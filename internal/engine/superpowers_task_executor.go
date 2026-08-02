@@ -420,6 +420,12 @@ func buildSuperpowersVerificationChecks(run *SuperpowersRun) []superpowersVerifi
 
 func VerifySuperpowersRunRuntime(ctx context.Context, run *SuperpowersRun) error {
 	run.Phase = SuperpowersPhaseVerification
+	// Persist the phase BEFORE the first check runs. Verification is the
+	// longest, most kill-prone stage of a cycle — a dead cycle budget or a
+	// crash mid-suite is routine — and a run.json still advertising the
+	// pre-verification phase misreports what the run was doing to the
+	// dashboard and to crash recovery.
+	_ = writeSuperpowersRunJSON(run)
 	for _, check := range buildSuperpowersVerificationChecks(run) {
 		res := runShellCommand(ctx, defaultSuperpowersCommandRunner, run.WorktreePathOrRepo(), check.cmd)
 		recordSuperpowersVerification(run, check.name, check.cmd, res)
@@ -549,12 +555,17 @@ func claudeRepairVerifyLint(ctx context.Context, run *SuperpowersRun, lintCmd, f
 	return claudeRetry, claudeRetry.Err == nil
 }
 
-// recordSuperpowersVerification appends one check result to the run record
-// and its evidence artifact.
+// recordSuperpowersVerification appends one check result to the run record and
+// its evidence artifact, then persists the run so the trail survives the
+// failure paths. Verification's error returns are the norm, not the exception:
+// batching the run.json write to the all-green return left every failed run's
+// evidence in memory only, and the per-check .txt artifacts cannot reconstruct
+// it — they carry neither the phase nor the order the checks ran in.
 func recordSuperpowersVerification(run *SuperpowersRun, name, cmd string, res CommandResult) {
 	vc := VerificationCheck{Name: name, Command: cmd, Passed: res.Err == nil, Output: res.Output, Duration: res.Duration.String()}
 	run.Verification = append(run.Verification, vc)
 	_ = os.WriteFile(filepath.Join(run.ArtifactDir, "verification", name+".txt"), []byte(formatCommandResult(res)), 0o644)
+	_ = writeSuperpowersRunJSON(run)
 }
 
 func (run *SuperpowersRun) WorktreePathOrRepo() string {

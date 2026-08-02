@@ -85,6 +85,15 @@ func (g *MAPElitesGrid) Key(d BehavioralDescriptor) string {
 
 // Insert adds an individual to the grid, replacing only if it has higher fitness.
 // Returns true if this individual won the cell.
+//
+// Ownership: the grid stores ind as given — it does not copy the Individual or
+// its Tree. A cell is therefore only a snapshot of the shape whose descriptor
+// selected it if the caller hands over a tree nothing else mutates afterwards.
+// Callers archiving a long-lived tree that is evolved in place across cycles
+// (see gardener.recordDiversityObservation) MUST clone before inserting;
+// otherwise every cell ends up aliasing that one object, holding the latest
+// shape against a stale per-cell Fitness, and consumers like EliteSeed hand
+// back the caller's own live tree instead of an archived alternative.
 func (g *MAPElitesGrid) Insert(desc BehavioralDescriptor, ind *Individual) bool {
 	key := g.Key(desc)
 	existing, ok := g.Cells[key]

@@ -175,10 +175,22 @@ func (g *Gardener) treeDiversityGrid(name string) *evolution.MAPElitesGrid {
 // recordDiversityObservation feeds tree's behavioral descriptor and fitness
 // into name's diversity grid, so BehavioralDiversity (evolveTreeV2) can
 // eventually read a live DiversityScore instead of the placeholder 0.
+//
+// The tree is SNAPSHOT before it is archived. The caller's tree is almost
+// always entry.Tree (evolveTreeV2), and Registry.List copies the entry slice
+// but not the *SerializableNode it points at — so every cycle hands over the
+// same stable pointer to an object the pipeline then mutates in place.
+// Archiving that pointer verbatim (MAPElitesGrid.Insert stores what it is
+// given) would leave every cell in the grid aliasing one live object holding
+// whatever shape the latest cycle left behind, paired with a stale per-cell
+// Fitness. That silently breaks every archive consumer: reseedFromDiversity-
+// Archive would re-score current-best against itself and always decline, so an
+// elite reseed could never fire in production. Each cell must own an
+// independent copy of the shape whose descriptor selected it.
 func (g *Gardener) recordDiversityObservation(name string, tree *evolution.SerializableNode, fitness float64) {
 	grid := g.treeDiversityGrid(name)
 	desc := evolution.Descriptor(tree, "")
-	grid.Insert(desc, &evolution.Individual{Tree: tree, Fitness: fitness})
+	grid.Insert(desc, &evolution.Individual{Tree: cloneTreeForGardener(tree), Fitness: fitness})
 }
 
 // lastFailureTask returns the Task text of the most recent (by Timestamp)
@@ -1208,10 +1220,35 @@ func (g *Gardener) runIslandExploration(entries []TreeEntry) map[string]bool {
 // evolveTreeV2 enforces (an island breeds with random mutation, so it can grow
 // individuals the per-tree pipeline would refuse to evolve further). Returns
 // whether the migration happened.
+//
+// This is a persist path, so it clears the same safety gates evolveTreeV2
+// clears before ITS save (quality gate, evidence gate, validation gate) rather
+// than only the fitness/bloat checks below. It runs BEFORE the per-tree loop
+// (RunCycleV2), so a gate this pass skipped could not be caught downstream:
+// a randomly bred individual would already be on disk by the time
+// evolveTreeV2 reached the same tree.
 func (g *Gardener) adoptIslandWinner(entry TreeEntry, records []evolution.Record) bool {
 	if entry.Tree == nil {
 		return false
 	}
+
+	// Fail closed on a disabled quality gate, exactly as evolveTreeV2 does: the
+	// tree has regressed ConsecutiveFails times running and is about to be
+	// rolled back to its last known-good revision, so overwriting it here would
+	// clobber the very state the rollback restores.
+	if g.cfg.Gate != nil && g.cfg.Gate.IsDisabledFor(entry.Name) {
+		slog.Warn("gardener/v2: quality gate DISABLED — skipping island adoption (fail-closed)",
+			"tree", entry.Name, "consecutive_fails", g.cfg.Gate.FailCountFor(entry.Name))
+		return false
+	}
+
+	// Evidence gate, mirroring evolveTreeV2: with no reflection records the
+	// scores below are computed over an empty corpus, so "the winner beats the
+	// live tree" is noise rather than a measured improvement.
+	if len(records) == 0 && !g.cfg.EvolveWithoutReflections {
+		return false
+	}
+
 	score := func(tree *evolution.SerializableNode) float64 {
 		return evaluator.EvaluateTree(tree, records).Composite
 	}
@@ -1224,6 +1261,14 @@ func (g *Gardener) adoptIslandWinner(entry TreeEntry, records []evolution.Record
 	if nodes := evolution.CountNodes(winner); nodes > baseNodeCount(entry.Name)*20 {
 		slog.Warn("gardener/v2: island winner exceeds bloat cap, not migrating",
 			"tree", entry.Name, "winner_nodes", nodes)
+		return false
+	}
+
+	// Validation gate — checked before the in-place assignment, not after, so a
+	// rejection leaves the live tree untouched and needs no restore.
+	if err := ValidationGate(entry.Name, entry.Name, g.cfg.ValidationGate); err != nil {
+		slog.Warn("gardener/v2: validation gate rejected island winner, not migrating",
+			"tree", entry.Name, "error", err)
 		return false
 	}
 

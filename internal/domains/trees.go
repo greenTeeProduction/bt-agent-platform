@@ -921,11 +921,12 @@ func ExpectedDomainIDs(registry map[string]*evolution.SerializableNode) []string
 
 // Descriptions maps tree names to descriptions for the AllDomainTrees()
 // registry only — the curated gardener/dashboard surface. Trees that live
-// outside that registry (the kanban/hermes trees returned by
-// KanbanAndHermesDomainTrees) are described in NonRegistryDescriptions
-// instead; the two maps are kept disjoint. Callers that want a description for
-// an arbitrary tree name should use DescriptionFor rather than indexing either
-// map directly, so a non-registry tree still resolves.
+// outside that registry are described in NonRegistryDescriptions (the
+// kanban/hermes trees returned by KanbanAndHermesDomainTrees) or in
+// ResolverReachableDescriptions (trees reachable only through ResolveTreeID);
+// the three maps are kept disjoint. Callers that want a description for an
+// arbitrary tree name should use DescriptionFor rather than indexing any map
+// directly, so an off-registry tree still resolves.
 var Descriptions = map[string]string{
 	"code_review":               "Bug detection, security review, style checking for any language",
 	"devops_ci":                 "Build → test → lint → deploy → verify → rollback pipeline",
@@ -973,8 +974,9 @@ var Descriptions = map[string]string{
 // off the AllDomainTrees() gardener/dashboard registry. They are just as
 // selectable by name as registry trees, so leaving them undescribed made them
 // render as bare identifiers wherever descriptions are surfaced. This map must
-// stay disjoint from Descriptions: a name in both would make DescriptionFor's
-// precedence silently pick one of two divergent descriptions.
+// stay disjoint from Descriptions and ResolverReachableDescriptions: a name in
+// two maps would make DescriptionFor's precedence silently pick one of two
+// divergent descriptions.
 var NonRegistryDescriptions = map[string]string{
 	"kanban_task_creator": "Create a DoR-ready Focalboard card from a raw request: validate input → draft an actionable title, testable acceptance criteria, priority and AQAL quadrant → file it in BACKLOG, with LLM failure diagnosis on a bad board or card format",
 	"kanban_refiner":      "Refine a TODO card through the Definition of Ready gate: expand the description with implementation context and architecture constraints, make acceptance criteria testable, then walk the card TODO → PLANNING → REFINED",
@@ -986,15 +988,41 @@ var NonRegistryDescriptions = map[string]string{
 	"hermes_obsidian":     "Run the Hermes+Obsidian vault pipeline: route to session-start context load, raw/ ingest with wiki synthesis, derivative-note sweep, knowledge audit, or publish, then enforce the source-quote and immutable-raw quality gates plus an AQAL rating",
 }
 
-// DescriptionFor resolves the description for a domain tree by name across both
-// registries, so callers do not have to know whether a tree is part of the
-// curated AllDomainTrees() surface or the KanbanAndHermesDomainTrees() set.
-// Descriptions wins over NonRegistryDescriptions when a name somehow appears in
-// both. A whitespace-only entry is reported as a miss rather than returned: a
-// blank description would otherwise be rendered as an unexplained builtin,
-// which is exactly the state this lookup exists to prevent.
+// ResolverReachableDescriptions describes the domains-package trees that are
+// selectable in production through ResolveTreeID (tree_resolver.go — used by
+// bt-agent's switch_tree, A2A, and template validation) but belong to neither
+// AllDomainTrees() nor KanbanAndHermesDomainTrees(), so neither Descriptions
+// nor NonRegistryDescriptions may name them: both maps are orphan-guarded
+// against those two registries. superpowers_pipeline is exactly that case —
+// ResolveTreeID("superpowers_pipeline") returns the production SDLC tree, so an
+// operator can switch onto it, yet it had no describable home and rendered as a
+// bare identifier wherever builtins are listed. This map is that home. It must
+// stay disjoint from the other two for the same reason they are disjoint from
+// each other: a name in two maps makes DescriptionFor's precedence silently
+// choose between divergent descriptions.
+var ResolverReachableDescriptions = map[string]string{
+	"superpowers_pipeline": "Production Superpowers SDLC run: design artifact → safe worktree with a verified baseline build → strictly validated implementation plan → dry-run artifacts or a HITL-gated Claude Code TDD apply path → layered verification → finish report with evidence",
+}
+
+// DescriptionFor resolves the description for a domain tree by name across all
+// three description maps, so callers do not have to know whether a tree is part
+// of the curated AllDomainTrees() surface, the KanbanAndHermesDomainTrees() set,
+// or the ResolveTreeID-only extras. Resolution runs registry → non-registry →
+// resolver-reachable, so a curated entry wins if a name somehow appears in more
+// than one map. A whitespace-only entry is reported as a miss rather than
+// returned: a blank description would otherwise be rendered as an unexplained
+// builtin, which is exactly the state this lookup exists to prevent.
+//
+// This is the only supported way to describe a tree by name. Every production
+// consumer goes through it — gardener.Registry.loadAll (builtin registration),
+// bt-dashboard's /api/trees handler (the Create-Agent dropdown), and bt-agent's
+// bt_use_domain_tree tool (the switch confirmation) — because indexing a single
+// map directly yields "" the moment a registry tree's description lives in one
+// of the other two, which is what a tree promoted onto AllDomainTrees() without
+// its description entry moving along with it looks like. That failure is silent:
+// the surface renders a bare identifier rather than reporting a miss.
 func DescriptionFor(name string) (string, bool) {
-	for _, m := range []map[string]string{Descriptions, NonRegistryDescriptions} {
+	for _, m := range []map[string]string{Descriptions, NonRegistryDescriptions, ResolverReachableDescriptions} {
 		if desc, ok := m[name]; ok && strings.TrimSpace(desc) != "" {
 			return desc, true
 		}

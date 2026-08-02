@@ -138,6 +138,11 @@ func buildGardenerConfig(refDir, metricsDir, snapDir, sloEvidencePath string) (g
 		// at the gardener's own default (defaultIslandInterval — roughly hourly
 		// at the 5-minute cycle interval above), since the pass evolves a whole
 		// subpopulation per tree and is deliberately a side channel.
+		//
+		// Adoption of an island winner is a persist path, so it clears the Gate
+		// and ValidationGate wired above before overwriting a live tree — the
+		// pass runs before the per-tree loop, so those gates are the only thing
+		// standing between a randomly bred individual and disk.
 		IslandModel: evolution.NewIslandModel(islandMigrationInterval, islandMigrationRate),
 	}, nil
 }

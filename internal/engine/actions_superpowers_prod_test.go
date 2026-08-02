@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -554,6 +555,105 @@ func TestRunSuperpowersRuntime_NonRateLimitFailureSetsImplDegraded(t *testing.T)
 	// the fallback-eligible ScheduledAnalysisPath guard catches it.
 	if got, _ := bb.ChainState["goap_fusion_impl_degraded"].(string); got != "true" {
 		t.Fatalf("goap_fusion_impl_degraded = %q, want \"true\": every ClaudeSuperpowersPath failure must set the durable degrade signal so the loop degrades to analysis instead of aborting", got)
+	}
+}
+
+// phaseProbeClaudeRunner captures the run.json phase persisted on disk at the
+// moment the implementation batch does its FIRST piece of work. Claude is the
+// seam because runSuperpowersRuntimeFromExistingPlanAction never invokes it
+// before ExecuteSuperpowersTaskBatchRuntime — the first RunClaude call is the
+// batch's first task RED phase — so what this observes is exactly the run state
+// an external reader (dashboard, crash recovery) sees while the batch runs.
+type phaseProbeClaudeRunner struct {
+	inner        ClaudeRunner
+	runJSONPath  string
+	called       bool
+	runJSONFound bool
+	phaseAtStart SuperpowersPhase
+}
+
+func (r *phaseProbeClaudeRunner) RunClaude(ctx context.Context, repoDir string, prompt string) CommandResult {
+	if !r.called {
+		r.called = true
+		if run, err := readSuperpowersRunJSON(r.runJSONPath); err == nil {
+			r.runJSONFound = true
+			r.phaseAtStart = run.Phase
+		}
+	}
+	return r.inner.RunClaude(ctx, repoDir, prompt)
+}
+
+// TestRunSuperpowersRuntime_PlanResumeSetsImplementationPhaseBeforeBatch proves
+// the plan-resume path mirrors the ExecuteSuperpowersTaskBatch BT action's phase
+// bookkeeping: before handing the run to ExecuteSuperpowersTaskBatchRuntime it
+// must set run.Phase = SuperpowersPhaseImplementation AND persist it via
+// writeSuperpowersRunJSON. Before the fix only the BT action set the phase, so a
+// cycle resumed from an existing plan ran its whole implementation batch while
+// the tracked run still advertised its previous phase (and, until the batch's
+// own first per-task write, had no run.json on disk at all) — anything reading
+// run artifacts mid-batch, including crash recovery after a SIGKILL at the run
+// budget, could not tell the run had entered implementation.
+func TestRunSuperpowersRuntime_PlanResumeSetsImplementationPhaseBeforeBatch(t *testing.T) {
+	// Guard against any stray relative-path writes escaping into the repo, and
+	// keep run-artifact scans off the operator's live runs directory.
+	t.Chdir(t.TempDir())
+	isolateSuperpowersRunsDir(t)
+
+	prevRunner, prevClaude := defaultSuperpowersCommandRunner, defaultSuperpowersClaudeRunner
+	t.Cleanup(func() {
+		defaultSuperpowersCommandRunner = prevRunner
+		defaultSuperpowersClaudeRunner = prevClaude
+	})
+	// A RED verify that runs the task's test command and gets a PASSING result
+	// fails with "RED command unexpectedly passed" — a deterministic,
+	// non-rate-limit batch failure that stops the action right after the batch,
+	// so the success path's SuperpowersPhaseFinish assignment can never be what
+	// this test observes.
+	defaultSuperpowersCommandRunner = &scriptedSuperpowersRunner{
+		t:           t,
+		testResults: []CommandResult{{Output: "ok  \tgithub.com/nico/go-bt-evolve/internal/engine\t0.01s\n"}},
+	}
+
+	planPath := filepath.Join(t.TempDir(), "plan.md")
+	if err := os.WriteFile(planPath, []byte(buildDeterministicImplementationPlan("improve the platform")), 0o644); err != nil {
+		t.Fatalf("write plan: %v", err)
+	}
+
+	run := &SuperpowersRun{
+		ID:   "run-phase",
+		Task: "improve the platform",
+		Mode: SuperpowersModeApply,
+		// The shape a resumed carryover has: planning already finished, the
+		// implementation batch has not started.
+		Phase:        SuperpowersPhasePlan,
+		RepoDir:      t.TempDir(),
+		WorktreePath: t.TempDir(), // non-empty so no real worktree is created
+		ArtifactDir:  filepath.Join(t.TempDir(), "artifacts"),
+	}
+	probe := &phaseProbeClaudeRunner{
+		inner:       &scriptedClaudeRunner{},
+		runJSONPath: filepath.Join(run.ArtifactDir, "run.json"),
+	}
+	defaultSuperpowersClaudeRunner = probe
+
+	bb := newTestBlackboard()
+	setSuperpowersRun(bb, run)
+	bb.ChainState["goap_fusion_superpowers_plan_path"] = planPath
+
+	if got := runSuperpowersRuntimeFromExistingPlanAction(&btcore.BTContext[Blackboard]{Blackboard: bb}); got != -1 {
+		t.Fatalf("expected FAILURE (-1) from the scripted non-rate-limit batch failure, got %d: %s", got, bb.Result)
+	}
+	if !probe.called {
+		t.Fatal("the implementation batch never invoked Claude; this test's observation seam did not run — fix the fixture before trusting the assertions below")
+	}
+	if !probe.runJSONFound {
+		t.Fatalf("no run.json at %s when the implementation batch started: the plan-resume path must persist the run via writeSuperpowersRunJSON BEFORE calling ExecuteSuperpowersTaskBatchRuntime", probe.runJSONPath)
+	}
+	if probe.phaseAtStart != SuperpowersPhaseImplementation {
+		t.Fatalf("persisted phase when the batch started = %q, want %q: runSuperpowersRuntimeFromExistingPlanAction must set run.Phase = SuperpowersPhaseImplementation and persist it before ExecuteSuperpowersTaskBatchRuntime, mirroring the ExecuteSuperpowersTaskBatch BT action", probe.phaseAtStart, SuperpowersPhaseImplementation)
+	}
+	if run.Phase != SuperpowersPhaseImplementation {
+		t.Fatalf("in-memory run.Phase after the batch = %q, want %q: the plan-resume path must leave the failed run marked as implementation, not its pre-batch phase", run.Phase, SuperpowersPhaseImplementation)
 	}
 }
 
@@ -1607,5 +1707,185 @@ func TestArchiveAndDeleteSuperpowersBranch_LogsForceReap(t *testing.T) {
 
 	if !rec.hasRecord(slog.LevelInfo, branch) && !rec.hasRecord(slog.LevelWarn, branch) {
 		t.Fatalf("expected an Info or Warn log naming force-reaped branch %s; records: %+v", branch, rec.records)
+	}
+}
+
+// verifyPersistProbeRunner replays a scripted verification suite and, before
+// each command, snapshots the run.json that is on disk at that instant. Each
+// snapshot is exactly what an external reader (dashboard, crash recovery,
+// FindAbandonedSuperpowersRun) would see if the process died right there, which
+// is the only thing that makes "persisted" a testable claim rather than an
+// in-memory one.
+type verifyPersistProbeRunner struct {
+	t           *testing.T
+	runJSONPath string
+	results     []CommandResult
+	i           int
+	commands    []string
+	// snapshots[i] is the run.json state before commands[i] ran; nil means no
+	// run.json existed on disk at that point.
+	snapshots []*SuperpowersRun
+}
+
+func (r *verifyPersistProbeRunner) Run(_ context.Context, dir, name string, args ...string) CommandResult {
+	cmd := name + " " + strings.Join(args, " ")
+	r.commands = append(r.commands, cmd)
+	snap, err := readSuperpowersRunJSON(r.runJSONPath)
+	if err != nil {
+		snap = nil
+	}
+	r.snapshots = append(r.snapshots, snap)
+	if r.i >= len(r.results) {
+		r.t.Fatalf("unexpected verification command #%d: %q", r.i+1, cmd)
+	}
+	res := r.results[r.i]
+	r.i++
+	res.Command = cmd
+	res.Dir = dir
+	if res.Duration == 0 {
+		res.Duration = time.Millisecond
+	}
+	return res
+}
+
+// verificationNames renders a run's verification trail as name:passed pairs.
+func verificationNames(run *SuperpowersRun) []string {
+	names := make([]string, 0, len(run.Verification))
+	for _, vc := range run.Verification {
+		names = append(names, vc.Name+":"+strconv.FormatBool(vc.Passed))
+	}
+	return names
+}
+
+// TestVerifySuperpowersRunRuntime_PersistsPhaseAndEvidenceOnFailurePath proves
+// VerifySuperpowersRunRuntime persists the run at every point where it mutates
+// it, not only on the success return. Today the ONLY writeSuperpowersRunJSON
+// call in the function is the `return writeSuperpowersRunJSON(run)` at the end
+// of the all-checks-passed path, so a run that fails verification — the case
+// that most needs a durable record — leaves the run.json on disk still showing
+// the previous phase and none of the verification evidence. The evidence lives
+// only in the in-memory *SuperpowersRun and in the per-check .txt artifacts,
+// which carry neither the phase nor the ordered trail.
+//
+// The failure path asserted here is a changed-packages-lint failure that
+// survives the deterministic `--fix` pass (the Claude self-correct pass is
+// disabled via BT_SUPERPOWERS_VERIFY_LINT_FIX_ATTEMPTS=0), so the run exits
+// through the plain `return fmt.Errorf("verification %s failed: ...")` after
+// recording checks from BOTH the main loop and the lint-remediation branch.
+func TestVerifySuperpowersRunRuntime_PersistsPhaseAndEvidenceOnFailurePath(t *testing.T) {
+	// Guard against any stray relative-path artifact write escaping into the repo.
+	t.Chdir(t.TempDir())
+	t.Setenv("BT_SUPERPOWERS_VERIFY_LINT_FIX_ATTEMPTS", "0")
+
+	prevRunner, prevLint := defaultSuperpowersCommandRunner, superpowersLintBin
+	superpowersLintBin = "golangci-lint"
+	t.Cleanup(func() {
+		defaultSuperpowersCommandRunner = prevRunner
+		superpowersLintBin = prevLint
+	})
+
+	artifactDir := filepath.Join(t.TempDir(), "artifacts")
+	run := &SuperpowersRun{
+		ID:   "run-verify-persist",
+		Task: "improve the platform",
+		Mode: SuperpowersModeApply,
+		// The phase a run carries into verification; it must not survive on disk.
+		Phase:        SuperpowersPhaseImplementation,
+		RepoDir:      t.TempDir(),
+		ArtifactDir:  artifactDir,
+		ChangedFiles: []string{"internal/evolution/map_elites.go"},
+	}
+
+	lintFinding := "map_elites.go:12:2: Error return value is not checked (errcheck)"
+	probe := &verifyPersistProbeRunner{
+		t:           t,
+		runJSONPath: filepath.Join(artifactDir, "run.json"),
+		results: []CommandResult{
+			{}, // focused-tests
+			{}, // build
+			{}, // changed-packages-tests
+			{Err: errors.New("exit status 1"), Output: lintFinding}, // changed-packages-lint
+			{}, // golangci-lint run --fix
+			{Err: errors.New("exit status 1"), Output: lintFinding}, // changed-packages-lint-retry
+		},
+	}
+	defaultSuperpowersCommandRunner = probe
+
+	err := VerifySuperpowersRunRuntime(context.Background(), run)
+	if err == nil || !strings.Contains(err.Error(), "changed-packages-lint") {
+		t.Fatalf("scripted unfixable lint finding must fail verification, got %v", err)
+	}
+	if len(probe.snapshots) != 6 {
+		t.Fatalf("expected the 6 scripted verification commands to run, got %d: %v — fix the fixture before trusting the assertions below", len(probe.snapshots), probe.commands)
+	}
+
+	// (a) The phase is durable BEFORE the first check runs. A run killed by the
+	// cycle budget mid-verification must still be readable as "in verification".
+	first := probe.snapshots[0]
+	if first == nil {
+		t.Fatalf("no run.json at %s when the first verification check (%s) ran: VerifySuperpowersRunRuntime must persist the run immediately after setting run.Phase = SuperpowersPhaseVerification", probe.runJSONPath, probe.commands[0])
+	}
+	if first.Phase != SuperpowersPhaseVerification {
+		t.Fatalf("persisted phase at the first check = %q, want %q", first.Phase, SuperpowersPhaseVerification)
+	}
+	if len(first.Verification) != 0 {
+		t.Fatalf("persisted verification trail at the first check = %v, want empty: the phase write happens before any check has run", verificationNames(first))
+	}
+
+	// (b) Each check is durable as soon as it is recorded, not batched to the end.
+	second := probe.snapshots[1]
+	if second == nil {
+		t.Fatalf("no run.json when the second check (%s) ran", probe.commands[1])
+	}
+	if got := verificationNames(second); len(got) != 1 || got[0] != "focused-tests:true" {
+		t.Fatalf("persisted verification trail at the second check = %v, want [focused-tests:true]: recordSuperpowersVerification must be followed by a run.json write", got)
+	}
+
+	// (c) The same holds for records made inside the lint-remediation branch:
+	// snapshot #5 is taken before `golangci-lint run --fix`, so it must already
+	// carry the failed lint check, and #6 (the post-fix retry) must additionally
+	// carry the autofix record.
+	beforeFix := probe.snapshots[4]
+	if beforeFix == nil {
+		t.Fatalf("no run.json when the lint autofix (%s) ran", probe.commands[4])
+	}
+	if got := verificationNames(beforeFix); len(got) != 4 || got[3] != "changed-packages-lint:false" {
+		t.Fatalf("persisted verification trail before the lint autofix = %v, want the 3 passing checks plus changed-packages-lint:false", got)
+	}
+	beforeRetry := probe.snapshots[5]
+	if beforeRetry == nil {
+		t.Fatalf("no run.json when the post-autofix lint retry (%s) ran", probe.commands[5])
+	}
+	if got := verificationNames(beforeRetry); len(got) != 5 || got[4] != "changed-packages-lint-autofix:true" {
+		t.Fatalf("persisted verification trail before the lint retry = %v, want changed-packages-lint-autofix:true appended: records made on the remediation branch must be persisted too", got)
+	}
+
+	// (d) The failing return leaves the complete record on disk.
+	final, ferr := readSuperpowersRunJSON(probe.runJSONPath)
+	if ferr != nil {
+		t.Fatalf("read run.json after the failed verification: %v — the failure path must leave a durable run record", ferr)
+	}
+	if final.Phase != SuperpowersPhaseVerification {
+		t.Fatalf("persisted phase after the failed verification = %q, want %q: a failed run must not stay on disk advertising its pre-verification phase", final.Phase, SuperpowersPhaseVerification)
+	}
+	wantTrail := []string{
+		"focused-tests:true",
+		"build:true",
+		"changed-packages-tests:true",
+		"changed-packages-lint:false",
+		"changed-packages-lint-autofix:true",
+		"changed-packages-lint-retry:false",
+	}
+	got := verificationNames(final)
+	if len(got) != len(wantTrail) {
+		t.Fatalf("persisted verification trail after the failed verification = %v, want %v", got, wantTrail)
+	}
+	for i, want := range wantTrail {
+		if got[i] != want {
+			t.Fatalf("persisted verification trail[%d] = %q, want %q (full trail %v)", i, got[i], want, got)
+		}
+	}
+	if !strings.Contains(final.Verification[5].Output, lintFinding) {
+		t.Fatalf("persisted evidence for the failing check lost its output %q: %q", lintFinding, final.Verification[5].Output)
 	}
 }

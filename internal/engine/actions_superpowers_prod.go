@@ -1136,6 +1136,17 @@ func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboar
 	if reaped := reapOrphanedSuperpowersBranches(c, defaultSuperpowersCommandRunner, run.RepoDir, superpowersRunsDir); len(reaped) > 0 {
 		Info("reaped orphaned superpowers branches", "count", len(reaped), "branches", strings.Join(reaped, ", "))
 	}
+	// Mirror the ExecuteSuperpowersTaskBatch BT action's phase bookkeeping, and
+	// persist it the way the SuperpowersPhaseFinish transition below does: the
+	// batch owns the next ~90 minutes, so without this the resumed run
+	// advertises its pre-batch phase (and has no run.json at all until the
+	// batch's first per-task write) for the whole implementation window. Anything
+	// reading run artifacts mid-batch — the dashboard, a scan after a SIGKILL at
+	// the run budget — cannot otherwise tell the run entered implementation.
+	// Best-effort like the other persistence in this function: an unwritable
+	// artifact dir surfaces as a real failure inside the batch, not here.
+	run.Phase = SuperpowersPhaseImplementation
+	_ = writeSuperpowersRunJSON(run)
 	if err := ExecuteSuperpowersTaskBatchRuntime(c, run); err != nil {
 		errStr := err.Error()
 		if isClaudeRateLimit(errStr) {

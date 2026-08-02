@@ -5040,6 +5040,82 @@ func TestBTUseDomainTreeHoldsServerLock(t *testing.T) {
 	}, "bt_use_domain_tree")
 }
 
+// relocateDomainDescription moves name's description out of
+// domains.Descriptions and into domains.ResolverReachableDescriptions for the
+// duration of the test, restoring both maps afterwards. It reproduces the
+// legitimate maintenance state in which a tree registered in AllDomainTrees()
+// is described by one of the other two description maps: domains.DescriptionFor
+// still resolves the name, a direct domains.Descriptions index no longer does.
+//
+// Safe as a global mutation because no test in this package calls t.Parallel().
+func relocateDomainDescription(t *testing.T, name string) string {
+	t.Helper()
+	desc, ok := domains.Descriptions[name]
+	if !ok || strings.TrimSpace(desc) == "" {
+		t.Fatalf("fixture assumption broken: domains.Descriptions[%q] = %q, want a non-blank description", name, desc)
+	}
+	delete(domains.Descriptions, name)
+	domains.ResolverReachableDescriptions[name] = desc
+	t.Cleanup(func() {
+		domains.Descriptions[name] = desc
+		delete(domains.ResolverReachableDescriptions, name)
+	})
+	return desc
+}
+
+// TestBTUseDomainTreeDescriptionResolvesThroughDescriptionFor pins that
+// bt_use_domain_tree reports the switched-to tree's description via
+// domains.DescriptionFor instead of indexing domains.Descriptions directly.
+//
+// The domains package deliberately splits descriptions across three maps —
+// Descriptions (the curated AllDomainTrees surface), NonRegistryDescriptions,
+// and ResolverReachableDescriptions — and DescriptionFor is the single lookup
+// spanning all three, so callers need not know which map holds a given name
+// (ADR-251, ADR-255). A direct index silently yields "" the moment a registry
+// tree's description lives in one of the other two maps, which is exactly what
+// a tree promoted onto AllDomainTrees() without its description entry moving
+// along with it looks like. The tool then confirms the switch with an empty
+// "description", telling the caller nothing about the tree it just moved onto.
+//
+// RED before the migration: the result's "description" is the empty string
+// because domains.Descriptions no longer holds the relocated name.
+func TestBTUseDomainTreeDescriptionResolvesThroughDescriptionFor(t *testing.T) {
+	const treeName = "code_review"
+	want := relocateDomainDescription(t, treeName)
+
+	dir := t.TempDir()
+	store, err := evolution.NewTreeStore(dir)
+	if err != nil {
+		t.Fatalf("tree store: %v", err)
+	}
+	var live btcore.Command[engine.Blackboard]
+	deps := &mcpDeps{bb: &engine.Blackboard{}, bt: &live, treeStore: store}
+	server := engine.NewServer("test")
+	registerMCPTools(server, deps)
+
+	res, ok := server.Invoke("bt_use_domain_tree", json.RawMessage(`{"tree":"`+treeName+`"}`))
+	if !ok {
+		t.Fatal("Invoke(bt_use_domain_tree) reported the tool as unregistered")
+	}
+	if res == nil || len(res.Content) == 0 {
+		t.Fatal("bt_use_domain_tree returned no content")
+	}
+
+	var out map[string]interface{}
+	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+		t.Fatalf("bt_use_domain_tree result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
+	}
+	if _, isErr := out["error"]; isErr {
+		t.Fatalf("bt_use_domain_tree unexpectedly returned an error for %q: %v", treeName, out)
+	}
+
+	if got, _ := out["description"].(string); got != want {
+		t.Errorf("bt_use_domain_tree description = %q, want %q — the handler must resolve the description "+
+			"via domains.DescriptionFor(%q), which spans all three description maps, instead of indexing "+
+			"domains.Descriptions directly", got, want, treeName)
+	}
+}
+
 // TestBTDelegateToTreeHoldsServerLock pins milestone 4/4 of the Q1
 // Correctness / Q3 Reliability mcpDeps shared-blackboard race program:
 // bt_delegate_to_tree writes deps.bb.Task, swaps *deps.bt, and then calls
