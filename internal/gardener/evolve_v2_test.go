@@ -2901,6 +2901,117 @@ func TestEvolveTreeV2_NoCrisis_DoesNotReseed(t *testing.T) {
 	}
 }
 
+// TestGardener_RecordDiversityObservation_SnapshotsTreePerCell pins the
+// archive's independence-from-the-live-tree invariant. Production never hands
+// recordDiversityObservation a fresh tree the way the tests above do: it hands
+// over entry.Tree (evolveTreeV2), and Registry.List copies the entry slice but
+// not the *SerializableNode it points at, so every cycle archives the SAME
+// pointer after mutating that one object in place. Storing the pointer verbatim
+// therefore leaves every cell in a tree's grid aliasing one live object holding
+// whatever shape the latest cycle happened to leave behind, paired with a stale
+// per-cell Fitness. Each cell must instead hold an independent snapshot of the
+// shape whose descriptor selected it.
+func TestGardener_RecordDiversityObservation_SnapshotsTreePerCell(t *testing.T) {
+	g := &Gardener{}
+	const name = "aliasing_tree"
+
+	// The one live tree pointer the registry hands out to every cycle.
+	live := &evolution.SerializableNode{Type: "Action", Name: "Leaf"}
+
+	depths := []int{0, 10, 20, 30, 40, 50}
+	for i, depth := range depths {
+		*live = *chainTree(depth) // this cycle mutated the live tree in place
+		g.recordDiversityObservation(name, live, 0.5+0.01*float64(i))
+	}
+
+	// A later cycle leaves the live tree in yet another shape. The already
+	// archived cells must not follow it.
+	*live = *chainTree(2)
+
+	grid := g.treeDiversityGrid(name)
+	if grid.CellCount() != len(depths) {
+		t.Fatalf("test setup sanity check failed: expected %d occupied niches, got %d", len(depths), grid.CellCount())
+	}
+
+	type shape struct{ nodes, depth int }
+	seen := make(map[shape]string, grid.CellCount())
+	for key, cell := range grid.Cells {
+		if cell == nil || cell.Tree == nil {
+			t.Fatalf("niche %q holds no tree", key)
+		}
+		if cell.Tree == live {
+			t.Errorf("niche %q stores the live tree pointer itself instead of a snapshot", key)
+		}
+		if got := grid.Key(evolution.Descriptor(cell.Tree, "")); got != key {
+			t.Errorf("niche %q holds a tree whose own descriptor keys to %q (%d nodes, depth %d) — the cell no longer matches the shape that claimed it",
+				key, got, evolution.CountNodes(cell.Tree), evolution.MaxDepth(cell.Tree, 0))
+		}
+		s := shape{nodes: evolution.CountNodes(cell.Tree), depth: evolution.MaxDepth(cell.Tree, 0)}
+		if other, dup := seen[s]; dup {
+			t.Errorf("niches %q and %q both hold a %d-node/depth-%d tree — the cells are aliasing one object", other, key, s.nodes, s.depth)
+		}
+		seen[s] = key
+	}
+}
+
+// TestEvolveTreeV2_DiversityCrisis_ReseedsFromLiveDrivenArchive is the
+// end-to-end consequence of the aliasing pinned above, driven exactly the way
+// production drives it: every archived observation is the SAME live entry.Tree
+// pointer, mutated in place between cycles. When the archive stores that
+// pointer verbatim, the elite EliteSeed hands back IS the live tree, so
+// reseedFromDiversityArchive re-scores current-best against itself, its
+// `<= floor+0.0001` check rejects, and EliteReseed can never be true in
+// production — the sibling test above only passes because it injects freshly
+// built trees the production path never produces.
+func TestEvolveTreeV2_DiversityCrisis_ReseedsFromLiveDrivenArchive(t *testing.T) {
+	g, entry, live := eliteSeedGardener(t, "live_archive_reseed_tree")
+	records := entryRecords(t, g, entry)
+
+	currentBest := cloneTreeForGardener(live)
+	baseComposite := evaluator.EvaluateTree(currentBest, records).Composite
+	eliteComposite := evaluator.EvaluateTree(eliteSeedTree(), records).Composite
+	if eliteComposite <= baseComposite {
+		t.Fatalf("test setup sanity check failed: elite composite %.4f must beat current-best %.4f", eliteComposite, baseComposite)
+	}
+
+	// Replay earlier cycles the way evolveTreeV2 records them — mutate the ONE
+	// live entry.Tree in place, then archive that same pointer. The chain niches
+	// are archived below the current tree's fitness, so the only elite worth
+	// reseeding from is the genuinely fitter shape.
+	for _, depth := range []int{0, 10, 20, 30, 40, 50} {
+		*live = *chainTree(depth)
+		g.recordDiversityObservation(entry.Name, live, baseComposite-1)
+	}
+	*live = *eliteSeedTree()
+	g.recordDiversityObservation(entry.Name, live, eliteComposite)
+
+	// …and the cycle under test opens on current-best again, as it would after a
+	// later cycle's regression restore put the tree back on its own lineage.
+	*live = *currentBest
+
+	score := g.treeDiversityGrid(entry.Name).DiversityScore()
+	if score <= 0 || score >= g.cfg.CrisisDetector.DiversityThreshold {
+		t.Fatalf("test setup sanity check failed: DiversityScore = %v, want in (0, %v)", score, g.cfg.CrisisDetector.DiversityThreshold)
+	}
+
+	m := g.evolveTreeV2(entry, eliteSeedV2Config())
+
+	if !m.CrisisIntervened {
+		t.Fatalf("test setup sanity check failed: expected a diversity-collapse crisis (DiversityScore=%v, threshold=%v), got metrics=%+v",
+			score, g.cfg.CrisisDetector.DiversityThreshold, m)
+	}
+	if !m.EliteReseed {
+		t.Fatalf("expected CycleMetrics.EliteReseed == true — an earlier cycle archived a fitter shape (composite %.4f) in a different niche than current-best (%.4f) (metrics=%+v)",
+			eliteComposite, baseComposite, m)
+	}
+	if !hasNodeNamed(live, "HasClearTask") {
+		t.Errorf("live tree was not reseeded from the archived elite (still %s/%q with %d nodes)", live.Type, live.Name, evolution.CountNodes(live))
+	}
+	if m.NewFitness < eliteComposite-0.0001 {
+		t.Errorf("NewFitness = %.4f, want at least the adopted elite's composite %.4f (metrics=%+v)", m.NewFitness, eliteComposite, m)
+	}
+}
+
 // ============================================================================
 // Island-model population exploration (milestone 3/5): RunCycleV2 must run
 // evolution.IslandModel.EvolveAll as a periodic per-domain exploration pass —

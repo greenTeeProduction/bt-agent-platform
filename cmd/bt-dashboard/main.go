@@ -702,12 +702,17 @@ func handleTrees(w http.ResponseWriter, _ *http.Request) {
 			continue
 		}
 		tree := domainTrees[name]
+		// domains.DescriptionFor spans all three description maps; indexing
+		// domains.Descriptions directly would serve a blank description — and
+		// so an unexplained dropdown entry — for any registry tree described
+		// outside the curated map.
+		desc, _ := domains.DescriptionFor(name)
 		r2 = append(r2, map[string]interface{}{
 			"id":          id,
 			"name":        tree.Name,
 			"category":    "domain",
 			"node_count":  evolution.CountNodes(tree),
-			"description": domains.Descriptions[name],
+			"description": desc,
 		})
 	}
 

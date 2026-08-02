@@ -100,9 +100,13 @@ func (r *Registry) loadAll() {
 		r.addBuiltin("research_"+name, evolution.Descriptions[name], tree)
 	}
 
-	// Domain trees
+	// Domain trees. Resolve descriptions through domains.DescriptionFor rather
+	// than indexing domains.Descriptions: descriptions are split across three
+	// maps, and a direct index registers a blank Description the moment a
+	// registry tree is described outside the curated map.
 	for name, tree := range domains.AllDomainTrees() {
-		r.addBuiltin("domain_"+name, domains.Descriptions[name], tree)
+		desc, _ := domains.DescriptionFor(name)
+		r.addBuiltin("domain_"+name, desc, tree)
 	}
 
 	// Load persisted trees from disk (tree-<name>.json files only)

@@ -1786,6 +1786,93 @@ func TestHandleTrees_DomainEntriesCarryDescription(t *testing.T) {
 	}
 }
 
+// relocateDomainDescription moves name's description out of
+// domains.Descriptions and into domains.ResolverReachableDescriptions for the
+// duration of the test, restoring both maps afterwards. It reproduces the
+// legitimate maintenance state in which a tree registered in AllDomainTrees()
+// is described by one of the other two description maps: domains.DescriptionFor
+// still resolves the name, a direct domains.Descriptions index no longer does.
+//
+// Safe as a global mutation because no test in this package calls t.Parallel().
+func relocateDomainDescription(t *testing.T, name string) string {
+	t.Helper()
+	desc, ok := domains.Descriptions[name]
+	if !ok || strings.TrimSpace(desc) == "" {
+		t.Fatalf("fixture assumption broken: domains.Descriptions[%q] = %q, want a non-blank description", name, desc)
+	}
+	delete(domains.Descriptions, name)
+	domains.ResolverReachableDescriptions[name] = desc
+	t.Cleanup(func() {
+		domains.Descriptions[name] = desc
+		delete(domains.ResolverReachableDescriptions, name)
+	})
+	return desc
+}
+
+// TestHandleTrees_DomainDescriptionsResolveThroughDescriptionFor is the
+// /api/trees follow-up to TestHandleTrees_DomainEntriesCarryDescription: the
+// merged domain-catalog entries carry a "description", but handleTrees sources
+// it by indexing domains.Descriptions directly.
+//
+// The domains package deliberately splits descriptions across three maps —
+// Descriptions (the curated AllDomainTrees surface), NonRegistryDescriptions,
+// and ResolverReachableDescriptions — and DescriptionFor is the single lookup
+// spanning all three, so callers need not know which map holds a given name
+// (ADR-251, ADR-255). A direct index silently yields "" the moment a registry
+// tree's description lives in one of the other two maps, which is exactly what
+// a tree promoted onto AllDomainTrees() without its description entry moving
+// along with it looks like. The Create-Agent dropdown then lists that tree's
+// raw ID with nothing explaining what it does.
+//
+// RED before the migration: the merged entry's "description" is the empty
+// string because domains.Descriptions no longer holds the relocated name.
+func TestHandleTrees_DomainDescriptionsResolveThroughDescriptionFor(t *testing.T) {
+	origKG := kg
+	t.Cleanup(func() { kg = origKG })
+
+	const treeName = "goap_fusion"
+	want := relocateDomainDescription(t, treeName)
+
+	g := knowledge.NewKnowledgeGraph()
+	g.Register(&knowledge.TreeMeta{
+		ID:       "default",
+		Name:     "Default Agent",
+		Category: "core",
+	})
+	kg = g
+
+	req := httptest.NewRequest(http.MethodGet, "/api/trees", nil)
+	rr := httptest.NewRecorder()
+	handleTrees(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+
+	var trees []map[string]interface{}
+	if err := json.Unmarshal(rr.Body.Bytes(), &trees); err != nil {
+		t.Fatalf("decode response: %v; body=%s", err, rr.Body.String())
+	}
+
+	id := "domain:" + treeName
+	var entry map[string]interface{}
+	for _, tr := range trees {
+		if tr["id"] == id {
+			entry = tr
+			break
+		}
+	}
+	if entry == nil {
+		t.Fatalf("response missing entry for %s; body=%s", id, rr.Body.String())
+	}
+
+	if got, _ := entry["description"].(string); got != want {
+		t.Errorf("%s description = %q, want %q — handleTrees must resolve domain descriptions via "+
+			"domains.DescriptionFor(%q), which spans all three description maps, instead of indexing "+
+			"domains.Descriptions directly", id, got, want, treeName)
+	}
+}
+
 // TestAgentsJS_TreeDropdownGroupedByCategory is the client-side follow-up to
 // TestHandleTrees_IncludesFullDomainCatalog: now that /api/trees serves a
 // complete, live tree catalog (kg.Trees merged with domains.AllDomainTrees()),
