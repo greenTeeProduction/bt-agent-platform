@@ -6,8 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -431,157 +429,73 @@ func (a *Auctioneer) RunAuction(ctx context.Context, ann TaskAnnouncement, candi
 // winnerBreakerKeyPrefix namespaces winner breaker entries within
 // agent.CircuitBreakersFile() so the store below only ever reads/writes keys
 // it owns, leaving the scheduler's per-agent breaker entries in the same file
-// untouched. The value is owned by internal/agent (whose store skips these
-// keys on Load and preserves them on Save) so the two file owners cannot
-// drift apart.
+// untouched. The value is owned by internal/agent, which is also the single
+// implementation of that file's persistence: its default store skips these
+// keys on Load and preserves them on Save, and the NewWinnerCircuitBreakerStore
+// this package uses does the mirror image, so the two key spaces cannot drift
+// apart.
 const winnerBreakerKeyPrefix = agent.A2AWinnerBreakerKeyPrefix
-
-// winnerBreakerFileEntry / winnerBreakerFile mirror the on-disk shape
-// internal/agent's AgentCircuitBreakerStore.Save/Load already use for
-// agent.CircuitBreakersFile() ({"breakers": {name: {status, failures,
-// last_failure}}}) — the same shape internal/dashboard's loadCircuitBreakers
-// reads for the dashboard's cb_status column — so winner breakers round-trip
-// through the exact same file without agent and a2a sharing a Go type.
-type winnerBreakerFileEntry struct {
-	Status      string `json:"status"`
-	Failures    int    `json:"failures"`
-	LastFailure string `json:"last_failure,omitempty"`
-}
-
-type winnerBreakerFile struct {
-	Breakers map[string]winnerBreakerFileEntry `json:"breakers"`
-}
 
 // winnerBreakerStore is the process-wide, file-backed store every
 // NewPersistentAuctioneer routes its winner breaker lookups through. Keeping
 // one breaker instance per winner name alive for the lifetime of the process
 // (instead of inside a per-call Auctioneer) is what lets a failure count
-// survive across separate AuctionDelegate calls (engine ticks); Save/Load
-// against agent.CircuitBreakersFile() is what additionally lets it survive a
-// process restart.
+// survive across separate AuctionDelegate calls (engine ticks); persisting to
+// agent.CircuitBreakersFile() is what additionally lets it survive a process
+// restart.
+//
+// Persistence is NOT implemented here. It delegates to internal/agent's
+// AgentCircuitBreakerStore — the single owner of that file — configured via
+// NewWinnerCircuitBreakerStore to own the winnerBreakerKeyPrefix key space.
+// This package previously hand-rolled its own load/save against the same path,
+// and the two implementations had drifted: the local load replayed the
+// persisted failure count through RecordFailure (re-stamping every restored
+// winner's last_failure with the restart time) and the local save's
+// read-merge-write took no cross-process lock (so a concurrent daemon or
+// dashboard write landing inside that window was dropped by the rename).
+// Routing through the one owner is what keeps those rules in a single place.
 type winnerBreakerStore struct {
-	mu       sync.Mutex
-	breakers map[string]*reliability.CircuitBreaker
-	loaded   bool
+	mu    sync.Mutex
+	store *agent.AgentCircuitBreakerStore
 }
 
 // winnerBreakers is the shared store every production AuctionDelegate call
 // reads and writes through.
 var winnerBreakers = &winnerBreakerStore{}
 
-// get returns the circuit breaker tracking dispatch failures for the named
-// winner, restoring persisted state from agent.CircuitBreakersFile() on first
-// use (so a process restart doesn't forget a previously-open breaker) and
-// creating a fresh closed breaker when none exists yet, in memory or on disk.
-func (s *winnerBreakerStore) get(name string) *reliability.CircuitBreaker {
+// owner returns the single persistence owner backing this store, creating it
+// and restoring previously-persisted winner breakers on first use so a process
+// restart doesn't forget a known-bad winner. A missing or unparseable file is
+// not an error — it's the expected first-boot state before any winner breaker
+// has ever tripped.
+func (s *winnerBreakerStore) owner() *agent.AgentCircuitBreakerStore {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if !s.loaded {
-		s.loadLocked()
-		s.loaded = true
+	if s.store == nil {
+		s.store = agent.NewWinnerCircuitBreakerStore(agent.CircuitBreakerOptions{
+			Threshold: winnerCircuitBreakerThreshold,
+			Cooldown:  winnerCircuitBreakerCooldown,
+		})
+		if err := s.store.Load(agent.CircuitBreakersFile()); err != nil {
+			slog.Debug("a2a: no restorable winner circuit breaker state", "path", agent.CircuitBreakersFile(), "err", err)
+		}
 	}
-	if s.breakers == nil {
-		s.breakers = make(map[string]*reliability.CircuitBreaker)
-	}
-	key := winnerBreakerKeyPrefix + name
-	cb, ok := s.breakers[key]
-	if !ok {
-		cb = reliability.NewCircuitBreaker(key, winnerCircuitBreakerThreshold, winnerCircuitBreakerCooldown)
-		s.breakers[key] = cb
-	}
-	return cb
+	return s.store
 }
 
-// loadLocked restores previously-persisted winner breakers so a process
-// restart doesn't forget a known-bad winner. A missing or unreadable file is
-// not an error — it's the expected first-boot state before any winner
-// breaker has ever tripped. Must be called with s.mu held.
-func (s *winnerBreakerStore) loadLocked() {
-	data, err := os.ReadFile(agent.CircuitBreakersFile())
-	if err != nil {
-		return
-	}
-	var file winnerBreakerFile
-	if err := json.Unmarshal(data, &file); err != nil {
-		return
-	}
-	if s.breakers == nil {
-		s.breakers = make(map[string]*reliability.CircuitBreaker)
-	}
-	for key, entry := range file.Breakers {
-		if !strings.HasPrefix(key, winnerBreakerKeyPrefix) {
-			continue // owned by another writer (e.g. the scheduler's per-agent breakers)
-		}
-		cb := reliability.NewCircuitBreaker(key, winnerCircuitBreakerThreshold, winnerCircuitBreakerCooldown)
-		// reliability.CircuitBreaker exposes no state-setter, so replay the
-		// persisted failure count through RecordFailure to reconstruct the
-		// same status (closed, or open once it crosses the threshold).
-		for i := 0; i < entry.Failures; i++ {
-			cb.RecordFailure()
-		}
-		s.breakers[key] = cb
-	}
+// get returns the circuit breaker tracking dispatch failures for the named
+// winner, creating a fresh closed breaker when none exists yet, in memory or
+// on disk.
+func (s *winnerBreakerStore) get(name string) *reliability.CircuitBreaker {
+	return s.owner().Get(winnerBreakerKeyPrefix + name)
 }
 
 // save persists every tracked winner breaker's state into
 // agent.CircuitBreakersFile(), merging with (not clobbering) whatever
 // non-winner entries — e.g. the scheduler's per-agent breakers — are already
-// in the file.
+// in the file, under the owner's cross-process advisory file lock.
 func (s *winnerBreakerStore) save() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	path := agent.CircuitBreakersFile()
-	file := winnerBreakerFile{Breakers: map[string]winnerBreakerFileEntry{}}
-	if data, err := os.ReadFile(path); err == nil {
-		_ = json.Unmarshal(data, &file) // best-effort merge; a corrupt file is simply overwritten below
-	}
-	if file.Breakers == nil {
-		file.Breakers = map[string]winnerBreakerFileEntry{}
-	}
-	for key, cb := range s.breakers {
-		entry := winnerBreakerFileEntry{
-			Status:   cb.State().String(),
-			Failures: cb.FailureCount(),
-		}
-		if t := cb.LastFailureTime(); !t.IsZero() {
-			entry.LastFailure = t.Format(time.RFC3339)
-		}
-		file.Breakers[key] = entry
-	}
-
-	data, err := json.MarshalIndent(file, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal winner circuit breaker state: %w", err)
-	}
-	if dir := filepath.Dir(path); dir != "" {
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			return fmt.Errorf("create circuit breaker state dir: %w", err)
-		}
-	}
-	// Unique temp per writer: the daemon scheduler, the dashboard executor,
-	// and this store all write the same path — a shared fixed ".tmp" let
-	// interleaved writes publish a torn file.
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".circuit_breakers-*.tmp")
-	if err != nil {
-		return fmt.Errorf("create winner circuit breaker temp file: %w", err)
-	}
-	tmpName := tmp.Name()
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		_ = os.Remove(tmpName)
-		return fmt.Errorf("write winner circuit breaker state: %w", err)
-	}
-	if err := tmp.Close(); err != nil {
-		_ = os.Remove(tmpName)
-		return fmt.Errorf("close winner circuit breaker temp file: %w", err)
-	}
-	_ = os.Chmod(tmpName, 0644) // CreateTemp defaults to 0600; other processes read this file
-	if err := os.Rename(tmpName, path); err != nil {
-		_ = os.Remove(tmpName)
-		return fmt.Errorf("rename winner circuit breaker state: %w", err)
-	}
-	return nil
+	return s.owner().Save(agent.CircuitBreakersFile())
 }
 
 // AuctionCardsFn is the production seam that yields the live A2A card registry

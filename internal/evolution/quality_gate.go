@@ -106,8 +106,20 @@ func (q *QualityGate) ValidateFor(treeKey string, preComposite, postComposite fl
 // The verdict order differs deliberately from Validate: rollback outranks the
 // composite floor when the baseline itself was healthy. A tree at or above
 // MinComposite that drops more than MaxRegressionRate has a known-good state
-// worth restoring (GateRollback), whereas a tree already below the floor that
-// declines further has no such baseline and is simply refused (GateRejected).
+// worth restoring (GateRollback), whereas a tree already below the floor has no
+// such baseline and is simply refused (GateRejected).
+//
+// The floor is absolute, unlike Validate's — Probe refuses any post score below
+// MinComposite regardless of direction, improvements included. Validate can
+// afford the "let weak trees climb out" escape hatch because it gates the
+// structural loop, whose alternative to a sub-floor improvement is keeping an
+// even weaker tree. Probe's caller (RefineGated) already returns early unless
+// post > pre, so a direction-only floor is unreachable by construction and the
+// gate check degenerates to an unconditional accept. Judging the tuned score
+// against the absolute floor is what makes the gate mean anything there: a
+// refinement that improves but leaves the tree below the health floor is
+// speculative tuning the caller can simply discard, not a tree worth committing
+// to disk.
 func (q *QualityGate) Probe(preComposite, postComposite float64) GateResult {
 	// Regression from a healthy baseline — there is a known-good state to
 	// roll back to.
@@ -115,9 +127,9 @@ func (q *QualityGate) Probe(preComposite, postComposite float64) GateResult {
 		return GateRollback
 	}
 
-	// Fitness floor — below the floor even small declines are refused.
-	// Improvements below the floor pass: weak trees must be allowed to climb out.
-	if postComposite < q.MinComposite && postComposite < preComposite {
+	// Fitness floor — a post score under the floor is refused whether it
+	// climbed there or fell there.
+	if postComposite < q.MinComposite {
 		return GateRejected
 	}
 

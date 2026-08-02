@@ -1004,6 +1004,37 @@ var ResolverReachableDescriptions = map[string]string{
 	"superpowers_pipeline": "Production Superpowers SDLC run: design artifact → safe worktree with a verified baseline build → strictly validated implementation plan → dry-run artifacts or a HITL-gated Claude Code TDD apply path → layered verification → finish report with evidence",
 }
 
+// ResolverIDAliases maps a bare tree ID that resolveTreeIDWithResolver accepts
+// (tree_resolver.go) onto the registry name describing the same tree, for the
+// IDs where the two spellings differ. ResolveTreeID("kanban:refiner") returns
+// KanbanRefinerTree() — the very tree KanbanAndHermesDomainTrees() registers as
+// "kanban_refiner" — but the colon form is a different map key, so
+// DescriptionFor missed on the exact string an operator types into switch_tree
+// and the tree rendered as a bare identifier there, in the gardener, and in the
+// dashboard tree list. The same split hits "notebooklm-consumer" (hyphen), whose
+// registry twin is "notebooklm_consumer" (underscore) — the same two-spelling
+// hazard RegisterNotebookLMFitness already has to register both ways.
+//
+// Aliasing rather than copying the sentence is what keeps one description per
+// tree. A second copy under the colon spelling would have to live in one of the
+// three description maps, and every one of them is orphan-guarded against the
+// registry that defines it, so the copy would be an orphan in all three — and
+// two copies of a sentence are two things to keep in sync. An alias instead
+// asserts the fact that is actually true: these are two names for one tree.
+//
+// Resolution is a single hop and runs only after all three maps miss, so a real
+// description entry always wins and an alias can never chain or cycle. Every
+// target must itself be describable.
+var ResolverIDAliases = map[string]string{
+	"kanban:task_creator": "kanban_task_creator",
+	"kanban:refiner":      "kanban_refiner",
+	"kanban:qa":           "kanban_qa",
+	"kanban:monitor":      "kanban_monitor",
+	"kanban:workflow":     "kanban_workflow",
+	"kanban:autopilot":    "kanban_autopilot",
+	"notebooklm-consumer": "notebooklm_consumer",
+}
+
 // DescriptionFor resolves the description for a domain tree by name across all
 // three description maps, so callers do not have to know whether a tree is part
 // of the curated AllDomainTrees() surface, the KanbanAndHermesDomainTrees() set,
@@ -1021,7 +1052,27 @@ var ResolverReachableDescriptions = map[string]string{
 // of the other two, which is what a tree promoted onto AllDomainTrees() without
 // its description entry moving along with it looks like. That failure is silent:
 // the surface renders a bare identifier rather than reporting a miss.
+//
+// On a miss in all three maps the name is retried once through
+// ResolverIDAliases, so a tree whose ResolveTreeID spelling differs from its
+// registry spelling ("kanban:refiner" vs "kanban_refiner") describes as the one
+// tree it is. The alias hop is last precisely so it can only turn a miss into a
+// hit: a name any map answers for never reaches it.
 func DescriptionFor(name string) (string, bool) {
+	if desc, ok := describeExactName(name); ok {
+		return desc, true
+	}
+	if canonical, ok := ResolverIDAliases[name]; ok {
+		return describeExactName(canonical)
+	}
+	return "", false
+}
+
+// describeExactName is DescriptionFor's map lookup without the alias hop: the
+// three description maps in precedence order, treating a whitespace-only entry
+// as a miss. Kept separate so the alias retry resolves its target by exactly the
+// same rules and cannot itself chain through another alias.
+func describeExactName(name string) (string, bool) {
 	for _, m := range []map[string]string{Descriptions, NonRegistryDescriptions, ResolverReachableDescriptions} {
 		if desc, ok := m[name]; ok && strings.TrimSpace(desc) != "" {
 			return desc, true
