@@ -20,7 +20,10 @@ type MockLLM struct {
 }
 
 // NewMockLLM returns a MockLLM with sensible defaults for all responses.
-// All Generate* methods return at least 40 chars to pass validateOutputQuality.
+// Generate, GenerateCtx and GenerateWithTimeout return defaultGenerateResp
+// (>= 40 chars) so output built from them passes validateOutputQuality.
+// ComplexityResp, WentWellResp and ToImproveResp are short fixture strings that
+// never reach that check.
 func NewMockLLM() *MockLLM {
 	return &MockLLM{
 		ComplexityResp: "low",

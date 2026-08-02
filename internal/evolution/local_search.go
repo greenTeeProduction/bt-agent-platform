@@ -103,6 +103,14 @@ type RefineResult struct {
 // no tunable slack left. A nil gate skips the gate check entirely; a gate
 // already disabled for treeKey refuses the refinement outright.
 //
+// The AND in that contract is load-bearing only because Probe judges the tuned
+// score against QualityGate.MinComposite absolutely. The strict-improvement
+// check below guarantees Probe always sees post > pre, so a gate that keyed on
+// the pre→post direction alone could never refuse anything here and every
+// refinement would reach the live tree ungated. What the gate still catches is
+// a tuned tree that improved yet stayed under the health floor — a gain too
+// small to be worth committing.
+//
 // tree is never mutated in place — the caller commits the result.
 func (ls *LocalSearcher) RefineGated(
 	tree *SerializableNode,

@@ -174,6 +174,18 @@ type githubPR struct {
 	} `json:"head"`
 }
 
+// githubRequiredChecks is the branch-protection required status checks object.
+// Strict is GitHub's "require branches to be up to date before merging".
+type githubRequiredChecks struct {
+	Strict   bool     `json:"strict"`
+	Contexts []string `json:"contexts"`
+}
+
+type githubCommitStatus struct {
+	Context string `json:"context"`
+	State   string `json:"state"` // success | pending | failure | error
+}
+
 type githubCheckRun struct {
 	ID         int64  `json:"id"`
 	Name       string `json:"name"`
@@ -262,6 +274,36 @@ func (c *githubPRClient) listCheckRuns(ctx context.Context, sha string) ([]githu
 	return out.CheckRuns, nil
 }
 
+// requiredStatusChecks reads the branch-protection required status checks for
+// branch. GitHub answers 404 when the branch is unprotected or has no required
+// checks, which is reported as (nil, nil) — "nothing required".
+func (c *githubPRClient) requiredStatusChecks(ctx context.Context, branch string) (*githubRequiredChecks, error) {
+	var req githubRequiredChecks
+	path := fmt.Sprintf("/repos/%s/%s/branches/%s/protection/required_status_checks", c.owner, c.repo, branch)
+	status, err := c.do(ctx, http.MethodGet, path, nil, &req)
+	if status == http.StatusNotFound {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &req, nil
+}
+
+// listCommitStatuses returns the legacy commit statuses on sha. Required
+// contexts can be satisfied by either a check run or a commit status, so both
+// have to be consulted before deciding a context is unmet.
+func (c *githubPRClient) listCommitStatuses(ctx context.Context, sha string) ([]githubCommitStatus, error) {
+	var out struct {
+		Statuses []githubCommitStatus `json:"statuses"`
+	}
+	path := fmt.Sprintf("/repos/%s/%s/commits/%s/status", c.owner, c.repo, sha)
+	if _, err := c.do(ctx, http.MethodGet, path, nil, &out); err != nil {
+		return nil, err
+	}
+	return out.Statuses, nil
+}
+
 func (c *githubPRClient) listAnnotations(ctx context.Context, checkRunID int64, limit int) []string {
 	var anns []struct {
 		Path      string `json:"path"`
@@ -332,6 +374,45 @@ func newGitHubPRClientFromEnv(ctx context.Context, runner CommandRunner, repoDir
 		base: "https://api.github.com", owner: owner, repo: repo, token: token,
 		hc: &http.Client{Timeout: 15 * time.Second},
 	}, nil
+}
+
+// prShepherdRequirementGate reports why branch protection cannot currently
+// admit the pinned head, or "" when the merge may be attempted.
+//
+// Check runs going green is NOT the merge condition: GitHub arbitrates on the
+// required *contexts*, and a context that never reported reads as "expected"
+// forever. PR #61 sat green with 4 of 4 contexts unreported and burned a merge
+// call every pass (live 2026-08-02). Naming the gap is what an operator needs.
+func prShepherdRequirementGate(req *githubRequiredChecks, runs []githubCheckRun, statuses []githubCommitStatus, headUpToDate bool) string {
+	if req == nil {
+		return ""
+	}
+	if req.Strict && !headUpToDate {
+		return "branch protection is strict (branches must be up to date) and the pinned head is out of date with master — the required checks can never report against the current base"
+	}
+	satisfied := make(map[string]bool, len(runs)+len(statuses))
+	for _, r := range runs {
+		// GitHub counts skipped and neutral check runs as non-blocking.
+		if r.Status == "completed" && (r.Conclusion == "success" || r.Conclusion == "skipped" || r.Conclusion == "neutral") {
+			satisfied[r.Name] = true
+		}
+	}
+	for _, s := range statuses {
+		if s.State == "success" {
+			satisfied[s.Context] = true
+		}
+	}
+	var unmet []string
+	for _, ctxName := range req.Contexts {
+		if !satisfied[ctxName] {
+			unmet = append(unmet, ctxName)
+		}
+	}
+	if len(unmet) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%d of %d required status check(s) never reported on the pinned head: %s — the context names must match what CI publishes",
+		len(unmet), len(req.Contexts), strings.Join(unmet, ", "))
 }
 
 // ---------------------------------------------------------------------------
@@ -551,6 +632,24 @@ func runPRShepherd(bb *Blackboard, deps prShepherdDeps) int {
 	}
 
 	if len(failed) == 0 {
+		// Pre-flight branch protection. Reading it needs elevated scope, so a
+		// query failure degrades OPEN (attempt the merge, let GitHub arbitrate)
+		// rather than gating every merge the fleet makes.
+		if req, reqErr := api.requiredStatusChecks(ctx, "master"); reqErr != nil {
+			Warn("pr shepherd: required-status-checks query failed, merging unguarded", "err", reqErr)
+		} else if req != nil {
+			var statuses []githubCommitStatus
+			if st, stErr := api.listCommitStatuses(ctx, pinnedSHA); stErr == nil {
+				statuses = st
+			} else {
+				Warn("pr shepherd: commit-status query failed", "err", stErr)
+			}
+			headUpToDate := deps.runner.Run(ctx, deps.repoDir, "git", "merge-base", "--is-ancestor", "refs/remotes/origin/master", pinnedSHA).Err == nil
+			if reason := prShepherdRequirementGate(req, runs, statuses, headUpToDate); reason != "" {
+				return prShepherdSkip(bb, "pr_shepherd_merge_blocked",
+					"## PR Shepherd Merge Blocked\n\nPR #%d check runs are green but branch protection cannot admit it: %s.\n\nNo merge was attempted; this needs an operator.", pr.Number, reason)
+			}
+		}
 		if err := api.mergePR(ctx, pr.Number); err != nil {
 			return prShepherdSkip(bb, "pr_shepherd_merge_blocked",
 				"## PR Shepherd Merge Blocked\n\nPR #%d is green but the merge was refused: %v", pr.Number, err)

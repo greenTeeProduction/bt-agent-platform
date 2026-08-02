@@ -1110,9 +1110,10 @@ func TestArc42DomainTreeNodesHaveDescriptions(t *testing.T) {
 // full-node description guard (TestAllDomainTreeNodesHaveDescriptions) to the
 // domains-package trees that are production-reachable but NOT in the
 // AllDomainTrees registry, so the curated walk never inspects them: the
-// smoke-tested extras (hermes_evolve + the six kanban_* trees, mirroring the
-// fns map in engine_domain_execution_test.go) and the ResolveTreeID-reachable
-// extras (resolverReachableExtraDomainTrees). Their Condition nodes are
+// smoke-tested extras (hermes_evolve + hermes_obsidian + the six kanban_* trees,
+// mirroring the fns map in engine_domain_execution_test.go) and the
+// ResolveTreeID-reachable extras (ResolverReachableDomainTrees). Their Condition
+// nodes are
 // already guarded, but their composites (PreGate, OutcomeSelector, routers)
 // and non-Condition leaves (Action, ChainAction) can still carry blank
 // Descriptions — an unexplained routing stage to the same gardener and
@@ -1131,13 +1132,14 @@ func TestNonRegistryDomainTreeNodesHaveDescriptions(t *testing.T) {
 		}
 	}
 
-	// The smoke-testable extras come from the canonical
-	// SmokeTestableDomainTrees() union minus the curated registry, so this guard
-	// cannot fall behind the registries; the resolver-reachable extras are still
-	// enumerated by their builder functions.
+	// Both halves come from production registries — the smoke-testable extras
+	// from the canonical SmokeTestableDomainTrees() union minus the curated
+	// registry, the resolver-reachable ones from ResolverReachableDomainTrees()
+	// — so this guard cannot fall behind either set. Both return fresh maps, so
+	// merging into the first is safe.
 	trees := nonRegistrySmokeTestableTrees()
-	for name, fn := range resolverReachableExtraDomainTrees() {
-		trees[name] = fn()
+	for name, tree := range ResolverReachableDomainTrees() {
+		trees[name] = tree
 	}
 
 	for name, tree := range trees {
@@ -1218,27 +1220,6 @@ func TestGoapFusionTreeHasResearchRouter(t *testing.T) {
 	}
 }
 
-// resolverReachableExtraDomainTrees returns the domains-package trees that are
-// reachable in production through ResolveTreeID (tree_resolver.go — used by
-// bt-agent, A2A, and template validation) but are NOT already guarded by the
-// AllDomainTrees registry (TestAllDomainTrees / *HaveDescriptions) or the
-// executable-structure smoke registry (TestSmokeTestedDomainTreesHaveCondition-
-// Descriptions, which mirrors engine_domain_execution_test.go's fns map).
-//
-// hermes_obsidian is such a tree: ResolveTreeID("hermes_obsidian") returns
-// HermesObsidianOptimizerTree(), so operators can switch_tree onto it, yet it is
-// absent from every existing coverage guard — it has no smoke test and its
-// routing Conditions were never walked for descriptions. The kanban_* and
-// hermes_evolve / notebooklm* / stockfish* IDs are either already in the smoke
-// registries above or live in other packages (evolution.*), so they are excluded
-// here to keep this guard scoped to the domains package's own untested trees.
-func resolverReachableExtraDomainTrees() map[string]func() *evolution.SerializableNode {
-	return map[string]func() *evolution.SerializableNode{
-		"hermes_obsidian":      HermesObsidianOptimizerTree,
-		"superpowers_pipeline": SuperpowersPipelineTree,
-	}
-}
-
 // TestResolverReachableDomainTreesHaveSmokeStructure closes the "smoke tests"
 // half of the goal "all domain trees have smoke tests, descriptions, and
 // condition coverage" for the ResolveTreeID-reachable domains-package trees that
@@ -1246,14 +1227,16 @@ func resolverReachableExtraDomainTrees() map[string]func() *evolution.Serializab
 // fails if BuildTree panics or returns nil (structural smoke, like the arc42 and
 // runtime-state-dependent trees in TestAllDomainTrees). It also asserts the tree
 // is genuinely reachable via ResolveTreeID so a rename can't silently orphan it.
+//
+// The work list is ResolverReachableDomainTrees(), the production registry, not
+// a copy of it: registering a resolver-only tree is what subjects it to this
+// guard, exactly as registry membership does for the smoke union. A hand-copied
+// literal here would let a tree satisfy
+// TestResolverReachableRegistryIsDerivedFromTreeResolver — which reads the
+// production registry — while never being built once.
 func TestResolverReachableDomainTreesHaveSmokeStructure(t *testing.T) {
 	mock := benchmark.DefaultMock()
-	resolverID := map[string]string{
-		"hermes_obsidian":      "hermes_obsidian",
-		"superpowers_pipeline": "superpowers_pipeline",
-	}
-	for name, fn := range resolverReachableExtraDomainTrees() {
-		tree := fn()
+	for name, tree := range ResolverReachableDomainTrees() {
 		if tree == nil || len(tree.Children) == 0 {
 			t.Errorf("resolver-reachable tree %q is nil or empty", name)
 			continue
@@ -1262,8 +1245,11 @@ func TestResolverReachableDomainTreesHaveSmokeStructure(t *testing.T) {
 		if cmd := engine.BuildTree(tree, bb); cmd == nil {
 			t.Errorf("resolver-reachable tree %q: BuildTree returned nil", name)
 		}
-		if id, ok := resolverID[name]; ok && ResolveTreeID(id) == nil {
-			t.Errorf("resolver-reachable tree %q: ResolveTreeID(%q) returned nil", name, id)
+		// The registry key is the resolver ID by contract (pinned by
+		// TestResolverReachableDomainTreesIsNonEmptyAndResolvable), so the name
+		// doubles as the ID to probe — no side table to fall out of sync.
+		if ResolveTreeID(name) == nil {
+			t.Errorf("resolver-reachable tree %q: ResolveTreeID(%q) returned nil", name, name)
 		}
 	}
 }
@@ -1276,8 +1262,7 @@ func TestResolverReachableDomainTreesHaveSmokeStructure(t *testing.T) {
 // switch_tree tool surface these per-node descriptions as the human-readable
 // routing rationale, and a blank one advertises an unexplained gate to operators.
 func TestResolverReachableDomainTreesHaveConditionDescriptions(t *testing.T) {
-	for name, fn := range resolverReachableExtraDomainTrees() {
-		tree := fn()
+	for name, tree := range ResolverReachableDomainTrees() {
 		if tree == nil {
 			t.Errorf("resolver-reachable tree %q returned nil", name)
 			continue
@@ -1301,12 +1286,12 @@ func TestResolverReachableDomainTreesHaveConditionDescriptions(t *testing.T) {
 // identifier everywhere descriptions are surfaced (gardener, dashboard, the
 // bt-agent switch_tree tool), exactly the unexplained-builtin state
 // DescriptionFor exists to prevent. Every tree in the canonical
-// resolverReachableExtraDomainTrees() enumeration must resolve to a real
-// sentence, and the enumeration is the work list so a newly guarded
+// ResolverReachableDomainTrees() registry must resolve to a real sentence, and
+// that production registry is the work list so a newly registered
 // resolver-reachable tree cannot be added undescribed.
 func TestResolverReachableDomainTreesHaveDescriptions(t *testing.T) {
 	const minDescLen = 20
-	for name := range resolverReachableExtraDomainTrees() {
+	for name := range ResolverReachableDomainTrees() {
 		desc, ok := DescriptionFor(name)
 		if !ok {
 			t.Errorf("resolver-reachable tree %q: DescriptionFor returned ok=false — the tree is selectable via ResolveTreeID(%q) but has no description, so it renders as a bare identifier wherever builtins are listed", name, name)
@@ -1335,10 +1320,10 @@ func TestResolverReachableDomainTreesHaveDescriptions(t *testing.T) {
 // disjoint — a name in two of them makes DescriptionFor's precedence silently
 // choose which of two divergent descriptions the gardener shows.
 func TestResolverReachableDescriptionsHaveNoOrphans(t *testing.T) {
-	reachable := resolverReachableExtraDomainTrees()
+	reachable := ResolverReachableDomainTrees()
 	for name := range ResolverReachableDescriptions {
 		if _, ok := reachable[name]; !ok {
-			t.Errorf("ResolverReachableDescriptions has entry %q but no such tree is registered in resolverReachableExtraDomainTrees()", name)
+			t.Errorf("ResolverReachableDescriptions has entry %q but no such tree is registered in ResolverReachableDomainTrees()", name)
 		}
 		if _, ok := Descriptions[name]; ok {
 			t.Errorf("tree %q is described in both Descriptions and ResolverReachableDescriptions — the description maps must be disjoint", name)
@@ -1358,15 +1343,127 @@ func TestResolverReachableDescriptionsHaveNoOrphans(t *testing.T) {
 // same way hermes_obsidian is protected. The registry must both hold a non-nil builder
 // for the tree and expose it through ResolveTreeID so a rename cannot silently orphan it.
 func TestSuperpowersPipelineIsGuarded(t *testing.T) {
-	fn, ok := resolverReachableExtraDomainTrees()["superpowers_pipeline"]
-	if !ok || fn == nil {
-		t.Fatalf("superpowers_pipeline is not registered in resolverReachableExtraDomainTrees() — it escapes the smoke + condition-description coverage guards")
+	tree, ok := ResolverReachableDomainTrees()["superpowers_pipeline"]
+	if !ok {
+		t.Fatalf("superpowers_pipeline is not registered in ResolverReachableDomainTrees() — it escapes the smoke + condition-description coverage guards")
 	}
-	if tree := fn(); tree == nil || len(tree.Children) == 0 {
-		t.Fatalf("resolverReachableExtraDomainTrees()[\"superpowers_pipeline\"] built a nil or empty tree")
+	if tree == nil || len(tree.Children) == 0 {
+		t.Fatalf("ResolverReachableDomainTrees()[\"superpowers_pipeline\"] built a nil or empty tree")
 	}
 	if ResolveTreeID("superpowers_pipeline") == nil {
 		t.Fatalf("ResolveTreeID(\"superpowers_pipeline\") returned nil — guarded tree is not resolver-reachable")
+	}
+}
+
+// resolverReachableTreesByID is the fail-closed work list for the two
+// resolver-reachable coverage guards below: every tree an operator can actually
+// switch_tree onto, keyed by the ID they type.
+//
+// The IDs are read out of the production resolver by AST scan
+// (resolverBareIDLiterals) rather than copied into a literal here, for the same
+// reason TestResolverReachableRegistryIsDerivedFromTreeResolver reads them that
+// way: a hand-maintained list is exactly the thing that silently falls behind a
+// new `if id == "x"` branch, handing operators a selectable tree with no
+// coverage. IDs whose branch builds another package's tree are skipped via
+// externalPackageResolverIDs — that package guards its own trees, and the
+// exemption must be spelled out rather than inferred.
+//
+// This is deliberately wider than ResolverReachableDomainTrees(), which holds
+// only the resolver-reachable trees NO other registry covers. The registry is
+// the right work list for description guards (it is the home of
+// ResolverReachableDescriptions keys, and must stay disjoint from the smoke
+// registries). It is the wrong work list for the two legs below, because the
+// coverage those legs check is scoped to AllDomainTrees() today — so a
+// resolver-reachable tree that lives in KanbanAndHermesDomainTrees()
+// (hermes_obsidian, hermes_evolve, the six kanban_* trees) is inside the smoke
+// registry and still outside both legs. Walking the resolver instead is what
+// makes "reachable in production" the thing that earns coverage.
+func resolverReachableTreesByID(t *testing.T) map[string]*evolution.SerializableNode {
+	t.Helper()
+
+	ids := resolverBareIDLiterals(t)
+	if len(ids) == 0 {
+		t.Fatalf("no `id == \"...\"` comparisons found in %s's resolveTreeIDWithResolver — the resolver-reachable coverage guards would pass vacuously", resolverBareIDFile)
+	}
+
+	trees := make(map[string]*evolution.SerializableNode, len(ids))
+	for _, id := range ids {
+		if _, external := externalPackageResolverIDs[id]; external {
+			continue
+		}
+		tree := ResolveTreeID(id)
+		if tree == nil {
+			t.Errorf("ResolveTreeID(%q) returned nil even though %s has a branch for that ID", id, resolverBareIDFile)
+			continue
+		}
+		trees[id] = tree
+	}
+	return trees
+}
+
+// TestResolverReachableDomainTreeConditionEdgeMetadataCoverage closes the
+// machine-readable half of condition coverage for the resolver-reachable trees.
+//
+// conditionGuardEdgeGaps already exists and is already the right check — it is
+// simply only ever applied to AllDomainTrees() (TestDomainTreeConditionEdge-
+// MetadataCoverage's guard-edges subtest). That subtest's own doc comment carves
+// the non-registry trees out on the grounds that they "declare their Condition
+// nodes as inline literals rather than via cond() and stay covered by the
+// edge-metadata-populated subtest below" — but that sibling subtest only
+// validates edges a node ALREADY has (edgeMetadataGaps reports blank fields on
+// present edges). A Condition node with no Edges at all passes it trivially.
+// So every resolver-reachable non-registry tree has, until now, had zero
+// enforcement that its gates carry a precondition production code can read.
+//
+// That matters because the Description is prose and the typed edge is not:
+// engine/typed_edges.go (guardConditionForChild) and
+// engine/utility_selector.go (ScoreChild) gate execution on
+// TypedEdge.Condition, and evolution.ValidateEdge rejects a guard edge whose
+// Condition is blank. A switch_tree-selectable tree whose gates exist only as
+// prose is one the engine cannot reason about at all.
+func TestResolverReachableDomainTreeConditionEdgeMetadataCoverage(t *testing.T) {
+	for id, tree := range resolverReachableTreesByID(t) {
+		for _, gap := range conditionGuardEdgeGaps(*tree) {
+			t.Errorf("resolver-reachable tree %q (ResolveTreeID(%q)): Condition node %q carries no EdgeGuard typed edge with a Label and a Condition (machine-readable condition coverage gap).\n"+
+				"Fix at the source by building the node through the cond() helper in trees.go, which derives a guardLabel and a non-blank Condition — do not weaken the guard.",
+				id, id, gap)
+		}
+	}
+}
+
+// TestResolverReachableDomainTreeNodesHaveDescriptions mirrors
+// TestAllDomainTreeSelectorsHaveDescriptions and
+// TestAllDomainTreeNodesHaveDescriptions — both scoped to AllDomainTrees() — for
+// the resolver-reachable trees those two walks never reach.
+//
+// Every Sequence, Selector, Condition and Action node must carry a non-blank
+// Description: these are the four load-bearing node classes the gardener and the
+// bt-agent switch_tree tool surface as the human-readable routing rationale,
+// and a blank one advertises an unexplained stage to operators. Selector nodes
+// matter most and are the easiest to miss — the sel() helper predates carrying a
+// description at all — so a router with no rationale is the specific regression
+// this guard anchors.
+//
+// Failures report the node path from the root, not just the node name, because
+// these trees reuse stage names (ValidateInput, WasSuccessful) across branches.
+func TestResolverReachableDomainTreeNodesHaveDescriptions(t *testing.T) {
+	described := map[string]bool{"Sequence": true, "Selector": true, "Condition": true, "Action": true}
+
+	var walk func(id string, node evolution.SerializableNode, path string)
+	walk = func(id string, node evolution.SerializableNode, path string) {
+		here := path + "/" + node.Name
+		if described[node.Type] && strings.TrimSpace(node.Description) == "" {
+			t.Errorf("resolver-reachable tree %q (ResolveTreeID(%q)): %s node %q has an empty Description (node description coverage gap) at path %s.\n"+
+				"Fix at the source by giving the node a Description in the tree's own file — do not weaken the guard.",
+				id, id, node.Type, node.Name, here)
+		}
+		for _, child := range node.Children {
+			walk(id, child, here)
+		}
+	}
+
+	for id, tree := range resolverReachableTreesByID(t) {
+		walk(id, *tree, "")
 	}
 }
 
@@ -1860,11 +1957,7 @@ func TestDomainTreeConditionEdgeMetadataCoverage(t *testing.T) {
 		walkAll("registered", AllDomainTrees())
 		walkAll("non-registry", KanbanAndHermesDomainTrees())
 
-		resolver := map[string]*evolution.SerializableNode{}
-		for name, fn := range resolverReachableExtraDomainTrees() {
-			resolver[name] = fn()
-		}
-		walkAll("resolver-reachable", resolver)
+		walkAll("resolver-reachable", ResolverReachableDomainTrees())
 	})
 }
 
@@ -2071,5 +2164,463 @@ func TestSmokeExecutionFnsMapCoversRegistry(t *testing.T) {
 		t.Errorf("the fns map in %s is missing %d of the %d SmokeTestableDomainTrees() entries, so those trees are silently unexercised by the executable-structure smoke test: %v\n"+
 			"Fix by ranging over SmokeTestableDomainTrees() instead of maintaining a hand-copied literal.",
 			smokeExecutionFile, len(missing), len(SmokeTestableDomainTrees()), missing)
+	}
+}
+
+// resolverBareIDFile is the production resolver whose bare-ID branches decide
+// which domains-package trees an operator can select by name.
+const resolverBareIDFile = "tree_resolver.go"
+
+// idEqualityLiterals reports every string literal compared against the `id`
+// parameter in a resolver branch condition, flattening `||` chains so a
+// multi-alias branch (`id == "fusion" || id == "fusion_deliberation"`) yields
+// both IDs rather than being silently skipped.
+func idEqualityLiterals(cond ast.Expr) []string {
+	bin, ok := cond.(*ast.BinaryExpr)
+	if !ok {
+		return nil
+	}
+	if bin.Op == token.LOR {
+		return append(idEqualityLiterals(bin.X), idEqualityLiterals(bin.Y)...)
+	}
+	if bin.Op != token.EQL {
+		return nil
+	}
+	if x, ok := bin.X.(*ast.Ident); !ok || x.Name != "id" {
+		return nil
+	}
+	lit, ok := bin.Y.(*ast.BasicLit)
+	if !ok || lit.Kind != token.STRING {
+		return nil
+	}
+	unquoted, err := strconv.Unquote(lit.Value)
+	if err != nil {
+		return nil
+	}
+	return []string{unquoted}
+}
+
+// returnedLocalConstructor reports the name of the unqualified constructor a
+// resolver branch returns — "KanbanRefinerTree" for `return KanbanRefinerTree()`.
+// An unqualified call is by definition a domains-package tree, so this is what
+// separates the trees this package must cover from the qualified calls
+// (evolution.StockfishEvolutionTree(), thinktank.SynthesisTree()) that belong to
+// other packages and carry their own coverage there.
+func returnedLocalConstructor(block *ast.BlockStmt) (string, bool) {
+	for _, stmt := range block.List {
+		ret, ok := stmt.(*ast.ReturnStmt)
+		if !ok || len(ret.Results) != 1 {
+			continue
+		}
+		call, ok := ret.Results[0].(*ast.CallExpr)
+		if !ok {
+			continue
+		}
+		if ident, ok := call.Fun.(*ast.Ident); ok {
+			return ident.Name, true
+		}
+	}
+	return "", false
+}
+
+// resolverReachableDomainsTreeIDs parses resolverBareIDFile and returns every
+// bare tree ID whose branch returns a domains-package tree, mapped to the
+// constructor that builds it.
+//
+// This is the ground truth the resolver-reachable coverage guards are checked
+// against. Adding a branch to resolveTreeIDWithResolver makes a tree selectable
+// in production (bt-agent switch_tree, A2A, template validation), and nothing
+// about that act adds it to a coverage registry, so the tree would escape every
+// guard silently. The two smoke registries solved exactly this problem in
+// production code — coverage derives from SmokeTestableDomainTrees() so
+// membership alone forces exercise — and ResolverReachableDomainTrees() now
+// gives the resolver-only class the same derivation, with
+// TestResolverReachableRegistryIsDerivedFromTreeResolver reconciling it against
+// the branches parsed here.
+func resolverReachableDomainsTreeIDs(t *testing.T) map[string]string {
+	t.Helper()
+
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, resolverBareIDFile, nil, 0)
+	if err != nil {
+		t.Fatalf("parsing %s: %v", resolverBareIDFile, err)
+	}
+
+	const resolverFn = "resolveTreeIDWithResolver"
+	var body *ast.BlockStmt
+	for _, decl := range file.Decls {
+		if fn, ok := decl.(*ast.FuncDecl); ok && fn.Name.Name == resolverFn {
+			body = fn.Body
+		}
+	}
+	if body == nil {
+		t.Fatalf("%s: no func %s — the resolver was renamed, so this guard is no longer inspecting the real selection surface", resolverBareIDFile, resolverFn)
+	}
+
+	ids := map[string]string{}
+	ast.Inspect(body, func(n ast.Node) bool {
+		ifStmt, ok := n.(*ast.IfStmt)
+		if !ok {
+			return true
+		}
+		ctor, ok := returnedLocalConstructor(ifStmt.Body)
+		if !ok {
+			return true
+		}
+		for _, id := range idEqualityLiterals(ifStmt.Cond) {
+			ids[id] = ctor
+		}
+		return true
+	})
+	return ids
+}
+
+// TestEveryResolverReachableDomainTreeIsCovered closes the last hole in the goal
+// "all domain trees have smoke tests, descriptions, and condition coverage": the
+// trees an operator selects by bare ID through ResolveTreeID.
+//
+// Every coverage guard derives its work list from a production enumeration, so
+// registering a tree is what subjects it to the checks. But the registries only
+// see trees someone remembered to register, while resolveTreeIDWithResolver
+// exposes domains-package trees by bare ID whether or not anyone did. This test
+// derives its work list from the resolver source itself, so a branch added there
+// cannot escape.
+//
+// The description leg fails today. ResolveTreeID("kanban:refiner") returns a real
+// tree an operator can switch onto, but DescriptionFor("kanban:refiner") misses —
+// NonRegistryDescriptions is keyed "kanban_refiner", the registry name, not the
+// ID the resolver actually accepts. Those IDs render as bare identifiers wherever
+// builtins are listed, which is the precise failure DescriptionFor exists to
+// prevent and the reason ResolverReachableDescriptions was introduced.
+func TestEveryResolverReachableDomainTreeIsCovered(t *testing.T) {
+	ids := resolverReachableDomainsTreeIDs(t)
+	if len(ids) == 0 {
+		t.Fatalf("no bare-ID domains-package branches found in %s — the AST guard stopped matching the real resolver and is silently vacuous", resolverBareIDFile)
+	}
+
+	names := make([]string, 0, len(ids))
+	for id := range ids {
+		names = append(names, id)
+	}
+	sort.Strings(names)
+
+	mock := benchmark.DefaultMock()
+	for _, id := range names {
+		ctor := ids[id]
+		t.Run(id, func(t *testing.T) {
+			// Smoke: the tree an operator selects must actually build.
+			tree := ResolveTreeID(id)
+			if tree == nil || len(tree.Children) == 0 {
+				t.Fatalf("ResolveTreeID(%q) (built by %s) returned a nil or childless tree", id, ctor)
+			}
+			bb := &engine.Blackboard{Task: "smoke: exercise " + id, LLM: mock}
+			if cmd := engine.BuildTree(tree, bb); cmd == nil {
+				t.Errorf("resolver ID %q (built by %s): BuildTree returned nil", id, ctor)
+			}
+
+			// Condition coverage: every gate must explain its routing rationale.
+			for _, gap := range conditionDescriptionGaps(*tree) {
+				t.Errorf("resolver ID %q (built by %s): Condition node %q has an empty Description (condition coverage gap)", id, ctor, gap)
+			}
+
+			// Descriptions: the ID an operator types must resolve to a sentence.
+			desc, ok := DescriptionFor(id)
+			if !ok {
+				t.Errorf("resolver ID %q (built by %s): DescriptionFor returned ok=false — ResolveTreeID(%q) hands an operator a real tree, but no description map knows that ID, so it renders as a bare identifier in the gardener, the dashboard tree list, and the bt-agent switch_tree confirmation",
+					id, ctor, id)
+				return
+			}
+			// Same floor the other description guards enforce: a description
+			// must explain the tree, not restate its name.
+			const minDescLen = 20
+			if trimmed := strings.TrimSpace(desc); len(trimmed) < minDescLen {
+				t.Errorf("resolver ID %q (built by %s): description %q is only %d chars, want >= %d",
+					id, ctor, trimmed, len(trimmed), minDescLen)
+			}
+		})
+	}
+}
+
+// TestResolverIDAliasesHaveNoOrphans is the reverse guard to the description leg
+// of TestEveryResolverReachableDomainTreeIsCovered, and the alias-map sibling of
+// the three HaveNoOrphans guards above. The forward test only proves each alias
+// resolves; it cannot see an alias whose key no longer names a resolver branch
+// (dead weight advertising a spelling ResolveTreeID rejects), nor one whose key
+// a description map has since claimed outright — that key would silently stop
+// using the alias, so a divergent description could grow underneath it unnoticed.
+//
+// It also pins the two structural properties DescriptionFor's alias hop depends
+// on: every target must be describable without an alias (the hop is single, so a
+// chain resolves to nothing), and no target may be a key (which is what makes a
+// chain impossible in the first place rather than merely absent today).
+func TestResolverIDAliasesHaveNoOrphans(t *testing.T) {
+	reachable := resolverReachableDomainsTreeIDs(t)
+	for alias, canonical := range ResolverIDAliases {
+		if _, ok := reachable[alias]; !ok {
+			t.Errorf("ResolverIDAliases has key %q but no bare-ID branch in %s resolves that spelling — the alias describes a name ResolveTreeID rejects", alias, resolverBareIDFile)
+		}
+		if _, ok := ResolverIDAliases[canonical]; ok {
+			t.Errorf("ResolverIDAliases maps %q to %q, which is itself an alias key — DescriptionFor resolves a single hop, so a chained alias resolves to nothing", alias, canonical)
+		}
+		desc, ok := DescriptionFor(canonical)
+		if !ok {
+			t.Errorf("ResolverIDAliases maps %q to %q, but DescriptionFor(%q) returned ok=false — the alias target must be describable in its own right", alias, canonical, canonical)
+			continue
+		}
+		if got, _ := DescriptionFor(alias); got != desc {
+			t.Errorf("DescriptionFor(%q) = %q, want the target's description %q — the alias exists so both spellings describe the one tree they resolve to", alias, got, desc)
+		}
+	}
+
+	// The alias hop must never shadow a real entry: it runs last precisely so a
+	// name the maps answer for cannot be redirected somewhere else.
+	for alias := range ResolverIDAliases {
+		for mapName, m := range map[string]map[string]string{
+			"Descriptions":                  Descriptions,
+			"NonRegistryDescriptions":       NonRegistryDescriptions,
+			"ResolverReachableDescriptions": ResolverReachableDescriptions,
+		} {
+			if _, ok := m[alias]; ok {
+				t.Errorf("%q is both a ResolverIDAliases key and a %s entry — the alias is dead (DescriptionFor answers from the map first), so the two can silently diverge", alias, mapName)
+			}
+		}
+	}
+}
+
+// externalPackageResolverIDs are the bare tree IDs resolveTreeIDWithResolver
+// accepts whose branch builds a tree owned by ANOTHER package, so the domains
+// coverage registries deliberately do not — and must not — name them. Every one
+// of these resolves into internal/evolution, which carries its own smoke and
+// description coverage in that package's tests; duplicating them here would
+// guard a tree this package does not define. The value records which
+// constructor each ID lands on, so a branch repointed at a domains-package tree
+// is visible as a stale comment rather than a silent exemption.
+//
+// This set is what makes TestResolverReachableRegistryIsDerivedFromTreeResolver
+// fail CLOSED. A newly added `if id == "x"` branch is presumed to build a
+// domains-package tree that must be covered; exempting it takes a deliberate
+// edit here, not silence.
+var externalPackageResolverIDs = map[string]string{
+	"stockfish_evolve":    "evolution.StockfishEvolutionTree",
+	"stockfish_loop":      "evolution.StockfishEvolutionLoop",
+	"vault_manager":       "evolution.VaultManagerTree",
+	"notebooklm-bridge":   "evolution.NotebookLMBridgeTree",
+	"godev":               "evolution.GoDeveloperTree",
+	"fusion":              "evolution.FusionDeliberationTree",
+	"fusion_deliberation": "evolution.FusionDeliberationTree",
+	"telegram_clarify":    "evolution.TelegramClarifyTree",
+}
+
+// resolverBareIDLiterals returns every string literal compared against the `id`
+// parameter anywhere inside resolveTreeIDWithResolver, sorted for deterministic
+// reporting. The empty string is dropped: `if id == ""` is the nil guard, not a
+// selectable tree.
+//
+// This is deliberately broader than resolverReachableDomainsTreeIDs above, which
+// only keeps branches returning an unqualified constructor call. That filter
+// infers "is this a domains tree?" from the shape of the return statement, so a
+// branch that returns anything else — a helper call, a variable, a qualified
+// call — drops out of the work list with no signal. Here every literal ID counts
+// and an exemption must be spelled out in externalPackageResolverIDs, which is
+// the direction that fails closed. It parses independently for the same reason:
+// this guard must keep matching the real resolver even if the other helper's
+// filtering changes.
+func resolverBareIDLiterals(t *testing.T) []string {
+	t.Helper()
+
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, resolverBareIDFile, nil, 0)
+	if err != nil {
+		t.Fatalf("parsing %s: %v", resolverBareIDFile, err)
+	}
+
+	const resolverFn = "resolveTreeIDWithResolver"
+	var body *ast.BlockStmt
+	for _, decl := range file.Decls {
+		if fn, ok := decl.(*ast.FuncDecl); ok && fn.Name.Name == resolverFn {
+			body = fn.Body
+		}
+	}
+	if body == nil {
+		t.Fatalf("%s: no func %s — the resolver was renamed, so this guard is no longer inspecting the real selection surface", resolverBareIDFile, resolverFn)
+	}
+
+	seen := map[string]bool{}
+	ast.Inspect(body, func(n ast.Node) bool {
+		if bin, ok := n.(*ast.BinaryExpr); ok {
+			for _, id := range idEqualityLiterals(bin) {
+				if id != "" {
+					seen[id] = true
+				}
+			}
+		}
+		return true
+	})
+
+	ids := make([]string, 0, len(seen))
+	for id := range seen {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+// coverageRootName reports the name by which a resolver-returned tree and a
+// registry tree can be compared. AllDomainTrees() wraps every value in a
+// ClaudeErrorHandler rooted at "<key>_ErrorHandler" (wrapWithErrorHandler in
+// trees.go) while resolveTreeIDWithResolver returns the bare constructor output,
+// so the two spellings of one tree only line up once the wrapper is peeled off.
+//
+// Trees are matched by root name rather than by map key because the resolver's
+// IDs deliberately differ from the registries' names — ResolveTreeID accepts
+// "kanban:refiner" for the tree KanbanAndHermesDomainTrees() registers as
+// "kanban_refiner" — so a key comparison would report covered trees as missing.
+func coverageRootName(tree *evolution.SerializableNode) string {
+	if tree == nil {
+		return ""
+	}
+	if tree.Type == "ClaudeErrorHandler" && len(tree.Children) == 1 {
+		return tree.Children[0].Name
+	}
+	return tree.Name
+}
+
+// TestResolverReachableRegistryIsDerivedFromTreeResolver makes the
+// resolver-reachable coverage work list fail closed.
+//
+// SmokeTestableDomainTrees() is derived — it is the union of two production
+// registries, so registering a tree is itself what subjects it to the smoke,
+// condition-description, and description guards. The third class of tree,
+// domains-package trees reachable ONLY through ResolveTreeID, is enumerated by
+// ResolverReachableDomainTrees(), which gives it the same property. What neither
+// registry can give it is exhaustiveness: adding one `if id == "x" { return
+// XTree() }` branch to tree_resolver.go hands operators a switch_tree-selectable
+// tree with no smoke test, no Condition walk, and no description, and no
+// registry notices the omission — that is precisely the thing nobody registered.
+//
+// This guard reads the IDs out of the production resolver instead. Each one must
+// either resolve to a tree already covered by SmokeTestableDomainTrees() ∪
+// ResolverReachableDomainTrees(), or be listed in externalPackageResolverIDs as
+// another package's tree. A new domains-package ID defaults to "must be
+// covered", so the only way past this test is to put the tree in a production
+// registry.
+func TestResolverReachableRegistryIsDerivedFromTreeResolver(t *testing.T) {
+	ids := resolverBareIDLiterals(t)
+	if len(ids) == 0 {
+		t.Fatalf("no `id == \"...\"` comparisons found in %s's resolveTreeIDWithResolver — a refactor moved the bare-ID branches somewhere this scan cannot see, so the guard is silently vacuous and every resolver-reachable tree is unguarded again", resolverBareIDFile)
+	}
+
+	// Root name -> the registry entry that covers it.
+	covered := map[string]string{}
+	for name, tree := range SmokeTestableDomainTrees() {
+		if root := coverageRootName(tree); root != "" {
+			covered[root] = "SmokeTestableDomainTrees()[" + name + "]"
+		}
+	}
+	for name, tree := range ResolverReachableDomainTrees() {
+		if root := coverageRootName(tree); root != "" {
+			covered[root] = "ResolverReachableDomainTrees()[" + name + "]"
+		}
+	}
+
+	for _, id := range ids {
+		if _, external := externalPackageResolverIDs[id]; external {
+			continue
+		}
+		t.Run(id, func(t *testing.T) {
+			tree := ResolveTreeID(id)
+			if tree == nil {
+				t.Fatalf("ResolveTreeID(%q) returned nil even though %s has a branch for that ID", id, resolverBareIDFile)
+			}
+			root := coverageRootName(tree)
+			if _, ok := covered[root]; !ok {
+				t.Errorf("resolver ID %q resolves to a tree rooted at %q, which is in neither SmokeTestableDomainTrees() nor ResolverReachableDomainTrees().\n"+
+					"%s makes that tree switch_tree-selectable in production, so today it has no smoke test, no condition-description walk, and no description.\n"+
+					"Fix by adding it to ResolverReachableDomainTrees() in trees.go (or to AllDomainTrees()/KanbanAndHermesDomainTrees() if it belongs on a registry surface) — or, if its tree is built by another package, to externalPackageResolverIDs with the constructor that owns it.",
+					id, root, resolverBareIDFile)
+			}
+		})
+	}
+}
+
+// TestResolverReachableDomainTreesIsNonEmptyAndResolvable pins the contract of
+// the production registry the guard above derives half its covered set from:
+// every entry must be a real, buildable tree that ResolveTreeID actually hands
+// back under that exact key.
+//
+// The emptiness check matters because an empty registry would make the
+// derivation guard pass vacuously for this class of tree. The key check matters
+// because ResolveTreeID falls back to evolution.DefaultTree() rather than nil for
+// an unknown ID, so a typo'd or renamed key still returns a non-nil tree — it is
+// the root-name comparison, not the nil check, that catches a registry entry
+// operators can no longer select.
+func TestResolverReachableDomainTreesIsNonEmptyAndResolvable(t *testing.T) {
+	trees := ResolverReachableDomainTrees()
+	if len(trees) == 0 {
+		t.Fatal("ResolverReachableDomainTrees() is empty — the resolver-only class of tree has lost its coverage work list, and TestResolverReachableRegistryIsDerivedFromTreeResolver can only pass vacuously for it")
+	}
+
+	for name, tree := range trees {
+		if tree == nil {
+			t.Errorf("ResolverReachableDomainTrees()[%q] is nil; every entry must be a buildable tree", name)
+			continue
+		}
+		if len(tree.Children) == 0 {
+			t.Errorf("ResolverReachableDomainTrees()[%q] has no children, so it can never do any work", name)
+		}
+
+		resolved := ResolveTreeID(name)
+		if resolved == nil {
+			t.Errorf("ResolveTreeID(%q) returned nil — the registry guards a tree no operator can select", name)
+			continue
+		}
+		if got, want := coverageRootName(resolved), coverageRootName(tree); got != want {
+			t.Errorf("ResolveTreeID(%q) builds a tree rooted at %q, but ResolverReachableDomainTrees()[%q] is rooted at %q — the key must be the exact ID tree_resolver.go accepts, or the registry describes and smoke-tests a different tree than the one operators get",
+				name, got, name, want)
+		}
+	}
+}
+
+// TestResolverReachableDomainTreesIsDisjointFromSmokeRegistry keeps the two
+// halves of the covered set from overlapping. The three description maps are
+// already required to be pairwise disjoint (DescriptionFor's precedence would
+// otherwise silently pick one of two divergent sentences), and each map is
+// orphan-guarded against the registry that defines it — so a name registered in
+// both SmokeTestableDomainTrees() and ResolverReachableDomainTrees() would have
+// two legitimate description homes at once, making that invariant
+// unenforceable. A tree belongs to exactly one class.
+func TestResolverReachableDomainTreesIsDisjointFromSmokeRegistry(t *testing.T) {
+	smoke := SmokeTestableDomainTrees()
+	for name := range ResolverReachableDomainTrees() {
+		if _, ok := smoke[name]; ok {
+			t.Errorf("tree %q is registered in both SmokeTestableDomainTrees() and ResolverReachableDomainTrees() — the two registries must be disjoint, because a tree in both has two valid description homes and the maps can then diverge. A tree covered by AllDomainTrees()/KanbanAndHermesDomainTrees() is not resolver-only; drop it from ResolverReachableDomainTrees()", name)
+		}
+	}
+}
+
+// TestResolverReachableDomainTreesReturnsFreshMap holds the new registry to the
+// same defensive-copy contract SmokeTestableDomainTrees() carries: coverage
+// guards filter and merge these maps (see TestNonRegistryDomainTreeNodesHave-
+// Descriptions, which copies entries into a scratch map), so a shared backing map
+// would let one guard's bookkeeping delete another guard's work list and turn a
+// coverage failure into a silent pass.
+func TestResolverReachableDomainTreesReturnsFreshMap(t *testing.T) {
+	want := len(ResolverReachableDomainTrees())
+
+	got := ResolverReachableDomainTrees()
+	const sentinel = "zz_resolver_reachable_sentinel"
+	got[sentinel] = &evolution.SerializableNode{Type: "Action", Name: "Sentinel"}
+	for name := range got {
+		if name != sentinel {
+			delete(got, name)
+		}
+	}
+
+	fresh := ResolverReachableDomainTrees()
+	if _, leaked := fresh[sentinel]; leaked {
+		t.Error("ResolverReachableDomainTrees() leaks shared state: a key added to one call's map showed up in the next; it must build a fresh map every call")
+	}
+	if len(fresh) != want {
+		t.Errorf("ResolverReachableDomainTrees() returned %d entries after the previous result was mutated, want %d; it must build a fresh map every call", len(fresh), want)
 	}
 }

@@ -90,10 +90,16 @@ type fakeGitHub struct {
 	t           *testing.T
 	openPRs     []map[string]any
 	checkRuns   map[string][]map[string]any // head sha -> runs
+	statuses    map[string][]map[string]any // head sha -> legacy commit statuses
 	annotations map[int64][]map[string]any  // check-run id -> annotations
 	mergeCode   int                         // 0 => 200 merged
 	mergeMsg    string
-	requests    []string
+	// Branch protection: required contexts is nil => the endpoint 404s, which
+	// is how GitHub answers a branch with no required status checks.
+	requiredContexts []string
+	requiredStrict   bool
+	protectionCode   int // non-zero => that status instead of the payload
+	requests         []string
 }
 
 func (g *fakeGitHub) server() *httptest.Server {
@@ -109,6 +115,25 @@ func (g *fakeGitHub) server() *httptest.Server {
 				"number": 77,
 				"head":   map[string]any{"sha": "localsha", "ref": "fleet/landing"},
 			})
+		case r.Method == "GET" && strings.HasSuffix(r.URL.Path, "/protection/required_status_checks"):
+			if g.protectionCode != 0 {
+				w.WriteHeader(g.protectionCode)
+				_ = json.NewEncoder(w).Encode(map[string]any{"message": "no"})
+				return
+			}
+			if g.requiredContexts == nil {
+				w.WriteHeader(http.StatusNotFound)
+				_ = json.NewEncoder(w).Encode(map[string]any{"message": "Branch not protected"})
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"strict": g.requiredStrict, "contexts": g.requiredContexts,
+			})
+		case r.Method == "GET" && strings.Contains(r.URL.Path, "/commits/") && strings.HasSuffix(r.URL.Path, "/status"):
+			parts := strings.Split(r.URL.Path, "/")
+			sha := parts[len(parts)-2]
+			st := g.statuses[sha]
+			_ = json.NewEncoder(w).Encode(map[string]any{"statuses": st})
 		case r.Method == "GET" && strings.Contains(r.URL.Path, "/commits/") && strings.HasSuffix(r.URL.Path, "/check-runs"):
 			parts := strings.Split(r.URL.Path, "/")
 			sha := parts[len(parts)-2]
@@ -479,6 +504,126 @@ func TestPRShepherd_MergeBlockedSkips(t *testing.T) {
 	}
 	if !strings.Contains(bb.Result, "approving review") {
 		t.Fatalf("Result should carry the API message: %s", bb.Result)
+	}
+}
+
+// Branch protection is the real merge authority: check runs going green says
+// nothing about whether the contexts GitHub *requires* ever reported. PR #61
+// sat green with zero required contexts reported and burned a merge call every
+// pass on "4 of 4 required status checks are expected" (live 2026-08-02 11:47).
+// The shepherd must pre-flight the requirement and name what is missing.
+func TestPRShepherd_SkipsMergeWhenRequiredContextNeverReported(t *testing.T) {
+	gh := &fakeGitHub{t: t, openPRs: openPR("localsha"),
+		requiredContexts: []string{"Lint", "Build"},
+		checkRuns: map[string][]map[string]any{
+			"localsha": {{"id": int64(1), "name": "Lint", "status": "completed", "conclusion": "success"}},
+		}}
+	runner := &prShepherdScriptRunner{script: gitAncestryScript("localsha", "originsha", false, true)}
+	bb := newTestBlackboard()
+	if got := runPRShepherd(bb, prTestDeps(t, gh, runner, nil)); got != 1 {
+		t.Fatalf("result = %d, want 1; result=%s", got, bb.Result)
+	}
+	if bb.Outcome != "pr_shepherd_merge_blocked" {
+		t.Fatalf("Outcome = %q; result=%s", bb.Outcome, bb.Result)
+	}
+	if !strings.Contains(bb.Result, "Build") {
+		t.Fatalf("Result must name the unmet context: %s", bb.Result)
+	}
+	if strings.Contains(bb.Result, "Lint") {
+		t.Fatalf("Result must not list the satisfied context: %s", bb.Result)
+	}
+	// The whole point is to stop hammering an API call that cannot succeed.
+	if gh.requested("/merge") {
+		t.Fatalf("merge must not be attempted when a required context is unmet: %v", gh.requests)
+	}
+}
+
+func TestPRShepherd_MergesWhenEveryRequiredContextSucceeded(t *testing.T) {
+	gh := &fakeGitHub{t: t, openPRs: openPR("localsha"),
+		requiredContexts: []string{"Lint", "Test (short)"},
+		checkRuns: map[string][]map[string]any{
+			"localsha": {
+				{"id": int64(1), "name": "Lint", "status": "completed", "conclusion": "success"},
+				{"id": int64(2), "name": "Test (short)", "status": "completed", "conclusion": "success"},
+			},
+		}}
+	runner := &prShepherdScriptRunner{script: gitAncestryScript("localsha", "originsha", false, true)}
+	bb := newTestBlackboard()
+	if got := runPRShepherd(bb, prTestDeps(t, gh, runner, nil)); got != 1 {
+		t.Fatalf("result = %d, want 1; result=%s", got, bb.Result)
+	}
+	if bb.Outcome != "pr_shepherd_merged" {
+		t.Fatalf("Outcome = %q; result=%s", bb.Outcome, bb.Result)
+	}
+}
+
+// Required contexts can be satisfied by a legacy commit status rather than a
+// check run; matching only against check runs would wrongly gate those repos.
+func TestPRShepherd_RequiredContextSatisfiedByCommitStatus(t *testing.T) {
+	gh := &fakeGitHub{t: t, openPRs: openPR("localsha"),
+		requiredContexts: []string{"ci/legacy-builder"},
+		checkRuns: map[string][]map[string]any{
+			"localsha": {{"id": int64(1), "name": "Lint", "status": "completed", "conclusion": "success"}},
+		},
+		statuses: map[string][]map[string]any{
+			"localsha": {{"context": "ci/legacy-builder", "state": "success"}},
+		}}
+	runner := &prShepherdScriptRunner{script: gitAncestryScript("localsha", "originsha", false, true)}
+	bb := newTestBlackboard()
+	if got := runPRShepherd(bb, prTestDeps(t, gh, runner, nil)); got != 1 {
+		t.Fatalf("result = %d, want 1; result=%s", got, bb.Result)
+	}
+	if bb.Outcome != "pr_shepherd_merged" {
+		t.Fatalf("Outcome = %q; result=%s", bb.Outcome, bb.Result)
+	}
+}
+
+// strict protection ("require branches to be up to date") refuses the merge
+// when the pinned head does not contain the base tip, with the same opaque
+// "N of N expected" 405. Detect it from the head's ancestry instead.
+func TestPRShepherd_SkipsMergeWhenStrictAndHeadBehindBase(t *testing.T) {
+	gh := &fakeGitHub{t: t, openPRs: openPR("pinnedsha"),
+		requiredContexts: []string{"Lint"}, requiredStrict: true,
+		checkRuns: map[string][]map[string]any{
+			"pinnedsha": {{"id": int64(1), "name": "Lint", "status": "completed", "conclusion": "success"}},
+		}}
+	base := gitAncestryScript("localsha", "originsha", false, true)
+	runner := &prShepherdScriptRunner{script: func(dir, cmd string) (CommandResult, bool) {
+		if strings.Contains(cmd, "merge-base --is-ancestor refs/remotes/origin/master pinnedsha") {
+			return CommandResult{Err: fmt.Errorf("exit status 1")}, true
+		}
+		return base(dir, cmd)
+	}}
+	bb := newTestBlackboard()
+	if got := runPRShepherd(bb, prTestDeps(t, gh, runner, nil)); got != 1 {
+		t.Fatalf("result = %d, want 1; result=%s", got, bb.Result)
+	}
+	if bb.Outcome != "pr_shepherd_merge_blocked" {
+		t.Fatalf("Outcome = %q; result=%s", bb.Outcome, bb.Result)
+	}
+	if !strings.Contains(bb.Result, "out of date") {
+		t.Fatalf("Result must explain the strict-protection stall: %s", bb.Result)
+	}
+	if gh.requested("/merge") {
+		t.Fatalf("merge must not be attempted when strict protection cannot pass: %v", gh.requests)
+	}
+}
+
+// Reading protection needs elevated scope; a token without it must degrade to
+// the pre-existing behaviour (attempt the merge, let GitHub arbitrate) rather
+// than gate every merge the fleet makes.
+func TestPRShepherd_MergesWhenProtectionUnreadable(t *testing.T) {
+	gh := &fakeGitHub{t: t, openPRs: openPR("localsha"), protectionCode: 403,
+		checkRuns: map[string][]map[string]any{
+			"localsha": {{"id": int64(1), "name": "Lint", "status": "completed", "conclusion": "success"}},
+		}}
+	runner := &prShepherdScriptRunner{script: gitAncestryScript("localsha", "originsha", false, true)}
+	bb := newTestBlackboard()
+	if got := runPRShepherd(bb, prTestDeps(t, gh, runner, nil)); got != 1 {
+		t.Fatalf("result = %d, want 1; result=%s", got, bb.Result)
+	}
+	if bb.Outcome != "pr_shepherd_merged" {
+		t.Fatalf("Outcome = %q; result=%s", bb.Outcome, bb.Result)
 	}
 }
 

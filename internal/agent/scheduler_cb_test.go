@@ -493,6 +493,77 @@ func TestAgentCircuitBreakerStore_Load_MissingFileIsNotError(t *testing.T) {
 	}
 }
 
+// TestAgentCircuitBreakerStore_SaveLocksReadModifyWrite pins the cross-process
+// serialization this store — the single owner of circuit_breakers.json — owes
+// its writers. The daemon scheduler, the dashboard executor and internal/a2a's
+// winner breakers all Save into the same path. The atomic rename only makes
+// each individual write indivisible; it does nothing about the read-merge-write
+// cycle around it, so two savers can both read the same old file and the second
+// rename silently drops whatever the first one committed in between. Save must
+// hold the shared advisory sidecar lock (reliability.AcquireFileLock, the same
+// `<path>.lock` idiom internal/evolution and internal/research already use)
+// across the whole cycle, so it blocks while another process holds it and
+// re-reads the file only after acquiring.
+func TestAgentCircuitBreakerStore_SaveLocksReadModifyWrite(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "circuit_breakers.json")
+	if err := os.WriteFile(path, []byte(`{"breakers":{}}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Stand in for a second process that is mid read-modify-write on the file.
+	release, err := reliability.AcquireFileLock(path)
+	if err != nil {
+		t.Fatalf("AcquireFileLock: %v", err)
+	}
+	defer release() // safe to call twice; released explicitly below
+
+	store := NewAgentCircuitBreakerStore(CircuitBreakerOptions{Threshold: 1, Cooldown: time.Minute})
+	store.RecordFailure("own-agent")
+
+	done := make(chan error, 1)
+	go func() { done <- store.Save(path) }()
+
+	select {
+	case saveErr := <-done:
+		t.Fatalf("Save returned (err=%v) while another process held %s.lock; its read-modify-write must block on the shared advisory file lock", saveErr, path)
+	case <-time.After(250 * time.Millisecond):
+		// Still blocked, as required.
+	}
+
+	// The other process commits its entry and drops the lock. Save must not have
+	// read the file before this point, or the merge below loses this entry.
+	other := `{"breakers":{"other-process-agent":{"status":"open","failures":7,"last_failure":"2026-07-17T12:00:00Z"}}}`
+	if err := os.WriteFile(path, []byte(other), 0644); err != nil {
+		t.Fatal(err)
+	}
+	release()
+
+	select {
+	case saveErr := <-done:
+		if saveErr != nil {
+			t.Fatalf("Save: %v", saveErr)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("Save never completed after the advisory file lock was released")
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded circuitBreakersFileForTest
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("saved file is not valid dashboard-shaped JSON: %v\n%s", err, data)
+	}
+	if entry, ok := decoded.Breakers["other-process-agent"]; !ok || entry.Failures != 7 {
+		t.Errorf("other process's entry = %+v (present=%v), want failures=7 preserved — Save read the file before taking the lock and clobbered a concurrent writer", entry, ok)
+	}
+	if _, ok := decoded.Breakers["own-agent"]; !ok {
+		t.Errorf("own-agent missing from saved file: %+v", decoded.Breakers)
+	}
+}
+
 // TestScheduler_PersistsCircuitBreakerOnFailure exercises the real scheduler
 // run loop (runJob -> reportAgentOutcome) end to end: a failing agent must
 // leave circuit_breakers.json on disk at agent.CircuitBreakersFile() with the

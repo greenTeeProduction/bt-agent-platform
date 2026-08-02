@@ -71,14 +71,42 @@ type CircuitSummary = reliability.CircuitSummary
 // what it adds beyond the state machine itself is the dashboard-shaped JSON
 // persistence (Save/Load) and the A2A winner-breaker key coexistence rules
 // for the file the two owners share.
+//
+// This type is the ONLY implementation of circuit_breakers.json persistence in
+// the platform. internal/a2a's winnerBreakerStore used to hand-roll a second,
+// subtly different load/save against the same path; it now delegates here via
+// NewWinnerCircuitBreakerStore, so the merge rules, the half-open un-wedging,
+// the timestamp restore and the cross-process lock exist once.
 type AgentCircuitBreakerStore struct {
 	mu      sync.RWMutex
 	agents  map[string]*AgentCircuitBreaker
 	options CircuitBreakerOptions
+
+	// keyPrefix is the key space in the shared file this store owns. Empty —
+	// the scheduler/dashboard default — means "every key that is not somebody
+	// else's", i.e. everything except A2AWinnerBreakerKeyPrefix. A non-empty
+	// prefix means the store owns exactly the keys carrying it. Either way
+	// Load restores only owned keys and Save merges rather than rewrites, so
+	// the two owners never absorb or clobber each other's entries.
+	keyPrefix string
 }
 
-// NewAgentCircuitBreakerStore creates a new circuit breaker store.
+// NewAgentCircuitBreakerStore creates a new circuit breaker store owning the
+// plain agent-name key space of CircuitBreakersFile().
 func NewAgentCircuitBreakerStore(opts CircuitBreakerOptions) *AgentCircuitBreakerStore {
+	return newCircuitBreakerStore("", opts)
+}
+
+// NewWinnerCircuitBreakerStore creates a store owning the
+// A2AWinnerBreakerKeyPrefix key space of CircuitBreakersFile() — the auction
+// winner breakers internal/a2a tracks. Callers pass already-prefixed keys to
+// Get/RecordFailure/…; this store does not rewrite names, it only decides
+// which of the file's entries are its own to restore on Load.
+func NewWinnerCircuitBreakerStore(opts CircuitBreakerOptions) *AgentCircuitBreakerStore {
+	return newCircuitBreakerStore(A2AWinnerBreakerKeyPrefix, opts)
+}
+
+func newCircuitBreakerStore(keyPrefix string, opts CircuitBreakerOptions) *AgentCircuitBreakerStore {
 	if opts.Threshold <= 0 {
 		opts.Threshold = 3
 	}
@@ -86,9 +114,21 @@ func NewAgentCircuitBreakerStore(opts CircuitBreakerOptions) *AgentCircuitBreake
 		opts.Cooldown = 5 * time.Minute
 	}
 	return &AgentCircuitBreakerStore{
-		agents:  make(map[string]*AgentCircuitBreaker),
-		options: opts,
+		agents:    make(map[string]*AgentCircuitBreaker),
+		options:   opts,
+		keyPrefix: keyPrefix,
 	}
+}
+
+// ownsKey reports whether an on-disk entry belongs to this store's key space.
+// Keys another owner writes are left strictly alone on Load: absorbing them
+// would freeze a boot-time copy here that Save then re-writes stale over the
+// real owner's live updates.
+func (s *AgentCircuitBreakerStore) ownsKey(name string) bool {
+	if s.keyPrefix != "" {
+		return strings.HasPrefix(name, s.keyPrefix)
+	}
+	return !strings.HasPrefix(name, A2AWinnerBreakerKeyPrefix)
 }
 
 // Get returns the circuit breaker for the named agent, creating it if needed.
@@ -148,10 +188,11 @@ func (s *AgentCircuitBreakerStore) ResetAll() {
 }
 
 // A2AWinnerBreakerKeyPrefix namespaces the auction-winner circuit breakers
-// internal/a2a's winnerBreakerStore persists into the SAME on-disk file
-// (CircuitBreakersFile()) this store saves. Load skips keys with this prefix
-// and Save preserves them, so the two owners can share the file without
-// clobbering each other's entries.
+// internal/a2a persists into the SAME on-disk file (CircuitBreakersFile())
+// this store saves. A default store skips keys with this prefix on Load and
+// preserves them on Save; a NewWinnerCircuitBreakerStore does the mirror
+// image, so the two key spaces share one file — and one persistence
+// implementation — without clobbering each other's entries.
 const A2AWinnerBreakerKeyPrefix = "a2a.auction.winner."
 
 // circuitBreakerFileEntry mirrors internal/dashboard/agents.go's
@@ -173,15 +214,39 @@ type circuitBreakersFile struct {
 // {"breakers": {name: {status, failures, last_failure}}} shape the dashboard's
 // loadCircuitBreakers (internal/dashboard/agents.go) already decodes.
 //
-// Save MERGES into the existing file rather than rewriting it wholesale
-// (mirroring internal/a2a's winnerBreakerStore.save): entries this store does
-// not own — the a2a winner breakers, or agents another process tracks — are
-// preserved, so a scheduler/dashboard save cannot clobber a winner breaker
-// that opened after this store loaded. The temp file is unique per writer
-// (os.CreateTemp) because the daemon, the dashboard, and the a2a store all
-// write this path concurrently — a shared fixed ".tmp" let interleaved writes
-// publish a torn file.
+// Save MERGES into the existing file rather than rewriting it wholesale:
+// entries this store does not own — the a2a winner breakers, or agents another
+// process tracks — are preserved, so a scheduler/dashboard save cannot clobber
+// a winner breaker that opened after this store loaded. The temp file is
+// unique per writer (os.CreateTemp) because the daemon, the dashboard, and the
+// a2a winner store all write this path concurrently — a shared fixed ".tmp"
+// let interleaved writes publish a torn file.
+//
+// The whole read-merge-write cycle runs under the shared advisory sidecar lock
+// (reliability.AcquireFileLock on `<path>.lock`, the same ADR-024 idiom
+// internal/evolution and internal/research use). The atomic rename alone only
+// makes each individual write indivisible; it does nothing about the window
+// between this store's read and its rename, so without the lock two savers can
+// both read the same old file and the second rename silently drops whatever
+// the first committed in between.
 func (s *AgentCircuitBreakerStore) Save(path string) error {
+	// Before the lock: the sidecar is created beside path, so the directory
+	// has to exist first.
+	// 0750, not 0755: every writer of this path (daemon, dashboard, a2a winner
+	// store) runs as the same user, so owner+group access is all that's needed
+	// and world-execute on a state directory is what gosec G301 rejects.
+	dir := filepath.Dir(path)
+	if dir != "" {
+		if err := os.MkdirAll(dir, 0750); err != nil {
+			return fmt.Errorf("create circuit breaker state dir: %w", err)
+		}
+	}
+	release, err := reliability.AcquireFileLock(path)
+	if err != nil {
+		return fmt.Errorf("lock circuit breaker state: %w", err)
+	}
+	defer release()
+
 	out := circuitBreakersFile{Breakers: make(map[string]circuitBreakerFileEntry, len(s.agents))}
 	if data, err := os.ReadFile(path); err == nil {
 		_ = json.Unmarshal(data, &out) // best-effort merge; a corrupt file is simply overwritten
@@ -206,12 +271,6 @@ func (s *AgentCircuitBreakerStore) Save(path string) error {
 	data, err := json.MarshalIndent(out, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal circuit breaker state: %w", err)
-	}
-	dir := filepath.Dir(path)
-	if dir != "" {
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			return fmt.Errorf("create circuit breaker state dir: %w", err)
-		}
 	}
 	tmp, err := os.CreateTemp(dir, ".circuit_breakers-*.tmp")
 	if err != nil {
@@ -254,10 +313,7 @@ func (s *AgentCircuitBreakerStore) Load(path string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for name, entry := range in.Breakers {
-		// Keys the a2a winnerBreakerStore owns are skipped: absorbing them
-		// would freeze a boot-time copy in this store that Save then re-writes
-		// stale over a2a's live updates.
-		if strings.HasPrefix(name, A2AWinnerBreakerKeyPrefix) {
+		if !s.ownsKey(name) {
 			continue
 		}
 		cb := NewAgentCircuitBreaker(name, s.options.Threshold, s.options.Cooldown)

@@ -13,6 +13,7 @@ import (
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/nico/go-bt-evolve/internal/agent"
+	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
 // ---- test isolation: never touch the real ~/.go-bt-evolve -----------------
@@ -835,5 +836,135 @@ func TestAuctionDelegate_WinnerCircuitBreakerOpenFallsBack(t *testing.T) {
 	}
 	if _, dispatched := ft.dispatched["http://breakerwinner"]; dispatched {
 		t.Error("winner should not be dispatched while its circuit breaker is open")
+	}
+}
+
+// ---- winner breaker persistence: one owner, one lock ----------------------
+
+// TestWinnerBreakerStore_LoadRestoresPersistedStateVerbatim pins that winner
+// breaker state is RESTORED from what is on disk rather than RE-DERIVED by
+// replaying the persisted failure count through fresh RecordFailure calls.
+// Replay stamps lastFailureTime with the restart time, so the next save
+// rewrites every restored winner's last_failure to "when this process booted" —
+// corrupting the very field internal/dashboard's loadCircuitBreakers renders in
+// its cb_status column, on every restart with any tripped winner. Routing the
+// load through internal/agent's store (the single owner of this file, which
+// restores via RestoreState) keeps the real failure timestamp.
+func TestWinnerBreakerStore_LoadRestoresPersistedStateVerbatim(t *testing.T) {
+	t.Setenv("BT_AGENT_HOME", t.TempDir())
+	path := agent.CircuitBreakersFile()
+
+	const lastFailure = "2026-07-17T12:00:00Z"
+	key := winnerBreakerKeyPrefix + "known-bad-winner"
+	blob := `{"breakers":{"` + key + `":{"status":"open","failures":4,"last_failure":"` + lastFailure + `"}}}`
+	if err := os.WriteFile(path, []byte(blob), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	store := &winnerBreakerStore{} // fresh store: the load happens on first get
+	cb := store.get("known-bad-winner")
+	if cb.State() != reliability.CircuitOpen {
+		t.Fatalf("restored winner breaker state = %v, want open", cb.State())
+	}
+	if got := cb.LastFailureTime().UTC().Format(time.RFC3339); got != lastFailure {
+		t.Errorf("restored last failure time = %q, want %q — replaying RecordFailure re-stamps it with the restart time instead of restoring it", got, lastFailure)
+	}
+
+	if err := store.save(); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var file struct {
+		Breakers map[string]struct {
+			Status      string `json:"status"`
+			Failures    int    `json:"failures"`
+			LastFailure string `json:"last_failure"`
+		} `json:"breakers"`
+	}
+	if err := json.Unmarshal(data, &file); err != nil {
+		t.Fatalf("parse saved file: %v\n%s", err, data)
+	}
+	entry, ok := file.Breakers[key]
+	if !ok {
+		t.Fatalf("winner key %q missing after save: %+v", key, file.Breakers)
+	}
+	if entry.LastFailure != lastFailure {
+		t.Errorf("persisted last_failure = %q, want %q preserved across a restart round trip", entry.LastFailure, lastFailure)
+	}
+	if entry.Status != "open" || entry.Failures != 4 {
+		t.Errorf("persisted entry = %+v, want status=open failures=4", entry)
+	}
+}
+
+// TestWinnerBreakerStore_SaveLocksReadModifyWrite pins that winner breaker
+// persistence goes through the same locked single owner the scheduler uses:
+// the read-merge-write cycle over the shared circuit_breakers.json must be
+// serialized against other processes by the advisory `<path>.lock` sidecar.
+// A hand-rolled save that only renames atomically still reads the file before
+// a concurrent daemon/dashboard writer commits, and its rename then drops that
+// writer's entry.
+func TestWinnerBreakerStore_SaveLocksReadModifyWrite(t *testing.T) {
+	t.Setenv("BT_AGENT_HOME", t.TempDir())
+	path := agent.CircuitBreakersFile()
+	if err := os.WriteFile(path, []byte(`{"breakers":{}}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	store := &winnerBreakerStore{}
+	store.get("flaky-winner").RecordFailure() // load now, before the lock is held
+
+	// Stand in for the daemon scheduler mid read-modify-write on the same file.
+	release, err := reliability.AcquireFileLock(path)
+	if err != nil {
+		t.Fatalf("AcquireFileLock: %v", err)
+	}
+	defer release() // safe to call twice; released explicitly below
+
+	done := make(chan error, 1)
+	go func() { done <- store.save() }()
+
+	select {
+	case saveErr := <-done:
+		t.Fatalf("save returned (err=%v) while another process held %s.lock; winner breaker persistence must go through the locked single owner", saveErr, path)
+	case <-time.After(250 * time.Millisecond):
+		// Still blocked, as required.
+	}
+
+	scheduler := `{"breakers":{"scheduler-agent":{"status":"open","failures":9,"last_failure":"2026-07-17T12:00:00Z"}}}`
+	if err := os.WriteFile(path, []byte(scheduler), 0644); err != nil {
+		t.Fatal(err)
+	}
+	release()
+
+	select {
+	case saveErr := <-done:
+		if saveErr != nil {
+			t.Fatalf("save: %v", saveErr)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("save never completed after the advisory file lock was released")
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var file struct {
+		Breakers map[string]struct {
+			Status   string `json:"status"`
+			Failures int    `json:"failures"`
+		} `json:"breakers"`
+	}
+	if err := json.Unmarshal(data, &file); err != nil {
+		t.Fatalf("parse saved file: %v\n%s", err, data)
+	}
+	if entry, ok := file.Breakers["scheduler-agent"]; !ok || entry.Failures != 9 {
+		t.Errorf("scheduler entry = %+v (present=%v), want failures=9 preserved — the winner save read the file before taking the lock and clobbered a concurrent writer", entry, ok)
+	}
+	if _, ok := file.Breakers[winnerBreakerKeyPrefix+"flaky-winner"]; !ok {
+		t.Errorf("winner entry missing from saved file: %+v", file.Breakers)
 	}
 }

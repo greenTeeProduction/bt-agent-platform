@@ -176,6 +176,68 @@ func TestLocalSearcher_RefineGated_RejectsNonImprovement(t *testing.T) {
 	}
 }
 
+// TestRefineGated_RejectsWhenGateRefuses pins that RefineGated's quality gate
+// is reachable at all. RefineGated returns early when the tuned tree does not
+// strictly beat baseFitness, so by the time it calls Probe the pair is always
+// post > pre — and Probe's only rejection paths (a regression past
+// MaxRegressionRate, or a decline while below MinComposite) both require
+// post < pre. Every gate consultation therefore returns GateAccepted, the
+// documented contract ("keeps the tuned tree only when it strictly beats
+// baseFitness AND the quality gate accepts") is vacuous, and the tuned tree is
+// copied into the live tree and forced to disk with zero gate coverage.
+//
+// Here the refinement genuinely improves (5.0 → 20.0) but saturates below the
+// gate's 25.0 composite floor: an improvement that still leaves the tree
+// unhealthy is not one the gate should wave through. Probe must judge the
+// tuned score against that absolute floor, not only the pre→post direction.
+func TestRefineGated_RejectsWhenGateRefuses(t *testing.T) {
+	tree := &SerializableNode{Type: "Sequence", Name: "Root", TimeoutMs: 5000}
+	// Rises with TimeoutMs, then saturates at 20.0 — the tuned tree improves
+	// but can never reach the gate's floor.
+	fitness := func(n *SerializableNode) float64 {
+		if f := float64(n.TimeoutMs) / 1000.0; f < 20.0 {
+			return f
+		}
+		return 20.0
+	}
+	const base, tunedCeiling = 5.0, 20.0
+	if got := fitness(tree); got != base {
+		t.Fatalf("test setup: baseline fitness = %.4f, want %.4f", got, base)
+	}
+
+	gate := NewQualityGate(t.TempDir())
+	gate.MinComposite = 25.0 // above everything this fitness function can reach
+
+	ls := NewLocalSearcher(HillClimbSearch)
+	// Setup guard: the search must actually find an improvement, so that a
+	// rejection below can only come from the gate — not from an inert climb
+	// tripping RefineGated's "did not beat baseFitness" early return.
+	if _, delta := ls.Search(tree, fitness); delta <= 0 {
+		t.Fatalf("test setup: hill climb reported delta %.4f, want > 0 so the gate is the only possible reason for rejection", delta)
+	}
+
+	res := ls.RefineGated(tree, base, fitness, gate, "refine_tree")
+
+	if res.Accepted {
+		t.Fatalf("RefineGated accepted a refinement whose tuned score (%.1f) is below the gate's composite floor (%.1f): %+v", tunedCeiling, gate.MinComposite, res)
+	}
+	if res.Gate != GateRejected {
+		t.Errorf("Gate = %v, want %v — a tuned score of %.1f never clears the %.1f floor, and nothing regressed, so the verdict is a rejection", res.Gate, GateRejected, tunedCeiling, gate.MinComposite)
+	}
+	if res.Tree != tree {
+		t.Errorf("gate-refused refinement returned %+v, want the caller's original tree untouched", res.Tree)
+	}
+	if res.Fitness != base {
+		t.Errorf("Fitness = %.4f, want the untouched baseFitness %.4f", res.Fitness, base)
+	}
+	if res.Delta != 0 {
+		t.Errorf("Delta = %.4f, want 0", res.Delta)
+	}
+	if tree.TimeoutMs != 5000 {
+		t.Errorf("RefineGated mutated the input tree in place (TimeoutMs = %d, want 5000)", tree.TimeoutMs)
+	}
+}
+
 // TestQualityGate_Probe_DoesNotRecordFailures pins the non-recording probe
 // RefineGated consults: identical verdicts to Validate, zero bookkeeping.
 func TestQualityGate_Probe_DoesNotRecordFailures(t *testing.T) {
