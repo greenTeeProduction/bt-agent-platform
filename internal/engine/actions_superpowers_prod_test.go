@@ -557,6 +557,105 @@ func TestRunSuperpowersRuntime_NonRateLimitFailureSetsImplDegraded(t *testing.T)
 	}
 }
 
+// phaseProbeClaudeRunner captures the run.json phase persisted on disk at the
+// moment the implementation batch does its FIRST piece of work. Claude is the
+// seam because runSuperpowersRuntimeFromExistingPlanAction never invokes it
+// before ExecuteSuperpowersTaskBatchRuntime — the first RunClaude call is the
+// batch's first task RED phase — so what this observes is exactly the run state
+// an external reader (dashboard, crash recovery) sees while the batch runs.
+type phaseProbeClaudeRunner struct {
+	inner        ClaudeRunner
+	runJSONPath  string
+	called       bool
+	runJSONFound bool
+	phaseAtStart SuperpowersPhase
+}
+
+func (r *phaseProbeClaudeRunner) RunClaude(ctx context.Context, repoDir string, prompt string) CommandResult {
+	if !r.called {
+		r.called = true
+		if run, err := readSuperpowersRunJSON(r.runJSONPath); err == nil {
+			r.runJSONFound = true
+			r.phaseAtStart = run.Phase
+		}
+	}
+	return r.inner.RunClaude(ctx, repoDir, prompt)
+}
+
+// TestRunSuperpowersRuntime_PlanResumeSetsImplementationPhaseBeforeBatch proves
+// the plan-resume path mirrors the ExecuteSuperpowersTaskBatch BT action's phase
+// bookkeeping: before handing the run to ExecuteSuperpowersTaskBatchRuntime it
+// must set run.Phase = SuperpowersPhaseImplementation AND persist it via
+// writeSuperpowersRunJSON. Before the fix only the BT action set the phase, so a
+// cycle resumed from an existing plan ran its whole implementation batch while
+// the tracked run still advertised its previous phase (and, until the batch's
+// own first per-task write, had no run.json on disk at all) — anything reading
+// run artifacts mid-batch, including crash recovery after a SIGKILL at the run
+// budget, could not tell the run had entered implementation.
+func TestRunSuperpowersRuntime_PlanResumeSetsImplementationPhaseBeforeBatch(t *testing.T) {
+	// Guard against any stray relative-path writes escaping into the repo, and
+	// keep run-artifact scans off the operator's live runs directory.
+	t.Chdir(t.TempDir())
+	isolateSuperpowersRunsDir(t)
+
+	prevRunner, prevClaude := defaultSuperpowersCommandRunner, defaultSuperpowersClaudeRunner
+	t.Cleanup(func() {
+		defaultSuperpowersCommandRunner = prevRunner
+		defaultSuperpowersClaudeRunner = prevClaude
+	})
+	// A RED verify that runs the task's test command and gets a PASSING result
+	// fails with "RED command unexpectedly passed" — a deterministic,
+	// non-rate-limit batch failure that stops the action right after the batch,
+	// so the success path's SuperpowersPhaseFinish assignment can never be what
+	// this test observes.
+	defaultSuperpowersCommandRunner = &scriptedSuperpowersRunner{
+		t:           t,
+		testResults: []CommandResult{{Output: "ok  \tgithub.com/nico/go-bt-evolve/internal/engine\t0.01s\n"}},
+	}
+
+	planPath := filepath.Join(t.TempDir(), "plan.md")
+	if err := os.WriteFile(planPath, []byte(buildDeterministicImplementationPlan("improve the platform")), 0o644); err != nil {
+		t.Fatalf("write plan: %v", err)
+	}
+
+	run := &SuperpowersRun{
+		ID:   "run-phase",
+		Task: "improve the platform",
+		Mode: SuperpowersModeApply,
+		// The shape a resumed carryover has: planning already finished, the
+		// implementation batch has not started.
+		Phase:        SuperpowersPhasePlan,
+		RepoDir:      t.TempDir(),
+		WorktreePath: t.TempDir(), // non-empty so no real worktree is created
+		ArtifactDir:  filepath.Join(t.TempDir(), "artifacts"),
+	}
+	probe := &phaseProbeClaudeRunner{
+		inner:       &scriptedClaudeRunner{},
+		runJSONPath: filepath.Join(run.ArtifactDir, "run.json"),
+	}
+	defaultSuperpowersClaudeRunner = probe
+
+	bb := newTestBlackboard()
+	setSuperpowersRun(bb, run)
+	bb.ChainState["goap_fusion_superpowers_plan_path"] = planPath
+
+	if got := runSuperpowersRuntimeFromExistingPlanAction(&btcore.BTContext[Blackboard]{Blackboard: bb}); got != -1 {
+		t.Fatalf("expected FAILURE (-1) from the scripted non-rate-limit batch failure, got %d: %s", got, bb.Result)
+	}
+	if !probe.called {
+		t.Fatal("the implementation batch never invoked Claude; this test's observation seam did not run — fix the fixture before trusting the assertions below")
+	}
+	if !probe.runJSONFound {
+		t.Fatalf("no run.json at %s when the implementation batch started: the plan-resume path must persist the run via writeSuperpowersRunJSON BEFORE calling ExecuteSuperpowersTaskBatchRuntime", probe.runJSONPath)
+	}
+	if probe.phaseAtStart != SuperpowersPhaseImplementation {
+		t.Fatalf("persisted phase when the batch started = %q, want %q: runSuperpowersRuntimeFromExistingPlanAction must set run.Phase = SuperpowersPhaseImplementation and persist it before ExecuteSuperpowersTaskBatchRuntime, mirroring the ExecuteSuperpowersTaskBatch BT action", probe.phaseAtStart, SuperpowersPhaseImplementation)
+	}
+	if run.Phase != SuperpowersPhaseImplementation {
+		t.Fatalf("in-memory run.Phase after the batch = %q, want %q: the plan-resume path must leave the failed run marked as implementation, not its pre-batch phase", run.Phase, SuperpowersPhaseImplementation)
+	}
+}
+
 // TestRunSuperpowersRuntime_NoPlanAfterCommittedApplyDoesNotDegrade proves the
 // Q3 Reliability contract: run 20260723T091452 landed commit 3d6a13b (tasks
 // 1-2 committed via partial-landing, ApplyStatus=committed_pr_opened) yet the

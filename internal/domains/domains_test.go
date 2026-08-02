@@ -1288,6 +1288,67 @@ func TestResolverReachableDomainTreesHaveConditionDescriptions(t *testing.T) {
 	}
 }
 
+// TestResolverReachableDomainTreesHaveDescriptions closes the remaining leg of
+// the goal "all domain trees have smoke tests, descriptions, and condition
+// coverage" for the ResolveTreeID-reachable domains-package trees. The two
+// sibling guards above already give those trees smoke structure and Condition
+// descriptions, but nothing describes the tree itself: DescriptionFor resolves
+// only against Descriptions (the AllDomainTrees registry) and
+// NonRegistryDescriptions (the KanbanAndHermesDomainTrees set), and
+// superpowers_pipeline belongs to neither. It is nonetheless selectable in
+// production — ResolveTreeID("superpowers_pipeline") returns the tree, so
+// operators can switch_tree onto it — which means it renders as a bare
+// identifier everywhere descriptions are surfaced (gardener, dashboard, the
+// bt-agent switch_tree tool), exactly the unexplained-builtin state
+// DescriptionFor exists to prevent. Every tree in the canonical
+// resolverReachableExtraDomainTrees() enumeration must resolve to a real
+// sentence, and the enumeration is the work list so a newly guarded
+// resolver-reachable tree cannot be added undescribed.
+func TestResolverReachableDomainTreesHaveDescriptions(t *testing.T) {
+	const minDescLen = 20
+	for name := range resolverReachableExtraDomainTrees() {
+		desc, ok := DescriptionFor(name)
+		if !ok {
+			t.Errorf("resolver-reachable tree %q: DescriptionFor returned ok=false — the tree is selectable via ResolveTreeID(%q) but has no description, so it renders as a bare identifier wherever builtins are listed", name, name)
+			continue
+		}
+		trimmed := strings.TrimSpace(desc)
+		if trimmed == "" {
+			t.Errorf("resolver-reachable tree %q: DescriptionFor returned a blank description", name)
+			continue
+		}
+		if len(trimmed) < minDescLen {
+			t.Errorf("resolver-reachable tree %q: description %q is only %d chars, want >= %d — descriptions must explain the tree, not restate its name",
+				name, trimmed, len(trimmed), minDescLen)
+		}
+	}
+}
+
+// TestResolverReachableDescriptionsHaveNoOrphans is the reverse guard to
+// TestResolverReachableDomainTreesHaveDescriptions, and the third-map sibling of
+// TestDescriptionsHaveNoOrphans / TestNonRegistryDescriptionsHaveNoOrphans:
+// those two check their maps against the AllDomainTrees +
+// KanbanAndHermesDomainTrees union, which by construction can never contain a
+// ResolverReachableDescriptions key, so without this guard the new map is the
+// one description surface where a renamed or deleted tree leaves a dead entry
+// advertising a builtin that can never be selected. It also keeps the three maps
+// disjoint — a name in two of them makes DescriptionFor's precedence silently
+// choose which of two divergent descriptions the gardener shows.
+func TestResolverReachableDescriptionsHaveNoOrphans(t *testing.T) {
+	reachable := resolverReachableExtraDomainTrees()
+	for name := range ResolverReachableDescriptions {
+		if _, ok := reachable[name]; !ok {
+			t.Errorf("ResolverReachableDescriptions has entry %q but no such tree is registered in resolverReachableExtraDomainTrees()", name)
+		}
+		if _, ok := Descriptions[name]; ok {
+			t.Errorf("tree %q is described in both Descriptions and ResolverReachableDescriptions — the description maps must be disjoint", name)
+		}
+		if _, ok := NonRegistryDescriptions[name]; ok {
+			t.Errorf("tree %q is described in both NonRegistryDescriptions and ResolverReachableDescriptions — the description maps must be disjoint", name)
+		}
+	}
+}
+
 // TestSuperpowersPipelineIsGuarded asserts that the production superpowers_pipeline
 // tree — now reachable via ResolveTreeID("superpowers_pipeline") (tree_resolver.go),
 // so operators can switch_tree onto it — is registered in the resolver-reachable
