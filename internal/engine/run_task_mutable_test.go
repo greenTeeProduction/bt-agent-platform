@@ -85,8 +85,8 @@ func muttestMark(b *Blackboard, s string) {
 func marksOf(b *Blackboard) []string {
 	var out []string
 	for _, r := range b.Results {
-		if strings.HasPrefix(r, "mark:") {
-			out = append(out, strings.TrimPrefix(r, "mark:"))
+		if after, ok := strings.CutPrefix(r, "mark:"); ok {
+			out = append(out, after)
 		}
 	}
 	return out

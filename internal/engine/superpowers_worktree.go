@@ -269,7 +269,7 @@ func reapOrphanedSuperpowersBranches(ctx context.Context, runner CommandRunner, 
 		return nil
 	}
 	var reaped []string
-	for _, line := range strings.Split(list.Output, "\n") {
+	for line := range strings.SplitSeq(list.Output, "\n") {
 		raw := strings.TrimSpace(line)
 		if raw == "" {
 			continue
@@ -377,7 +377,7 @@ func superpowersWorktreeBranches(ctx context.Context, runner CommandRunner, repo
 		return branches
 	}
 	var current string
-	for _, line := range strings.Split(res.Output, "\n") {
+	for line := range strings.SplitSeq(res.Output, "\n") {
 		line = strings.TrimSpace(line)
 		if p, ok := strings.CutPrefix(line, "worktree "); ok {
 			current = filepath.Clean(p)

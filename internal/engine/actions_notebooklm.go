@@ -292,7 +292,7 @@ func registerNotebookLMActions() {
 // extractTaskID extracts a UUID-like task ID from research output.
 func extractTaskID(output string) string {
 	// The nlm research start output typically contains a task_id field
-	for _, line := range strings.Split(output, "\n") {
+	for line := range strings.SplitSeq(output, "\n") {
 		line = strings.TrimSpace(line)
 		if strings.HasPrefix(line, "task_id") || strings.Contains(line, "task_id") {
 			parts := strings.SplitN(line, ":", 2)
@@ -306,7 +306,7 @@ func extractTaskID(output string) string {
 		}
 	}
 	// Fallback: find any UUID in the output
-	for _, word := range strings.Fields(output) {
+	for word := range strings.FieldsSeq(output) {
 		word = strings.Trim(word, `"':{},`)
 		if len(word) >= 36 && strings.Count(word, "-") >= 4 {
 			return word

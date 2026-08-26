@@ -235,11 +235,11 @@ func TestACPHelperProcess(_ *testing.T) {
 		}
 		return
 	}
-	if strings.HasPrefix(mode, "always-crash:") {
+	if after, ok := strings.CutPrefix(mode, "always-crash:"); ok {
 		// Simulates a subprocess that fails on every launch (e.g. a broken
 		// binary or crash-looping agent): record that we were invoked, then
 		// exit immediately without ever answering an ACP request.
-		countFile := strings.TrimPrefix(mode, "always-crash:")
+		countFile := after
 		if f, err := os.OpenFile(countFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
 			_, _ = f.WriteString("x")
 			_ = f.Close()

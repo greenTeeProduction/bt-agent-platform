@@ -288,7 +288,7 @@ func (c *Catalog) isInstalled(name string) bool {
 func extractYAMLField(yaml, key string) string {
 	// Simple YAML field extractor — finds "key: value" on a single line
 	prefix := key + ":"
-	for _, line := range strings.Split(yaml, "\n") {
+	for line := range strings.SplitSeq(yaml, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, prefix) {
 			value := strings.TrimSpace(trimmed[len(prefix):])

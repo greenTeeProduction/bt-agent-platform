@@ -1789,7 +1789,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			var seeded []string
 			if params.Domains != "" {
 				var names []string
-				for _, raw := range strings.Split(params.Domains, ",") {
+				for raw := range strings.SplitSeq(params.Domains, ",") {
 					if name := strings.TrimSpace(raw); name != "" {
 						names = append(names, name)
 					}
@@ -2448,8 +2448,8 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				tree, treeID = f.CreateTree(params.Task, category, nil)
 			}
 			cat := treeID
-			if idx := strings.Index(treeID, ":"); idx >= 0 {
-				cat = treeID[:idx]
+			if before, _, ok := strings.Cut(treeID, ":"); ok {
+				cat = before
 			}
 			result := map[string]any{"tree_id": treeID, "node_count": evolution.CountNodes(tree), "parents": []string{params.ParentA, params.ParentB}, "category": cat}
 			persistGeneratedTree(deps, treeID, tree, result)

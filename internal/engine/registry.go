@@ -408,8 +408,8 @@ func init() {
 			report.Write(freeOut)
 			report.WriteString("```\n\n")
 			// Parse available memory threshold
-			lines := strings.Split(strings.TrimSpace(string(freeOut)), "\n")
-			for _, line := range lines {
+			lines := strings.SplitSeq(strings.TrimSpace(string(freeOut)), "\n")
+			for line := range lines {
 				if strings.Contains(line, "Mem:") || strings.Contains(line, "Mem.:") {
 					fields := strings.Fields(line)
 					if len(fields) >= 7 {
@@ -480,8 +480,8 @@ func init() {
 			okSections++
 			active, inactive := 0, 0
 			dupes := map[string]int{}
-			lines := strings.Split(string(schedData), "\n")
-			for _, line := range lines {
+			lines := strings.SplitSeq(string(schedData), "\n")
+			for line := range lines {
 				if strings.Contains(line, `"active": true`) {
 					active++
 				}

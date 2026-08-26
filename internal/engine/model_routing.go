@@ -290,7 +290,7 @@ func parseRouteResponse(resp string) (label string, confidence float64, rational
 
 	// Line-based fallback for non-JSON model output.
 	var foundLabel bool
-	for _, line := range strings.Split(resp, "\n") {
+	for line := range strings.SplitSeq(resp, "\n") {
 		key, val, found := strings.Cut(line, ":")
 		if !found {
 			continue

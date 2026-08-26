@@ -96,7 +96,7 @@ Rules:
 
 	status := runner.Run(ctx, run.WorktreePath, "git", "status", "--short", "--", "docs/")
 	var docFiles []string
-	for _, line := range strings.Split(status.Output, "\n") {
+	for line := range strings.SplitSeq(status.Output, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue

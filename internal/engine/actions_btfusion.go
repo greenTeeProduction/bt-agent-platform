@@ -65,7 +65,7 @@ func btFusionPatternQuestion() string {
 // btFusionResearchFindings extracts bullet findings from a NotebookLM answer.
 func btFusionResearchFindings(answer string) []string {
 	var out []string
-	for _, line := range strings.Split(answer, "\n") {
+	for line := range strings.SplitSeq(answer, "\n") {
 		t := strings.TrimSpace(line)
 		if strings.HasPrefix(t, "- ") || strings.HasPrefix(t, "* ") {
 			t = strings.TrimSpace(t[2:])

@@ -230,11 +230,11 @@ func isGoapRedUnexpectedlyPassed(result string) bool {
 // an empty command as "keep the previous record".
 func extractRedPassCommand(result string) string {
 	const marker = "failing regression evidence: "
-	i := strings.Index(result, marker)
-	if i < 0 {
+	_, after, ok := strings.Cut(result, marker)
+	if !ok {
 		return ""
 	}
-	rest := result[i+len(marker):]
+	rest := after
 	if nl := strings.IndexByte(rest, '\n'); nl >= 0 {
 		rest = rest[:nl]
 	}

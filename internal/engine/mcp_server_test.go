@@ -84,7 +84,7 @@ func TestServer_ToolPanicRecovery(t *testing.T) {
 	// tools/call handlers run concurrently, so responses may arrive in any
 	// order — index them by request ID.
 	responses := map[float64]Message{}
-	for _, line := range strings.Split(strings.TrimSpace(out.String()), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(out.String()), "\n") {
 		if line == "" {
 			continue
 		}
@@ -221,7 +221,7 @@ func TestServer_Run_MixedToolConcurrentCallsDoNotRaceOnSharedBlackboard(t *testi
 		Error  *RPCError   `json:"error,omitempty"`
 	}
 	responses := make(map[int]rpcResponse, n)
-	for _, line := range strings.Split(strings.TrimSpace(out.String()), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(out.String()), "\n") {
 		if line == "" {
 			continue
 		}

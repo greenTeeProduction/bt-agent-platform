@@ -114,7 +114,7 @@ func goapWorldStateFrom(b *Blackboard) goap.WorldState {
 // else strings. Malformed fragments (no "=") are skipped.
 func parseGoapPairs(spec string) map[string]any {
 	pairs := make(map[string]any)
-	for _, frag := range strings.Split(spec, ",") {
+	for frag := range strings.SplitSeq(spec, ",") {
 		frag = strings.TrimSpace(frag)
 		if frag == "" {
 			continue

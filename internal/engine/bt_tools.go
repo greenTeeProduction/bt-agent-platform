@@ -279,7 +279,7 @@ func validateShellCommand(input string) string {
 		return "empty command"
 	}
 
-	for _, tok := range strings.Fields(trimmed) {
+	for tok := range strings.FieldsSeq(trimmed) {
 		if tok == ">" || tok == ">>" {
 			return "redirect operators are blocked for safety"
 		}

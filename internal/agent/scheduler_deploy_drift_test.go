@@ -116,7 +116,7 @@ func TestRunJob_WarnsOnDeployDriftAtCycleComplete(t *testing.T) {
 		sched.runJob(job, runner)
 
 		found := false
-		for _, line := range bytes.Split(bytes.TrimSpace(buf.Bytes()), []byte("\n")) {
+		for line := range bytes.SplitSeq(bytes.TrimSpace(buf.Bytes()), []byte("\n")) {
 			var rec map[string]any
 			if err := json.Unmarshal(line, &rec); err != nil {
 				continue
@@ -148,7 +148,7 @@ func TestRunJob_WarnsOnDeployDriftAtCycleComplete(t *testing.T) {
 		job := &ScheduledJob{ID: "job_drift-agent_sync", AgentName: "drift-agent", Schedule: "every 1h", Timeout: "30s"}
 		sched.runJob(job, runner)
 
-		for _, line := range bytes.Split(bytes.TrimSpace(buf.Bytes()), []byte("\n")) {
+		for line := range bytes.SplitSeq(bytes.TrimSpace(buf.Bytes()), []byte("\n")) {
 			var rec map[string]any
 			if err := json.Unmarshal(line, &rec); err != nil {
 				continue

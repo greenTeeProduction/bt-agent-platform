@@ -440,25 +440,25 @@ func TestDaemonWrapsSchedulerAndA2AStartWithSafeGo(t *testing.T) {
 	}
 	s := string(src)
 
-	startIdx := strings.Index(s, "globalSched.Start(")
-	if startIdx < 0 {
+	before, _, ok := strings.Cut(s, "globalSched.Start(")
+	if !ok {
 		t.Fatal("main.go lost the globalSched.Start( callback registration")
 	}
-	if strings.Contains(s[:startIdx], "\n\tgo globalSched.Start(") {
+	if strings.Contains(before, "\n\tgo globalSched.Start(") {
 		t.Error("scheduler-start goroutine must be wrapped by reliability.SafeGo, not a bare `go` statement — an unrecovered panic in the scheduler callback would crash the whole daemon")
 	}
-	if safeGoIdx := strings.LastIndex(s[:startIdx], `reliability.SafeGo("scheduler-start"`); safeGoIdx < 0 {
+	if safeGoIdx := strings.LastIndex(before, `reliability.SafeGo("scheduler-start"`); safeGoIdx < 0 {
 		t.Error(`main.go must invoke globalSched.Start via reliability.SafeGo("scheduler-start", func() { ... }, nil), matching the kg-build-index / dlq-replay-scan-ticker pattern in this file`)
 	}
 
-	a2aIdx := strings.Index(s, "a2aSrv.Start()")
-	if a2aIdx < 0 {
+	before0, _, ok0 := strings.Cut(s, "a2aSrv.Start()")
+	if !ok0 {
 		t.Fatal("main.go lost the a2aSrv.Start() call")
 	}
-	if strings.Contains(s[:a2aIdx], "go func() {\n\t\t\tif err := a2aSrv.Start()") {
+	if strings.Contains(before0, "go func() {\n\t\t\tif err := a2aSrv.Start()") {
 		t.Error("a2a server-start goroutine must be wrapped by reliability.SafeGo, not a bare `go func(){...}()` — an unrecovered panic there would crash the daemon")
 	}
-	if safeGoIdx := strings.LastIndex(s[:a2aIdx], `reliability.SafeGo("a2a-server-start"`); safeGoIdx < 0 {
+	if safeGoIdx := strings.LastIndex(before0, `reliability.SafeGo("a2a-server-start"`); safeGoIdx < 0 {
 		t.Error(`main.go must invoke a2aSrv.Start via reliability.SafeGo("a2a-server-start", func() { ... }, nil), matching the kg-build-index / dlq-replay-scan-ticker pattern in this file`)
 	}
 }

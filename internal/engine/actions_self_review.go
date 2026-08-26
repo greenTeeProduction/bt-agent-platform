@@ -246,7 +246,7 @@ func oldestCommitHash(oneline string) string {
 		if l == "" {
 			continue
 		}
-		hash := strings.SplitN(l, " ", 2)[0]
+		hash, _, _ := strings.Cut(l, " ")
 		if hash != "" {
 			return hash
 		}

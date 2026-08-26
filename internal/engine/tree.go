@@ -542,7 +542,7 @@ func setHeuristicQuality(b *Blackboard, score float64) {
 func stripFencedBlocks(s string) string {
 	var out strings.Builder
 	inFence := false
-	for _, line := range strings.Split(s, "\n") {
+	for line := range strings.SplitSeq(s, "\n") {
 		if strings.HasPrefix(strings.TrimSpace(line), "```") {
 			inFence = !inFence
 			continue

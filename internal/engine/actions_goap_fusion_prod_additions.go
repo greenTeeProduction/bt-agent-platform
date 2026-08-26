@@ -91,7 +91,7 @@ func registerGoapFusionProductionAdditions() {
 		// task, and the biggest catalog/research goals are exactly the ones
 		// that tend to arrive pathless.
 		var scopedLines []string
-		for _, line := range strings.Split(goals, "\n") {
+		for line := range strings.SplitSeq(goals, "\n") {
 			scopedLines = append(scopedLines, scopeGoapGoalLine(line))
 		}
 		// The saturation check hashes the grep-scoped but NOT graphify-enriched
@@ -442,7 +442,7 @@ func goapFusionMaterializerSnapshotsSection(bb *Blackboard) string {
 			continue
 		}
 		changed := 0
-		for _, line := range strings.Split(string(data), "\n") {
+		for line := range strings.SplitSeq(string(data), "\n") {
 			if strings.HasPrefix(line, "diff --git ") {
 				changed++
 			}
@@ -473,7 +473,7 @@ func loadGoapFusionReportedSnapshots(bb *Blackboard) map[string]bool {
 	if err != nil {
 		return reported
 	}
-	for _, name := range strings.Split(e.Value, "\n") {
+	for name := range strings.SplitSeq(e.Value, "\n") {
 		if name = strings.TrimSpace(name); name != "" {
 			reported[name] = true
 		}
@@ -517,7 +517,7 @@ func goapFusionParkedBranchesSection() string {
 	}
 	cutoff := time.Now().Add(-24 * time.Hour)
 	var lines []string
-	for _, raw := range strings.Split(out, "\n") {
+	for raw := range strings.SplitSeq(out, "\n") {
 		raw = strings.TrimSpace(raw)
 		if raw == "" {
 			continue
@@ -547,9 +547,9 @@ func goapBacktickValueAfter(s, prefix string) string {
 	}
 	start := idx + len(prefix)
 	rest := s[start:]
-	end := strings.Index(rest, "`")
-	if end < 0 {
+	before, _, ok := strings.Cut(rest, "`")
+	if !ok {
 		return ""
 	}
-	return strings.TrimSpace(rest[:end])
+	return strings.TrimSpace(before)
 }

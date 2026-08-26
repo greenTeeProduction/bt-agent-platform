@@ -620,11 +620,11 @@ func TestHandleAnalyze_TaskIDsKeyedOnInsightIndex(t *testing.T) {
 	}
 	source := string(src)
 
-	start := strings.Index(source, "func handleAnalyze(")
-	if start < 0 {
+	_, after, ok := strings.Cut(source, "func handleAnalyze(")
+	if !ok {
 		t.Fatal("handleAnalyze not found in main.go")
 	}
-	rest := source[start+len("func handleAnalyze("):]
+	rest := after
 	end := strings.Index(rest, "\nfunc ")
 	if end < 0 {
 		end = len(rest)
@@ -738,11 +738,11 @@ func TestHandleAnalyze_SurfacesOrchestratorError(t *testing.T) {
 	}
 	source := string(src)
 
-	start := strings.Index(source, "func handleAnalyze(")
-	if start < 0 {
+	_, after, ok := strings.Cut(source, "func handleAnalyze(")
+	if !ok {
 		t.Fatal("handleAnalyze not found in main.go")
 	}
-	rest := source[start+len("func handleAnalyze("):]
+	rest := after
 	end := strings.Index(rest, "\nfunc ")
 	if end < 0 {
 		end = len(rest)

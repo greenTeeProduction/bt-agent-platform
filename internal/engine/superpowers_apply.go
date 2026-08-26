@@ -440,7 +440,7 @@ func hasBlockingMainRepoDirty(status string) bool {
 
 func blockingMainRepoDirtySummary(status string) string {
 	var blocking []string
-	for _, line := range strings.Split(status, "\n") {
+	for line := range strings.SplitSeq(status, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" || len(trimmed) < 4 {
 			continue

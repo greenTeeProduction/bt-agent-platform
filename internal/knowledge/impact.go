@@ -176,10 +176,10 @@ func readModulePath(root string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	for _, line := range strings.Split(string(data), "\n") {
+	for line := range strings.SplitSeq(string(data), "\n") {
 		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "module ") {
-			return strings.TrimSpace(strings.TrimPrefix(line, "module ")), nil
+		if after, ok := strings.CutPrefix(line, "module "); ok {
+			return strings.TrimSpace(after), nil
 		}
 	}
 	return "", nil

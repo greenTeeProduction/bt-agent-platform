@@ -167,7 +167,7 @@ func (m *HabitMiner) similarityFn(recent []Interaction) func(i, j int) float64 {
 // keywordSet tokenizes a task into its significant lowercase words.
 func keywordSet(task string) map[string]bool {
 	set := make(map[string]bool)
-	for _, w := range strings.Fields(strings.ToLower(task)) {
+	for w := range strings.FieldsSeq(strings.ToLower(task)) {
 		w = strings.Trim(w, ",.!?;:\"'()[]{}")
 		if len(w) > 3 && !stopwords[w] {
 			set[w] = true

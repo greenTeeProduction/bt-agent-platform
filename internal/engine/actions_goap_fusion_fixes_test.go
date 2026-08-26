@@ -116,7 +116,7 @@ func TestRunGoapShellTimeout_ReportsTimeout(t *testing.T) {
 func TestDefaultSuperpowersAllowedTools_OnePrefixPerBashRule(t *testing.T) {
 	// Claude Code permission syntax allows one command prefix per Bash() rule;
 	// a colon-joined multi-command list silently denies everything.
-	for _, rule := range strings.Split(defaultSuperpowersAllowedTools, ",") {
+	for rule := range strings.SplitSeq(defaultSuperpowersAllowedTools, ",") {
 		if !strings.HasPrefix(rule, "Bash(") {
 			continue
 		}

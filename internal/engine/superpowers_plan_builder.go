@@ -92,7 +92,7 @@ func buildGoalDrivenImplementationPlan(task string) string {
 func extractPrioritizedGoals(task string) []string {
 	byPriority := map[string][]string{}
 	var priorities []string
-	for _, line := range strings.Split(task, "\n") {
+	for line := range strings.SplitSeq(task, "\n") {
 		m := goalLineRe.FindStringSubmatch(strings.TrimSpace(line))
 		if m == nil {
 			continue

@@ -638,7 +638,7 @@ func changedFilesDeltaText(before, after string) []string {
 
 func changedFilesFromGitStatus(status string) []string {
 	var files []string
-	for _, line := range strings.Split(status, "\n") {
+	for line := range strings.SplitSeq(status, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || len(line) < 4 {
 			continue

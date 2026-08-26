@@ -483,7 +483,7 @@ type agentNameKey struct{}
 // than via a freshly constructed handler.
 func (s *Server) handleAgentEndpoint(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/agents/")
-	agentName := strings.Split(path, "/")[0]
+	agentName, _, _ := strings.Cut(path, "/")
 
 	cards := s.cardCacheSnapshot()
 

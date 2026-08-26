@@ -1484,15 +1484,15 @@ func parseFinalAnswer(response string) string {
 	trimmed := strings.TrimSpace(response)
 
 	// Fast path: entire response starts with "Final Answer:"
-	if strings.HasPrefix(trimmed, "Final Answer:") {
-		return strings.TrimSpace(strings.TrimPrefix(trimmed, "Final Answer:"))
+	if after, ok := strings.CutPrefix(trimmed, "Final Answer:"); ok {
+		return strings.TrimSpace(after)
 	}
 
 	// Scan for "Final Answer:" on a line, then capture everything after it
 	lines := strings.Split(response, "\n")
 	for i, line := range lines {
-		if strings.HasPrefix(strings.TrimSpace(line), "Final Answer:") {
-			firstLine := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "Final Answer:"))
+		if after, ok := strings.CutPrefix(strings.TrimSpace(line), "Final Answer:"); ok {
+			firstLine := strings.TrimSpace(after)
 			rest := strings.TrimSpace(strings.Join(lines[i+1:], "\n"))
 			if rest != "" {
 				return firstLine + "\n" + rest
@@ -1744,7 +1744,7 @@ func replaceAll(s, old, newStr string) string {
 
 func splitLines(s string) []string {
 	var lines []string
-	for _, line := range strings.Split(s, "\n") {
+	for line := range strings.SplitSeq(s, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" {
 			continue

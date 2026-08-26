@@ -183,7 +183,7 @@ func collectSystem() SystemMetrics {
 	// Memory via /proc/meminfo
 	if data, err := os.ReadFile("/proc/meminfo"); err == nil {
 		parseMem := func(key string) int {
-			for _, line := range strings.Split(string(data), "\n") {
+			for line := range strings.SplitSeq(string(data), "\n") {
 				if strings.HasPrefix(line, key+":") {
 					parts := strings.Fields(line)
 					if len(parts) >= 2 {

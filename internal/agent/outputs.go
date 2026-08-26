@@ -53,10 +53,10 @@ func validateOutputJSON(output string) error {
 func extractJSONPayload(output string) string {
 	lower := strings.ToLower(output)
 	for _, fence := range []string{"```json", "```JSON"} {
-		if idx := strings.Index(output, fence); idx >= 0 {
-			rest := output[idx+len(fence):]
-			if end := strings.Index(rest, "```"); end >= 0 {
-				return strings.TrimSpace(rest[:end])
+		if _, after, ok := strings.Cut(output, fence); ok {
+			rest := after
+			if before, _, ok := strings.Cut(rest, "```"); ok {
+				return strings.TrimSpace(before)
 			}
 		}
 	}
@@ -65,8 +65,8 @@ func extractJSONPayload(output string) string {
 		if nl := strings.Index(rest, "\n"); nl >= 0 {
 			rest = rest[nl+1:]
 		}
-		if end := strings.Index(rest, "```"); end >= 0 {
-			candidate := strings.TrimSpace(rest[:end])
+		if before, _, ok := strings.Cut(rest, "```"); ok {
+			candidate := strings.TrimSpace(before)
 			if strings.HasPrefix(candidate, "{") || strings.HasPrefix(candidate, "[") {
 				return candidate
 			}

@@ -566,7 +566,7 @@ func extractListSection(raw, label string) []string {
 // extractBulletPoints extracts items from bullet-point or numbered-list text.
 func extractBulletPoints(text string) []string {
 	var items []string
-	for _, line := range strings.Split(text, "\n") {
+	for line := range strings.SplitSeq(text, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" {
 			continue
@@ -594,7 +594,7 @@ func extractBulletPoints(text string) []string {
 
 // extractFirstLine returns the first non-empty line.
 func extractFirstLine(text string) string {
-	for _, line := range strings.Split(text, "\n") {
+	for line := range strings.SplitSeq(text, "\n") {
 		if trimmed := strings.TrimSpace(line); trimmed != "" {
 			return trimmed
 		}
@@ -606,7 +606,7 @@ func extractFirstLine(text string) string {
 func splitByNumberedSections(text string) []string {
 	var parts []string
 	current := ""
-	for _, line := range strings.Split(text, "\n") {
+	for line := range strings.SplitSeq(text, "\n") {
 		trimmed := strings.TrimSpace(line)
 		lower := strings.ToLower(trimmed)
 		isNew := false

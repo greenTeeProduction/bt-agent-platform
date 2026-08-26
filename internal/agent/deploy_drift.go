@@ -506,8 +506,8 @@ func scrubGitEnv() []string {
 	out := make([]string, 0, len(src))
 	for _, kv := range src {
 		name := kv
-		if i := strings.IndexByte(kv, '='); i >= 0 {
-			name = kv[:i]
+		if before, _, ok := strings.Cut(kv, "="); ok {
+			name = before
 		}
 		if drop[name] {
 			continue
