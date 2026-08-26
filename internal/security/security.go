@@ -61,11 +61,9 @@ func (rl *RateLimiter) cleanup() {
 	for range ticker.C {
 		rl.mu.Lock()
 		cutoff := time.Now().Add(-30 * time.Minute)
-		for k, b := range rl.buckets {
-			if b.lastTime.Before(cutoff) {
-				delete(rl.buckets, k)
-			}
-		}
+		maps.DeleteFunc(rl.buckets, func(_ string, b *tokenBucket) bool {
+			return b.lastTime.Before(cutoff)
+		})
 		rl.mu.Unlock()
 	}
 }

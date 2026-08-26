@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"os"
@@ -569,10 +570,7 @@ func recordSuperpowersVerification(run *SuperpowersRun, name, cmd string, res Co
 }
 
 func (run *SuperpowersRun) WorktreePathOrRepo() string {
-	if run.WorktreePath != "" {
-		return run.WorktreePath
-	}
-	return run.RepoDir
+	return cmp.Or(run.WorktreePath, run.RepoDir)
 }
 
 func runShellCommand(ctx context.Context, runner CommandRunner, dir, command string) CommandResult {

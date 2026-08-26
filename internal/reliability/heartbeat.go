@@ -8,6 +8,7 @@
 package reliability
 
 import (
+	"maps"
 	"sync"
 	"time"
 )
@@ -208,9 +209,7 @@ func (hb *NodeHeartbeat) cleanup() {
 	defer hb.mu.Unlock()
 
 	now := time.Now()
-	for id, entry := range hb.nodes {
-		if now.Sub(entry.lastSeen) >= hb.ttl {
-			delete(hb.nodes, id)
-		}
-	}
+	maps.DeleteFunc(hb.nodes, func(_ string, entry *heartbeatEntry) bool {
+		return now.Sub(entry.lastSeen) >= hb.ttl
+	})
 }

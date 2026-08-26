@@ -312,10 +312,7 @@ func targetNameForRecord(r evolution.Record) string {
 			return inferred
 		}
 	}
-	if name != "" {
-		return name
-	}
-	return "unknown"
+	return cmp.Or(name, "unknown")
 }
 
 func inferAgentName(s string) string {

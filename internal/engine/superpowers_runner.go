@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"os"
@@ -126,10 +127,7 @@ func resolvedSuperpowersClaudeModel() string {
 	if strings.EqualFold(model, "auto") || strings.EqualFold(model, "default") || strings.EqualFold(model, "none") {
 		return ""
 	}
-	if model != "" {
-		return model
-	}
-	return defaultSuperpowersClaudeModel
+	return cmp.Or(model, defaultSuperpowersClaudeModel)
 }
 
 func withSuperpowersClaudeModel(args []string, model string) []string {
@@ -149,10 +147,7 @@ func resolvedSuperpowersClaudeEffort() string {
 	if strings.EqualFold(effort, "auto") || strings.EqualFold(effort, "default") || strings.EqualFold(effort, "none") {
 		return ""
 	}
-	if effort != "" {
-		return effort
-	}
-	return defaultSuperpowersClaudeEffort
+	return cmp.Or(effort, defaultSuperpowersClaudeEffort)
 }
 
 func withSuperpowersClaudeEffort(args []string, effort string) []string {

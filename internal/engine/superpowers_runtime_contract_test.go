@@ -1074,14 +1074,7 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightCompos
 	}
 	collect(node)
 
-	indexOf := func(name string) int {
-		for i, n := range order {
-			if n == name {
-				return i
-			}
-		}
-		return -1
-	}
+	indexOf := func(name string) int { return slices.Index(order, name) }
 
 	guardIdx := indexOf(guard)
 	loopIdx := indexOf(loopRunner)
@@ -1345,14 +1338,7 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionGatesClaudeImpl
 		collect(n)
 	}
 
-	indexOf := func(name string) int {
-		for i, n := range order {
-			if n == name {
-				return i
-			}
-		}
-		return -1
-	}
+	indexOf := func(name string) int { return slices.Index(order, name) }
 
 	cbIdx := indexOf(circuitBreaker)
 	loopIdx := indexOf(loopRunner)
@@ -1492,14 +1478,7 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightCompos
 	}
 	collect(node)
 
-	indexOf := func(name string) int {
-		for i, n := range order {
-			if n == name {
-				return i
-			}
-		}
-		return -1
-	}
+	indexOf := func(name string) int { return slices.Index(order, name) }
 
 	guardIdx := indexOf(guard)
 	loopIdx := indexOf(loopRunner)
@@ -1573,14 +1552,7 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightCompos
 	}
 	collect(node)
 
-	indexOf := func(name string) int {
-		for i, n := range order {
-			if n == name {
-				return i
-			}
-		}
-		return -1
-	}
+	indexOf := func(name string) int { return slices.Index(order, name) }
 
 	guardIdx := indexOf(guard)
 	loopIdx := indexOf(loopRunner)
@@ -1650,14 +1622,7 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightCompos
 	}
 	collect(node)
 
-	indexOf := func(name string) int {
-		for i, n := range order {
-			if n == name {
-				return i
-			}
-		}
-		return -1
-	}
+	indexOf := func(name string) int { return slices.Index(order, name) }
 
 	guardIdx := indexOf(guard)
 	loopIdx := indexOf(loopRunner)
@@ -1803,14 +1768,7 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightCompos
 	}
 	collect(node)
 
-	indexOf := func(name string) int {
-		for i, n := range order {
-			if n == name {
-				return i
-			}
-		}
-		return -1
-	}
+	indexOf := func(name string) int { return slices.Index(order, name) }
 
 	guardIdx := indexOf(guard)
 	loopIdx := indexOf(loopRunner)
@@ -1881,14 +1839,7 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightCompos
 	}
 	collect(node)
 
-	indexOf := func(name string) int {
-		for i, n := range order {
-			if n == name {
-				return i
-			}
-		}
-		return -1
-	}
+	indexOf := func(name string) int { return slices.Index(order, name) }
 
 	guardIdx := indexOf(guard)
 	loopIdx := indexOf(loopRunner)
@@ -1963,14 +1914,7 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightCompos
 	}
 	collect(node)
 
-	indexOf := func(name string) int {
-		for i, n := range order {
-			if n == name {
-				return i
-			}
-		}
-		return -1
-	}
+	indexOf := func(name string) int { return slices.Index(order, name) }
 
 	guardIdx := indexOf(guard)
 	gitToolIdx := indexOf(gitTool)
@@ -2053,14 +1997,7 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightCompos
 	}
 	collect(node)
 
-	indexOf := func(name string) int {
-		for i, n := range order {
-			if n == name {
-				return i
-			}
-		}
-		return -1
-	}
+	indexOf := func(name string) int { return slices.Index(order, name) }
 
 	guardIdx := indexOf(guard)
 	loopIdx := indexOf(loopRunner)
@@ -2138,14 +2075,7 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightCompos
 	}
 	collect(node)
 
-	indexOf := func(name string) int {
-		for i, n := range order {
-			if n == name {
-				return i
-			}
-		}
-		return -1
-	}
+	indexOf := func(name string) int { return slices.Index(order, name) }
 
 	guardIdx := indexOf(guard)
 	loopIdx := indexOf(loopRunner)
@@ -2224,14 +2154,7 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightCompos
 	}
 	collect(node)
 
-	indexOf := func(name string) int {
-		for i, n := range order {
-			if n == name {
-				return i
-			}
-		}
-		return -1
-	}
+	indexOf := func(name string) int { return slices.Index(order, name) }
 
 	guardIdx := indexOf(guard)
 	notebookToolIdx := indexOf(notebookTool)
@@ -2388,14 +2311,7 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightCompos
 	}
 	collect(node)
 
-	indexOf := func(name string) int {
-		for i, n := range order {
-			if n == name {
-				return i
-			}
-		}
-		return -1
-	}
+	indexOf := func(name string) int { return slices.Index(order, name) }
 
 	guardIdx := indexOf(guard)
 	loopIdx := indexOf(loopRunner)
@@ -2508,14 +2424,7 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightCompos
 	}
 	collect(node)
 
-	indexOf := func(name string) int {
-		for i, n := range order {
-			if n == name {
-				return i
-			}
-		}
-		return -1
-	}
+	indexOf := func(name string) int { return slices.Index(order, name) }
 
 	guardIdx := indexOf(guard)
 	loopIdx := indexOf(loopRunner)
@@ -2598,14 +2507,7 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightCompos
 	}
 	collect(node)
 
-	indexOf := func(name string) int {
-		for i, n := range order {
-			if n == name {
-				return i
-			}
-		}
-		return -1
-	}
+	indexOf := func(name string) int { return slices.Index(order, name) }
 
 	guardIdx := indexOf(guard)
 	loopIdx := indexOf(loopRunner)
@@ -2677,14 +2579,7 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightCompos
 	}
 	collect(node)
 
-	indexOf := func(name string) int {
-		for i, n := range order {
-			if n == name {
-				return i
-			}
-		}
-		return -1
-	}
+	indexOf := func(name string) int { return slices.Index(order, name) }
 
 	guardIdx := indexOf(guard)
 	loopIdx := indexOf(loopRunner)
@@ -2761,14 +2656,7 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightCompos
 	}
 	collect(node)
 
-	indexOf := func(name string) int {
-		for i, n := range order {
-			if n == name {
-				return i
-			}
-		}
-		return -1
-	}
+	indexOf := func(name string) int { return slices.Index(order, name) }
 
 	guardIdx := indexOf(guard)
 	loopIdx := indexOf(loopRunner)
@@ -2852,14 +2740,7 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightCompos
 	}
 	collect(node)
 
-	indexOf := func(name string) int {
-		for i, n := range order {
-			if n == name {
-				return i
-			}
-		}
-		return -1
-	}
+	indexOf := func(name string) int { return slices.Index(order, name) }
 
 	guardIdx := indexOf(guard)
 	loopIdx := indexOf(loopRunner)
@@ -2961,14 +2842,7 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightCompos
 	}
 	collect(node)
 
-	indexOf := func(name string) int {
-		for i, n := range order {
-			if n == name {
-				return i
-			}
-		}
-		return -1
-	}
+	indexOf := func(name string) int { return slices.Index(order, name) }
 
 	guardIdx := indexOf(guard)
 	loopIdx := indexOf(loopRunner)
@@ -3040,14 +2914,7 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightCompos
 	}
 	collect(node)
 
-	indexOf := func(name string) int {
-		for i, n := range order {
-			if n == name {
-				return i
-			}
-		}
-		return -1
-	}
+	indexOf := func(name string) int { return slices.Index(order, name) }
 
 	guardIdx := indexOf(guard)
 	loopIdx := indexOf(loopRunner)
@@ -3192,14 +3059,7 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightDrives
 	}
 	collect(node)
 
-	indexOf := func(name string) int {
-		for i, n := range order {
-			if n == name {
-				return i
-			}
-		}
-		return -1
-	}
+	indexOf := func(name string) int { return slices.Index(order, name) }
 
 	loopIdx := indexOf(loopRunner)
 	cycleIdx := indexOf(cycle)
@@ -3341,14 +3201,7 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionWiresLoopTree(t
 	}
 	collect(path)
 
-	indexOf := func(name string) int {
-		for i, n := range order {
-			if n == name {
-				return i
-			}
-		}
-		return -1
-	}
+	indexOf := func(name string) int { return slices.Index(order, name) }
 
 	cbIdx := indexOf(circuitBreaker)
 	loopIdx := indexOf(loopRunner)
@@ -3688,14 +3541,7 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightCompos
 	}
 	collect(node)
 
-	indexOf := func(name string) int {
-		for i, n := range order {
-			if n == name {
-				return i
-			}
-		}
-		return -1
-	}
+	indexOf := func(name string) int { return slices.Index(order, name) }
 
 	guardIdx := indexOf(guard)
 	loopIdx := indexOf(loopRunner)

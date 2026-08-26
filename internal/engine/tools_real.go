@@ -2,6 +2,7 @@ package engine
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"fmt"
 	"io"
@@ -443,10 +444,7 @@ var nlmRun = func(timeout time.Duration, args ...string) string {
 	// per-day cache and refuse metered calls over the local daily budget so
 	// the ~50/day plan quota is spent on NEW questions, not repeats.
 	if cached, deny, proceed := nlmPreflight(args); !proceed {
-		if deny != "" {
-			return deny
-		}
-		return cached
+		return cmp.Or(deny, cached)
 	}
 
 	// Determine operation type for metrics
