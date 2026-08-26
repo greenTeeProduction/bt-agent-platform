@@ -84,27 +84,23 @@ var dashPersonaStore *persona.Store
 // creates and loads it on first use (guarded by dashCBStoreOnce) so it is
 // available even to callers that run before or without main()'s startup
 // sequence, such as tests that call newAgentExecutor() directly.
-var dashCBStore *agent.AgentCircuitBreakerStore
-var dashCBStoreOnce sync.Once
 
 // getDashCBStore returns the shared circuit breaker store, initializing it
 // from dashConfig's CB settings (or defaults, if dashConfig hasn't been
 // loaded yet) and restoring persisted state from agent.CircuitBreakersFile()
 // the first time it is called.
-func getDashCBStore() *agent.AgentCircuitBreakerStore {
-	dashCBStoreOnce.Do(func() {
-		var opts agent.CircuitBreakerOptions
-		if dashConfig != nil {
-			opts.Threshold = dashConfig.CBThreshold
-			opts.Cooldown = time.Duration(dashConfig.CBCooldownSecs) * time.Second
-		}
-		dashCBStore = agent.NewAgentCircuitBreakerStore(opts)
-		if err := dashCBStore.Load(agent.CircuitBreakersFile()); err != nil {
-			slog.Warn("dashboard: restore circuit breaker state failed", "path", agent.CircuitBreakersFile(), "err", err)
-		}
-	})
-	return dashCBStore
-}
+var getDashCBStore = sync.OnceValue(func() *agent.AgentCircuitBreakerStore {
+	var opts agent.CircuitBreakerOptions
+	if dashConfig != nil {
+		opts.Threshold = dashConfig.CBThreshold
+		opts.Cooldown = time.Duration(dashConfig.CBCooldownSecs) * time.Second
+	}
+	store := agent.NewAgentCircuitBreakerStore(opts)
+	if err := store.Load(agent.CircuitBreakersFile()); err != nil {
+		slog.Warn("dashboard: restore circuit breaker state failed", "path", agent.CircuitBreakersFile(), "err", err)
+	}
+	return store
+})
 
 // dlq is the dead letter queue for failed agent tasks.
 // Persisted to ~/.go-bt-evolve/dead_letter_queue.json.

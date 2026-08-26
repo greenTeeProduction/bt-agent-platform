@@ -47,14 +47,11 @@ func SetEvolutionRand(r *rand.Rand) (restore func()) {
 	evolutionRand = r
 	evolutionRandMu.Unlock()
 
-	var once sync.Once
-	return func() {
-		once.Do(func() {
-			evolutionRandMu.Lock()
-			evolutionRand = prev
-			evolutionRandMu.Unlock()
-		})
-	}
+	return sync.OnceFunc(func() {
+		evolutionRandMu.Lock()
+		evolutionRand = prev
+		evolutionRandMu.Unlock()
+	})
 }
 
 // evoIntn returns a random int in [0,n) from the injected source, or from the

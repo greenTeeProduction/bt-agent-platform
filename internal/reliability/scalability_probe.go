@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -192,7 +193,7 @@ func getJSON(ctx context.Context, client *http.Client, url, apiKey string, dst a
 	}
 	defer resp.Body.Close()
 	if dst != nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		if err := json.NewDecoder(resp.Body).Decode(dst); err != nil && err != io.EOF {
+		if err := json.NewDecoder(resp.Body).Decode(dst); err != nil && !errors.Is(err, io.EOF) {
 			return resp.StatusCode, err
 		}
 	} else {

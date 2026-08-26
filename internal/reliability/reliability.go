@@ -528,15 +528,12 @@ func AcquireFileLock(path string) (func(), error) {
 			_ = f.Close() // locked an orphaned inode; retry on the live path
 			continue
 		}
-		var once sync.Once
-		release := func() {
-			once.Do(func() {
-				// Unlink before close so no waiter still blocked on this
-				// inode can mistake it for the lock guarding the path.
-				_ = os.Remove(lockPath)
-				_ = f.Close() // closing the descriptor releases the flock
-			})
-		}
+		release := sync.OnceFunc(func() {
+			// Unlink before close so no waiter still blocked on this
+			// inode can mistake it for the lock guarding the path.
+			_ = os.Remove(lockPath)
+			_ = f.Close() // closing the descriptor releases the flock
+		})
 		return release, nil
 	}
 }
@@ -1294,8 +1291,7 @@ func (r *AgentRouter) SetLocal(e AgentExecutor) {
 func (r *AgentRouter) Execute(ctx context.Context, agent, task string) (*AgentResult, error) {
 	// Snapshot router state under lock, then release before Health() calls.
 	r.mu.Lock()
-	executors := make([]AgentExecutor, len(r.executors))
-	copy(executors, r.executors)
+	executors := slices.Clone(r.executors)
 	strategy := r.strategy
 	maxFailover := r.MaxFailover
 
@@ -1467,8 +1463,7 @@ func (r *AgentRouter) String() string {
 func (r *AgentRouter) Executors() []AgentExecutor {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	result := make([]AgentExecutor, len(r.executors))
-	copy(result, r.executors)
+	result := slices.Clone(r.executors)
 	return result
 }
 

@@ -215,8 +215,7 @@ func cappedIndividuals(individuals []*MultiIndividual, limit int) []*MultiIndivi
 	if limit <= 0 || len(individuals) <= limit {
 		return individuals
 	}
-	sorted := make([]*MultiIndividual, len(individuals))
-	copy(sorted, individuals)
+	sorted := slices.Clone(individuals)
 	slices.SortFunc(sorted, func(a, b *MultiIndividual) int {
 		return cmp.Or(
 			cmp.Compare(b.Fitness, a.Fitness),

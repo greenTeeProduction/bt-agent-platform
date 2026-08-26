@@ -437,8 +437,7 @@ func tradeoffVecs() []MultiFitness {
 func frontIndexSets(fronts []NSGAIIFront) [][]int {
 	out := make([][]int, len(fronts))
 	for i, f := range fronts {
-		idx := make([]int, len(f.Indices))
-		copy(idx, f.Indices)
+		idx := slices.Clone(f.Indices)
 		slices.Sort(idx)
 		out[i] = idx
 	}

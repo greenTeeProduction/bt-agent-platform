@@ -162,14 +162,12 @@ func (im *IslandModel) Migrate() int {
 		}
 
 		// Sort source by fitness (best first) and target (worst first)
-		srcSorted := make([]Individual, len(srcPop.Individuals))
-		copy(srcSorted, srcPop.Individuals)
+		srcSorted := slices.Clone(srcPop.Individuals)
 		slices.SortFunc(srcSorted, func(a, b Individual) int {
 			return cmp.Compare(b.Fitness, a.Fitness)
 		})
 
-		tgtSorted := make([]Individual, len(tgtPop.Individuals))
-		copy(tgtSorted, tgtPop.Individuals)
+		tgtSorted := slices.Clone(tgtPop.Individuals)
 		slices.SortFunc(tgtSorted, func(a, b Individual) int {
 			return cmp.Compare(a.Fitness, b.Fitness)
 		})

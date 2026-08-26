@@ -175,8 +175,7 @@ func (gq *GoalQueue) SelectGoal(state WorldState) *Goal {
 	// is already satisfied.
 	// Strategy: iterate through a sorted copy — this is O(n log n) but
 	// goal queues are typically small (<100 goals).
-	sorted := make([]*goalEntry, len(gq.heap))
-	copy(sorted, gq.heap)
+	sorted := slices.Clone(gq.heap)
 	slices.SortFunc(sorted, func(a, b *goalEntry) int {
 		if entryLess(a, b) {
 			return -1

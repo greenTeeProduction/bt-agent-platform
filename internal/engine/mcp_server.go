@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -196,8 +197,7 @@ func (s *Server) Run() error {
 		}
 
 		// Copy line data — scanner.Bytes() is only valid until next Scan().
-		data := make([]byte, len(line))
-		copy(data, line)
+		data := slices.Clone(line)
 
 		// Fast-path: handle initialize/list/notifications synchronously.
 		// These never block and must complete before tools/call can work.

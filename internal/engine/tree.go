@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -98,8 +99,7 @@ func (bb *Blackboard) ChildTicks() []ChildTick {
 	}
 	bb.childTicks.mu.Lock()
 	defer bb.childTicks.mu.Unlock()
-	out := make([]ChildTick, len(bb.childTicks.ticks))
-	copy(out, bb.childTicks.ticks)
+	out := slices.Clone(bb.childTicks.ticks)
 	return out
 }
 

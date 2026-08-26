@@ -1054,8 +1054,7 @@ func biasCandidatesWithExperience(bank *evolution.ExperienceBank, tree *evolutio
 		return candidates
 	}
 
-	biased := make([]evaluator.MutationCandidate, len(candidates))
-	copy(biased, candidates)
+	biased := slices.Clone(candidates)
 	reused := make(map[string]bool)
 	for i := range biased {
 		h, ok := best[opTarget{biased[i].Op.Operation, biased[i].Op.Target}]

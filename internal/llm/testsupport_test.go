@@ -68,8 +68,7 @@ func TestSkipIfUnavailable(t *testing.T) {
 	os.Setenv(EnvSkipLLMTests, "1")
 	t.Cleanup(func() {
 		os.Unsetenv(EnvSkipLLMTests)
-		configuredOnce = sync.Once{}
-		configuredVal = false
+		configuredOnce = sync.OnceValue(configured)
 	})
 	SkipIfUnavailable(t)
 	t.Fatal("test should have been skipped")

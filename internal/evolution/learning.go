@@ -990,12 +990,10 @@ func CloneMetadata(src map[string]any) map[string]any {
 	for k, v := range src {
 		switch vv := v.(type) {
 		case []any:
-			cp := make([]any, len(vv))
-			copy(cp, vv)
+			cp := slices.Clone(vv)
 			out[k] = cp
 		case []string:
-			cp := make([]string, len(vv))
-			copy(cp, vv)
+			cp := slices.Clone(vv)
 			out[k] = cp
 		case map[string]any:
 			out[k] = CloneMetadata(vv)

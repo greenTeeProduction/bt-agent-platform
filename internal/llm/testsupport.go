@@ -20,10 +20,7 @@ const EnvSkipLLMTests = "BT_SKIP_LLM_TESTS"
 // to actually exercise the LLM backend.
 const EnvRunLLMTests = "BT_RUN_LLM_TESTS"
 
-var (
-	configuredOnce sync.Once
-	configuredVal  bool
-)
+var configuredOnce = sync.OnceValue(configured)
 
 // envEnabled reports whether the named env var is set to 1, true, or yes.
 func envEnabled(name string) bool {
@@ -59,10 +56,7 @@ func OllamaReachable(cfg Config) bool {
 // Configured reports whether a real LLM backend is available for integration tests.
 // Honors BT_SKIP_LLM_TESTS. For ollama, probes the server; for deepseek/acp, checks credentials/command.
 func Configured() bool {
-	configuredOnce.Do(func() {
-		configuredVal = configured()
-	})
-	return configuredVal
+	return configuredOnce()
 }
 
 func configured() bool {

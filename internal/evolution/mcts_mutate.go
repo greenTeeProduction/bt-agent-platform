@@ -383,8 +383,7 @@ func (m *MCTSMutator) backpropagate(node *MCTSNode, fitness float64) {
 // buildMutationOps creates the set of mutation operations to try from a given tree.
 // Includes warm-start hints from the experience bank if available.
 func (m *MCTSMutator) buildMutationOps(_ *SerializableNode) []string {
-	ops := make([]string, len(AllMutationOps))
-	copy(ops, AllMutationOps)
+	ops := slices.Clone(AllMutationOps)
 
 	// Prepend warm-start hints if any
 	if len(m.WarmStartHints) > 0 {

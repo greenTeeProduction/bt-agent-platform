@@ -370,8 +370,7 @@ func successRate(records []evolution.Record) float64 {
 
 func consecutiveFailures(records []evolution.Record) int {
 	// Sort by timestamp descending
-	sorted := make([]evolution.Record, len(records))
-	copy(sorted, records)
+	sorted := slices.Clone(records)
 	slices.SortFunc(sorted, func(a, b evolution.Record) int {
 		return cmp.Compare(b.Timestamp, a.Timestamp)
 	})
