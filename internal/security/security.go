@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net"
 	"net/http"
 	"strconv"
@@ -901,9 +902,7 @@ func BearerPrincipal(ctx context.Context) string {
 // For production, use a JWT validator or OAuth2 token introspection endpoint.
 func StaticTokenValidator(tokens map[string]string) TokenValidator {
 	valid := make(map[string]string, len(tokens))
-	for token, subject := range tokens {
-		valid[token] = subject
-	}
+	maps.Copy(valid, tokens)
 	return func(_ context.Context, token string) (string, error) {
 		if subject, ok := valid[token]; ok {
 			return subject, nil

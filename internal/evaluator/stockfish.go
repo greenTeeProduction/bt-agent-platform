@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -734,10 +735,8 @@ func chainHasTool(n *evolution.SerializableNode, tool string) bool {
 			}
 		}
 	case []string:
-		for _, t := range tools {
-			if t == tool {
-				return true
-			}
+		if slices.Contains(tools, tool) {
+			return true
 		}
 	}
 	return false

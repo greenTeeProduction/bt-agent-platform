@@ -3,6 +3,7 @@ package blocks
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"sort"
@@ -188,9 +189,7 @@ func cloneTree(t *evolution.SerializableNode) *evolution.SerializableNode {
 	}
 	if t.Metadata != nil {
 		c.Metadata = make(map[string]any)
-		for k, v := range t.Metadata {
-			c.Metadata[k] = v
-		}
+		maps.Copy(c.Metadata, t.Metadata)
 	}
 	if t.Edges != nil {
 		c.Edges = make([]evolution.TypedEdge, len(t.Edges))

@@ -5,6 +5,7 @@
 package domains
 
 import (
+	"maps"
 	"sort"
 	"strings"
 	"unicode"
@@ -854,9 +855,7 @@ func AllDomainTrees() map[string]*evolution.SerializableNode {
 		"self_review":               SelfReviewTree(),
 	}
 	// Merge arc42 trees with qualified names (arc42:section1, etc.)
-	for k, v := range Arc42Trees() {
-		trees[k] = v
-	}
+	maps.Copy(trees, Arc42Trees())
 	// Every domain tree root gets the self-extending error handler.
 	for k, v := range trees {
 		trees[k] = wrapWithErrorHandler(k, v)
@@ -897,12 +896,8 @@ func SmokeTestableDomainTrees() map[string]*evolution.SerializableNode {
 	nonRegistry := KanbanAndHermesDomainTrees()
 
 	trees := make(map[string]*evolution.SerializableNode, len(registry)+len(nonRegistry))
-	for name, tree := range registry {
-		trees[name] = tree
-	}
-	for name, tree := range nonRegistry {
-		trees[name] = tree
-	}
+	maps.Copy(trees, registry)
+	maps.Copy(trees, nonRegistry)
 	return trees
 }
 

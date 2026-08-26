@@ -2,6 +2,7 @@ package thinktank
 
 import (
 	"fmt"
+	"maps"
 	"strings"
 	"time"
 
@@ -35,9 +36,7 @@ func (o *ThinkTankOrchestrator) newBlackboard(task string) *engine.Blackboard {
 	cs["thinktank"] = o.Tank
 
 	// Copy chain state so prior phase results are available to later phases
-	for k, v := range o.chainState {
-		cs[k] = v
-	}
+	maps.Copy(cs, o.chainState)
 
 	return &engine.Blackboard{
 		Task:       task,

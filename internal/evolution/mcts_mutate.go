@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"slices"
 	"sort"
 	"sync"
 )
@@ -389,11 +390,8 @@ func (m *MCTSMutator) buildMutationOps(_ *SerializableNode) []string {
 	if len(m.WarmStartHints) > 0 {
 		// Filter hints to only include valid ops
 		for _, hint := range m.WarmStartHints {
-			for _, valid := range AllMutationOps {
-				if hint == valid {
-					ops = append([]string{hint}, ops...)
-					break
-				}
+			if slices.Contains(AllMutationOps, hint) {
+				ops = append([]string{hint}, ops...)
 			}
 		}
 	}

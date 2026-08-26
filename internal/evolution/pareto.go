@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -123,12 +124,7 @@ func ParetoAccepts(candidate MultiFitness, baselines []MultiFitness) bool {
 	if len(fronts) == 0 {
 		return true
 	}
-	for _, idx := range fronts[0].Indices {
-		if idx == candidateIdx {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(fronts[0].Indices, candidateIdx)
 }
 
 // String returns a compact representation.

@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
 )
@@ -160,10 +161,8 @@ func sideEffectClass(node *evolution.SerializableNode) string {
 }
 
 func addUniqueError(info *evolution.NodeValidationInfo, msg string) {
-	for _, existing := range info.Errors {
-		if existing == msg {
-			return
-		}
+	if slices.Contains(info.Errors, msg) {
+		return
 	}
 	info.Errors = append(info.Errors, msg)
 }

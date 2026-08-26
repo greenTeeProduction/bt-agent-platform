@@ -25,6 +25,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
 	"sync/atomic"
 	"time"
@@ -163,9 +164,7 @@ func (p *WebhookPublisher) handleEvent(event AgentEvent) {
 		if annotated != "" {
 			// Copy the map — event.Data is shared with other bus subscribers.
 			patched := make(map[string]any, len(data)+1)
-			for k, v := range data {
-				patched[k] = v
-			}
+			maps.Copy(patched, data)
 			patched["summary"] = annotated
 			event.Data = patched
 		}

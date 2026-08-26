@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 )
 
@@ -75,13 +76,7 @@ func TestHandleIntent(t *testing.T) {
 	if err != nil {
 		t.Errorf("failed to load profile: %v", err)
 	}
-	hasTag := false
-	for _, tag := range profile.PreferenceTags {
-		if tag == "security" {
-			hasTag = true
-			break
-		}
-	}
+	hasTag := slices.Contains(profile.PreferenceTags, "security")
 	if !hasTag {
 		t.Errorf("expected profile to be updated with security tag")
 	}
@@ -145,13 +140,7 @@ func TestHandleBookmark(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to load profile: %v", err)
 	}
-	hasBookmark := false
-	for _, bID := range savedProfile.BookmarkIDs {
-		if bID == page.ID {
-			hasBookmark = true
-			break
-		}
-	}
+	hasBookmark := slices.Contains(savedProfile.BookmarkIDs, page.ID)
 	if !hasBookmark {
 		t.Errorf("expected profile to have bookmark ID %s", page.ID)
 	}

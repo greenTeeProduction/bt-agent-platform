@@ -5,9 +5,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"math/rand"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 )
@@ -329,13 +331,7 @@ func (p *Population) selfHealGeneration(eliteCount int, supervisor *LLMSuperviso
 // and a later regression spiral) both persist to the end of the run.
 func (p *Population) recordCrisisReasons(reasons []string) {
 	for _, r := range reasons {
-		seen := false
-		for _, existing := range p.CrisisReasons {
-			if existing == r {
-				seen = true
-				break
-			}
-		}
+		seen := slices.Contains(p.CrisisReasons, r)
 		if !seen {
 			p.CrisisReasons = append(p.CrisisReasons, r)
 		}
@@ -345,12 +341,7 @@ func (p *Population) recordCrisisReasons(reasons []string) {
 // containsCrisisReason reports whether the given crisis reason appears in the
 // slice DetectPopulation surfaced this generation.
 func containsCrisisReason(reasons []string, want string) bool {
-	for _, r := range reasons {
-		if r == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(reasons, want)
 }
 
 const (
@@ -776,9 +767,7 @@ func (qt *QTable) Load(path string) error {
 		if qt.Values[state] == nil {
 			qt.Values[state] = make(map[string]float64)
 		}
-		for action, val := range actions {
-			qt.Values[state][action] = val
-		}
+		maps.Copy(qt.Values[state], actions)
 	}
 	return nil
 }

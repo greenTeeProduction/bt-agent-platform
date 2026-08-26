@@ -1,6 +1,7 @@
 package knowledge
 
 import (
+	"slices"
 	"sync"
 	"time"
 )
@@ -102,9 +103,9 @@ func (ts *TraceStore) Get(treeID string, limit int) []DecisionTrace {
 func (ts *TraceStore) LastFailure(treeID string) *DecisionTrace {
 	ts.mu.RLock()
 	defer ts.mu.RUnlock()
-	for i := len(ts.traces) - 1; i >= 0; i-- {
-		if ts.traces[i].TreeID == treeID && ts.traces[i].Outcome != "success" && ts.traces[i].Outcome != "chain_success" {
-			t := ts.traces[i]
+	for _, t := range slices.Backward(ts.traces) {
+		if t.TreeID == treeID && t.Outcome != "success" && t.Outcome != "chain_success" {
+
 			return &t
 		}
 	}

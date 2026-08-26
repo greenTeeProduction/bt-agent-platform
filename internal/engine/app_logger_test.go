@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -32,12 +33,7 @@ func (h *recordingHandler) WithGroup(string) slog.Handler      { return h }
 func (h *recordingHandler) received(msg string) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	for _, m := range h.msgs {
-		if m == msg {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(h.msgs, msg)
 }
 
 // TestSetAsDefaultFollowsHandlerRebuild verifies that after SetAsDefault,

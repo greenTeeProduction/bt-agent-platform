@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"runtime/debug"
 	"strconv"
@@ -575,9 +576,7 @@ func writeLabeledHistogram(w io.Writer, name, help string, lh *LabeledHistogram)
 // withLeLabel returns a copy of labels with the Prometheus "le" bound added.
 func withLeLabel(labels map[string]string, le string) map[string]string {
 	out := make(map[string]string, len(labels)+1)
-	for k, v := range labels {
-		out[k] = v
-	}
+	maps.Copy(out, labels)
 	out["le"] = le
 	return out
 }

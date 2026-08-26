@@ -2,6 +2,7 @@ package blocks
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
@@ -50,12 +51,7 @@ func PipelineWithToolsProfile(blocks []string, toolsProfile string) []string {
 }
 
 func sliceContains(ss []string, target string) bool {
-	for _, s := range ss {
-		if s == target {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(ss, target)
 }
 
 // ComposePreset builds a tree from a named preset.

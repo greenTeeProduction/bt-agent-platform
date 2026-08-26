@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 	"sync"
 	"time"
@@ -183,9 +184,7 @@ func (s *wfState) cloneForParallel() *wfState {
 		runID:    s.runID,
 		prev:     make(map[string]StepResult, len(s.prev)),
 	}
-	for k, v := range s.prev {
-		cp.prev[k] = v
-	}
+	maps.Copy(cp.prev, s.prev)
 	return cp
 }
 

@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -402,7 +403,7 @@ func BootstrapCI(successes, total int) (lower, upper float64) {
 	}
 
 	// Sort and take 2.5th and 97.5th percentiles
-	sort.Slice(samples, func(i, j int) bool { return samples[i] < samples[j] })
+	slices.Sort(samples)
 	lower = samples[25]  // 2.5th percentile
 	upper = samples[975] // 97.5th percentile
 	return

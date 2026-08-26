@@ -2,6 +2,7 @@ package goap
 
 import (
 	"fmt"
+	"maps"
 	"sync"
 	"time"
 )
@@ -230,9 +231,7 @@ func (a *Agent) executePlan(plan *Plan, startTime time.Time) *AgentRun {
 
 			// Update agent's world state
 			a.mu.Lock()
-			for k, v := range action.Effects {
-				a.WorldState[k] = v
-			}
+			maps.Copy(a.WorldState, action.Effects)
 			a.mu.Unlock()
 		}
 

@@ -3,6 +3,7 @@ package goap
 import (
 	"fmt"
 	"hash/fnv"
+	"maps"
 	"sort"
 	"strings"
 )
@@ -250,9 +251,7 @@ func provenanceMetadata(plan *Plan, opts CompileOptions) map[string]any {
 		"plan_steps":   steps,
 		"plan_cost":    plan.Cost,
 	}
-	for k, v := range opts.Provenance {
-		meta[k] = v
-	}
+	maps.Copy(meta, opts.Provenance)
 	return meta
 }
 

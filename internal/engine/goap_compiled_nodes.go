@@ -12,6 +12,7 @@
 package engine
 
 import (
+	"maps"
 	"strconv"
 	"strings"
 
@@ -85,9 +86,7 @@ func compiledGoapActionFor(name string) ActionFunc {
 		if ws == nil {
 			ws = make(goap.WorldState)
 		}
-		for k, v := range effects {
-			ws[k] = v
-		}
+		maps.Copy(ws, effects)
 		b.ChainState[goapWorldStateChainKey] = ws
 		return 1
 	}

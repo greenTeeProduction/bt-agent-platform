@@ -7,6 +7,7 @@ import (
 	"compress/gzip"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 )
@@ -175,10 +176,5 @@ func isCompressibleContentType(contentType string) bool {
 	if idx := strings.IndexByte(mediaType, ';'); idx != -1 {
 		mediaType = strings.TrimSpace(mediaType[:idx])
 	}
-	for _, ct := range CompressibleTypes {
-		if mediaType == ct {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(CompressibleTypes, mediaType)
 }

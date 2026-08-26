@@ -4,6 +4,7 @@ package engine
 
 import (
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
 
@@ -42,18 +43,14 @@ func cloneNode(n *evolution.SerializableNode) *evolution.SerializableNode {
 	cp := *n
 	if n.Metadata != nil {
 		cp.Metadata = make(map[string]any, len(n.Metadata))
-		for k, v := range n.Metadata {
-			cp.Metadata[k] = v
-		}
+		maps.Copy(cp.Metadata, n.Metadata)
 	}
 	if n.Edges != nil {
 		cp.Edges = append([]evolution.TypedEdge(nil), n.Edges...)
 		for i := range cp.Edges {
 			if cp.Edges[i].Blackboard != nil {
 				bb := make(map[string]string, len(cp.Edges[i].Blackboard))
-				for k, v := range cp.Edges[i].Blackboard {
-					bb[k] = v
-				}
+				maps.Copy(bb, cp.Edges[i].Blackboard)
 				cp.Edges[i].Blackboard = bb
 			}
 		}

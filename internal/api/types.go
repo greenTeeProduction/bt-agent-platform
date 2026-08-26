@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -319,12 +320,7 @@ func validateAgainstSchema(v any, s *Schema, path string) error {
 }
 
 func stringIn(value string, allowed []string) bool {
-	for _, item := range allowed {
-		if value == item {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(allowed, value)
 }
 
 func numberValue(v any) (float64, bool) {

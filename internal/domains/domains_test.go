@@ -5,6 +5,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"maps"
 	"sort"
 	"strconv"
 	"strings"
@@ -737,12 +738,8 @@ func TestEdgeMetadataWalkerDetectsBlankFields(t *testing.T) {
 // DescriptionFor, and no description entry may point outside it.
 func describableDomainTrees() map[string]*evolution.SerializableNode {
 	union := map[string]*evolution.SerializableNode{}
-	for name, tree := range AllDomainTrees() {
-		union[name] = tree
-	}
-	for name, tree := range KanbanAndHermesDomainTrees() {
-		union[name] = tree
-	}
+	maps.Copy(union, AllDomainTrees())
+	maps.Copy(union, KanbanAndHermesDomainTrees())
 	return union
 }
 
@@ -1138,9 +1135,7 @@ func TestNonRegistryDomainTreeNodesHaveDescriptions(t *testing.T) {
 	// — so this guard cannot fall behind either set. Both return fresh maps, so
 	// merging into the first is safe.
 	trees := nonRegistrySmokeTestableTrees()
-	for name, tree := range ResolverReachableDomainTrees() {
-		trees[name] = tree
-	}
+	maps.Copy(trees, ResolverReachableDomainTrees())
 
 	for name, tree := range trees {
 		if tree == nil {

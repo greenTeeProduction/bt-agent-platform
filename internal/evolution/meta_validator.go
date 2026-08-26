@@ -2,6 +2,7 @@ package evolution
 
 import (
 	"math"
+	"slices"
 	"sort"
 )
 
@@ -138,10 +139,8 @@ func (m *MetaValidator) ValidateMutation(baseline, candidate *SerializableNode, 
 }
 
 func (m *MetaValidator) checkRoot(candidate *SerializableNode, report *MetaValidationReport) {
-	for _, typ := range m.config.RequiredRootTypes {
-		if candidate.Type == typ {
-			return
-		}
+	if slices.Contains(m.config.RequiredRootTypes, candidate.Type) {
+		return
 	}
 	report.addIssue("root_type", "critical", "root node must be Sequence or Selector", 0.35)
 }

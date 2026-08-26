@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 )
 
 // Handler implements the REST API handlers for DoorMate endpoints.
@@ -52,13 +53,7 @@ func (h *Handler) HandleIntent(w http.ResponseWriter, r *http.Request) {
 	_ = h.store.SavePage(page)
 
 	// Lightweight profile update based on intent
-	hasTag := false
-	for _, t := range profile.PreferenceTags {
-		if t == sess.Intent {
-			hasTag = true
-			break
-		}
-	}
+	hasTag := slices.Contains(profile.PreferenceTags, sess.Intent)
 	if !hasTag && sess.Intent != "general" {
 		profile.PreferenceTags = append(profile.PreferenceTags, sess.Intent)
 		_ = h.store.SaveProfile(profile)

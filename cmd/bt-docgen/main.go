@@ -28,9 +28,11 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -238,9 +240,7 @@ func main() {
 
 		// Pass dependency state
 		ws := worldState.ToWorldState()
-		for k, v := range ws {
-			bb.ChainState[k] = v
-		}
+		maps.Copy(bb.ChainState, ws)
 
 		cmd := engine.BuildTree(tree, &bb)
 		result := engine.RunTask(&bb, cmd)
@@ -400,12 +400,7 @@ func sectionReady(ws goap.DocPlannerWorldState, sm goap.SectionMapping) bool {
 }
 
 func contains(slice []int, n int) bool {
-	for _, v := range slice {
-		if v == n {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(slice, n)
 }
 
 // fileHash returns the SHA-256 hash of a file (empty string if missing).

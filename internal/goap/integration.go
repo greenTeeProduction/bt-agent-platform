@@ -3,6 +3,7 @@ package goap
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"strings"
 )
 
@@ -78,9 +79,7 @@ func (b *BlackboardBridge) SyncToBB() {
 		return
 	}
 	// Write all world state to chain state
-	for k, v := range b.Agent.WorldState {
-		cs[k] = v
-	}
+	maps.Copy(cs, b.Agent.WorldState)
 }
 
 // PlanAndSync runs the planner and writes the plan to the blackboard.

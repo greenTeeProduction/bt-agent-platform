@@ -1,5 +1,7 @@
 package evolution
 
+import "slices"
+
 import "time"
 
 // EvolutionMetadata stores lineage, fitness, and mutation history for a tree.
@@ -85,10 +87,5 @@ func (m *EvolutionMetadata) IsSpecialist() bool {
 
 // IsResurrected returns true if the tree was resurrected from the specialist registry.
 func (m *EvolutionMetadata) IsResurrected() bool {
-	for _, tag := range m.Tags {
-		if tag == "resurrected:true" {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(m.Tags, "resurrected:true")
 }

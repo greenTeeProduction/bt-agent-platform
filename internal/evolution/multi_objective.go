@@ -2,6 +2,7 @@ package evolution
 
 import (
 	"math"
+	"slices"
 	"sort"
 )
 
@@ -300,10 +301,8 @@ func (nsga2 *NSGAIIPopulation) crowdedComparison(i, j int) bool {
 // frontRank returns the front index (rank) for individual i.
 func (nsga2 *NSGAIIPopulation) frontRank(i int) int {
 	for rank, front := range nsga2.Fronts {
-		for _, idx := range front.Indices {
-			if idx == i {
-				return rank
-			}
+		if slices.Contains(front.Indices, i) {
+			return rank
 		}
 	}
 	return len(nsga2.Fronts) // dominated by all

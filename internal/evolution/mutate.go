@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 )
 
 // SerializableNode represents a behavior tree node in a serializable format.
@@ -614,10 +615,8 @@ func applyAddTool(tree *SerializableNode, targetName string, meta map[string]any
 				}
 				n.Metadata["tools"] = append(tools, newTool)
 			case []string:
-				for _, t := range tools {
-					if t == newTool {
-						return
-					}
+				if slices.Contains(tools, newTool) {
+					return
 				}
 				n.Metadata["tools"] = append(tools, newTool)
 			default:

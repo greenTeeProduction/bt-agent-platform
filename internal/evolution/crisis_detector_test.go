@@ -1,6 +1,7 @@
 package evolution
 
 import (
+	"slices"
 	"testing"
 )
 
@@ -513,10 +514,5 @@ func TestCrisisDetector_ResetPopulation(t *testing.T) {
 
 // Helper
 func containsReason(reasons []string, target string) bool {
-	for _, r := range reasons {
-		if r == target {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(reasons, target)
 }

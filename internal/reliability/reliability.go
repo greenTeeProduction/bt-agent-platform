@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -180,9 +181,7 @@ func (cb *CircuitBreaker) CategoryFailureCounts() map[ErrorCategory]int {
 		return nil
 	}
 	result := make(map[ErrorCategory]int, len(cb.categoryCounts))
-	for k, v := range cb.categoryCounts {
-		result[k] = v
-	}
+	maps.Copy(result, cb.categoryCounts)
 	return result
 }
 

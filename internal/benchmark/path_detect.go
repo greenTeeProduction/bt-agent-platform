@@ -1,5 +1,7 @@
 package benchmark
 
+import "slices"
+
 import "github.com/nico/go-bt-evolve/internal/engine"
 
 // pathMatches reports whether actual matches the path a TaskCase declared it
@@ -12,12 +14,7 @@ func pathMatches(tc TaskCase, actual string) bool {
 	if actual == tc.ExpectedPath {
 		return true
 	}
-	for _, p := range tc.PossiblePaths {
-		if actual == p {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(tc.PossiblePaths, actual)
 }
 
 // detectPath returns the strategy path that was actually executed by the tree.

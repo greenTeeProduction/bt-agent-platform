@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -241,8 +242,8 @@ func scanSelfReviewCommits(repoDir, lastSHA string) (commitLog, diff, head, rang
 // no git calls.
 func oldestCommitHash(oneline string) string {
 	lines := strings.Split(strings.TrimSpace(oneline), "\n")
-	for i := len(lines) - 1; i >= 0; i-- {
-		l := strings.TrimSpace(lines[i])
+	for _, line := range slices.Backward(lines) {
+		l := strings.TrimSpace(line)
 		if l == "" {
 			continue
 		}

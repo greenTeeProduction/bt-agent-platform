@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -157,12 +158,8 @@ func NewEngine() *Engine {
 	defer regMu.RUnlock()
 	actions := make(map[string]ActionFunc, len(actionRegistry))
 	conditions := make(map[string]ConditionFunc, len(conditionRegistry))
-	for k, v := range actionRegistry {
-		actions[k] = v
-	}
-	for k, v := range conditionRegistry {
-		conditions[k] = v
-	}
+	maps.Copy(actions, actionRegistry)
+	maps.Copy(conditions, conditionRegistry)
 	return &Engine{Actions: actions, Conditions: conditions}
 }
 

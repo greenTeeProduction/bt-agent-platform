@@ -14,6 +14,7 @@ package goap
 
 import (
 	"fmt"
+	"maps"
 	"sort"
 	"strings"
 )
@@ -64,9 +65,7 @@ func (p *Plan) String() string {
 // Clone creates a deep copy of a WorldState.
 func (ws WorldState) Clone() WorldState {
 	clone := make(WorldState, len(ws))
-	for k, v := range ws {
-		clone[k] = v
-	}
+	maps.Copy(clone, ws)
 	return clone
 }
 
@@ -90,9 +89,7 @@ func (ws WorldState) MeetsPreconditions(pre WorldState) bool {
 // Returns a clone with effects applied (original is not modified).
 func (ws WorldState) Apply(effects WorldState) WorldState {
 	result := ws.Clone()
-	for k, v := range effects {
-		result[k] = v
-	}
+	maps.Copy(result, effects)
 	return result
 }
 

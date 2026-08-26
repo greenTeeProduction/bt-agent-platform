@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -1134,12 +1135,7 @@ func TestSuperpowersRuntime_GoapFusionPreflightNodeComposesBuildTreeMaterializer
 		if n.Type == "Action" && n.Name == want {
 			return true
 		}
-		for _, c := range n.Children {
-			if references(c) {
-				return true
-			}
-		}
-		return false
+		return slices.ContainsFunc(n.Children, references)
 	}
 
 	if !references(node) {
@@ -1188,12 +1184,7 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightCompos
 		if n.Type == "Action" && n.Name == want {
 			return true
 		}
-		for _, c := range n.Children {
-			if references(c) {
-				return true
-			}
-		}
-		return false
+		return slices.ContainsFunc(n.Children, references)
 	}
 
 	if !references(node) {
@@ -1442,12 +1433,7 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightCompos
 		if n.Type == "Action" && n.Name == want {
 			return true
 		}
-		for _, c := range n.Children {
-			if references(c) {
-				return true
-			}
-		}
-		return false
+		return slices.ContainsFunc(n.Children, references)
 	}
 
 	if !references(node) {

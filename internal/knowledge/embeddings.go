@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"math"
 	"net/http"
 	"time"
@@ -151,9 +152,7 @@ func (kg *KnowledgeGraph) BuildIndex() error {
 
 	kg.mu.RLock()
 	trees := make(map[string]*TreeMeta, len(kg.Trees))
-	for id, tree := range kg.Trees {
-		trees[id] = tree
-	}
+	maps.Copy(trees, kg.Trees)
 	kg.mu.RUnlock()
 
 	ch := make(chan result, len(trees))

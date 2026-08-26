@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/nico/go-bt-evolve/internal/goap"
@@ -290,9 +291,7 @@ func registerGoapNodes() {
 				if !ok {
 					ws = make(goap.WorldState)
 				}
-				for k, v := range p.Steps[idx].Effects {
-					ws[k] = v
-				}
+				maps.Copy(ws, p.Steps[idx].Effects)
 				cs["goap_world_state"] = ws
 			}
 		}
