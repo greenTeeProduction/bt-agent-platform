@@ -4,10 +4,11 @@
 package evaluator
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -235,8 +236,8 @@ func buildScorecard(results []SuiteEvalResult) PlatformScorecard {
 	for _, v := range cases {
 		sorted = append(sorted, v)
 	}
-	sort.Slice(sorted, func(i, j int) bool {
-		return sorted[i].AutomationFit > sorted[j].AutomationFit
+	slices.SortFunc(sorted, func(a, b UseCaseScore) int {
+		return cmp.Compare(b.AutomationFit, a.AutomationFit)
 	})
 
 	sc := PlatformScorecard{UseCases: make(map[string]UseCaseScore)}

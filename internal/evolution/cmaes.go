@@ -1,10 +1,11 @@
 package evolution
 
 import (
+	"cmp"
 	"fmt"
 	"math"
 	"math/rand"
-	"sort"
+	"slices"
 
 	"github.com/nico/go-bt-evolve/internal/util"
 )
@@ -407,8 +408,8 @@ func (cma *CMAESOptimizer) Optimize(
 		for i := range idx {
 			idx[i] = i
 		}
-		sort.Slice(idx, func(i, j int) bool {
-			return fitnesses[idx[i]] > fitnesses[idx[j]]
+		slices.SortFunc(idx, func(a, b int) int {
+			return cmp.Compare(fitnesses[b], fitnesses[a])
 		})
 
 		// 3. Early stop if target reached

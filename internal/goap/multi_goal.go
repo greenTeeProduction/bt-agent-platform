@@ -1,8 +1,10 @@
 package goap
 
 import (
+	"cmp"
 	"container/heap"
 	"fmt"
+	"slices"
 	"sort"
 	"sync"
 )
@@ -201,8 +203,8 @@ func (gq *GoalQueue) SelectAllUnsatisfied(state WorldState) []*Goal {
 		}
 	}
 
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].Priority > result[j].Priority
+	slices.SortFunc(result, func(a, b *Goal) int {
+		return cmp.Compare(b.Priority, a.Priority)
 	})
 	return result
 }
@@ -240,8 +242,8 @@ func (gq *GoalQueue) All() []*Goal {
 		result = append(result, entry.goal)
 	}
 
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].Priority > result[j].Priority
+	slices.SortFunc(result, func(a, b *Goal) int {
+		return cmp.Compare(b.Priority, a.Priority)
 	})
 	return result
 }

@@ -12,11 +12,13 @@
 package evolution
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -199,8 +201,8 @@ func (eb *ExperienceBank) Retrieve(query string, topK int) []ExperienceEntry {
 	}
 
 	// Sort by score descending
-	sort.Slice(candidates, func(i, j int) bool {
-		return candidates[i].score > candidates[j].score
+	slices.SortFunc(candidates, func(a, b scored) int {
+		return cmp.Compare(b.score, a.score)
 	})
 
 	// Return top-K
@@ -226,8 +228,8 @@ func (eb *ExperienceBank) RetrieveByTreeType(treeType string, topK int) []Experi
 		}
 	}
 
-	sort.Slice(matching, func(i, j int) bool {
-		return matching[i].QualityScore > matching[j].QualityScore
+	slices.SortFunc(matching, func(a, b ExperienceEntry) int {
+		return cmp.Compare(b.QualityScore, a.QualityScore)
 	})
 
 	if topK > len(matching) {

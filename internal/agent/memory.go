@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -313,8 +314,8 @@ func (ms *MemoryStore) queryLocked(category, priority string, limit int) []Memor
 		results = append(results, *e)
 	}
 
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].UpdatedAt.After(results[j].UpdatedAt)
+	slices.SortFunc(results, func(a, b MemoryEntry) int {
+		return b.UpdatedAt.Compare(a.UpdatedAt)
 	})
 
 	if limit > 0 && limit < len(results) {

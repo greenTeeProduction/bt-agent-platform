@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"sync"
 	"time"
 
@@ -264,7 +264,9 @@ func errorHandlerLedgerStamp(sig, verdict string) {
 		for s, e := range ledger {
 			entries = append(entries, sigAge{s, e.LastAttempt})
 		}
-		sort.Slice(entries, func(i, j int) bool { return entries[i].at.Before(entries[j].at) })
+		slices.SortFunc(entries, func(a, b sigAge) int {
+			return a.at.Compare(b.at)
+		})
 		for _, e := range entries[:len(ledger)-errorHandlerLedgerMaxEntries] {
 			delete(ledger, e.sig)
 		}

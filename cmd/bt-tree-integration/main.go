@@ -1,13 +1,14 @@
 package main
 
 import (
+	"cmp"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/benchmark"
@@ -118,7 +119,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 	reg := gardener.NewRegistry(*storageDir)
 	entries := reg.List()
-	sort.Slice(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })
+	slices.SortFunc(entries, func(a, b gardener.TreeEntry) int {
+		return cmp.Compare(a.Name, b.Name)
+	})
 
 	if *listOnly {
 		if *jsonOnly {

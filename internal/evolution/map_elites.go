@@ -1,10 +1,12 @@
 package evolution
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 )
 
@@ -133,8 +135,8 @@ func (g *MAPElitesGrid) Elites() []*Individual {
 	}
 
 	// Sort by fitness descending
-	sort.Slice(elites, func(i, j int) bool {
-		return elites[i].Fitness > elites[j].Fitness
+	slices.SortFunc(elites, func(a, b *Individual) int {
+		return cmp.Compare(b.Fitness, a.Fitness)
 	})
 
 	// Truncate to EliteSize

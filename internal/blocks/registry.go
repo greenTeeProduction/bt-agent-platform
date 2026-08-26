@@ -1,13 +1,13 @@
 package blocks
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
 	"sync"
 
@@ -97,7 +97,9 @@ func (r *Registry) List() []Block {
 			Version:     b.Version,
 		})
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	slices.SortFunc(out, func(a, b Block) int {
+		return cmp.Compare(a.ID, b.ID)
+	})
 	return out
 }
 

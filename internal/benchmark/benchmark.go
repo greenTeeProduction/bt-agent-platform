@@ -17,12 +17,12 @@
 package benchmark
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"log/slog"
 	"math"
 	"slices"
-	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -1480,7 +1480,7 @@ func SuiteForTreeNamed(treeName string) (Suite, bool) {
 
 // SortResults sorts results by task name for consistent comparison.
 func SortResults(results []Result) {
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].Task < results[j].Task
+	slices.SortFunc(results, func(a, b Result) int {
+		return cmp.Compare(a.Task, b.Task)
 	})
 }

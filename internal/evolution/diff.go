@@ -1,8 +1,9 @@
 package evolution
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -242,8 +243,8 @@ func (mpe *MetaPromptEvolver) EvolveTemplates() {
 	}
 
 	// Sort by success rate descending
-	sort.Slice(mpe.Templates, func(i, j int) bool {
-		return mpe.Templates[i].SuccessRate > mpe.Templates[j].SuccessRate
+	slices.SortFunc(mpe.Templates, func(a, b MutationTemplate) int {
+		return cmp.Compare(b.SuccessRate, a.SuccessRate)
 	})
 
 	// Keep top K

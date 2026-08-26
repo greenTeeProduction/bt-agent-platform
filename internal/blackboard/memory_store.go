@@ -1,7 +1,9 @@
 package blackboard
 
 import (
+	"cmp"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -176,7 +178,9 @@ func (s *scopedStore) list(prefix string, limit int) []Entry {
 			out = append(out, e)
 		}
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
+	slices.SortFunc(out, func(a, b Entry) int {
+		return cmp.Compare(a.Key, b.Key)
+	})
 	if len(out) > limit {
 		out = out[:limit]
 	}

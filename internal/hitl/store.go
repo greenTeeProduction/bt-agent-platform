@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"sync"
 	"time"
 
@@ -113,8 +113,8 @@ func (s *Store) save() error {
 		terminal = append(terminal, r)
 	}
 	if len(terminal) > hitlMaxStoredTerminal {
-		sort.Slice(terminal, func(i, j int) bool {
-			return terminal[i].UpdatedAt.After(terminal[j].UpdatedAt)
+		slices.SortFunc(terminal, func(a, b *Request) int {
+			return b.UpdatedAt.Compare(a.UpdatedAt)
 		})
 		for _, dropped := range terminal[hitlMaxStoredTerminal:] {
 			delete(s.records, dropped.ID)

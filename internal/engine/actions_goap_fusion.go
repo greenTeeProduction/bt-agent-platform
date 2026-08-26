@@ -8,7 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -685,7 +685,9 @@ func readNewestVaultDocs(dir, label string, match func(string) bool, maxFiles, p
 		}
 		docs = append(docs, vaultDoc{name: e.Name(), mod: info.ModTime()})
 	}
-	sort.Slice(docs, func(i, j int) bool { return docs[i].mod.After(docs[j].mod) })
+	slices.SortFunc(docs, func(a, b vaultDoc) int {
+		return b.mod.Compare(a.mod)
+	})
 	out := make([]string, 0, maxFiles)
 	for _, d := range docs {
 		if len(out) == maxFiles {

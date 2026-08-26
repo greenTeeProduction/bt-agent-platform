@@ -3,12 +3,13 @@ package main
 
 import (
 	"bufio"
+	"cmp"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/nico/go-bt-evolve/internal/agent"
@@ -136,7 +137,9 @@ func (a *app) cmdAgents() int {
 		fmt.Fprintln(a.out, "No agents registered. Create one with: bt-assistant create <name> --tree <tree-id>")
 		return 0
 	}
-	sort.Slice(agents, func(i, j int) bool { return agents[i].Definition.Name < agents[j].Definition.Name })
+	slices.SortFunc(agents, func(a, b *agent.Instance) int {
+		return cmp.Compare(a.Definition.Name, b.Definition.Name)
+	})
 	fmt.Fprintf(a.out, "%-28s %-10s %-32s %s\n", "NAME", "STATE", "TREE", "SCHEDULE")
 	for _, inst := range agents {
 		schedule := inst.Definition.Schedule
@@ -161,7 +164,9 @@ func (a *app) cmdTrees(args []string) int {
 			trees = append(trees, tree)
 		}
 	}
-	sort.Slice(trees, func(i, j int) bool { return trees[i].ID < trees[j].ID })
+	slices.SortFunc(trees, func(a, b *knowledge.TreeMeta) int {
+		return cmp.Compare(a.ID, b.ID)
+	})
 	for _, tree := range trees {
 		fmt.Fprintf(a.out, "%s\t%s\t%s\n", tree.ID, tree.Category, tree.Description)
 	}
@@ -361,7 +366,9 @@ func (a *app) assistantPrompt(question string) string {
 	var b strings.Builder
 	b.WriteString("You are the personal assistant for the Go BT platform. Answer concisely and prefer exact bt-assistant commands when actions are needed.\n\nAgents:\n")
 	agents := a.registry.List()
-	sort.Slice(agents, func(i, j int) bool { return agents[i].Definition.Name < agents[j].Definition.Name })
+	slices.SortFunc(agents, func(a, b *agent.Instance) int {
+		return cmp.Compare(a.Definition.Name, b.Definition.Name)
+	})
 	for _, inst := range agents {
 		fmt.Fprintf(&b, "- %s state=%s tree=%s schedule=%s\n", inst.Definition.Name, inst.State, inst.Definition.Tree, inst.Definition.Schedule)
 	}

@@ -1,12 +1,13 @@
 package a2a
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -769,8 +770,8 @@ func (a *Auctioneer) CollectBids(ctx context.Context, ann TaskAnnouncement, cand
 	}
 	wg.Wait()
 
-	sort.Slice(bids, func(i, j int) bool {
-		return bids[i].BidderName < bids[j].BidderName
+	slices.SortFunc(bids, func(a, b Bid) int {
+		return cmp.Compare(a.BidderName, b.BidderName)
 	})
 	return bids, nil
 }

@@ -1,9 +1,10 @@
 package evolution
 
 import (
+	"cmp"
 	"math"
 	"math/rand"
-	"sort"
+	"slices"
 )
 
 // ─── Memetic Local Search ────────────────────────────────────────────────
@@ -391,8 +392,8 @@ func (p *Population) MemeticEvolve(
 		p.Generation++
 
 		// Sort by fitness descending
-		sort.Slice(p.Individuals, func(i, j int) bool {
-			return p.Individuals[i].Fitness > p.Individuals[j].Fitness
+		slices.SortFunc(p.Individuals, func(a, b Individual) int {
+			return cmp.Compare(b.Fitness, a.Fitness)
 		})
 
 		// --- MEMETIC: Local search on top N individuals ---

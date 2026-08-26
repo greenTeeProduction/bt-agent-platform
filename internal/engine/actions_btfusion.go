@@ -5,7 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -370,7 +370,9 @@ func listFusionVaultNotes() []fusionVaultNote {
 			notes = append(notes, fusionVaultNote{path: filepath.Join(dir, e.Name()), name: e.Name(), mod: info.ModTime()})
 		}
 	}
-	sort.Slice(notes, func(i, j int) bool { return notes[i].mod.After(notes[j].mod) })
+	slices.SortFunc(notes, func(a, b fusionVaultNote) int {
+		return b.mod.Compare(a.mod)
+	})
 	return notes
 }
 

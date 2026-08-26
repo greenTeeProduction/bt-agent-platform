@@ -1,6 +1,7 @@
 package evolution
 
 import (
+	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -10,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strconv"
 )
 
@@ -290,8 +290,8 @@ func (p *Population) selfHealGeneration(eliteCount int, supervisor *LLMSuperviso
 		containsCrisisReason(reasons, "quality_crash")
 
 	// Sort by fitness descending
-	sort.Slice(p.Individuals, func(i, j int) bool {
-		return p.Individuals[i].Fitness > p.Individuals[j].Fitness
+	slices.SortFunc(p.Individuals, func(a, b Individual) int {
+		return cmp.Compare(b.Fitness, a.Fitness)
 	})
 
 	// Archive validated specialist elites every generation so that if a

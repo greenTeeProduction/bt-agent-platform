@@ -1,6 +1,7 @@
 package evolution
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -418,8 +419,8 @@ func (pp *ParetoPopulation) EvolvePareto(generations int, fitnessFn func(*Serial
 
 		pp.selfHealGeneration(eliteCount, supervisor, func(mutationRate float64) {
 			// Sort by composite score
-			sort.Slice(pp.Individuals, func(i, j int) bool {
-				return pp.Individuals[i].Fitness > pp.Individuals[j].Fitness
+			slices.SortFunc(pp.Individuals, func(a, b Individual) int {
+				return cmp.Compare(b.Fitness, a.Fitness)
 			})
 
 			newPop := make([]Individual, len(pp.Individuals))

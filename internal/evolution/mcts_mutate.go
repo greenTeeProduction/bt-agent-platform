@@ -13,12 +13,12 @@
 package evolution
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"math"
 	"math/rand"
 	"slices"
-	"sort"
 	"sync"
 )
 
@@ -551,7 +551,9 @@ func (m *MCTSMutator) Candidates(parent *SerializableNode, parentFitness float64
 				imp.op.Operation, imp.op.Target, imp.gain, m.Iterations),
 		})
 	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].Score > out[j].Score })
+	slices.SortStableFunc(out, func(a, b ScoredMutation) int {
+		return cmp.Compare(b.Score, a.Score)
+	})
 	return out
 }
 
@@ -582,7 +584,9 @@ func MergeScoredMutations(heuristic, mcts []ScoredMutation) []ScoredMutation {
 		}
 	}
 
-	sort.SliceStable(merged, func(i, j int) bool { return merged[i].Score > merged[j].Score })
+	slices.SortStableFunc(merged, func(a, b ScoredMutation) int {
+		return cmp.Compare(b.Score, a.Score)
+	})
 	return merged
 }
 

@@ -1,12 +1,12 @@
 package persona
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -77,7 +77,9 @@ func (s *AutomationStore) All() ([]AutomationRecord, error) {
 	if err != nil {
 		return nil, err
 	}
-	sort.Slice(records, func(i, j int) bool { return records[i].CreatedAt > records[j].CreatedAt })
+	slices.SortFunc(records, func(a, b AutomationRecord) int {
+		return cmp.Compare(b.CreatedAt, a.CreatedAt)
+	})
 	return records, nil
 }
 

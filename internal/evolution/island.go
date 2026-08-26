@@ -1,11 +1,12 @@
 package evolution
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 )
@@ -165,14 +166,14 @@ func (im *IslandModel) Migrate() int {
 		// Sort source by fitness (best first) and target (worst first)
 		srcSorted := make([]Individual, len(srcPop.Individuals))
 		copy(srcSorted, srcPop.Individuals)
-		sort.Slice(srcSorted, func(i, j int) bool {
-			return srcSorted[i].Fitness > srcSorted[j].Fitness
+		slices.SortFunc(srcSorted, func(a, b Individual) int {
+			return cmp.Compare(b.Fitness, a.Fitness)
 		})
 
 		tgtSorted := make([]Individual, len(tgtPop.Individuals))
 		copy(tgtSorted, tgtPop.Individuals)
-		sort.Slice(tgtSorted, func(i, j int) bool {
-			return tgtSorted[i].Fitness < tgtSorted[j].Fitness
+		slices.SortFunc(tgtSorted, func(a, b Individual) int {
+			return cmp.Compare(a.Fitness, b.Fitness)
 		})
 
 		// Migrate top individuals from source to replace worst in target
@@ -527,8 +528,8 @@ func enforceIslandCap(pop *Population, islandCap int) int {
 	if islandCap <= 0 || len(pop.Individuals) <= islandCap {
 		return 0
 	}
-	sort.Slice(pop.Individuals, func(i, j int) bool {
-		return pop.Individuals[i].Fitness > pop.Individuals[j].Fitness
+	slices.SortFunc(pop.Individuals, func(a, b Individual) int {
+		return cmp.Compare(b.Fitness, a.Fitness)
 	})
 	evicted := len(pop.Individuals) - islandCap
 	pop.Individuals = pop.Individuals[:islandCap]

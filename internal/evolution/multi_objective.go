@@ -1,9 +1,9 @@
 package evolution
 
 import (
+	"cmp"
 	"math"
 	"slices"
-	"sort"
 )
 
 // ─── NSGA-II Multi-Objective Optimization ──────────────────────────────────
@@ -247,8 +247,8 @@ func crowdingDistances(indices []int, fitnessVecs []MultiFitness, dims []Fitness
 	for _, dim := range dims {
 		// Sort a copy of the front by this dimension, ascending.
 		copy(sorted, indices)
-		sort.Slice(sorted, func(a, b int) bool {
-			return fitnessVecs[sorted[a]].Get(dim) < fitnessVecs[sorted[b]].Get(dim)
+		slices.SortFunc(sorted, func(x, y int) int {
+			return cmp.Compare(fitnessVecs[x].Get(dim), fitnessVecs[y].Get(dim))
 		})
 
 		// Boundary points get infinite distance.
@@ -415,8 +415,8 @@ func (nsga2 *NSGAIIPopulation) Evolve(
 					// Assign crowding distance to this front
 					cd := sorter.assignCrowdingDistance(indices, combinedVecs)
 					// Sort by crowding distance descending
-					sort.Slice(indices, func(a, b int) bool {
-						return cd[indices[a]] > cd[indices[b]]
+					slices.SortFunc(indices, func(x, y int) int {
+						return cmp.Compare(cd[y], cd[x])
 					})
 					for k := 0; k < remaining && k < len(indices); k++ {
 						idx := indices[k]

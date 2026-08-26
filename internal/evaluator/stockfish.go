@@ -7,6 +7,7 @@
 package evaluator
 
 import (
+	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -14,7 +15,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
 	"sync"
 
@@ -517,8 +517,8 @@ func OrderMutations(tree *evolution.SerializableNode, records []evolution.Record
 	}
 
 	// Sort all candidates by descending score for deterministic ordering
-	sort.Slice(candidates, func(i, j int) bool {
-		return candidates[i].Score > candidates[j].Score
+	slices.SortFunc(candidates, func(a, b MutationCandidate) int {
+		return cmp.Compare(b.Score, a.Score)
 	})
 
 	return candidates

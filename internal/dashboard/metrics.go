@@ -2,12 +2,13 @@
 package dashboard
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -135,8 +136,8 @@ func Collect(treeCount int, categories map[string]int, trees []TreeSnapshot) Met
 func rankTopWinners(trees []TreeSnapshot) []TreeSnapshot {
 	winners := make([]TreeSnapshot, len(trees))
 	copy(winners, trees)
-	sort.SliceStable(winners, func(i, j int) bool {
-		return winners[i].StructuralFitness > winners[j].StructuralFitness
+	slices.SortStableFunc(winners, func(a, b TreeSnapshot) int {
+		return cmp.Compare(b.StructuralFitness, a.StructuralFitness)
 	})
 	return winners
 }

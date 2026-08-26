@@ -9,11 +9,11 @@ package engine
 // actually fan out to multi-task cycles.
 
 import (
+	"cmp"
 	"fmt"
 	"os/exec"
 	"regexp"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -345,7 +345,9 @@ func recentImplementedGoals(n int) []string {
 			entries = append(entries, e)
 		}
 	}
-	sort.Slice(entries, func(i, j int) bool { return entries[i].LastSeen.After(entries[j].LastSeen) })
+	slices.SortFunc(entries, func(a, b *research.Entry) int {
+		return b.LastSeen.Compare(a.LastSeen)
+	})
 	var titles []string
 	for _, e := range entries {
 		titles = append(titles, e.Title)
@@ -630,7 +632,9 @@ func scopeGoapGoalLine(line string) string {
 	if len(hits) == 0 {
 		return line
 	}
-	sort.SliceStable(hits, func(i, j int) bool { return counts[hits[i]] > counts[hits[j]] })
+	slices.SortStableFunc(hits, func(a, b string) int {
+		return cmp.Compare(counts[b], counts[a])
+	})
 	if len(hits) > 3 {
 		hits = hits[:3]
 	}

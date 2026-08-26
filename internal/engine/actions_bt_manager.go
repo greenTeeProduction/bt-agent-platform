@@ -3,8 +3,9 @@
 package engine
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -371,8 +372,8 @@ func consecutiveFailures(records []evolution.Record) int {
 	// Sort by timestamp descending
 	sorted := make([]evolution.Record, len(records))
 	copy(sorted, records)
-	sort.Slice(sorted, func(i, j int) bool {
-		return sorted[i].Timestamp > sorted[j].Timestamp
+	slices.SortFunc(sorted, func(a, b evolution.Record) int {
+		return cmp.Compare(b.Timestamp, a.Timestamp)
 	})
 
 	count := 0

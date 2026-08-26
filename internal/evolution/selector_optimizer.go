@@ -1,10 +1,12 @@
 package evolution
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"math"
 	"os"
+	"slices"
 	"sort"
 	"sync"
 )
@@ -399,20 +401,20 @@ func (so *SelectorOptimizer) OrderChildren(selectorName string) []string {
 
 	switch so.Strategy {
 	case OrderByIG:
-		sort.Slice(children, func(i, j int) bool {
-			return InformationGain(children[i], stats) > InformationGain(children[j], stats)
+		slices.SortFunc(children, func(a, b *ChildStats) int {
+			return cmp.Compare(InformationGain(b, stats), InformationGain(a, stats))
 		})
 	case OrderByGini:
-		sort.Slice(children, func(i, j int) bool {
-			return GiniImpurity(children[i]) < GiniImpurity(children[j])
+		slices.SortFunc(children, func(a, b *ChildStats) int {
+			return cmp.Compare(GiniImpurity(a), GiniImpurity(b))
 		})
 	case OrderBySuccessRate:
-		sort.Slice(children, func(i, j int) bool {
-			return children[i].SuccessRate() > children[j].SuccessRate()
+		slices.SortFunc(children, func(a, b *ChildStats) int {
+			return cmp.Compare(b.SuccessRate(), a.SuccessRate())
 		})
 	case OrderByKiller:
-		sort.Slice(children, func(i, j int) bool {
-			return children[i].LastSuccessTick > children[j].LastSuccessTick
+		slices.SortFunc(children, func(a, b *ChildStats) int {
+			return cmp.Compare(b.LastSuccessTick, a.LastSuccessTick)
 		})
 	case OrderByHybrid:
 		sort.Slice(children, func(i, j int) bool {

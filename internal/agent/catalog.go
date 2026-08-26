@@ -1,10 +1,11 @@
 package agent
 
 import (
+	"cmp"
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -53,8 +54,8 @@ func (c *Catalog) ListInstalled() []CatalogEntry {
 		}
 		entries = append(entries, entry)
 	}
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].Name < entries[j].Name
+	slices.SortFunc(entries, func(a, b CatalogEntry) int {
+		return cmp.Compare(a.Name, b.Name)
 	})
 	return entries
 }
@@ -95,8 +96,8 @@ func (c *Catalog) ListTemplates() ([]CatalogEntry, error) {
 			Installed:   c.isInstalled(name),
 		})
 	}
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].Name < result[j].Name
+	slices.SortFunc(result, func(a, b CatalogEntry) int {
+		return cmp.Compare(a.Name, b.Name)
 	})
 	return result, nil
 }

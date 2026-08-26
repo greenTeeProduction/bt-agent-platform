@@ -1,12 +1,14 @@
 package gardener
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"log/slog"
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"time"
 
@@ -1067,8 +1069,8 @@ func biasCandidatesWithExperience(bank *evolution.ExperienceBank, tree *evolutio
 		return candidates
 	}
 
-	sort.SliceStable(biased, func(i, j int) bool {
-		return biased[i].Score > biased[j].Score
+	slices.SortStableFunc(biased, func(a, b evaluator.MutationCandidate) int {
+		return cmp.Compare(b.Score, a.Score)
 	})
 
 	reusedIDs := make([]string, 0, len(reused))
