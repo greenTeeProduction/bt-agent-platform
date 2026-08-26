@@ -1196,8 +1196,7 @@ func BenchmarkAddFromMutation(b *testing.B) {
 	eb, _ := NewExperienceBank(dir)
 	tree := DefaultTree()
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		op := MutationOp{Operation: "add_before", Target: "N"}
 		_ = eb.AddFromMutation(tree, op, 0.3, 0.5, nil)
 	}
@@ -1214,8 +1213,7 @@ func BenchmarkRetrieve(b *testing.B) {
 		_ = eb.AddFromMutation(tree, op, 0.3, 0.3+float64(i)*0.005, nil)
 	}
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		eb.Retrieve("Default add_before", 5)
 	}
 }
