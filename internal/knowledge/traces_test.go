@@ -52,7 +52,7 @@ func TestTraceStore_RecordEviction(t *testing.T) {
 	ts := NewTraceStore(3)
 
 	// Add 5 traces — only last 3 should remain
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		ts.Record(DecisionTrace{
 			RunID:   "run-" + strconv.Itoa(i),
 			TreeID:  "tree:evict",
@@ -75,7 +75,7 @@ func TestTraceStore_GetByTreeID(t *testing.T) {
 	ts := NewTraceStore(20)
 
 	// Add traces for two different trees
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		ts.Record(DecisionTrace{
 			RunID:   "a-" + strconv.Itoa(i),
 			TreeID:  "tree:a",
@@ -103,7 +103,7 @@ func TestTraceStore_GetByTreeID(t *testing.T) {
 func TestTraceStore_GetLimited(t *testing.T) {
 	ts := NewTraceStore(20)
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		ts.Record(DecisionTrace{
 			RunID:   "r-" + strconv.Itoa(i),
 			TreeID:  "tree:lim",

@@ -201,7 +201,7 @@ func TestFileJobStore_Concurrent(t *testing.T) {
 	store := NewFileJobStore(path)
 
 	done := make(chan struct{})
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		go func(_ int) {
 			defer func() { done <- struct{}{} }()
 			_ = store.Save([]ScheduledJob{
@@ -211,7 +211,7 @@ func TestFileJobStore_Concurrent(t *testing.T) {
 		}(i)
 	}
 
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		<-done
 	}
 

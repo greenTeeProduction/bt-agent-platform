@@ -160,7 +160,7 @@ func TestACPClientCircuitBreakerShortCircuitsRepeatedSubprocessFailures(t *testi
 
 	const attempts = 10
 	var lastErr error
-	for i := 0; i < attempts; i++ {
+	for i := range attempts {
 		_, lastErr = client.Generate("trigger failure")
 		if lastErr == nil {
 			t.Fatalf("attempt %d: expected error from always-crashing ACP subprocess, got nil", i)

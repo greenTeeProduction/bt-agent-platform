@@ -904,7 +904,7 @@ var goapRedPrecheckRunFn = func(cmd string) (string, error) {
 // attempt. The shell runs OUTSIDE the program-store flock — only the
 // bookkeeping takes the lock, with the milestone re-validated under it.
 func precheckGoapStaleMilestones(bb *Blackboard) {
-	for i := 0; i < goapRedPrecheckMaxPerCycle; i++ {
+	for range goapRedPrecheckMaxPerCycle {
 		var programID, cmd string
 		var idx int
 		found := false

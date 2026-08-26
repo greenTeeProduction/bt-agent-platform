@@ -54,7 +54,7 @@ func TestLiveRunOpCap(t *testing.T) {
 	bb := &Blackboard{RunID: "run-cap-1"}
 	lr := registerLiveRun(bb, LiveRunInfo{})
 	defer deregisterLiveRun(lr.runID)
-	for i := 0; i < maxMutationsPerRun; i++ {
+	for i := range maxMutationsPerRun {
 		if _, err := lr.enqueue(MutationOp{Kind: "remove", Path: "0"}); err != nil {
 			t.Fatalf("enqueue %d unexpectedly failed: %v", i, err)
 		}

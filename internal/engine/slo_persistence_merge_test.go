@@ -110,7 +110,7 @@ func TestSaveSLOMetrics_OwnKeysWinOverStaleDiskEntries(t *testing.T) {
 	})
 
 	m := GetSLOMetrics("self-review", "domain:self_review")
-	for i := 0; i < 7; i++ {
+	for range 7 {
 		m.RecordSuccess(3)
 	}
 

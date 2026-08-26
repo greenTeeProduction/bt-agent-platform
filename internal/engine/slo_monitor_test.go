@@ -217,7 +217,7 @@ func TestSLOMetrics_Concurrency(t *testing.T) {
 	var wg sync.WaitGroup
 	n := 100
 
-	for i := 0; i < n; i++ {
+	for range n {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -251,7 +251,7 @@ func TestSLOMetrics_Summary_NoDeadlockWithConcurrentWriters(t *testing.T) {
 
 	stop := make(chan struct{})
 	var writers sync.WaitGroup
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		writers.Add(1)
 		go func() {
 			defer writers.Done()
@@ -268,7 +268,7 @@ func TestSLOMetrics_Summary_NoDeadlockWithConcurrentWriters(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		for i := 0; i < 2000; i++ {
+		for range 2000 {
 			_ = m.Summary()
 		}
 		close(done)

@@ -83,7 +83,6 @@ func registerArc42SyncNode(name string, run func(chg docChangeContext) (bool, st
 
 func init() {
 	for _, sec := range arc42Sections {
-		sec := sec
 		registerArc42SyncNode(fmt.Sprintf("SyncArc42Section%02d", sec.Num), func(chg docChangeContext) (bool, string) {
 			return arc42SectionSyncFn(context.Background(), defaultSuperpowersClaudeRunner, defaultSuperpowersCommandRunner, chg, sec)
 		})

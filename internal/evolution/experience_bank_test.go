@@ -259,7 +259,7 @@ func TestRetrieve_RespectsTopK(t *testing.T) {
 	}
 
 	tree := DefaultTree()
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		op := MutationOp{Operation: "add_before", Target: "N"}
 		_ = eb.AddFromMutation(tree, op, 0.3, 0.3+float64(i)*0.02, nil)
 	}
@@ -441,7 +441,7 @@ func TestConcurrentAccess(t *testing.T) {
 	tree := DefaultTree()
 
 	// Concurrent writers
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		go func(id int) {
 			op := MutationOp{Operation: "add_before", Target: "N"}
 			_ = eb.AddFromMutation(tree, op, 0.3, 0.3+float64(id)*0.05, nil)
@@ -450,7 +450,7 @@ func TestConcurrentAccess(t *testing.T) {
 	}
 
 	// Concurrent readers
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		go func() {
 			eb.Retrieve("Default", 3)
 			eb.Stats()
@@ -459,7 +459,7 @@ func TestConcurrentAccess(t *testing.T) {
 	}
 
 	// Wait for all
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		<-done
 	}
 
@@ -679,7 +679,7 @@ func TestEvolveWithExperience_ResurrectsExtinctSpecialist(t *testing.T) {
 		Generation:  500,
 		Specialists: registry,
 	}
-	for i := 0; i < size; i++ {
+	for i := range size {
 		// Identical, non-specialist genomes → Diversity() == 1/size == 0.1
 		// (< 0.2 threshold) trips diversity_collapse, and the goap niche is
 		// absent → the archetype qualifies as extinct.
@@ -766,7 +766,7 @@ func TestExperienceBank_CapEnforcedOnAdd(t *testing.T) {
 	}
 
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	for i := 0; i < experienceOverflow; i++ {
+	for i := range experienceOverflow {
 		e := mkExperienceEntry(fmt.Sprintf("cap_%04d", i), 0.5, base.Add(time.Duration(i)*time.Minute), 0)
 		if err := eb.addEntry(e); err != nil {
 			t.Fatalf("addEntry %d: %v", i, err)
@@ -793,7 +793,7 @@ func TestExperienceBank_EvictsLowestQualityFirst(t *testing.T) {
 	// oldest-first eviction agree), then high-quality entries to overflow.
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	eb.mu.Lock()
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		eb.Entries = append(eb.Entries, mkExperienceEntry(fmt.Sprintf("low_%04d", i), 0.05, base.Add(time.Duration(i)*time.Minute), 0))
 	}
 	for i := 10; i < experienceOverflow-1; i++ {
@@ -810,7 +810,7 @@ func TestExperienceBank_EvictsLowestQualityFirst(t *testing.T) {
 	if got := eb.Count(); got > experienceCapCeiling {
 		t.Fatalf("bank is unbounded: %d entries, want <= %d", got, experienceCapCeiling)
 	}
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		id := fmt.Sprintf("low_%04d", i)
 		if bankHasEntry(eb, id) {
 			t.Errorf("low-quality entry %s survived eviction; lowest QualityScore must be evicted first", id)
@@ -830,7 +830,7 @@ func TestExperienceBank_EvictsOldestAmongEqualQuality(t *testing.T) {
 
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	eb.mu.Lock()
-	for i := 0; i < experienceOverflow-1; i++ {
+	for i := range experienceOverflow - 1 {
 		eb.Entries = append(eb.Entries, mkExperienceEntry(fmt.Sprintf("eq_%04d", i), 0.5, base.Add(time.Duration(i)*time.Minute), 0))
 	}
 	eb.mu.Unlock()
@@ -890,7 +890,7 @@ func TestExperienceBank_CapEnforcedOnLoad(t *testing.T) {
 	// — as if produced by an older, unbounded build.
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	entries := make([]ExperienceEntry, 0, experienceOverflow)
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		entries = append(entries, mkExperienceEntry(fmt.Sprintf("low_%04d", i), 0.05, base.Add(time.Duration(i)*time.Minute), 0))
 	}
 	for i := 10; i < experienceOverflow; i++ {
@@ -918,7 +918,7 @@ func TestExperienceBank_CapEnforcedOnLoad(t *testing.T) {
 	if got < experienceCapFloor {
 		t.Errorf("Load cap too aggressive: %d entries retained, want >= %d", got, experienceCapFloor)
 	}
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		id := fmt.Sprintf("low_%04d", i)
 		if bankHasEntry(eb, id) {
 			t.Errorf("low-quality entry %s survived Load-time eviction", id)
@@ -961,7 +961,7 @@ func TestExperienceBank_TwoWriterInterleavedWritesPreserveAllEntries(t *testing.
 	// exactly like two long-lived processes sharing the file.
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	const perWriter = 5
-	for i := 0; i < perWriter; i++ {
+	for i := range perWriter {
 		de := mkExperienceEntry(fmt.Sprintf("daemon_%02d", i), 0.6, base.Add(time.Duration(2*i)*time.Minute), 0)
 		if err := daemon.addEntry(de); err != nil {
 			t.Fatalf("daemon addEntry %d: %v", i, err)
@@ -980,7 +980,7 @@ func TestExperienceBank_TwoWriterInterleavedWritesPreserveAllEntries(t *testing.
 	if got, want := reloaded.Count(), 2*perWriter; got != want {
 		t.Errorf("interleaved two-writer adds dropped entries: %d on disk, want %d", got, want)
 	}
-	for i := 0; i < perWriter; i++ {
+	for i := range perWriter {
 		for _, id := range []string{fmt.Sprintf("daemon_%02d", i), fmt.Sprintf("gardener_%02d", i)} {
 			if !bankHasEntry(reloaded, id) {
 				t.Errorf("entry %s was silently dropped by the other writer's rewrite", id)
@@ -1007,7 +1007,7 @@ func TestExperienceBank_TwoWriterMergePreservesHigherTimesReused(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewExperienceBank (gardener): %v", err)
 	}
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if err := gardener.MarkReused([]string{"shared"}); err != nil {
 			t.Fatalf("gardener MarkReused %d: %v", i, err)
 		}
@@ -1078,7 +1078,7 @@ func TestMarkReusedDoesNotDropConcurrentWriterEntries(t *testing.T) {
 	if err := daemon.addEntry(mkExperienceEntry("daemon_since_load", 0.6, base.Add(2*time.Minute), 0)); err != nil {
 		t.Fatalf("daemon addEntry (daemon_since_load): %v", err)
 	}
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		if err := daemon.MarkReused([]string{"shared"}); err != nil {
 			t.Fatalf("daemon MarkReused %d: %v", i, err)
 		}
@@ -1146,7 +1146,7 @@ func TestExperienceBank_ConcurrentWritersLoseNoEntries(t *testing.T) {
 		go func(name string, bank *ExperienceBank) {
 			defer wg.Done()
 			<-start
-			for i := 0; i < perWriter; i++ {
+			for i := range perWriter {
 				e := mkExperienceEntry(fmt.Sprintf("%s_%02d", name, i), 0.6, base.Add(time.Duration(i)*time.Minute), 0)
 				// A racing writer can also make the persist step itself fail
 				// (shared tmp file renamed away underneath us). Keep going —
@@ -1171,7 +1171,7 @@ func TestExperienceBank_ConcurrentWritersLoseNoEntries(t *testing.T) {
 	}
 	var missing []string
 	for name := range writers {
-		for i := 0; i < perWriter; i++ {
+		for i := range perWriter {
 			id := fmt.Sprintf("%s_%02d", name, i)
 			if !bankHasEntry(reloaded, id) {
 				missing = append(missing, id)
@@ -1209,7 +1209,7 @@ func BenchmarkRetrieve(b *testing.B) {
 	tree := DefaultTree()
 
 	// Populate with 100 entries
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		op := MutationOp{Operation: "add_before", Target: "N"}
 		_ = eb.AddFromMutation(tree, op, 0.3, 0.3+float64(i)*0.005, nil)
 	}

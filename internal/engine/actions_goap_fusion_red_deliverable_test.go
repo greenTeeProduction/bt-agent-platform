@@ -65,7 +65,7 @@ func TestRedPass_MissingDeliverableNeverCompletesMilestone(t *testing.T) {
 	id := seedDeliverableProgram(t, deliverableGoal)
 	stubRepoFileState(t, false, true) // probe is certain: the test file is absent
 
-	for i := 0; i < goapRedPassCompleteStreak+2; i++ {
+	for range goapRedPassCompleteStreak + 2 {
 		handleGoapRedPassCycleFailure(redPassBB(id))
 	}
 
@@ -86,7 +86,7 @@ func TestRedPass_PresentDeliverableStillCompletesMilestone(t *testing.T) {
 	id := seedDeliverableProgram(t, deliverableGoal)
 	stubRepoFileState(t, true, true) // probe is certain: the test file exists
 
-	for i := 0; i < goapRedPassCompleteStreak; i++ {
+	for range goapRedPassCompleteStreak {
 		handleGoapRedPassCycleFailure(redPassBB(id))
 	}
 
@@ -107,7 +107,7 @@ func TestRedPass_UndeterminedProbeCompletesNothingAndKeepsEvidence(t *testing.T)
 	id := seedDeliverableProgram(t, deliverableGoal)
 	stubRepoFileState(t, false, false) // could not determine
 
-	for i := 0; i < goapRedPassCompleteStreak+1; i++ {
+	for range goapRedPassCompleteStreak + 1 {
 		handleGoapRedPassCycleFailure(redPassBB(id))
 	}
 
@@ -213,7 +213,7 @@ func TestRedPass_GoalWithoutTestDeliverableIsUnaffected(t *testing.T) {
 	id := seedDeliverableProgram(t, "Fix the off-by-one in internal/engine/executor.go retry accounting.")
 	stubRepoFileState(t, false, true) // certain-absent, but no _test.go is named
 
-	for i := 0; i < goapRedPassCompleteStreak; i++ {
+	for range goapRedPassCompleteStreak {
 		handleGoapRedPassCycleFailure(redPassBB(id))
 	}
 

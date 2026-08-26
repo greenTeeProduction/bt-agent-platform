@@ -742,7 +742,7 @@ func TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionLoopRunner(t *t
 	// refuse to iterate forever. A history far longer than any sane finite bound
 	// must HALT (-1) on the backstop alone.
 	runaway := make([]string, 0, 100)
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		runaway = append(runaway, fmt.Sprintf("hash-%03d", i))
 	}
 	over := &Blackboard{

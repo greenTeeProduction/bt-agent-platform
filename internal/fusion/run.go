@@ -139,7 +139,6 @@ func RunPanel(ctx context.Context, caller ModelCaller, cfg Config, prompt string
 	responses := make([]Response, len(cfg.AnalysisModels))
 	var wg sync.WaitGroup
 	for i, model := range cfg.AnalysisModels {
-		i, model := i, model
 		wg.Add(1)
 		start := time.Now()
 		reliability.SafeGo(fmt.Sprintf("fusion.RunPanel[%s]", model), func() {

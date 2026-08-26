@@ -594,7 +594,7 @@ func TestDeadLetterQueue_EvictionBound(t *testing.T) {
 	dlq := NewDeadLetterQueue("")
 
 	total := MaxDeadLetterEntries + 25
-	for i := 0; i < total; i++ {
+	for i := range total {
 		dlq.Push(DeadLetterEntry{ID: fmt.Sprintf("e-%d", i), Task: "storm"})
 	}
 
@@ -632,7 +632,7 @@ func TestDeadLetterQueue_PoisonPillExclusion(t *testing.T) {
 	dlq.Push(DeadLetterEntry{ID: "poison", Task: "always fails"})
 
 	// Auto-requeue up to the threshold: each requeue counts one replay attempt.
-	for i := 0; i < MaxReplayAttempts; i++ {
+	for i := range MaxReplayAttempts {
 		if _, ok := dlq.Requeue("poison"); !ok {
 			t.Fatalf("requeue %d should succeed while under the attempt threshold", i+1)
 		}
@@ -671,7 +671,7 @@ func TestWorkerPool_Submit(t *testing.T) {
 	wp.Submit(func() { done <- true })
 	wp.Submit(func() { done <- true })
 
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		select {
 		case <-done:
 		case <-time.After(time.Second):
@@ -1160,7 +1160,7 @@ func TestAgentRouter_RoundRobinRouting(t *testing.T) {
 	router := NewAgentRouter(e1, e2, e3)
 
 	// Execute 6 tasks — each executor should get 2 (round-robin)
-	for i := 0; i < 6; i++ {
+	for range 6 {
 		_, err := router.Execute(context.Background(), "agent", "task")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -1504,7 +1504,7 @@ func TestAgentRouter_FailureTracking_Basic(t *testing.T) {
 	router.SetFailureCooldown(100 * time.Millisecond)
 
 	// Execute 3 times — should all fail but not yet in cooldown.
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		_, err := router.Execute(context.Background(), "agent", "task")
 		if err == nil {
 			t.Fatalf("attempt %d: expected error", i)
@@ -1548,7 +1548,7 @@ func TestAgentRouter_FailureTracking_SuccessResets(t *testing.T) {
 	router.SetFailureThreshold(3)
 
 	// Fail 2 times (below threshold).
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		_, err := router.Execute(context.Background(), "agent", "task")
 		if err == nil {
 			t.Fatalf("attempt %d: expected error", i)
@@ -1577,7 +1577,7 @@ func TestAgentRouter_FailureTracking_SuccessResets(t *testing.T) {
 
 	// Failing again should start from 0.
 	shouldFail = true
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		_, err := router.Execute(context.Background(), "agent", "task")
 		if err == nil {
 			t.Fatalf("attempt %d after reset: expected error", i)
@@ -1604,7 +1604,7 @@ func TestAgentRouter_FailureTracking_CoolDownExpiry(t *testing.T) {
 	router.SetFailureCooldown(50 * time.Millisecond)
 
 	// Fail twice to trigger cooldown.
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		_, _ = router.Execute(context.Background(), "agent", "task")
 	}
 
@@ -1824,7 +1824,7 @@ func TestAgentRouter_FailureTracking_Concurrent(t *testing.T) {
 	router.SetFailureThreshold(200) // high threshold so we test counter safety
 
 	var wg sync.WaitGroup
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

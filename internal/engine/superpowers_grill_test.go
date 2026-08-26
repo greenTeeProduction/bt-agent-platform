@@ -320,7 +320,7 @@ func TestGrillDesignArtifactAction_HappyPathBothAnswered(t *testing.T) {
 // and answers must map back to the correct original question indices.
 func TestResolveGrillQuestions_MultiBatchSevenQuestionsSplitsFiveAndTwo(t *testing.T) {
 	var qs []grillQuestion
-	for i := 0; i < 7; i++ {
+	for i := range 7 {
 		qs = append(qs, grillQuestion{Branch: fmt.Sprintf("D%d", i), Text: fmt.Sprintf("question %d?", i)})
 	}
 	var batchSizes []int
@@ -340,7 +340,7 @@ func TestResolveGrillQuestions_MultiBatchSevenQuestionsSplitsFiveAndTwo(t *testi
 	if res.OpenCritical != 0 {
 		t.Fatalf("OpenCritical = %d, want 0", res.OpenCritical)
 	}
-	for i := 0; i < 7; i++ {
+	for i := range 7 {
 		want := "answer:D" + fmt.Sprint(i)
 		if !strings.Contains(res.Markdown, want) {
 			t.Fatalf("markdown missing %q for question index %d; got %q", want, i, res.Markdown)

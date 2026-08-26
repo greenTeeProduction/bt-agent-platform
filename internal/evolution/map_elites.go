@@ -306,7 +306,7 @@ func (mp *MAPElitesPopulation) EvolveMAPElites(generations int, fitnessFn func(*
 	eliteCount := max(2, len(mp.Individuals)/10)
 	supervisor := NewLLMSupervisor()
 
-	for gen := 0; gen < generations; gen++ {
+	for range generations {
 		mp.Generation++
 
 		// Capture the MAP-Elites grid's niche winners before the shared

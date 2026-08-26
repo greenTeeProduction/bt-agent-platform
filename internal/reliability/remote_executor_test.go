@@ -333,7 +333,7 @@ func TestAgentRouter_RemoteExecutorMultiNodeDistribution(t *testing.T) {
 	)
 
 	seen := map[string]bool{}
-	for i := 0; i < 6; i++ {
+	for i := range 6 {
 		result, err := router.Execute(context.Background(), "distributed-agent", "validate multi-node routing")
 		if err != nil {
 			t.Fatalf("router.Execute #%d: %v", i, err)

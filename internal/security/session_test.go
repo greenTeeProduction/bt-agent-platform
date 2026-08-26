@@ -120,7 +120,7 @@ func TestSessionStore_CleanupExpired(t *testing.T) {
 	defer ss.Stop()
 
 	// Create 3 sessions
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if _, err := ss.CreateSession(""); err != nil {
 			t.Fatalf("CreateSession %d failed: %v", i, err)
 		}
@@ -151,7 +151,7 @@ func TestSessionStore_MaxSessions(t *testing.T) {
 	defer ss.Stop()
 
 	// Create up to the limit
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if _, err := ss.CreateSession(""); err != nil {
 			t.Fatalf("CreateSession %d failed before limit: %v", i, err)
 		}
@@ -351,7 +351,7 @@ func TestSessionStore_ConcurrentAccess(_ *testing.T) {
 	goroutines := 50
 	wg.Add(goroutines)
 
-	for i := 0; i < goroutines; i++ {
+	for range goroutines {
 		go func() {
 			defer wg.Done()
 			// Mix of validate, refresh, and create
@@ -415,7 +415,7 @@ func TestSessionStore_BackgroundCleanup(t *testing.T) {
 	defer ss.Stop()
 
 	// Create sessions
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		_, _ = ss.CreateSession("")
 	}
 
@@ -728,7 +728,7 @@ func TestSessionTokenUniqueness(t *testing.T) {
 	defer ss.Stop()
 
 	tokens := make(map[string]bool)
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		token, err := ss.CreateSession("")
 		if err != nil {
 			t.Fatalf("CreateSession %d failed: %v", i, err)

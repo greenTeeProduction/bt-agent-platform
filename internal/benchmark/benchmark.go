@@ -381,9 +381,9 @@ func BootstrapCI(successes, total int) (lower, upper float64) {
 	const iterations = 1000
 	samples := make([]float64, iterations)
 
-	for i := 0; i < iterations; i++ {
+	for i := range iterations {
 		bootSuccesses := 0
-		for j := 0; j < total; j++ {
+		for j := range total {
 			if math.Float64frombits(math.Float64bits(float64(j))%100000) < rate*100000 {
 				bootSuccesses++
 			}

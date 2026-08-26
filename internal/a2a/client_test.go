@@ -427,7 +427,7 @@ func TestAuctioneer_RunAuction_CircuitBreaksWinnerAfterRepeatedFailures(t *testi
 
 	const attempts = 8
 	callsAfter := make([]int, attempts)
-	for i := 0; i < attempts; i++ {
+	for i := range attempts {
 		if _, err := auc.RunAuction(context.Background(), ann, candidates); err == nil {
 			t.Fatalf("RunAuction call %d unexpectedly succeeded against a permanently failing winner", i)
 		}
@@ -475,7 +475,7 @@ func TestAuctionDelegate_WinnerCircuitBreakerSurvivesAcrossCallsAndRestarts(t *t
 
 	const ticks = 8
 	callsAfter := make([]int, ticks)
-	for i := 0; i < ticks; i++ {
+	for i := range ticks {
 		_, awarded, err := AuctionDelegate("do the work", nil)
 		if err == nil && awarded {
 			t.Fatalf("tick %d: AuctionDelegate unexpectedly succeeded against a permanently failing winner", i)

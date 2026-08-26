@@ -33,7 +33,7 @@ func TestPublishStateHashResetsOnMilestoneTransition(t *testing.T) {
 	// Milestone A: publish the same goal-queue hash 3 times (would trip the breaker).
 	bb.ChainState["goap_fusion_program_milestone"] = "prog:0"
 	bb.ChainState["goap_fusion_goal_queue"] = "[P0] milestone A goal"
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		pub(&btcore.BTContext[Blackboard]{Blackboard: bb})
 	}
 	if got := len(goapFusionStateHashes(bb)); got != 3 {

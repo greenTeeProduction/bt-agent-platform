@@ -463,7 +463,7 @@ func TestCircuitBreaker_RecordFailure_BackwardCompat(t *testing.T) {
 	}
 
 	// Should still open circuit at threshold
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		cb.RecordFailure()
 	}
 	if cb.State() != CircuitOpen {
@@ -482,13 +482,13 @@ func TestCircuitBreaker_CategoryFailureCounts_Empty(t *testing.T) {
 func TestCircuitBreaker_CategoryFailureCounts_Concurrent(t *testing.T) {
 	cb := NewCircuitBreaker("test", 100, time.Minute)
 	done := make(chan struct{})
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		go func() {
 			cb.RecordFailureWithCategory(errors.New("connection refused"))
 			done <- struct{}{}
 		}()
 	}
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		<-done
 	}
 	counts := cb.CategoryFailureCounts()
@@ -1310,14 +1310,14 @@ func TestErrorContext_Concurrent(_ *testing.T) {
 	// Verify ErrorContext is safe for concurrent use patterns.
 	ec := NewErrorContext(errors.New("error"), "agent", "task", "op")
 	done := make(chan bool, 10)
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		go func(_ int) {
 			_ = ec.Error()
 			_ = ec.Summary()
 			done <- true
 		}(i)
 	}
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		<-done
 	}
 }
@@ -1335,7 +1335,7 @@ func TestFullJitter_Zero(t *testing.T) {
 
 func TestFullJitter_Range(t *testing.T) {
 	base := 100 * time.Millisecond
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		got := FullJitter(base)
 		if got < 0 || got >= base {
 			t.Errorf("FullJitter(%v) = %v, out of range [0, %v)", base, got, base)
@@ -1355,7 +1355,7 @@ func TestEqualJitter_Zero(t *testing.T) {
 func TestEqualJitter_Range(t *testing.T) {
 	base := 100 * time.Millisecond
 	half := base / 2
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		got := EqualJitter(base)
 		if got < half {
 			t.Errorf("EqualJitter(%v) = %v, below half %v", base, got, half)
@@ -1394,7 +1394,7 @@ func TestApplyJitter_NoJitter(t *testing.T) {
 
 func TestApplyJitter_FullJitter(t *testing.T) {
 	delay := 100 * time.Millisecond
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		got := ApplyJitter(delay, FullJitterStrategy, 0)
 		if got < 0 || got >= delay {
 			t.Errorf("ApplyJitter(FullJitter, %v) = %v, out of range [0, %v)", delay, got, delay)
@@ -1405,7 +1405,7 @@ func TestApplyJitter_FullJitter(t *testing.T) {
 func TestApplyJitter_EqualJitter(t *testing.T) {
 	delay := 100 * time.Millisecond
 	half := delay / 2
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		got := ApplyJitter(delay, EqualJitterStrategy, 0)
 		if got < half || got > delay {
 			t.Errorf("ApplyJitter(EqualJitter, %v) = %v, out of range [%v, %v]", delay, got, half, delay)
@@ -1434,7 +1434,7 @@ func TestDecorrelatedJitter_ZeroMaxDelay(t *testing.T) {
 func TestApplyJitter_AllStrategiesDeterministicRange(t *testing.T) {
 	strategies := []JitterStrategy{NoJitter, FullJitterStrategy, EqualJitterStrategy, DecorrelatedJitterStrategy}
 	for _, s := range strategies {
-		for i := 0; i < 20; i++ {
+		for range 20 {
 			got := ApplyJitter(time.Second, s, 500*time.Millisecond)
 			if got < 0 {
 				t.Errorf("ApplyJitter(%s) = %v, negative", s, got)

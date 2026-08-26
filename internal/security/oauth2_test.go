@@ -501,7 +501,7 @@ func TestOAuth2IntrospectionValidator_ConcurrentAccess(t *testing.T) {
 
 	// Run 50 concurrent validations
 	done := make(chan bool)
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		go func() {
 			_, err := v(context.Background(), "shared-token")
 			if err != nil {
@@ -511,7 +511,7 @@ func TestOAuth2IntrospectionValidator_ConcurrentAccess(t *testing.T) {
 		}()
 	}
 
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		<-done
 	}
 }

@@ -27,7 +27,7 @@ func TestValidationGate_NoMetrics_FailClosed(t *testing.T) {
 func TestValidationGate_HighSuccessRate_Pass(t *testing.T) {
 	metrics := engine.GetSLOMetrics("good_agent", "test_tree")
 	// Reset by getting a fresh instance — record 10 successes
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		metrics.RecordSuccess(50 * time.Millisecond)
 	}
 
@@ -44,10 +44,10 @@ func TestValidationGate_LowSuccessRate_Reject(t *testing.T) {
 
 	metrics := engine.GetSLOMetrics(agentName, treeName)
 	// Record 3 successes, 7 failures = 30% success rate
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		metrics.RecordSuccess(50 * time.Millisecond)
 	}
-	for i := 0; i < 7; i++ {
+	for range 7 {
 		metrics.RecordFailure(100 * time.Millisecond)
 	}
 
@@ -60,7 +60,7 @@ func TestValidationGate_LowSuccessRate_Reject(t *testing.T) {
 
 func TestValidationGate_Disabled(t *testing.T) {
 	metrics := engine.GetSLOMetrics("any_agent", "test_tree")
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		metrics.RecordFailure(100 * time.Millisecond)
 	}
 
@@ -78,10 +78,10 @@ func TestValidationGate_LowRecoveryRate_Reject(t *testing.T) {
 
 	metrics := engine.GetSLOMetrics(agentName, treeName)
 	// 8 successes, 2 failures, 0 recoveries = 0% recovery
-	for i := 0; i < 8; i++ {
+	for range 8 {
 		metrics.RecordSuccess(50 * time.Millisecond)
 	}
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		metrics.RecordFailure(100 * time.Millisecond)
 	}
 
@@ -117,10 +117,10 @@ func TestValidationGate_ParetoAcceptance_AllowsTradeoff(t *testing.T) {
 	metrics := engine.GetSLOMetrics(agentName, treeName)
 	// 75 successes / 25 failures = 0.75 success rate (below the 0.80 floor),
 	// with every failure recovered = 1.00 recovery rate (far above 0.30).
-	for i := 0; i < 75; i++ {
+	for range 75 {
 		metrics.RecordSuccess(50 * time.Millisecond)
 	}
-	for i := 0; i < 25; i++ {
+	for range 25 {
 		metrics.RecordFailure(100 * time.Millisecond)
 		metrics.RecordRecovery(20 * time.Millisecond)
 	}
@@ -145,13 +145,13 @@ func TestValidationGate_ParetoAcceptance_RejectsDominatedEvidence(t *testing.T) 
 	metrics := engine.GetSLOMetrics(agentName, treeName)
 	// 0.75 success rate (below 0.80) AND 0.10 recovery rate (below 0.30):
 	// worse on both axes, so the threshold point dominates this evidence.
-	for i := 0; i < 75; i++ {
+	for range 75 {
 		metrics.RecordSuccess(50 * time.Millisecond)
 	}
-	for i := 0; i < 25; i++ {
+	for range 25 {
 		metrics.RecordFailure(100 * time.Millisecond)
 	}
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		metrics.RecordRecovery(20 * time.Millisecond)
 	}
 

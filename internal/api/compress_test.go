@@ -296,7 +296,7 @@ func TestIsCompressibleContentType(t *testing.T) {
 // Test that gzip writer pool reuses writers (no panic, no leak).
 func TestGzipWriterPool_Reuse(t *testing.T) {
 	// Run many concurrent compression requests to exercise the pool.
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		handler := CompressionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)

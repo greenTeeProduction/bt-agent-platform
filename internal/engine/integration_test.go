@@ -187,7 +187,7 @@ func TestIntegration_EdgeCases(t *testing.T) {
 	// Very long task
 	t.Run("very_long_task", func(t *testing.T) {
 		longTask := ""
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			longTask += "This is a very long task description to test input handling. "
 		}
 		bb := &Blackboard{Task: longTask, LLM: &MockLLM{}}

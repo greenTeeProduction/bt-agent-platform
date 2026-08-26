@@ -116,7 +116,6 @@ func TestBanditSelector_ColdStartTriesEveryArmOnce(t *testing.T) {
 	names := []string{"BanditColdChild0", "BanditColdChild1", "BanditColdChild2"}
 	calls := map[string]int{}
 	for _, name := range names {
-		name := name
 		RegisterAction(name, func(_ *btcore.BTContext[Blackboard]) int {
 			calls[name]++
 			return -1
@@ -166,7 +165,7 @@ func TestBanditSelector_WindowTrimsOutcomes(t *testing.T) {
 		},
 	}
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		bb := newTestBlackboard()
 		cmd := buildNode(node, bb, "")
 		ctx := newTestBTContext(bb)
@@ -387,10 +386,10 @@ func TestBanditSelector_ConcurrentTicksNoLostOutcomes(t *testing.T) {
 
 	var wg sync.WaitGroup
 	wg.Add(2)
-	for g := 0; g < 2; g++ {
+	for range 2 {
 		go func() {
 			defer wg.Done()
-			for i := 0; i < perGoroutine; i++ {
+			for range perGoroutine {
 				tick()
 			}
 		}()
@@ -448,10 +447,10 @@ func TestBanditSelector_ConcurrentTicksNoLostOutcomesEnabled(t *testing.T) {
 
 	var wg sync.WaitGroup
 	wg.Add(2)
-	for g := 0; g < 2; g++ {
+	for range 2 {
 		go func() {
 			defer wg.Done()
-			for i := 0; i < perGoroutine; i++ {
+			for range perGoroutine {
 				tick()
 			}
 		}()

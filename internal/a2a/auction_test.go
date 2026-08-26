@@ -815,7 +815,7 @@ func TestAuctionDelegate_WinnerCircuitBreakerOpenFallsBack(t *testing.T) {
 	// enough consecutive failures directly — the same store AuctionDelegate's
 	// NewPersistentAuctioneer consults via winnerBreaker.
 	breaker := winnerBreakers.get("breakerwinner")
-	for i := 0; i < winnerCircuitBreakerThreshold; i++ {
+	for range winnerCircuitBreakerThreshold {
 		breaker.RecordFailure()
 	}
 

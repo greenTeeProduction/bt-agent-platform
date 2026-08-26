@@ -204,7 +204,7 @@ func TestHistory_RecordAndList(t *testing.T) {
 	}
 
 	// Record some runs
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		_ = h.Record(RunRecord{
 			AgentName: "test-agent",
 			Task:      fmt.Sprintf("task-%d", i),

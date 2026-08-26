@@ -95,7 +95,7 @@ func TestOpenAICompat_ClientErrorsDoNotTripBreaker(t *testing.T) {
 	client := NewOpenAICompatClient(OpenAICompatConfig{BaseURL: server.URL, Model: "default", Timeout: 5 * time.Second})
 	// The breaker threshold is 3; five 400s would open it if 400s counted as
 	// breaker failures.
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		if _, err := client.GenerateWithModel(context.Background(), "m", "sys", "bad"); err == nil {
 			t.Fatalf("call %d: expected a 400 error", i)
 		}
@@ -171,7 +171,7 @@ func TestOpenAICompat_OpenBreakerRejectsWithoutRequest(t *testing.T) {
 	defer server.Close()
 
 	client := NewOpenAICompatClient(OpenAICompatConfig{BaseURL: server.URL, Model: "default", Timeout: time.Second})
-	for i := 0; i < 3; i++ { // threshold is 3
+	for range 3 { // threshold is 3
 		client.breaker.RecordFailure()
 	}
 	_, err := client.GenerateWithModel(context.Background(), "m", "sys", "p")

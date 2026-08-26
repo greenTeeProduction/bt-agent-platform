@@ -17,7 +17,7 @@ func TestRateLimiter_Basic(t *testing.T) {
 	key := "test-client"
 
 	// Should allow burst of 5
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		if !rl.Allow(key) {
 			t.Errorf("request %d should be allowed (burst)", i+1)
 		}
@@ -596,7 +596,7 @@ func TestGenerateRequestID_IsHex(t *testing.T) {
 
 func TestGenerateRequestID_Uniqueness(t *testing.T) {
 	seen := make(map[string]bool)
-	for i := 0; i < 1000; i++ {
+	for range 1000 {
 		id := GenerateRequestID()
 		if seen[id] {
 			t.Errorf("duplicate request ID generated: %q", id)
@@ -675,7 +675,7 @@ func TestRequestIDMiddleware_UniquePerRequest(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		req := httptest.NewRequest("GET", "/test", nil)
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
@@ -692,7 +692,7 @@ func TestGenerateRequestID_NoPanic(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		for i := 0; i < 1000; i++ {
+		for range 1000 {
 			id := GenerateRequestID()
 			if id == "" {
 				t.Error("GenerateRequestID returned empty string")
@@ -928,7 +928,7 @@ func TestCSRFMiddleware_CustomTokenGenerator(t *testing.T) {
 }
 
 func TestGenerateCSRFToken_Length(t *testing.T) {
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		token := GenerateCSRFToken()
 		if len(token) != 64 {
 			t.Errorf("token should be 64 hex chars, got %d: %s", len(token), token)

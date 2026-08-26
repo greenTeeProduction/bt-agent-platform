@@ -79,7 +79,7 @@ type goapSeedAttempt struct {
 func fetchAcceptableGoapProgram(prompt string, gate func(*goapProgramSpec) string) goapSeedAttempt {
 	att := goapSeedAttempt{}
 	current := prompt
-	for try := 0; try < 2; try++ {
+	for range 2 {
 		att.Fetches++
 		answer := seedProgramFetchFn(current)
 		spec := extractGoapProgram(answer)

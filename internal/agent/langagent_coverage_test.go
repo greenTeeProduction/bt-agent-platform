@@ -363,7 +363,7 @@ func TestGetReflectionsTool_Call_Truncation(t *testing.T) {
 	// More than 5 → only last 5 returned
 	refStore, _ := newTestStores(t)
 
-	for i := 0; i < 7; i++ {
+	for range 7 {
 		saveRecordWithDelay(t, refStore, &evolution.Record{
 			Task:    "task",
 			Outcome: evolution.Success,
@@ -532,7 +532,7 @@ func TestEvolvedAgent_Run_WithAutoEvolve(t *testing.T) {
 	cfg.LangLLM = &mockModelCorrect{}
 
 	// Seed 3 failures to trigger auto-evolve
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		saveRecordWithDelay(t, cfg.BB.Reflections, &evolution.Record{
 			Task:    "task",
 			Outcome: evolution.Failure,

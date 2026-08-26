@@ -82,13 +82,13 @@ func TestSaveSLOMetrics_ConcurrentCallsDoNotRaceOrCorrupt(t *testing.T) {
 	const rounds = 40
 	const writers = 8
 
-	for round := 0; round < rounds; round++ {
+	for round := range rounds {
 		GetSLOMetrics(fmt.Sprintf("concurrent-agent-%d", round), "concurrent-tree").RecordSuccess(time.Millisecond)
 
 		var wg sync.WaitGroup
 		start := make(chan struct{})
 		errs := make(chan error, writers)
-		for i := 0; i < writers; i++ {
+		for range writers {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()

@@ -161,7 +161,7 @@ func TestIslandModelTracksMigrations(t *testing.T) {
 	im.AddIsland("ops", islandTestPopulation("ops-short", "ops-much-longer-name"))
 
 	const evolveCalls = 3
-	for i := 0; i < evolveCalls; i++ {
+	for range evolveCalls {
 		im.EvolveAll(func(tree *SerializableNode) float64 {
 			return float64(len(tree.Name))
 		})

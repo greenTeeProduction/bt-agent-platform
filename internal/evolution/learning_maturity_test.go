@@ -16,7 +16,7 @@ func TestQTableStateBucketsAndDepth(t *testing.T) {
 	}
 
 	med := &SerializableNode{Type: "Sequence", Name: "Root"}
-	for i := 0; i < 21; i++ {
+	for range 21 {
 		med.Children = append(med.Children, SerializableNode{Type: "Action", Name: "A"})
 	}
 	if got := qt.GetState(med, "core"); !strings.HasPrefix(got, "core:med:") {
@@ -24,7 +24,7 @@ func TestQTableStateBucketsAndDepth(t *testing.T) {
 	}
 
 	high := &SerializableNode{Type: "Sequence", Name: "Root"}
-	for i := 0; i < 36; i++ {
+	for range 36 {
 		high.Children = append(high.Children, SerializableNode{Type: "Action", Name: "A"})
 	}
 	if got := qt.GetState(high, "core"); !strings.HasPrefix(got, "core:high:") {

@@ -569,7 +569,7 @@ func TestServer_RefreshCards_ConcurrentWithReaders_NoRace(t *testing.T) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		for i := 0; i < 50; i++ {
+		for range 50 {
 			if err := srv.RefreshCards(); err != nil {
 				t.Errorf("RefreshCards: %v", err)
 				return

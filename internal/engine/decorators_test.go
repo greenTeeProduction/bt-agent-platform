@@ -312,7 +312,7 @@ func TestBuildCircuitBreaker_OpensAfterDefaultThreeConsecutiveFailures(t *testin
 	cmd := BuildCircuitBreaker(node, bb)
 	ctx := btcore.NewBTContext(t.Context(), bb)
 
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		if code := cmd.Run(ctx); code != -1 {
 			t.Fatalf("failure %d: got %d, want -1", i, code)
 		}

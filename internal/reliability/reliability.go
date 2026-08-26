@@ -656,7 +656,7 @@ func NewWorkerPool(workers int) *WorkerPool {
 		tasks:   make(chan func(), workers*100),
 		quit:    make(chan struct{}),
 	}
-	for i := 0; i < workers; i++ {
+	for range workers {
 		wp.wg.Add(1)
 		go wp.worker()
 	}

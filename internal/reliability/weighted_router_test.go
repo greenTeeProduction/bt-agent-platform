@@ -234,7 +234,7 @@ func TestLeastConnections_PicksExecutorWithFewestActive(t *testing.T) {
 	// in-flight requests, resulting in roughly even distribution.
 	var wg sync.WaitGroup
 	n := 30
-	for i := 0; i < n; i++ {
+	for range n {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

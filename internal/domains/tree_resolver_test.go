@@ -196,7 +196,7 @@ func writeDTStats(t *testing.T, hitCounts map[string]int) string {
 	t.Helper()
 	da := evolution.NewDTAnalyzer()
 	for name, n := range hitCounts {
-		for i := 0; i < n; i++ {
+		for range n {
 			da.RecordHit("DTRouter", name, name, true)
 		}
 	}

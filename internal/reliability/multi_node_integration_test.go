@@ -38,7 +38,7 @@ func TestMultiNodeExecutionPipeline(t *testing.T) {
 	//   GET  /api/health          -> {"status":"ok"} (200)
 	//   POST /api/agents/execute -> AgentResult (200)
 	var servers []*httptest.Server
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		idx := i
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch r.URL.Path {
@@ -103,7 +103,7 @@ func TestMultiNodeExecutionPipeline(t *testing.T) {
 	defer pool.Close()
 
 	execs := make([]AgentExecutor, 3)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		execs[i] = NewRemoteExecutor(RemoteExecutorConfig{
 			Name:    execNames[i],
 			BaseURL: servers[i].URL,
@@ -131,7 +131,7 @@ func TestMultiNodeExecutionPipeline(t *testing.T) {
 	// PHASE 2: Round-robin distribution — 6 tasks, each node gets 2
 	// ----------------------------------------------------------------
 	seenOutputs := make(map[string]bool)
-	for i := 0; i < 6; i++ {
+	for i := range 6 {
 		result, err := router.Execute(context.Background(), "test-agent", "round-robin validation")
 		if err != nil {
 			t.Fatalf("phase 2: router.Execute #%d failed: %v", i, err)
@@ -176,7 +176,7 @@ func TestMultiNodeExecutionPipeline(t *testing.T) {
 	mu.Unlock()
 
 	// Run 3 more tasks — they should all hit node-beta and node-gamma
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		result, err := router.Execute(context.Background(), "test-agent", "fallback validation")
 		if err != nil {
 			// Router should fallback, but if ALL are unhealthy it might error
@@ -317,7 +317,7 @@ func TestMultiNode_ConcurrentAgentExecution(t *testing.T) {
 	concurrency := 30
 	errs := make(chan error, concurrency)
 
-	for i := 0; i < concurrency; i++ {
+	for i := range concurrency {
 		wg.Add(1)
 		go func(_ int) {
 			defer wg.Done()

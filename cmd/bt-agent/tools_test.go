@@ -1260,7 +1260,7 @@ func TestBTEvolveIslandCapsBoundDurableArchiveAcrossCalls(t *testing.T) {
 		const seedSize = 30
 		seed := evolution.NewIslandModel(1, 0.5)
 		seedPop := &evolution.Population{}
-		for i := 0; i < seedSize; i++ {
+		for i := range seedSize {
 			seedPop.Individuals = append(seedPop.Individuals, evolution.Individual{
 				Tree:    &evolution.SerializableNode{Type: "Action", Name: fmt.Sprintf("seed-%d", i)},
 				Genome:  fmt.Sprintf("seed-genome-%d", i),
@@ -1282,7 +1282,7 @@ func TestBTEvolveIslandCapsBoundDurableArchiveAcrossCalls(t *testing.T) {
 		// seed), growing without bound.
 		const populationCap = 6
 		args := fmt.Sprintf(`{"tree":"godev","domains":"code_review","population":4,"generations":1,"migration_interval":1,"migration_rate":0.5,"population_cap":%d}`, populationCap)
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			invoke(t, server, fmt.Sprintf("call %d", i+1), args)
 
 			islands := readIslands(t, home)
@@ -1346,7 +1346,7 @@ func TestBTEvolveIslandSurfacesEvictionCounters(t *testing.T) {
 	const seedSize = 10
 	seed := evolution.NewIslandModel(1, 0.5)
 	seedPop := &evolution.Population{}
-	for i := 0; i < seedSize; i++ {
+	for i := range seedSize {
 		seedPop.Individuals = append(seedPop.Individuals, evolution.Individual{
 			Tree:    &evolution.SerializableNode{Type: "Action", Name: fmt.Sprintf("seed-%d", i)},
 			Genome:  fmt.Sprintf("seed-genome-%d", i),
@@ -4224,7 +4224,7 @@ func TestBTEvolveQLearningStateCapBoundsDurableArchive(t *testing.T) {
 	seedArchive := func(t *testing.T, path string, stateCount int) {
 		t.Helper()
 		values := make(map[string]map[string]float64, stateCount)
-		for i := 0; i < stateCount; i++ {
+		for i := range stateCount {
 			values[fmt.Sprintf("seed_state_%d", i)] = map[string]float64{"add_before": float64(i)}
 		}
 		data, err := json.Marshal(values)
@@ -4355,7 +4355,7 @@ func seedSelectorProbeStats(t *testing.T, path string) {
 	t.Helper()
 	so := evolution.NewSelectorOptimizer(evolution.OrderBySuccessRate)
 	rec := func(child, outcome string, n int) {
-		for i := 0; i < n; i++ {
+		for range n {
 			so.Record("Router", evolution.NodeExecutionRecord{NodeName: child, Outcome: outcome})
 		}
 	}
@@ -4494,7 +4494,7 @@ func TestBTEvolveSelectorsHonorsEnvOrderingStrategy(t *testing.T) {
 	statsPath := filepath.Join(t.TempDir(), "gini_stats.json")
 	so := evolution.NewSelectorOptimizer(evolution.OrderBySuccessRate)
 	rec := func(child, outcome string, n int) {
-		for i := 0; i < n; i++ {
+		for range n {
 			so.Record("Router", evolution.NodeExecutionRecord{NodeName: child, Outcome: outcome})
 		}
 	}
@@ -4952,7 +4952,7 @@ func TestBTRunTaskConcurrentCallsDoNotRaceOnSharedBlackboard(t *testing.T) {
 	var wg sync.WaitGroup
 	var start sync.WaitGroup
 	start.Add(1)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
@@ -4983,7 +4983,7 @@ func TestBTRunTaskConcurrentCallsDoNotRaceOnSharedBlackboard(t *testing.T) {
 	start.Done()
 	wg.Wait()
 
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if errs[i] != nil {
 			t.Fatalf("call %d: %v", i, errs[i])
 		}

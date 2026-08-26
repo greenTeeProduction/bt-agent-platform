@@ -130,7 +130,7 @@ Features : fp asimd`
 
 func TestCountCPUCores_TwelveCores(t *testing.T) {
 	cpuinfo := ""
-	for i := 0; i < 12; i++ {
+	for i := range 12 {
 		cpuinfo += "processor\t: " + string(rune('0'+i%10)) + "\n"
 	}
 	if n := countCPUCores(cpuinfo); n != 12 {

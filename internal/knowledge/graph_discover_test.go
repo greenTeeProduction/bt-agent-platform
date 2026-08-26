@@ -219,7 +219,7 @@ const discoverRuns = 200
 func collectDiscoverIDs(kg *KnowledgeGraph, task string) (map[string]bool, map[float64]bool) {
 	ids := map[string]bool{}
 	confs := map[float64]bool{}
-	for i := 0; i < discoverRuns; i++ {
+	for range discoverRuns {
 		id, conf := kg.Discover(task)
 		ids[id] = true
 		confs[conf] = true

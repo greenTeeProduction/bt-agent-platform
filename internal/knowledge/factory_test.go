@@ -35,7 +35,7 @@ func TestFactory_BreedRefreshesTemplateFitnessFromGraph(t *testing.T) {
 
 	targetHits := 0
 	otherHits := make(map[string]int, len(otherIDs))
-	for i := 0; i < iters; i++ {
+	for range iters {
 		for _, id := range f.selectParents(category, "") {
 			if id == targetID {
 				targetHits++
@@ -97,7 +97,7 @@ func TestFactory_SelectParentsFavorsHighFitness(t *testing.T) {
 
 	highHits := 0
 	lowHits := make(map[string]int, len(lowIDs))
-	for i := 0; i < iters; i++ {
+	for range iters {
 		for _, id := range f.selectParents("cat", "") {
 			if id == highID {
 				highHits++
@@ -157,7 +157,7 @@ func TestFactory_SelectParentsExcludesCategoryAliasKeys(t *testing.T) {
 	f := NewFactory(kg)
 	f.SetSeed(1)
 
-	for i := 0; i < 2000; i++ {
+	for i := range 2000 {
 		parents := f.selectParents(category, "")
 		seen := make(map[string]int, len(parents))
 		for _, key := range parents {
@@ -184,7 +184,7 @@ func TestFactory_SelectParentsFallbackHasNoDuplicates(t *testing.T) {
 	}}
 	f.SetSeed(7)
 
-	for i := 0; i < 2000; i++ {
+	for i := range 2000 {
 		// Only one same-category candidate → the fallback pool is used.
 		parents := f.selectParents("cat", "")
 		seen := make(map[string]bool, len(parents))

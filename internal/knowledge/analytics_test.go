@@ -549,7 +549,7 @@ func TestFormatAnalytics_WithSuggestedActions(t *testing.T) {
 func TestFormatAnalytics_CentralityCappedAt5(t *testing.T) {
 	// FormatAnalytics caps centrality output at top 5
 	entries := make([]CentralityEntry, 10)
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		entries[i] = CentralityEntry{TreeID: "t", Dependents: i}
 	}
 	a := Analytics{Centrality: entries}

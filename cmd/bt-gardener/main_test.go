@@ -40,7 +40,7 @@ func seedSelectorStats(t *testing.T, path string) {
 	t.Helper()
 	so := evolution.NewSelectorOptimizer(evolution.OrderBySuccessRate)
 	rec := func(child, outcome string, n int) {
-		for i := 0; i < n; i++ {
+		for range n {
 			so.Record("Router", evolution.NodeExecutionRecord{NodeName: child, Outcome: outcome})
 		}
 	}

@@ -162,7 +162,7 @@ func driveDistributedDispatch(nodes []string, apiKey, agent, task string) distri
 	// every backend at least once.
 	dispatches := 2 * len(nodes)
 	seen := make(map[string]bool, len(nodes))
-	for i := 0; i < dispatches; i++ {
+	for range dispatches {
 		result, execErr := router.Execute(context.Background(), agent, task)
 		if execErr != nil {
 			dd.Error = appendDispatchErr(dd.Error, execErr.Error())

@@ -262,7 +262,7 @@ func ProbeDashboard(ctx context.Context, baseURL, apiKey string, client *http.Cl
 	// ── Rate limiting: send burst+1 requests to the same endpoint and expect at least one 429 ──
 	rateLimited := false
 	maxAttempts := 25
-	for i := 0; i < maxAttempts; i++ {
+	for range maxAttempts {
 		rlReq, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/api/summary", nil)
 		if err != nil {
 			continue

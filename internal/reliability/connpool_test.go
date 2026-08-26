@@ -137,7 +137,7 @@ func TestConnPool_SharedHTTPClient_Concurrency(t *testing.T) {
 	var wg sync.WaitGroup
 	errs := make(chan error, 20)
 
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -333,7 +333,7 @@ func TestConnPool_MaxConnsPerHost(t *testing.T) {
 	var wg sync.WaitGroup
 	errs := make(chan error, 5)
 
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -578,7 +578,7 @@ func TestAgentRouter_PooledExecutors_LeastConnections(t *testing.T) {
 	// Run 10 concurrent tasks — verify no crashes
 	var wg sync.WaitGroup
 	errs := make(chan error, 10)
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

@@ -80,7 +80,7 @@ func TestSave_ConcurrentWritersDoNotCorruptStore(t *testing.T) {
 	const workers = 30
 	var wg sync.WaitGroup
 	errs := make(chan error, workers)
-	for i := 0; i < workers; i++ {
+	for i := range workers {
 		i := i
 		wg.Add(1)
 		go func() {
@@ -141,7 +141,7 @@ func TestUpdatePrograms_ConcurrentWritersAllSurvive(t *testing.T) {
 	const workers = 30
 	var wg sync.WaitGroup
 	errs := make(chan error, workers)
-	for i := 0; i < workers; i++ {
+	for i := range workers {
 		i := i
 		wg.Add(1)
 		go func() {
@@ -301,7 +301,7 @@ func TestRecordAttemptAndMaybeBlock(t *testing.T) {
 	}
 
 	// Block m3 too → program has no pending milestone → not Active → reseed.
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		ps.RecordAttemptAndMaybeBlock(p.ID, 2, 3)
 	}
 	if ps.Active() != nil {

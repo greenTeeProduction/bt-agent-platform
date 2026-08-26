@@ -290,7 +290,7 @@ func (ls *LocalSearcher) tabuSearch(
 		}
 		candidates := make([]candidate, 0, 5)
 
-		for k := 0; k < 5; k++ {
+		for range 5 {
 			cand := cloneTree(current)
 			ops := randomMutation(cand)
 			ApplyMutations(cand, ops)
@@ -387,7 +387,7 @@ func (p *Population) MemeticEvolve(
 	}
 	supervisor := NewLLMSupervisor()
 
-	for gen := 0; gen < generations; gen++ {
+	for range generations {
 		p.Generation++
 
 		// Sort by fitness descending

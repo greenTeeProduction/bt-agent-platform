@@ -62,7 +62,6 @@ func TestArc42TreesRootShape(t *testing.T) {
 	wantChildTypes := []string{"Sequence", "Selector", "Action", "Action", "Action"}
 
 	for _, spec := range arc42Sections {
-		spec := spec
 		t.Run(spec.key, func(t *testing.T) {
 			root, ok := trees[spec.key]
 			if !ok || root == nil {
@@ -94,7 +93,6 @@ func TestArc42TreesRootShape(t *testing.T) {
 func TestArc42TreesPreGateConditions(t *testing.T) {
 	trees := Arc42Trees()
 	for _, spec := range arc42Sections {
-		spec := spec
 		t.Run(spec.key, func(t *testing.T) {
 			root := trees[spec.key]
 			if root == nil || len(root.Children) == 0 {
@@ -122,7 +120,6 @@ func TestArc42TreesPreGateConditions(t *testing.T) {
 func TestArc42TreesStrategyRouterChildCount(t *testing.T) {
 	trees := Arc42Trees()
 	for _, spec := range arc42Sections {
-		spec := spec
 		t.Run(spec.key, func(t *testing.T) {
 			root := trees[spec.key]
 			if root == nil || len(root.Children) < 2 {

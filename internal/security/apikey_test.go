@@ -205,7 +205,7 @@ func TestKeyRing_UseCount(t *testing.T) {
 	key, _ := kr.GenerateKey("counted-key", 0)
 
 	// Validate 3 times
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if !kr.Validate(key) {
 			t.Fatalf("validation %d failed", i)
 		}
@@ -246,7 +246,7 @@ func TestKeyRing_ConcurrentAccess(t *testing.T) {
 
 	// Generate some keys
 	keys := make([]string, 5)
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		k, err := kr.GenerateKey("concurrent", 0)
 		if err != nil {
 			t.Fatalf("GenerateKey %d failed: %v", i, err)
@@ -256,7 +256,7 @@ func TestKeyRing_ConcurrentAccess(t *testing.T) {
 
 	// Concurrent validation
 	done := make(chan bool, 20)
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		go func() {
 			for _, k := range keys {
 				kr.Validate(k)
@@ -268,7 +268,7 @@ func TestKeyRing_ConcurrentAccess(t *testing.T) {
 
 	// Concurrent listing
 	go func() {
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			kr.ListKeys()
 			kr.Count()
 			kr.CleanupExpired()
@@ -277,7 +277,7 @@ func TestKeyRing_ConcurrentAccess(t *testing.T) {
 	}()
 
 	// Wait for all goroutines
-	for i := 0; i < 11; i++ {
+	for range 11 {
 		<-done
 	}
 
@@ -571,7 +571,7 @@ func TestKeyRotationScheduler_MultipleExpiring(t *testing.T) {
 	kr := NewKeyRing()
 
 	// Create 3 keys that expire soon
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		_, _ = kr.GenerateKey("multi-key", 50*time.Millisecond)
 	}
 

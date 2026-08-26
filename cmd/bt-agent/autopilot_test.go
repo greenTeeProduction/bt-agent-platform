@@ -62,7 +62,7 @@ func seedRecurringTask(t *testing.T, deps *mcpDeps, user, task string) {
 		t.Fatalf("interaction log: %v", err)
 	}
 	now := time.Now().Unix()
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if err := log.Append(persona.Interaction{
 			Task:      task,
 			Outcome:   "success",

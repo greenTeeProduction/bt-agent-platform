@@ -12,19 +12,19 @@ import (
 
 func satisfactionRecords(positive, negative, plain int) []evolution.Record {
 	var records []evolution.Record
-	for i := 0; i < positive; i++ {
+	for range positive {
 		records = append(records, evolution.Record{
 			Outcome: evolution.Success, DurationMs: 1000,
 			UserFeedback: evolution.FeedbackPositive,
 		})
 	}
-	for i := 0; i < negative; i++ {
+	for range negative {
 		records = append(records, evolution.Record{
 			Outcome: evolution.Failure, DurationMs: 1000,
 			UserFeedback: evolution.FeedbackNegative,
 		})
 	}
-	for i := 0; i < plain; i++ {
+	for range plain {
 		records = append(records, evolution.Record{
 			Outcome: evolution.Success, DurationMs: 1000,
 		})

@@ -341,7 +341,7 @@ func TestRecordUserFeedback_FlaggedForReviewDoesNotReEscalateWhilePending(t *tes
 
 	// Two more negative-feedback calls while the ledger record is still
 	// automationFlaggedStatus must not create additional HITL requests.
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		result := recordUserFeedback(deps, user, treeID, "negative", "yet again")
 		if result["flagged_for_review"] != true {
 			t.Errorf("call %d: still over threshold, expected flagged_for_review=true, got %v", i, result)

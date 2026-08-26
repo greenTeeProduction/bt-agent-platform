@@ -81,7 +81,7 @@ func TestTranspositionTable_Save_EvictionThenSave(t *testing.T) {
 	}
 
 	tree := evolution.DefaultTree()
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		task := string(rune('a' + i))
 		tt.Store(tree, task, TranspositionEntry{Outcome: "success"})
 	}

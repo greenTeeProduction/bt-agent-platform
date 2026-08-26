@@ -1498,7 +1498,7 @@ func TestHandleAgentExecute_CircuitBreakerOpenReturns503(t *testing.T) {
 
 	const agentName = "breaker-tripped-execute-agent"
 	cb := getDashCBStore().Get(agentName)
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		cb.RecordFailure()
 	}
 	if cb.State() != agent.CircuitOpen {
@@ -1551,7 +1551,7 @@ func TestHandleAgentRun_CircuitBreakerOpenReturns503(t *testing.T) {
 
 	const agentName = "breaker-tripped-run-agent"
 	cb := getDashCBStore().Get(agentName)
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		cb.RecordFailure()
 	}
 	if cb.State() != agent.CircuitOpen {

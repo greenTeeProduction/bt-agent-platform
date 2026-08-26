@@ -74,7 +74,7 @@ func TestWebhookPublisher_ClientErrorsDoNotTripBreaker(t *testing.T) {
 	defer ts.Close()
 
 	pub := NewWebhookPublisher(ts.URL, DefaultWebhookSecrets())
-	for i := 0; i < 6; i++ {
+	for i := range 6 {
 		pub.handleEvent(AgentEvent{Type: "service_down", Source: "x", Message: "m", Data: map[string]any{"i": i}})
 	}
 	if got := atomic.LoadInt32(&serves); got != 6 {
@@ -243,7 +243,7 @@ func TestWebhookPublisher_HandleEventHTTPError(_ *testing.T) {
 	// Give goroutine time to execute handleEvent
 	// The HTTP client has 10s timeout, but connection refused happens immediately
 	// We just need the goroutine to wake up and process the event
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		if pub.eventCh != nil {
 			// event is in the channel, loop should pick it up
 			break
@@ -410,7 +410,7 @@ func TestWebhookPublisherLoop_PanicRecovered(t *testing.T) {
 		// with normal events. If the panics are recovered, the normal
 		// events still reach the server; if not, the process crashes and
 		// none of this ever runs.
-		for i := 0; i < 3; i++ {
+		for range 3 {
 			bus.Publish(AgentEvent{
 				Type:   "task_complete",
 				Source: "test",
@@ -643,7 +643,7 @@ func TestWebhookPublisher_CircuitBreakerTripsAndRecovers(t *testing.T) {
 func TestWebhookPublisher_BreakersUseCircuitBreakerStore(t *testing.T) {
 	pub := NewWebhookPublisher("http://localhost:8644", DefaultWebhookSecrets())
 
-	for i := 0; i < webhookCircuitBreakerThreshold; i++ {
+	for range webhookCircuitBreakerThreshold {
 		pub.breakers.RecordFailure("bt-agent-alert")
 	}
 	if pub.breakers.Allowed("bt-agent-alert") {

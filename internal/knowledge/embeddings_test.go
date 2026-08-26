@@ -274,7 +274,7 @@ func TestGetEmbedding_CircuitBreakerOpensAfterConsecutiveFailures(t *testing.T) 
 	// Threshold is 3: the first three calls each fail (a 5xx is retryable, so
 	// each call may make several attempts) and open the breaker.
 	const calls = 3
-	for i := 0; i < calls; i++ {
+	for i := range calls {
 		if _, err := ec.GetEmbedding("task"); err == nil {
 			t.Fatalf("call %d: expected error from failing backend, got nil", i)
 		}
@@ -286,7 +286,7 @@ func TestGetEmbedding_CircuitBreakerOpensAfterConsecutiveFailures(t *testing.T) 
 	// Once open, further calls must short-circuit without touching the dead
 	// backend at all.
 	before := atomic.LoadInt32(&requests)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if _, err := ec.GetEmbedding("task"); err == nil {
 			t.Fatalf("post-open call %d: expected the breaker-open error, got nil", i)
 		}
@@ -360,7 +360,7 @@ func TestDiscoverWithEmbeddings_FallsBackWhenBreakerOpen(t *testing.T) {
 	kg.Register(&TreeMeta{ID: "tree:a", Name: "A", Category: "test", Fitness: 50, Embedding: Embedding{1, 0, 0}})
 
 	// Trip the breaker before exercising discoverWithEmbeddings.
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		_, _ = defaultEmbeddingClient.GetEmbedding("warm up")
 	}
 	if state := embeddingBreaker.State(); state != reliability.CircuitOpen {
@@ -453,7 +453,7 @@ func TestBuildIndex_ConcurrentRegisterNoRace(t *testing.T) {
 	defaultEmbeddingClient = &EmbeddingClient{BaseURL: srv.URL, Model: "test"}
 
 	kg := NewKnowledgeGraph()
-	for i := 0; i < 200; i++ {
+	for i := range 200 {
 		kg.Register(&TreeMeta{ID: fmt.Sprintf("seed:%d", i), Name: "T", Category: "domain"})
 	}
 
@@ -485,7 +485,7 @@ func TestBuildIndex_ConcurrentRegisterNoRace(t *testing.T) {
 // caller-supplied parents) — are safe against a concurrent kg.Register call.
 func TestFactory_ConcurrentRegisterNoRace(t *testing.T) {
 	kg := NewKnowledgeGraph()
-	for i := 0; i < 200; i++ {
+	for i := range 200 {
 		kg.Register(&TreeMeta{ID: fmt.Sprintf("domain:seed%d", i), Name: "T", Category: "domain"})
 	}
 

@@ -500,7 +500,7 @@ func TestMetricsTracker_TruncationAtMaxHistory(t *testing.T) {
 	}
 
 	// Add more than 10000 records — should truncate to last 5000
-	for i := 0; i < 10001; i++ {
+	for i := range 10001 {
 		mt.Record(CycleMetrics{TreeName: "tree", Cycle: i + 1})
 	}
 

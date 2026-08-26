@@ -24,10 +24,10 @@ func pathStat(d *DTAnalyzer, selectorName, pathName string) *PathStats {
 // survive a Save→Load into a fresh analyzer with identical counts.
 func TestDTAnalyzer_SaveLoadRoundTrip(t *testing.T) {
 	d := NewDTAnalyzer()
-	for i := 0; i < 6; i++ {
+	for range 6 {
 		d.RecordHit("StrategyRouter", "PathA", "IsCodeReview", true)
 	}
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		d.RecordHit("StrategyRouter", "PathB", "IsBuildTask", false)
 	}
 
@@ -72,7 +72,7 @@ func TestDTAnalyzer_SaveLoadRoundTrip(t *testing.T) {
 // them, so telemetry from independent runs accumulates.
 func TestDTAnalyzer_LoadMergeCounts(t *testing.T) {
 	first := NewDTAnalyzer()
-	for i := 0; i < 6; i++ {
+	for range 6 {
 		first.RecordHit("SR", "PathA", "IsCodeReview", true)
 	}
 	path := filepath.Join(t.TempDir(), "dt_stats.json")
@@ -82,7 +82,7 @@ func TestDTAnalyzer_LoadMergeCounts(t *testing.T) {
 
 	// A second analyzer with its own fresh telemetry for the same selector.
 	second := NewDTAnalyzer()
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		second.RecordHit("SR", "PathA", "IsCodeReview", true)
 	}
 	if err := second.Load(path); err != nil {
@@ -163,10 +163,10 @@ func TestDTAnalyzer_EmptyStatsNoOp(t *testing.T) {
 func TestDTAnalyzer_Entropy(t *testing.T) {
 	d := NewDTAnalyzer()
 	// Record 10 tasks: 6 hit PathA, 4 hit PathB
-	for i := 0; i < 6; i++ {
+	for range 6 {
 		d.RecordHit("StrategyRouter", "PathA", "IsCodeReview", true)
 	}
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		d.RecordHit("StrategyRouter", "PathB", "IsBuildTask", true)
 	}
 
@@ -179,10 +179,10 @@ func TestDTAnalyzer_Entropy(t *testing.T) {
 
 func TestDTAnalyzer_Gini(t *testing.T) {
 	d := NewDTAnalyzer()
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		d.RecordHit("SR", "PathA", "Check", true)
 	}
-	for i := 0; i < 0; i++ {
+	for range 0 {
 		d.RecordHit("SR", "PathB", "Other", true)
 	}
 
@@ -194,10 +194,10 @@ func TestDTAnalyzer_Gini(t *testing.T) {
 
 	// 50/50 split
 	d2 := NewDTAnalyzer()
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		d2.RecordHit("SR2", "A", "x", true)
 	}
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		d2.RecordHit("SR2", "B", "y", true)
 	}
 	gini2 := d2.GiniImpurity("SR2")
@@ -210,10 +210,10 @@ func TestDTAnalyzer_Gini(t *testing.T) {
 func TestDTAnalyzer_BestSplit(t *testing.T) {
 	d := NewDTAnalyzer()
 	// Condition "IsCodeReview" perfectly splits: always hits PathA
-	for i := 0; i < 8; i++ {
+	for range 8 {
 		d.RecordHit("SR", "PathA", "IsCodeReview", true)
 	}
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		d.RecordHit("SR", "PathB", "IsBuildTask", true)
 	}
 
@@ -226,10 +226,10 @@ func TestDTAnalyzer_BestSplit(t *testing.T) {
 func TestBTOptimizer_ReorderSelectors(t *testing.T) {
 	o := NewBTOptimizer()
 	// Record usage: PathB hit more often than PathA
-	for i := 0; i < 8; i++ {
+	for range 8 {
 		o.Analyzer.RecordHit("StrategyRouter", "BuildPath", "IsBuildTask", true)
 	}
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		o.Analyzer.RecordHit("StrategyRouter", "ReviewPath", "IsCodeReview", true)
 	}
 
@@ -302,10 +302,10 @@ func TestGiniImpurityFromProbs_Canonical(t *testing.T) {
 // implementation, so the two never drift.
 func TestDTAnalyzer_GiniImpurity_MatchesCanonicalGiniImpurityFromProbs(t *testing.T) {
 	d := NewDTAnalyzer()
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		d.RecordHit("SR", "A", "x", true)
 	}
-	for i := 0; i < 7; i++ {
+	for range 7 {
 		d.RecordHit("SR", "B", "y", true)
 	}
 	got := d.GiniImpurity("SR")
@@ -318,14 +318,14 @@ func TestDTAnalyzer_GiniImpurity_MatchesCanonicalGiniImpurityFromProbs(t *testin
 func TestDTAnalyzer_InformationGain(t *testing.T) {
 	d := NewDTAnalyzer()
 	// Simulate: CodeReview paths succeed 90%, Build path succeeds 50%
-	for i := 0; i < 9; i++ {
+	for range 9 {
 		d.RecordHit("SR", "Review", "IsCodeReview", true)
 	}
 	d.RecordHit("SR", "Review", "IsCodeReview", false)
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		d.RecordHit("SR", "Build", "IsBuildTask", true)
 	}
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		d.RecordHit("SR", "Build", "IsBuildTask", false)
 	}
 

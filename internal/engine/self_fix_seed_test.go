@@ -286,7 +286,7 @@ func TestSeedCodeFixProgram_SameSigConcurrentDoubleSeed(t *testing.T) {
 
 	const workers = 8
 	var wg sync.WaitGroup
-	for i := 0; i < workers; i++ {
+	for range workers {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -367,7 +367,7 @@ func TestSeedCodeFixProgram_ConcurrentDistinctSigs(t *testing.T) {
 
 	const workers = 12
 	var wg sync.WaitGroup
-	for i := 0; i < workers; i++ {
+	for i := range workers {
 		i := i
 		wg.Add(1)
 		go func() {

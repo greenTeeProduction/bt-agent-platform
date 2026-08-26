@@ -2523,7 +2523,7 @@ func TestWindowScratchpad(t *testing.T) {
 	// exceeding the budget by more than the marker line, and starting on a clean
 	// line boundary (no half step).
 	var sb strings.Builder
-	for i := 0; i < 200; i++ {
+	for i := range 200 {
 		fmt.Fprintf(&sb, "Step %d: %s\n", i, strings.Repeat("x", 80))
 	}
 	full := sb.String()

@@ -80,7 +80,7 @@ func TestQualityGateConsecutiveFails(t *testing.T) {
 	qg.ConsecutiveFails = 3
 
 	// 3 consecutive rejections should trigger disabled
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		qg.Validate(50, 0.1)
 	}
 
@@ -122,7 +122,7 @@ func TestQualityGateResetFailCount(t *testing.T) {
 	qg := NewQualityGate("/tmp/test_qg")
 	qg.ConsecutiveFails = 3
 
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		qg.Validate(50, 0.1)
 	}
 

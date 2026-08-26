@@ -174,7 +174,7 @@ func TestTranspositionTable_Store_EvictsLowestValueDeterministically(t *testing.
 // trials; a fix based on comparing InsertedAt values evicts the same, oldest entry
 // every time.
 func TestTranspositionTable_Store_EvictsLowestValueRepeated(t *testing.T) {
-	for trial := 0; trial < 5; trial++ {
+	for trial := range 5 {
 		tmpDir := t.TempDir()
 		tt, err := NewTranspositionTable(tmpDir, 2)
 		if err != nil {

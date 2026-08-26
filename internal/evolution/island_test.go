@@ -35,7 +35,7 @@ func rigDeathSpiralIsland(name, specialistType string, size int) *Population {
 		Specialists: registry,
 	}
 	base := islandTestTree(name)
-	for i := 0; i < size; i++ {
+	for i := range size {
 		// Identical genomes (no specialist provenance) across every individual
 		// trips diversity_collapse the moment DetectPopulation runs, and leaves
 		// the "specialistType" niche absent from the population.
@@ -156,7 +156,7 @@ func TestIslandModel_EvolveAllObservesLearnedPatternViaExpertKnowledge(t *testin
 			im.AddIsland("go", NewPopulation(8, DefaultTree()))
 
 			var bestTrees map[string]*SerializableNode
-			for gen := 0; gen < 16; gen++ {
+			for range 16 {
 				bestTrees = im.EvolveAll(growthFitness)
 			}
 			if bestTrees["go"] == nil {
@@ -225,7 +225,7 @@ func TestMAPElitesPopulation_EvolveMAPElites_ObservesLearnedPatternViaExpertKnow
 // through evoFloat64 (map_elites.go) the injected source was ignored, since
 // `rand.Seed` has been a no-op since Go 1.20.
 func TestMAPElitesPopulation_EvolveMAPElites_ObservesLearnedPatternRepeatedly(t *testing.T) {
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		// A distinct source per iteration: reproducible, but not the same
 		// stream 20 times over, so this covers 20 independent draws of the
 		// mutation schedule rather than one repeated 20 times.

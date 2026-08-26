@@ -305,7 +305,7 @@ func TestStoreConcurrency(t *testing.T) {
 	const numGoroutines = 20
 	done := make(chan bool, numGoroutines)
 
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		go func(id int) {
 			profile := &UserProfile{
 				ID:             "user-concurrent",
@@ -318,7 +318,7 @@ func TestStoreConcurrency(t *testing.T) {
 		}(i)
 	}
 
-	for i := 0; i < numGoroutines; i++ {
+	for range numGoroutines {
 		<-done
 	}
 }

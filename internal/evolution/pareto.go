@@ -417,7 +417,7 @@ func (pp *ParetoPopulation) EvolvePareto(generations int, fitnessFn func(*Serial
 	eliteCount := min(max(2, len(pp.Individuals)/10), len(pp.Individuals))
 	supervisor := NewLLMSupervisor()
 
-	for gen := 0; gen < generations; gen++ {
+	for range generations {
 		pp.Generation++
 
 		pp.selfHealGeneration(eliteCount, supervisor, func(mutationRate float64) {

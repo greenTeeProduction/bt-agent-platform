@@ -169,7 +169,7 @@ func TestValidateErrorHandlerProposal(t *testing.T) {
 	// Size cap: a chain of 11 nested sequences exceeds maxProposalNodes=10.
 	deep := &evolution.SerializableNode{Type: "Condition", Name: "LastErrorCategoryIs:x"}
 	node := *deep
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		node = evolution.SerializableNode{Type: "Sequence", Name: "s" + strings.Repeat("x", i+1), Children: []evolution.SerializableNode{node}}
 	}
 	if err := validateErrorHandlerProposal(&node, map[string]bool{}); err == nil {

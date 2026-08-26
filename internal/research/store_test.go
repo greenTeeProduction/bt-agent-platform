@@ -77,7 +77,7 @@ func TestOpenCorruptFileErrors(t *testing.T) {
 func TestExcerptIsBoundedAndRuneSafe(t *testing.T) {
 	s, _ := Open(filepath.Join(t.TempDir(), "knowledge.json"))
 	long := ""
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		long += "Grüße-" // multi-byte runes across the truncation boundary
 	}
 	s.Record("vault:big.md", "big", long)

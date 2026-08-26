@@ -132,7 +132,7 @@ func (p *Population) Evaluate(fitnessFn func(*SerializableNode) float64) {
 // Select returns parents via tournament selection (k=3).
 func (p *Population) Select() []*SerializableNode {
 	parents := make([]*SerializableNode, 2)
-	for j := 0; j < 2; j++ {
+	for j := range 2 {
 		// Seed best/bestFit from the first draw instead of a sentinel like
 		// -1.0: fitness functions (e.g. structuralFitnessFn's unbounded
 		// anti-pattern penalty) can legitimately return values <= -1.0, which
@@ -176,7 +176,7 @@ func (p *Population) Evolve(generations int, fitnessFn func(*SerializableNode) f
 	eliteCount := min(max(2, len(p.Individuals)/10), len(p.Individuals))
 	supervisor := NewLLMSupervisor()
 
-	for gen := 0; gen < generations; gen++ {
+	for range generations {
 		p.Generation++
 
 		// Record baseline fitness of each individual BEFORE mutation, and
@@ -503,7 +503,7 @@ func (p *Population) EvolveWithExperienceContext(generations int, fitnessFn func
 	mutator := NewMCTSMutator()
 	mutator.WarmStartHints = hintOps
 
-	for gen := 0; gen < generations; gen++ {
+	for range generations {
 		p.Generation++
 
 		p.selfHealGeneration(eliteCount, supervisor, func(mutationRate float64) {
@@ -887,7 +887,7 @@ func (p *Population) EvolveQLearning(generations int, fitnessFn func(*Serializab
 	mutator := NewMCTSMutator()
 	supervisor := NewLLMSupervisor()
 
-	for gen := 0; gen < generations; gen++ {
+	for range generations {
 		p.Generation++
 
 		// Run the same selfHealGeneration envelope Evolve, EvolveWithExperience,

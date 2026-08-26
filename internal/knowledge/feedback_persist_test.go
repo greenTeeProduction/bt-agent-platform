@@ -100,7 +100,7 @@ func TestSaveLoadFeedback_RecentRunsRoundTrip(t *testing.T) {
 		Category: "test",
 	})
 
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		src.RecordRun(RunRecord{
 			TreeID:  "tree:history",
 			Task:    "repeat",
@@ -548,7 +548,7 @@ func TestFeedbackFlush_ThrottlesWrites(t *testing.T) {
 	kg.ConfigureFeedbackPersistence(path, time.Hour)
 
 	const flushes = 5
-	for i := 0; i < flushes; i++ {
+	for i := range flushes {
 		// Each iteration mutates feedback and marks the graph dirty, then flushes.
 		kg.RecordRun(RunRecord{TreeID: "tree:throttle", Task: "burst", Outcome: "success", Duration: time.Second})
 		kg.MarkFeedbackDirty()

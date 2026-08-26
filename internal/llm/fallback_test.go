@@ -20,7 +20,7 @@ func TestFallbackLLM_ValidationErrorsDoNotTripBreaker(t *testing.T) {
 	stub := &stubLLM{name: "m1", err: reliability.NewCategorizedError(reliability.ErrCatValidation, errors.New("api status 400"))}
 	f := NewFallbackLLM([]NamedLLM{{Name: "m1", LLM: stub}})
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		if _, err := f.Generate("bad prompt"); err == nil {
 			t.Fatalf("call %d: expected the validation error to surface", i)
 		}
@@ -162,7 +162,7 @@ func TestFallbackLLM_CircuitBreakerSkipsPersistentlyFailingModel(t *testing.T) {
 	})
 
 	const attempts = 10
-	for i := 0; i < attempts; i++ {
+	for i := range attempts {
 		got, err := chain.Generate("hello")
 		if err != nil {
 			t.Fatalf("attempt %d: Generate returned error: %v", i, err)

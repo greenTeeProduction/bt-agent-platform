@@ -192,7 +192,7 @@ func (o *CompanyOrchestrator) RunQuarter() *QuarterResult {
 	// Run 12 sprints (2-week sprints = 24 weeks ≈ 1 quarter). RunSprint locks
 	// state itself per call, so the lock must be released here first —
 	// state.Lock() is not reentrant.
-	for i := 0; i < 12; i++ {
+	for range 12 {
 		o.RunSprint()
 	}
 
@@ -244,7 +244,7 @@ func (o *CompanyOrchestrator) RunQuarter() *QuarterResult {
 // RunYear executes four quarters and returns the results.
 func (o *CompanyOrchestrator) RunYear() []QuarterResult {
 	results := make([]QuarterResult, 0, 4)
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		qr := o.RunQuarter()
 		results = append(results, *qr)
 	}

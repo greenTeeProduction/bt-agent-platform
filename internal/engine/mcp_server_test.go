@@ -195,7 +195,7 @@ func TestServer_Run_MixedToolConcurrentCallsDoNotRaceOnSharedBlackboard(t *testi
 	const n = 5
 	var lines []string
 	want := make(map[int]string, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		id := i + 1
 		task := fmt.Sprintf("mixed-race-task-%02d", i)
 		tool := "task_alpha"

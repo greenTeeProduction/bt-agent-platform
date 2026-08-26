@@ -23,7 +23,7 @@ func TestStoreSaveCompactsTerminalRecords(t *testing.T) {
 
 	base := time.Now().Add(-24 * time.Hour)
 	s.mu.Lock()
-	for i := 0; i < hitlMaxStoredTerminal+150; i++ {
+	for i := range hitlMaxStoredTerminal + 150 {
 		id := fmt.Sprintf("hitl-skip-%05d", i)
 		s.records[id] = &Request{
 			ID:        id,
@@ -34,7 +34,7 @@ func TestStoreSaveCompactsTerminalRecords(t *testing.T) {
 	}
 	// Pending requests are OLDER than every terminal record and must still
 	// survive compaction.
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		id := fmt.Sprintf("hitl-pending-%d", i)
 		s.records[id] = &Request{
 			ID:        id,

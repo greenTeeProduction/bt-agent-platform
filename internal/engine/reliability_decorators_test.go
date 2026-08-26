@@ -25,7 +25,7 @@ func TestCircuitBreaker_OpensAfterFailures(t *testing.T) {
 	cmd := buildCircuitBreaker(node, child, bb)
 	ctx := btcore.NewBTContext(t.Context(), bb)
 
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		cmd.Run(ctx)
 	}
 	if cmd.Run(ctx) != -1 {

@@ -307,7 +307,7 @@ func TestMemeticEvolve_ResurrectsExtinctSpecialist(t *testing.T) {
 		Generation:  500,
 		Specialists: registry,
 	}
-	for i := 0; i < size; i++ {
+	for i := range size {
 		// Identical, non-specialist genomes → Diversity() == 1/size == 0.1
 		// (< 0.2 threshold) trips diversity_collapse, and the goap niche is
 		// absent → the archetype qualifies as extinct.

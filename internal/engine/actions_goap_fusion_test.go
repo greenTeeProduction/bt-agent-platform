@@ -153,7 +153,7 @@ func TestPrioritizeGoapGoals_ConcurrentWithPersistGoapProgramAllSurvive(t *testi
 	const writers = 30
 	const chargers = 30
 	var wg sync.WaitGroup
-	for i := 0; i < writers; i++ {
+	for i := range writers {
 		i := i
 		wg.Add(1)
 		go func() {
@@ -166,7 +166,7 @@ func TestPrioritizeGoapGoals_ConcurrentWithPersistGoapProgramAllSurvive(t *testi
 			persistGoapProgram(bb, spec, "test")
 		}()
 	}
-	for i := 0; i < chargers; i++ {
+	for range chargers {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

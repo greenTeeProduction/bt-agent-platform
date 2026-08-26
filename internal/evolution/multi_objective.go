@@ -167,9 +167,9 @@ func nonDominatedSort(fitnessVecs []MultiFitness) []NSGAIIFront {
 	dominationCount := make([]int, n)
 	dominated := make([][]int, n)
 
-	for i := 0; i < n; i++ {
+	for i := range n {
 		dominated[i] = make([]int, 0, n)
-		for j := 0; j < n; j++ {
+		for j := range n {
 			if i == j {
 				continue
 			}
@@ -184,7 +184,7 @@ func nonDominatedSort(fitnessVecs []MultiFitness) []NSGAIIFront {
 	// Front 0: individuals with dominationCount == 0
 	var fronts []NSGAIIFront
 	currentFront := NSGAIIFront{Indices: make([]int, 0)}
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if dominationCount[i] == 0 {
 			currentFront.Indices = append(currentFront.Indices, i)
 		}
@@ -313,9 +313,9 @@ func (nsga2 *NSGAIIPopulation) frontRank(i int) int {
 // Selects n parents from the population using k-tournament.
 func (nsga2 *NSGAIIPopulation) TournamentSelect(k int) []*SerializableNode {
 	parents := make([]*SerializableNode, 2)
-	for j := 0; j < 2; j++ {
+	for j := range 2 {
 		best := -1
-		for t := 0; t < k; t++ {
+		for range k {
 			idx := evoIntn(len(nsga2.Individuals))
 			if best == -1 || nsga2.crowdedComparison(idx, best) {
 				best = idx
@@ -345,7 +345,7 @@ func (nsga2 *NSGAIIPopulation) Evolve(
 	eliteCount := min(max(2, popSize/10), popSize)
 	supervisor := NewLLMSupervisor()
 
-	for gen := 0; gen < generations; gen++ {
+	for range generations {
 		nsga2.Generation++
 
 		nsga2.selfHealGeneration(eliteCount, supervisor, func(mutationRate float64) {
@@ -357,7 +357,7 @@ func (nsga2 *NSGAIIPopulation) Evolve(
 
 			// Create offspring population via crowded tournament selection
 			offspring := make([]Individual, popSize)
-			for i := 0; i < popSize; i++ {
+			for i := range popSize {
 				parents := nsga2.TournamentSelect(3)
 				child := Crossover(parents[0], parents[1])
 				// Mutation
@@ -387,7 +387,7 @@ func (nsga2 *NSGAIIPopulation) Evolve(
 
 			combinedVecs := make([]MultiFitness, 2*popSize)
 			copy(combinedVecs[:popSize], nsga2.FitnessVecs)
-			for i := 0; i < popSize; i++ {
+			for i := range popSize {
 				combinedVecs[popSize+i] = fitnessFn(offspring[i].Tree)
 			}
 

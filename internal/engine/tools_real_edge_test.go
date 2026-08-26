@@ -44,7 +44,7 @@ func TestExtractDuckDuckGoResults_FallbackResultA(t *testing.T) {
 
 func TestExtractDuckDuckGoResults_ManyResults(t *testing.T) {
 	var sb strings.Builder
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		sb.WriteString(`<div class="result"><span class="result__snippet">`)
 		sb.WriteString(strings.Repeat("a", 100))
 		sb.WriteString(`</span><span class="result__url">example.com/`)

@@ -219,7 +219,7 @@ func TestQuery_SortsByPriorityThenRecency(t *testing.T) {
 
 func TestQuery_LimitResults(t *testing.T) {
 	ms := storeForTest(t, "query-limit", 100)
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		key := fmt.Sprintf("k%d", i)
 		_ = ms.Write(key, "v", "fact", "low", "test")
 	}
@@ -231,7 +231,7 @@ func TestQuery_LimitResults(t *testing.T) {
 
 func TestQuery_ReturnsAllWhenNoFilter(t *testing.T) {
 	ms := storeForTest(t, "query-all", 100)
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		_ = ms.Write(fmt.Sprintf("k%d", i), "v", "fact", "low", "test")
 	}
 	results := ms.Query("", "", 0)

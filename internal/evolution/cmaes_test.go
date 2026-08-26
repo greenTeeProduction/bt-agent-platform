@@ -364,10 +364,10 @@ func TestCholesky(t *testing.T) {
 	}
 
 	// Verify L * L^T = C
-	for i := 0; i < 2; i++ {
-		for j := 0; j < 2; j++ {
+	for i := range 2 {
+		for j := range 2 {
 			sum := 0.0
-			for k := 0; k < 2; k++ {
+			for k := range 2 {
 				sum += L[i][k] * L[j][k]
 			}
 			if math.Abs(sum-C[i][j]) > 1e-10 {

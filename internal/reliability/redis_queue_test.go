@@ -302,7 +302,7 @@ func TestRedisPriorityQueue_SamePriority(t *testing.T) {
 	rpq.Enqueue("task 3", "agent", PriorityMedium)
 
 	// All three should be dequeued at PriorityMedium
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		task := rpq.Dequeue()
 		if task.Priority != PriorityMedium {
 			t.Errorf("task %d: expected medium priority, got %s", i, task.Priority)

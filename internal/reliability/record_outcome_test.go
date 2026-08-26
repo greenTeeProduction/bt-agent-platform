@@ -36,7 +36,7 @@ func TestCircuitBreaker_RecordOutcome(t *testing.T) {
 	t.Run("caller-side error while closed is not counted", func(t *testing.T) {
 		cb := NewCircuitBreaker("t", 3, time.Minute)
 		authErr := NewCategorizedError(ErrCatAuth, errors.New("api status 401"))
-		for i := 0; i < 5; i++ {
+		for range 5 {
 			cb.RecordOutcome(validationErr)
 			cb.RecordOutcome(authErr)
 		}
@@ -51,7 +51,7 @@ func TestCircuitBreaker_RecordOutcome(t *testing.T) {
 		// walk the breaker toward open, or a persistently junk-emitting
 		// backend never trips it.
 		cb := NewCircuitBreaker("t", 3, time.Minute)
-		for i := 0; i < 3; i++ {
+		for range 3 {
 			cb.RecordOutcome(errors.New("zk9x qflm"))
 		}
 		if cb.State() != CircuitOpen {
