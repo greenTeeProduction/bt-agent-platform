@@ -34,8 +34,8 @@ type SerializableNode struct {
 	Name        string             `json:"name"`
 	Description string             `json:"description,omitempty"`
 	Children    []SerializableNode `json:"children,omitempty"`
-	MaxRetries  int                `json:"max_retries,omitempty"`
-	TimeoutMs   int64              `json:"timeout_ms,omitempty"`
+	MaxRetries  int                `json:"max_retries,omitzero"`
+	TimeoutMs   int64              `json:"timeout_ms,omitzero"`
 	Metadata    map[string]any     `json:"metadata,omitempty"` // chain config, tags, etc.
 	Edges       []TypedEdge        `json:"edges,omitempty"`    // typed edge relationships
 }

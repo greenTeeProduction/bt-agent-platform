@@ -35,8 +35,8 @@ type MetaValidationReport struct {
 	Recommendations []string               `json:"recommendations,omitempty"`
 	NodeCount       int                    `json:"node_count"`
 	Depth           int                    `json:"depth"`
-	Composite       float64                `json:"composite,omitempty"`
-	Regression      float64                `json:"regression,omitempty"`
+	Composite       float64                `json:"composite,omitzero"`
+	Regression      float64                `json:"regression,omitzero"`
 }
 
 // MetaValidatorConfig tunes the validation thresholds. Defaults are calibrated

@@ -30,7 +30,7 @@ type GoalAttempt struct {
 	// passed for this goal — evidence the work already exists at HEAD rather
 	// than an unlandable goal. RecordFailure resets it: a genuine failure
 	// proves the goal's tests can still fail.
-	RedPassStreak int `json:"red_pass_streak,omitempty"`
+	RedPassStreak int `json:"red_pass_streak,omitzero"`
 }
 
 // GoalAttemptStore persists per-goal failure budgets.

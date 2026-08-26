@@ -56,8 +56,8 @@ type TaskAnnouncement struct {
 	TaskID        string    `json:"task_id"`
 	Description   string    `json:"description,omitempty"`
 	RequiredTags  []string  `json:"required_tags,omitempty"`
-	MinConfidence float64   `json:"min_confidence,omitempty"`
-	Deadline      time.Time `json:"deadline,omitempty"`
+	MinConfidence float64   `json:"min_confidence,omitzero"`
+	Deadline      time.Time `json:"deadline,omitzero"`
 }
 
 // Kind identifies this message as a task announcement.

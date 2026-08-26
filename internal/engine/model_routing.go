@@ -58,7 +58,7 @@ type RouteDecision struct {
 	// consulted, so downstream nodes can tell "default branch, model not asked"
 	// apart from "default branch, model proposed X at 0.42 (below_threshold)".
 	ModelLabel      string  `json:"model_label,omitempty"`
-	ModelConfidence float64 `json:"model_confidence,omitempty"`
+	ModelConfidence float64 `json:"model_confidence,omitzero"`
 	Rejected        string  `json:"rejected,omitempty"`
 }
 

@@ -123,7 +123,7 @@ type MCTSMutator struct {
 	ExplorationConst float64     `json:"exploration_constant"` // C, default 1.4
 	MaxDepth         int         `json:"max_depth"`            // search depth limit, default 3
 	FitnessEvaluator FitnessFunc `json:"-"`                    // evaluates tree fitness
-	Verbose          bool        `json:"verbose,omitempty"`    // enable logging
+	Verbose          bool        `json:"verbose,omitzero"`     // enable logging
 
 	// Experience bank warm-start — optional reference to recent successful mutations
 	WarmStartHints []string `json:"warmstart_hints,omitempty"`

@@ -269,53 +269,53 @@ type CycleMetrics struct {
 	NodesAfter  int     `json:"nodes_after"`
 	Improved    bool    `json:"improved"`
 	DurationMs  int64   `json:"duration_ms"`
-	Rejections  int     `json:"rejections,omitempty"` // quality gate rejections this cycle
-	Rollbacks   int     `json:"rollbacks,omitempty"`  // quality gate rollbacks this cycle
+	Rejections  int     `json:"rejections,omitzero"` // quality gate rejections this cycle
+	Rollbacks   int     `json:"rollbacks,omitzero"`  // quality gate rollbacks this cycle
 	// SkippedNoEvidence marks a tree that carried no reflection records, so
 	// the evidence gate skipped mutation (no run-derived fitness gradient).
-	SkippedNoEvidence bool `json:"skipped_no_evidence,omitempty"`
+	SkippedNoEvidence bool `json:"skipped_no_evidence,omitzero"`
 	// CrisisIntervention marks a cycle where the crisis detector intervened
 	// (emergency mutation-budget boost) for this tree.
-	CrisisIntervention bool `json:"crisis_intervention,omitempty"`
+	CrisisIntervention bool `json:"crisis_intervention,omitzero"`
 	// CrisisIntervened mirrors CrisisIntervention for external observability
 	// consumers (metrics/dashboard, Q3 Reliability milestone 1).
-	CrisisIntervened bool `json:"crisis_intervened,omitempty"`
+	CrisisIntervened bool `json:"crisis_intervened,omitzero"`
 	// MutationBudget is the per-cycle mutation budget actually used, boosted
 	// above the configured MaxMutations when CrisisIntervened is true.
-	MutationBudget int `json:"mutation_budget,omitempty"`
+	MutationBudget int `json:"mutation_budget,omitzero"`
 	// DeepSearchUsed marks a cycle that exercised evaluator.IterativeDeepening
 	// (Q2 Evolvability milestone 2), gated on a configured
 	// Config.TranspositionTablePath.
-	DeepSearchUsed bool `json:"deep_search_used,omitempty"`
+	DeepSearchUsed bool `json:"deep_search_used,omitzero"`
 	// DeepSearchDepth is the deepest ply evaluator.IterativeDeepening reached
 	// this cycle. Zero when DeepSearchUsed is false.
-	DeepSearchDepth int `json:"deep_search_depth,omitempty"`
+	DeepSearchDepth int `json:"deep_search_depth,omitzero"`
 	// TTHitRate is the transposition-table probe hit rate
 	// (DeepeningResult.TTProbeHits / TTProbes) for this cycle's deep search.
 	// Zero when DeepSearchUsed is false.
-	TTHitRate float64 `json:"tt_hit_rate,omitempty"`
+	TTHitRate float64 `json:"tt_hit_rate,omitzero"`
 	// EliteReseed marks a cycle where a diversity-collapse crisis was answered
 	// by adopting an elite from a different niche of the tree's MAP-Elites
 	// archive as the cycle's mutation seed, instead of mutating current-best
 	// again. False when no crisis fired, when the crisis was stagnation rather
 	// than diversity collapse, when no archived elite in another niche beat the
 	// live tree, or when the reseed was later rolled back.
-	EliteReseed bool `json:"elite_reseed,omitempty"`
+	EliteReseed bool `json:"elite_reseed,omitzero"`
 	// LocalSearchDelta is the composite gain the post-structural-mutation
 	// local-search refinement pass contributed this cycle (0 when the pass is
 	// disabled, found nothing to tune, or its result was rejected).
-	LocalSearchDelta float64 `json:"local_search_delta,omitempty"`
+	LocalSearchDelta float64 `json:"local_search_delta,omitzero"`
 	// IslandAdopted marks a cycle where the periodic island-model exploration
 	// pass (RunCycleV2, Config.IslandModel) migrated a fitter individual out of
 	// this tree's domain island and into its persisted TreeEntry state. False
 	// when the pass is disabled, the cycle was not due, or the island held
 	// nothing that beat the live tree under its own reflection records.
-	IslandAdopted bool `json:"island_adopted,omitempty"`
+	IslandAdopted bool `json:"island_adopted,omitzero"`
 	// SaveFailed marks a cycle where persisting the evolved tree via
 	// Registry.SaveTree failed (Q3 Reliability milestone 3) — the in-memory
 	// mutation was applied, but it is not durably saved, so it must not be
 	// treated as a successfully persisted result.
-	SaveFailed bool `json:"save_failed,omitempty"`
+	SaveFailed bool `json:"save_failed,omitzero"`
 }
 
 // MetricsTracker records and analyzes evolution metrics over time.

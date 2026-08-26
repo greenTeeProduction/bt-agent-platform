@@ -64,7 +64,7 @@ type Population struct {
 	// of this Population — the crisis-recovery half of the specialist loop.
 	// Only actual injections count; a Resurrect that finds no replaceable slot
 	// does not.
-	Resurrections int `json:"resurrections,omitempty"`
+	Resurrections int `json:"resurrections,omitzero"`
 }
 
 // PopulationHealth is a read-only snapshot of the GA's self-healing signals —

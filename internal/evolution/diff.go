@@ -22,7 +22,7 @@ type NodeMatcher struct {
 	Name         string            `json:"name,omitempty"`          // exact name match
 	NameContains string            `json:"name_contains,omitempty"` // substring match
 	Metadata     map[string]string `json:"metadata,omitempty"`      // key-value metadata match
-	MaxDepth     int               `json:"max_depth,omitempty"`     // only search up to this depth (-1 = unlimited)
+	MaxDepth     int               `json:"max_depth,omitzero"`      // only search up to this depth (-1 = unlimited)
 }
 
 // Matches returns true if the node satisfies all matcher criteria.

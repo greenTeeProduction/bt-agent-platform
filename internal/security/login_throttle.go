@@ -30,8 +30,8 @@ type LoginThrottleState struct {
 	LastFailure  time.Time     `json:"last_failure"`
 	CooldownCoef float64       `json:"cooldown_coef"` // 1, 2, 4, ... exponential
 	IsBlocked    bool          `json:"is_blocked"`
-	BlockedUntil time.Time     `json:"blocked_until,omitempty"`
-	Remaining    time.Duration `json:"remaining,omitempty"`
+	BlockedUntil time.Time     `json:"blocked_until,omitzero"`
+	Remaining    time.Duration `json:"remaining,omitzero"`
 }
 
 // LoginThrottleConfig configures the per-IP login throttle.

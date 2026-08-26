@@ -24,11 +24,11 @@ const (
 type MutationOp struct {
 	Kind       string                      `json:"kind"`                  // "add" | "remove"
 	ParentPath string                      `json:"parent_path,omitempty"` // add: index path of parent ("" = root, "0.2" = root.Children[0].Children[2])
-	Index      int                         `json:"index,omitempty"`       // add: insertion position; -1 = append
+	Index      int                         `json:"index,omitzero"`        // add: insertion position; -1 = append
 	Path       string                      `json:"path,omitempty"`        // remove: index path of the node to remove
 	ExpectName string                      `json:"expect_name,omitempty"` // optional: resolved node's Name must match
 	Subtree    *evolution.SerializableNode `json:"subtree,omitempty"`     // add: subtree to graft
-	Persist    bool                        `json:"persist,omitempty"`     // snapshot resulting tree to the store
+	Persist    bool                        `json:"persist,omitzero"`      // snapshot resulting tree to the store
 	Origin     string                      `json:"origin,omitempty"`
 }
 

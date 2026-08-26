@@ -63,7 +63,7 @@ type Route struct {
 	Parameters         []RouteParam        `json:"parameters,omitempty"`
 	RequestBody        *Schema             `json:"request_body,omitempty"`
 	Responses          []RouteResponse     `json:"responses"`
-	Deprecated         bool                `json:"deprecated,omitempty"`
+	Deprecated         bool                `json:"deprecated,omitzero"`
 	SunsetDate         string              `json:"sunset_date,omitempty"`         // ISO 8601 date when endpoint will be removed
 	DeprecationHeaders []DeprecationHeader `json:"deprecation_headers,omitempty"` // HTTP headers emitted on deprecated responses
 	OperationID        string              `json:"operation_id,omitempty"`        // unique ID for code generators
@@ -78,7 +78,7 @@ type OpenAPISpec struct {
 	Info       OpenAPIInfo               `json:"info"`
 	Servers    []OpenAPIServer           `json:"servers,omitempty"`
 	Paths      map[string]map[string]any `json:"paths"`
-	Components OpenAPIComponents         `json:"components,omitempty"`
+	Components OpenAPIComponents         `json:"components,omitzero"`
 	Tags       []OpenAPITag              `json:"tags,omitempty"`
 }
 

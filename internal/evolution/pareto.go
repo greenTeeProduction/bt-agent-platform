@@ -141,7 +141,7 @@ func (mf MultiFitness) String() string {
 type ParetoFront struct {
 	Individuals []*MultiIndividual `json:"individuals"`
 	Dimensions  []FitnessDimension `json:"dimensions"`
-	Cap         int                `json:"cap,omitempty"` // max individuals for Save/Load (0 = unbounded)
+	Cap         int                `json:"cap,omitzero"` // max individuals for Save/Load (0 = unbounded)
 }
 
 // MultiIndividual extends Individual with multi-objective fitness.

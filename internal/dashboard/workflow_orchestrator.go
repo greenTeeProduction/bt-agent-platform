@@ -32,13 +32,13 @@ const (
 type Step struct {
 	ID            string   `yaml:"id" json:"id"`
 	Kind          StepKind `yaml:"kind" json:"kind"`
-	Agent         string   `yaml:"agent,omitempty" json:"agent,omitempty"`                   // agent name for agent step
-	Input         string   `yaml:"input,omitempty" json:"input,omitempty"`                   // task input (supports {{.prev.output}})
-	Condition     string   `yaml:"condition,omitempty" json:"condition,omitempty"`           // Go template: "{{.prev.output.status}} == 'degraded'"
-	MaxIterations int      `yaml:"max_iterations,omitempty" json:"max_iterations,omitempty"` // for loop steps
-	Steps         []Step   `yaml:"steps,omitempty" json:"steps,omitempty"`                   // for parallel/subworkflow steps
-	Timeout       string   `yaml:"timeout,omitempty" json:"timeout,omitempty"`               // "30s", "5m"
-	OnFailure     string   `yaml:"on_failure,omitempty" json:"on_failure,omitempty"`         // "skip", "abort", "retry"
+	Agent         string   `yaml:"agent,omitempty" json:"agent,omitempty"`                  // agent name for agent step
+	Input         string   `yaml:"input,omitempty" json:"input,omitempty"`                  // task input (supports {{.prev.output}})
+	Condition     string   `yaml:"condition,omitempty" json:"condition,omitempty"`          // Go template: "{{.prev.output.status}} == 'degraded'"
+	MaxIterations int      `yaml:"max_iterations,omitempty" json:"max_iterations,omitzero"` // for loop steps
+	Steps         []Step   `yaml:"steps,omitempty" json:"steps,omitempty"`                  // for parallel/subworkflow steps
+	Timeout       string   `yaml:"timeout,omitempty" json:"timeout,omitempty"`              // "30s", "5m"
+	OnFailure     string   `yaml:"on_failure,omitempty" json:"on_failure,omitempty"`        // "skip", "abort", "retry"
 }
 
 // Workflow is a named sequence of steps.

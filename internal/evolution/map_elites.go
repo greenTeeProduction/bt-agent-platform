@@ -59,10 +59,10 @@ func Bucket(value, bucketSize int) int {
 type MAPElitesGrid struct {
 	Cells       map[string]*Individual `json:"cells"`
 	Dimensions  []FeatureDimension     `json:"dimensions"`
-	EliteSize   int                    `json:"elite_size"`    // max elites to return
-	NodeBucket  int                    `json:"node_bucket"`   // bucket size for node count (default: 10)
-	DepthBucket int                    `json:"depth_bucket"`  // bucket size for depth (default: 2)
-	Cap         int                    `json:"cap,omitempty"` // max occupied cells for Save/Load (0 = unbounded)
+	EliteSize   int                    `json:"elite_size"`   // max elites to return
+	NodeBucket  int                    `json:"node_bucket"`  // bucket size for node count (default: 10)
+	DepthBucket int                    `json:"depth_bucket"` // bucket size for depth (default: 2)
+	Cap         int                    `json:"cap,omitzero"` // max occupied cells for Save/Load (0 = unbounded)
 }
 
 // NewMAPElitesGrid creates an empty MAP-Elites grid.

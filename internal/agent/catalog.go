@@ -20,8 +20,8 @@ type CatalogEntry struct {
 	Category    string    `json:"category"`
 	Tags        []string  `json:"tags"`
 	Installed   bool      `json:"installed"`
-	InstalledAt time.Time `json:"installed_at,omitempty"`
-	Score       float64   `json:"score,omitempty"`
+	InstalledAt time.Time `json:"installed_at,omitzero"`
+	Score       float64   `json:"score,omitzero"`
 }
 
 // Catalog manages the agent marketplace — browsing, searching, installing, sharing.

@@ -30,7 +30,7 @@ type Task struct {
 	Outcome     string `json:"outcome,omitempty"`
 	// Approval is the audit trail for approve/reject decisions, mirroring
 	// the Approval struct on WorkflowTask in workflow_engine.go.
-	Approval Approval `json:"approval,omitempty"`
+	Approval Approval `json:"approval,omitzero"`
 }
 
 // TaskStore persists tasks to a JSON file.

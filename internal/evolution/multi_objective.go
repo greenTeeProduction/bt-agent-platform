@@ -44,8 +44,8 @@ type NSGAIIPopulation struct {
 	Fronts         []NSGAIIFront                        `json:"-"`             // non-dominated fronts
 	CrowdingDist   []float64                            `json:"crowding_dist"` // per-individual crowding distance
 	FitnessMultiFn func(*SerializableNode) MultiFitness `json:"-"`
-	Cap            int                                  `json:"cap,omitempty"` // max individuals for Save/Load (0 = unbounded)
-	Archive        *ParetoFront                         `json:"-"`             // durable cross-run archive of front 0, populated by Load
+	Cap            int                                  `json:"cap,omitzero"` // max individuals for Save/Load (0 = unbounded)
+	Archive        *ParetoFront                         `json:"-"`            // durable cross-run archive of front 0, populated by Load
 	// ExpertKnowledge is an optional, caller-owned learning archive that
 	// Evolve's offspring mutation step observes every genuinely-improving
 	// mutation into via Observe, mirroring the ek plumbing

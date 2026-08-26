@@ -50,7 +50,7 @@ type Response struct {
 	Content    string `json:"content"`
 	Error      string `json:"error,omitempty"`
 	DurationMS int64  `json:"duration_ms"`
-	ToolCalls  int    `json:"tool_calls,omitempty"`
+	ToolCalls  int    `json:"tool_calls,omitzero"`
 }
 
 type Analysis struct {

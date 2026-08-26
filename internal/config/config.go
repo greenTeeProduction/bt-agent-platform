@@ -93,10 +93,10 @@ type Config struct {
 	ConfigFile string `json:"-" env:"BT_CONFIG_FILE" default:""` // path to JSON config file
 
 	// HITL — human-in-the-loop approval policy
-	HITL HITLSettings `json:"hitl,omitempty"`
+	HITL HITLSettings `json:"hitl,omitzero"`
 
 	// Paths — resolved file paths (populated by ResolvePaths())
-	Paths PathConfig `json:"paths,omitempty"`
+	Paths PathConfig `json:"paths,omitzero"`
 }
 
 // HITLSettings configures human approval gates.

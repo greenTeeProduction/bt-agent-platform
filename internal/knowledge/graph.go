@@ -40,7 +40,7 @@ type TreeMeta struct {
 	// gated by RunCount, so an unproven tree surfaces on structural merit while a
 	// well-run tree is judged on its measured runtime success (see
 	// blendedSelectionFitness).
-	StructuralFitness float64 `json:"structural_fitness,omitempty"`
+	StructuralFitness float64 `json:"structural_fitness,omitzero"`
 
 	// Capabilities — what tasks this tree handles
 	Capabilities []Capability `json:"capabilities"`
@@ -86,9 +86,9 @@ const maxRunHistory = 20
 
 // Capability describes what a tree can do.
 type Capability struct {
-	Action   string  `json:"action"`             // what it does (e.g., "analyze_financials", "review_code")
-	Domain   string  `json:"domain"`             // domain area (e.g., "finance", "engineering", "strategy")
-	Strength float64 `json:"strength,omitempty"` // 0-1 how good it is at this (from benchmarks)
+	Action   string  `json:"action"`            // what it does (e.g., "analyze_financials", "review_code")
+	Domain   string  `json:"domain"`            // domain area (e.g., "finance", "engineering", "strategy")
+	Strength float64 `json:"strength,omitzero"` // 0-1 how good it is at this (from benchmarks)
 }
 
 // Relation describes a connection to another tree.

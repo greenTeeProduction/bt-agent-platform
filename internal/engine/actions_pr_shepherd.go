@@ -109,13 +109,13 @@ func prShepherdMaxFixAttempts() int {
 // Durable state
 
 type prShepherdState struct {
-	PRNumber int `json:"pr_number,omitempty"`
+	PRNumber int `json:"pr_number,omitzero"`
 	// FixAttempts counts Claude fix attempts per PR-head SHA so one broken
 	// head cannot burn Claude forever. TotalFixAttempts additionally bounds
 	// an evolving-SHA ping-pong (each fix changes the head); both reset when
 	// a merge or upstream sync succeeds.
 	FixAttempts      map[string]int `json:"fix_attempts,omitempty"`
-	TotalFixAttempts int            `json:"total_fix_attempts,omitempty"`
+	TotalFixAttempts int            `json:"total_fix_attempts,omitzero"`
 	// LastOutcome/LastPassAt are the durable observability record: the
 	// action's blackboard outcome is overwritten by later tree nodes and the
 	// cycle-complete log line only carries the FINAL outcome, so without

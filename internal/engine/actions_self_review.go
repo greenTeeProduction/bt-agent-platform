@@ -70,7 +70,7 @@ type selfReviewState struct {
 	// finding real defects looked inert everywhere an operator would look.
 	LastReport     string    `json:"last_report,omitempty"`
 	LastOutcome    string    `json:"last_outcome,omitempty"`
-	LastReviewedAt time.Time `json:"last_reviewed_at,omitempty"`
+	LastReviewedAt time.Time `json:"last_reviewed_at,omitzero"`
 }
 
 // selfReviewReEmitWindow bounds how long a finished review may stand in for a
