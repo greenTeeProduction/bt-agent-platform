@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -695,7 +695,7 @@ func handleTrees(w http.ResponseWriter, _ *http.Request) {
 	for name := range domainTrees {
 		names = append(names, name)
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	for _, name := range names {
 		id := "domain:" + name
 		if seen[id] || seen[name] {

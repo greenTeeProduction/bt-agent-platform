@@ -3,7 +3,6 @@ package evolution
 import (
 	"math"
 	"slices"
-	"sort"
 )
 
 // MetaValidationDecision is the final acceptance decision produced by the
@@ -242,7 +241,7 @@ func (m *MetaValidator) checkArchetype(candidate *SerializableNode, report *Meta
 	if fits {
 		return
 	}
-	sort.Strings(issues)
+	slices.Sort(issues)
 	for _, issue := range issues {
 		report.addWarning("archetype", "warning", issue, 0.04)
 	}
@@ -274,7 +273,7 @@ func (m *MetaValidator) addRecommendations(candidate *SerializableNode, report *
 	for _, pattern := range patterns {
 		report.Recommendations = append(report.Recommendations, pattern.Name)
 	}
-	sort.Strings(report.Recommendations)
+	slices.Sort(report.Recommendations)
 }
 
 func hasExecutionPathFirst(node *SerializableNode) bool {

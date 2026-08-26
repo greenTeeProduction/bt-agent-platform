@@ -24,7 +24,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -163,7 +163,7 @@ func BuildImpactGraph(root string) (*ImpactGraph, error) {
 		for test := range set {
 			list = append(list, test)
 		}
-		sort.Strings(list)
+		slices.Sort(list)
 		tests[source] = list
 	}
 

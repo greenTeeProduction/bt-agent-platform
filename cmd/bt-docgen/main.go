@@ -33,7 +33,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -145,7 +144,7 @@ func main() {
 					targetSections = append(targetSections, s)
 				}
 			}
-			sort.Ints(targetSections)
+			slices.Sort(targetSections)
 		}
 	}
 
@@ -311,7 +310,7 @@ func parseSections(s string) []int {
 		}
 		result = append(result, n)
 	}
-	sort.Ints(result)
+	slices.Sort(result)
 	return result
 }
 

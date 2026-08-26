@@ -5,7 +5,7 @@ import (
 	"os/exec"
 	"path"
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -102,7 +102,7 @@ func extractPrioritizedGoals(task string) []string {
 		}
 		byPriority[m[1]] = append(byPriority[m[1]], strings.TrimSpace(m[2]))
 	}
-	sort.Strings(priorities)
+	slices.Sort(priorities)
 	var goals []string
 	for _, p := range priorities {
 		goals = append(goals, byPriority[p]...)

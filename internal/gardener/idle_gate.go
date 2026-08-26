@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"time"
 )
 
@@ -80,6 +80,6 @@ func reflectionWatermark(dir string) string {
 		}
 		parts = append(parts, fmt.Sprintf("%s:%d:%d", filepath.Base(e.Name()), info.Size(), info.ModTime().UnixNano()))
 	}
-	sort.Strings(parts) // ReadDir order is not guaranteed stable across platforms
+	slices.Sort(parts) // ReadDir order is not guaranteed stable across platforms
 	return fmt.Sprint(parts)
 }

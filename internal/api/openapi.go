@@ -4,7 +4,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
-	"sort"
+	"slices"
 )
 
 // ─── OpenAPI Route Definition ──────────────────────────────────────────────
@@ -252,7 +252,7 @@ func (g *OpenAPIGenerator) Generate() OpenAPISpec {
 	for k := range paths {
 		pathKeys = append(pathKeys, k)
 	}
-	sort.Strings(pathKeys)
+	slices.Sort(pathKeys)
 	for _, k := range pathKeys {
 		sortedPaths[k] = paths[k]
 	}

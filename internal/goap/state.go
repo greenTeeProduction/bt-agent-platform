@@ -15,7 +15,7 @@ package goap
 import (
 	"fmt"
 	"maps"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -112,7 +112,7 @@ func (ws WorldState) String() string {
 	for k := range ws {
 		keys = append(keys, k)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	var sb strings.Builder
 	sb.WriteString("{")
 	for i, k := range keys {

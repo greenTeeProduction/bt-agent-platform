@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -453,7 +453,7 @@ func goapFusionMaterializerSnapshotsSection(bb *Blackboard) string {
 	if len(lines) == 0 {
 		return ""
 	}
-	sort.Strings(lines)
+	slices.Sort(lines)
 	markGoapFusionReportedSnapshots(bb, newNames)
 	return "\n\n## Materializer Snapshots\n\nMaterializer snapshot patch(es) written since the prior cycle (a bare-repo wipe was snapshotted before materializing, never destructive):\n\n" + strings.Join(lines, "\n")
 }
@@ -497,7 +497,7 @@ func markGoapFusionReportedSnapshots(bb *Blackboard, names []string) {
 	for n := range reported {
 		all = append(all, n)
 	}
-	sort.Strings(all)
+	slices.Sort(all)
 	_ = bb.BB.Mgr.Set(scope, "goap_fusion_reported_materializer_snapshots", strings.Join(all, "\n"),
 		"durable set of materializer snapshot filenames already surfaced in a cycle report", "text")
 }
@@ -536,7 +536,7 @@ func goapFusionParkedBranchesSection() string {
 	if len(lines) == 0 {
 		return ""
 	}
-	sort.Strings(lines)
+	slices.Sort(lines)
 	return "\n\n## Parked Work (pending_patch)\n\nUnmerged superpowers/* branch(es) older than 24h — parked-run triage backlog:\n\n" + strings.Join(lines, "\n")
 }
 

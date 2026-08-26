@@ -1,7 +1,7 @@
 package domains
 
 import (
-	"sort"
+	"slices"
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/benchmark"
@@ -169,6 +169,6 @@ func sortedTreeNames(trees map[string]*evolution.SerializableNode) []string {
 	for name := range trees {
 		names = append(names, name)
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	return names
 }

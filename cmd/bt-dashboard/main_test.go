@@ -10,7 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -245,10 +245,10 @@ func TestBuildDashboardKnowledgeGraph_SetsExpectedDomainsAndSurfacesGaps(t *test
 	for name := range registry {
 		wantExpected = append(wantExpected, "domain:"+name)
 	}
-	sort.Strings(wantExpected)
+	slices.Sort(wantExpected)
 
 	gotExpected := append([]string(nil), kg.ExpectedDomains...)
-	sort.Strings(gotExpected)
+	slices.Sort(gotExpected)
 
 	if len(gotExpected) != len(wantExpected) {
 		t.Fatalf("buildDashboardKnowledgeGraph: kg.ExpectedDomains has %d entries, want %d "+
@@ -1424,7 +1424,7 @@ func TestDashboardAPIRoutesHaveOpenAPICoverage(t *testing.T) {
 	}
 
 	if len(missing) > 0 {
-		sort.Strings(missing)
+		slices.Sort(missing)
 		t.Errorf("%d dashboard mux path(s) registered in main.go have no matching Route in "+
 			"api.DashboardRoutes(), so the OpenAPI response validator never checks them: %v",
 			len(missing), missing)
@@ -1719,7 +1719,7 @@ func TestHandleTrees_IncludesFullDomainCatalog(t *testing.T) {
 		}
 	}
 	if len(missing) > 0 {
-		sort.Strings(missing)
+		slices.Sort(missing)
 		t.Errorf("/api/trees is missing %d of %d domains.AllDomainTrees() catalog entries not present "+
 			"in the runtime knowledge graph (e.g. %v); handleTrees must merge the domain-tree catalog "+
 			"into its response so the Create-Agent dropdown can fetch a complete tree list from this "+

@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -431,7 +432,7 @@ func (w *Workflow) distinctSprintTargets() []int {
 			sprints = append(sprints, t.SprintTarget)
 		}
 	}
-	sort.Ints(sprints)
+	slices.Sort(sprints)
 	return sprints
 }
 

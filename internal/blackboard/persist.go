@@ -6,7 +6,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -149,6 +149,6 @@ func (m *Manager) ListPersistedScopeIDs(kind ScopeKind) ([]string, error) {
 		}
 		out = append(out, strings.TrimSuffix(e.Name(), ".json"))
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out, nil
 }

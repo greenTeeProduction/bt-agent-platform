@@ -1,7 +1,7 @@
 package goap
 
 import (
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -81,7 +81,7 @@ func (v *Vocabulary) Keys() []string {
 	for k := range v.descriptions {
 		keys = append(keys, k)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	return keys
 }
 

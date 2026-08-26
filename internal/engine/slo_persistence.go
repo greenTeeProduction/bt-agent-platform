@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"sync"
 	"time"
 )
@@ -104,7 +104,7 @@ func SaveSLOMetrics(path string) error {
 	for k := range merged {
 		keys = append(keys, k)
 	}
-	sort.Strings(keys) // deterministic file (map iteration order is random)
+	slices.Sort(keys) // deterministic file (map iteration order is random)
 	snapshots := make([]SLOSnapshot, 0, len(merged))
 	for _, k := range keys {
 		snapshots = append(snapshots, merged[k])

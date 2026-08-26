@@ -29,7 +29,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
 	"time"
 
@@ -342,7 +341,7 @@ func canonicalSelfReviewSig(f selfReviewFinding) string {
 			files = append(files, file)
 		}
 	}
-	sort.Strings(files)
+	slices.Sort(files)
 	sum := sha256.Sum256([]byte(strings.Join(files, "\n") + "\x00" + normalizeSelfReviewTitle(f.Title)))
 	return hex.EncodeToString(sum[:])[:16]
 }

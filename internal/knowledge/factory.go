@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
@@ -91,7 +91,7 @@ func (f *Factory) extractTemplates() {
 		ids = append(ids, id)
 	}
 	f.Graph.mu.RUnlock()
-	sort.Strings(ids)
+	slices.Sort(ids)
 
 	for _, id := range ids {
 		meta := metas[id]

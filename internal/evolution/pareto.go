@@ -133,7 +133,7 @@ func (mf MultiFitness) String() string {
 	for dim, score := range mf.Scores {
 		parts = append(parts, fmt.Sprintf("%s=%.1f", dim, score))
 	}
-	sort.Strings(parts)
+	slices.Sort(parts)
 	return "{" + strings.Join(parts, " ") + "}"
 }
 

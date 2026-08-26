@@ -6,7 +6,7 @@ package domains
 
 import (
 	"maps"
-	"sort"
+	"slices"
 	"strings"
 	"unicode"
 
@@ -939,7 +939,7 @@ func ExpectedDomainIDs(registry map[string]*evolution.SerializableNode) []string
 	for name := range registry {
 		ids = append(ids, "domain:"+name)
 	}
-	sort.Strings(ids)
+	slices.Sort(ids)
 	return ids
 }
 

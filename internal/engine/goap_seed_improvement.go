@@ -2,7 +2,7 @@ package engine
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 )
@@ -153,7 +153,7 @@ func untestedProductionGoFiles(all []string) []string {
 		}
 		out = append(out, f)
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 

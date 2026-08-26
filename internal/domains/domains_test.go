@@ -6,6 +6,7 @@ import (
 	"go/parser"
 	"go/token"
 	"maps"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -2153,7 +2154,7 @@ func TestSmokeExecutionFnsMapCoversRegistry(t *testing.T) {
 			missing = append(missing, name)
 		}
 	}
-	sort.Strings(missing)
+	slices.Sort(missing)
 
 	if len(missing) > 0 {
 		t.Errorf("the fns map in %s is missing %d of the %d SmokeTestableDomainTrees() entries, so those trees are silently unexercised by the executable-structure smoke test: %v\n"+
@@ -2297,7 +2298,7 @@ func TestEveryResolverReachableDomainTreeIsCovered(t *testing.T) {
 	for id := range ids {
 		names = append(names, id)
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 
 	mock := benchmark.DefaultMock()
 	for _, id := range names {
@@ -2456,7 +2457,7 @@ func resolverBareIDLiterals(t *testing.T) []string {
 	for id := range seen {
 		ids = append(ids, id)
 	}
-	sort.Strings(ids)
+	slices.Sort(ids)
 	return ids
 }
 

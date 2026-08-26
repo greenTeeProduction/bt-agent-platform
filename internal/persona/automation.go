@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -217,7 +218,7 @@ func PatternSignature(representative string) string {
 	for w := range set {
 		words = append(words, w)
 	}
-	sort.Strings(words)
+	slices.Sort(words)
 	if len(words) > 5 {
 		words = words[:5]
 	}

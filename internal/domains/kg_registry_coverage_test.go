@@ -1,7 +1,7 @@
 package domains
 
 import (
-	"sort"
+	"slices"
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/knowledge"
@@ -26,7 +26,7 @@ func TestKnowledgeGraphRegistersAllDomainTrees(t *testing.T) {
 	}
 
 	if len(missing) > 0 {
-		sort.Strings(missing)
+		slices.Sort(missing)
 		t.Errorf("knowledge graph missing %d of %d domain trees from AllDomainTrees(): %v",
 			len(missing), len(trees), missing)
 	}
@@ -74,7 +74,7 @@ func TestKnowledgeGraphRegistersResolverSpecialCaseTrees(t *testing.T) {
 	}
 
 	if len(missing) > 0 {
-		sort.Strings(missing)
+		slices.Sort(missing)
 		t.Errorf("knowledge graph missing %d of %d resolver special-case tree IDs: %v",
 			len(missing), len(resolverSpecialCaseTreeIDs), missing)
 	}

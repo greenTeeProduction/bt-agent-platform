@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"maps"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -280,7 +280,7 @@ func encodePairs(ws WorldState) string {
 	for k := range ws {
 		keys = append(keys, k)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	var parts []string
 	for _, k := range keys {
 		v := fmt.Sprintf("%v", ws[k])
@@ -298,7 +298,7 @@ func encodePairsReadable(ws WorldState) string {
 	for k := range ws {
 		keys = append(keys, k)
 	}
-	sort.Strings(keys)
+	slices.Sort(keys)
 	parts := make([]string, 0, len(keys))
 	for _, k := range keys {
 		parts = append(parts, fmt.Sprintf("%s = %v", k, ws[k]))

@@ -3,7 +3,7 @@ package evolution
 import (
 	"math"
 	"path/filepath"
-	"sort"
+	"slices"
 	"testing"
 )
 
@@ -439,7 +439,7 @@ func frontIndexSets(fronts []NSGAIIFront) [][]int {
 	for i, f := range fronts {
 		idx := make([]int, len(f.Indices))
 		copy(idx, f.Indices)
-		sort.Ints(idx)
+		slices.Sort(idx)
 		out[i] = idx
 	}
 	return out

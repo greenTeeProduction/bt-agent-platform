@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"sort"
+	"slices"
 	"sync"
 	"testing"
 
@@ -52,7 +52,7 @@ func (f *fakeTransport) sentURLs() []string {
 	for u := range f.sent {
 		urls = append(urls, u)
 	}
-	sort.Strings(urls)
+	slices.Sort(urls)
 	return urls
 }
 

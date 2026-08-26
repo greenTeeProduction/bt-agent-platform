@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os/exec"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -81,7 +82,7 @@ func extractGoapResearchGoals(answer string) []goapResearchGoal {
 			byIndex[idx].Files = value
 		}
 	}
-	sort.Strings(order)
+	slices.Sort(order)
 	var goals []goapResearchGoal
 	for _, idx := range order {
 		if g := byIndex[idx]; strings.TrimSpace(g.Goal) != "" {
