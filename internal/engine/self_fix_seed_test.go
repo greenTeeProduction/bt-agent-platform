@@ -287,11 +287,9 @@ func TestSeedCodeFixProgram_SameSigConcurrentDoubleSeed(t *testing.T) {
 	const workers = 8
 	var wg sync.WaitGroup
 	for range workers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			seedCodeFixProgram("sig-same", "Fix Same", "fix file same.go: recurring defect", "self-fix:test:sig-same")
-		}()
+		})
 	}
 	wg.Wait()
 
@@ -369,12 +367,10 @@ func TestSeedCodeFixProgram_ConcurrentDistinctSigs(t *testing.T) {
 	var wg sync.WaitGroup
 	for i := range workers {
 		i := i
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			sig := fmt.Sprintf("sig%d", i)
 			seedCodeFixProgram(sig, "Fix "+sig, "fix file"+sig+".go: defect", "self-fix:test:"+sig)
-		}()
+		})
 	}
 	wg.Wait()
 

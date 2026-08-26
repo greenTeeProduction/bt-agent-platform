@@ -279,14 +279,14 @@ func TestMultiNode_ConcurrentAgentExecution(t *testing.T) {
 		t.Skip("multi-node concurrency test skipped in short mode")
 	}
 
-	var callCounter uint64
+	var callCounter atomic.Uint64
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/health" {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
 		if r.URL.Path == "/api/agents/execute" {
-			atomic.AddUint64(&callCounter, 1)
+			callCounter.Add(1)
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(&AgentResult{
 				Agent:   "concurrent-agent",
@@ -336,7 +336,7 @@ func TestMultiNode_ConcurrentAgentExecution(t *testing.T) {
 		}
 	}
 
-	final := atomic.LoadUint64(&callCounter)
+	final := callCounter.Load()
 	if final != uint64(concurrency) {
 		t.Errorf("expected %d total calls, got %d", concurrency, final)
 	}

@@ -604,16 +604,14 @@ func TestPersistGoapProgram_ConcurrentCallersAllSurvive(t *testing.T) {
 	var wg sync.WaitGroup
 	for i := range workers {
 		i := i
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			bb := &Blackboard{ChainState: map[string]any{}}
 			spec := &goapProgramSpec{
 				Title:      fmt.Sprintf("Concurrent program %d", i),
 				Milestones: []string{"m1"},
 			}
 			persistGoapProgram(bb, spec, "test")
-		}()
+		})
 	}
 	wg.Wait()
 
@@ -652,15 +650,13 @@ func TestCompleteGoapProgramMilestone_ConcurrentCallersAllSurvive(t *testing.T) 
 	var wg sync.WaitGroup
 	for i := range workers {
 		i := i
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			bb := &Blackboard{ChainState: map[string]any{
 				"goap_fusion_program_milestone": ids[i] + ":0",
 			}}
 			run := &SuperpowersRun{ID: fmt.Sprintf("run-%d", i), ChangedFiles: []string{anchors[i]}}
 			completeGoapProgramMilestone(bb, run)
-		}()
+		})
 	}
 	wg.Wait()
 

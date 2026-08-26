@@ -308,22 +308,18 @@ func TestSeedCodeFixProgram_ConcurrentWithPersistGoapProgramAllSurvive(t *testin
 	var wg sync.WaitGroup
 	for i := range workers {
 		i := i
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			sig := fmt.Sprintf("cross-sig-%d", i)
 			seedCodeFixProgram(sig, fmt.Sprintf("Cross fix %d", i), fmt.Sprintf("fix cross_%d.go: defect", i), "self-fix:test:"+sig)
-		}()
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		})
+		wg.Go(func() {
 			bb := &Blackboard{ChainState: map[string]any{}}
 			spec := &goapProgramSpec{
 				Title:      fmt.Sprintf("Cross persist %d", i),
 				Milestones: []string{"m1"},
 			}
 			persistGoapProgram(bb, spec, "test")
-		}()
+		})
 	}
 	wg.Wait()
 

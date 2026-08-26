@@ -396,14 +396,12 @@ func TestRefundGoapMilestoneAttempt_ConcurrentWritersAllSurvive(t *testing.T) {
 	var wg sync.WaitGroup
 	for i := range workers {
 		i := i
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			bb := &Blackboard{ChainState: map[string]any{
 				"goap_fusion_program_milestone_charged": ids[i] + ":0",
 			}}
 			refundGoapMilestoneAttemptForInfraFailure(bb)
-		}()
+		})
 	}
 	wg.Wait()
 

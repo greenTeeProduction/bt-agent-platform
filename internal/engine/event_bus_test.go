@@ -207,11 +207,9 @@ func TestEventBus_ConcurrentAccess(_ *testing.T) {
 
 	// Concurrent has/close
 	for range 3 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			eb.HasFired("concurrent_0")
-		}()
+		})
 	}
 
 	wg.Wait()

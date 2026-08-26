@@ -566,9 +566,7 @@ func TestServer_RefreshCards_ConcurrentWithReaders_NoRace(t *testing.T) {
 
 	// Writer: repeatedly rebuilds CardCache, as production code does after
 	// every registry mutation.
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for range 50 {
 			if err := srv.RefreshCards(); err != nil {
 				t.Errorf("RefreshCards: %v", err)
@@ -576,13 +574,11 @@ func TestServer_RefreshCards_ConcurrentWithReaders_NoRace(t *testing.T) {
 			}
 		}
 		close(done)
-	}()
+	})
 
 	// Readers: exercise every path that touches CardCache without holding
 	// any lock — HTTP handlers and the auction-bid scoring branch of Execute.
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for {
 			select {
 			case <-done:
@@ -601,13 +597,11 @@ func TestServer_RefreshCards_ConcurrentWithReaders_NoRace(t *testing.T) {
 
 			_ = srv.AuctionCardSource()()
 		}
-	}()
+	})
 
 	// Second reader: the auction-bid scoring branch inside Execute reads
 	// e.CardCache directly (server.go:100), independent of the HTTP handlers.
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		announcement := `{"kind":"task_announcement","task_id":"t1","required_tags":["domain"],"min_confidence":0}`
 		for {
 			select {
@@ -623,7 +617,7 @@ func TestServer_RefreshCards_ConcurrentWithReaders_NoRace(t *testing.T) {
 				}
 			}
 		}
-	}()
+	})
 
 	wg.Wait()
 }

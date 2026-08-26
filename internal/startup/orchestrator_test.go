@@ -16,17 +16,17 @@ import (
 type slowLLM struct {
 	*engine.MockLLM
 	delay time.Duration
-	calls int32
+	calls atomic.Int32
 }
 
 func (m *slowLLM) Generate(prompt string) (string, error) {
-	atomic.AddInt32(&m.calls, 1)
+	m.calls.Add(1)
 	time.Sleep(m.delay)
 	return m.MockLLM.Generate(prompt)
 }
 
 func (m *slowLLM) GenerateCtx(ctx context.Context, prompt string) (string, error) {
-	atomic.AddInt32(&m.calls, 1)
+	m.calls.Add(1)
 	time.Sleep(m.delay)
 	return m.MockLLM.Generate(prompt)
 }

@@ -318,16 +318,14 @@ func TestNodeHeartbeat_ConcurrentAccess(t *testing.T) {
 
 	// Concurrent reads
 	for range numGoroutines {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for range 100 {
 				hb.IsAlive("node-0")
 				hb.ListAlive()
 				hb.ListAll()
 				hb.Stats()
 			}
-		}()
+		})
 
 	}
 

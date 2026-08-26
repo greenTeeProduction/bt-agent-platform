@@ -89,12 +89,10 @@ func TestSaveSLOMetrics_ConcurrentCallsDoNotRaceOrCorrupt(t *testing.T) {
 		start := make(chan struct{})
 		errs := make(chan error, writers)
 		for range writers {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				<-start
 				errs <- SaveSLOMetrics(path)
-			}()
+			})
 		}
 		close(start)
 		wg.Wait()

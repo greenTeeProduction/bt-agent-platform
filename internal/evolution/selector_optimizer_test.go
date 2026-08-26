@@ -296,9 +296,7 @@ func TestSelectorOptimizer_ConcurrentMergeSumsCounts(t *testing.T) {
 
 	var wg sync.WaitGroup
 	for range writers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			// Each writer is a fresh optimizer contributing only its own
 			// records; Save's flock+merge must sum them, not overwrite.
 			so := NewSelectorOptimizer(OrderBySuccessRate)
@@ -308,7 +306,7 @@ func TestSelectorOptimizer_ConcurrentMergeSumsCounts(t *testing.T) {
 			if err := so.SaveSelectorStats(path); err != nil {
 				t.Errorf("concurrent SaveSelectorStats: %v", err)
 			}
-		}()
+		})
 	}
 	wg.Wait()
 

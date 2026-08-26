@@ -1825,11 +1825,9 @@ func TestAgentRouter_FailureTracking_Concurrent(t *testing.T) {
 
 	var wg sync.WaitGroup
 	for range 50 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			_, _ = router.Execute(context.Background(), "agent", "task")
-		}()
+		})
 	}
 	wg.Wait()
 

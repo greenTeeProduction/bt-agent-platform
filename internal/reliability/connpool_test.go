@@ -138,16 +138,14 @@ func TestConnPool_SharedHTTPClient_Concurrency(t *testing.T) {
 	errs := make(chan error, 20)
 
 	for range 20 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			resp, err := client.Get(server.URL + "/concurrent")
 			if err != nil {
 				errs <- err
 				return
 			}
 			resp.Body.Close()
-		}()
+		})
 	}
 	wg.Wait()
 	close(errs)
@@ -334,16 +332,14 @@ func TestConnPool_MaxConnsPerHost(t *testing.T) {
 	errs := make(chan error, 5)
 
 	for range 5 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			resp, err := client.Get(server.URL + "/maxconn")
 			if err != nil {
 				errs <- err
 				return
 			}
 			resp.Body.Close()
-		}()
+		})
 	}
 	wg.Wait()
 	close(errs)
@@ -579,14 +575,12 @@ func TestAgentRouter_PooledExecutors_LeastConnections(t *testing.T) {
 	var wg sync.WaitGroup
 	errs := make(chan error, 10)
 	for range 10 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			_, err := router.Execute(context.Background(), "lc", "task")
 			if err != nil {
 				errs <- err
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	close(errs)

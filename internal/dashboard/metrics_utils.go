@@ -20,22 +20,22 @@ import (
 
 // Counter is a monotonically increasing counter.
 type Counter struct {
-	value uint64
+	value atomic.Uint64
 }
 
-func (c *Counter) Inc()          { atomic.AddUint64(&c.value, 1) }
-func (c *Counter) Add(n uint64)  { atomic.AddUint64(&c.value, n) }
-func (c *Counter) Value() uint64 { return atomic.LoadUint64(&c.value) }
+func (c *Counter) Inc()          { c.value.Add(1) }
+func (c *Counter) Add(n uint64)  { c.value.Add(n) }
+func (c *Counter) Value() uint64 { return c.value.Load() }
 
 // Gauge is a value that can go up and down.
 type Gauge struct {
-	value int64
+	value atomic.Int64
 }
 
-func (g *Gauge) Set(v int64)  { atomic.StoreInt64(&g.value, v) }
-func (g *Gauge) Inc()         { atomic.AddInt64(&g.value, 1) }
-func (g *Gauge) Dec()         { atomic.AddInt64(&g.value, -1) }
-func (g *Gauge) Value() int64 { return atomic.LoadInt64(&g.value) }
+func (g *Gauge) Set(v int64)  { g.value.Store(v) }
+func (g *Gauge) Inc()         { g.value.Add(1) }
+func (g *Gauge) Dec()         { g.value.Add(-1) }
+func (g *Gauge) Value() int64 { return g.value.Load() }
 
 // Histogram tracks distribution of values.
 type Histogram struct {

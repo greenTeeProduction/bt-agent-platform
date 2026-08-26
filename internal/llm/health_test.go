@@ -252,9 +252,9 @@ const healthMonitorPanicSubprocessEnv = "BT_LLM_HEALTH_MONITOR_PANIC_SUBPROCESS"
 // monitor, and periodic probing must keep running afterward.
 func TestHealthMonitorStart_PanicRecovered(t *testing.T) {
 	if os.Getenv(healthMonitorPanicSubprocessEnv) == "1" {
-		var requests int64
+		var requests atomic.Int64
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			atomic.AddInt64(&requests, 1)
+			requests.Add(1)
 			w.WriteHeader(http.StatusOK)
 		}))
 		defer server.Close()
@@ -276,7 +276,7 @@ func TestHealthMonitorStart_PanicRecovered(t *testing.T) {
 		// this ever runs.
 		time.Sleep(150 * time.Millisecond)
 
-		if got := atomic.LoadInt64(&requests); got < 3 {
+		if got := requests.Load(); got < 3 {
 			fmt.Fprintf(os.Stderr, "expected at least 3 probes despite panics (monitor "+
 				"should keep running), got %d\n", got)
 			os.Exit(3)

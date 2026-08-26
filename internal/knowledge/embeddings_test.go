@@ -262,9 +262,9 @@ func withFreshEmbeddingBreaker(t *testing.T, threshold int, cooldown time.Durati
 func TestGetEmbedding_CircuitBreakerOpensAfterConsecutiveFailures(t *testing.T) {
 	withFreshEmbeddingBreaker(t, 3, time.Minute)
 
-	var requests int32
+	var requests atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		atomic.AddInt32(&requests, 1)
+		requests.Add(1)
 		http.Error(w, "boom", http.StatusInternalServerError)
 	}))
 	defer srv.Close()
@@ -285,13 +285,13 @@ func TestGetEmbedding_CircuitBreakerOpensAfterConsecutiveFailures(t *testing.T) 
 
 	// Once open, further calls must short-circuit without touching the dead
 	// backend at all.
-	before := atomic.LoadInt32(&requests)
+	before := requests.Load()
 	for i := range 3 {
 		if _, err := ec.GetEmbedding("task"); err == nil {
 			t.Fatalf("post-open call %d: expected the breaker-open error, got nil", i)
 		}
 	}
-	if got := atomic.LoadInt32(&requests); got != before {
+	if got := requests.Load(); got != before {
 		t.Errorf("open breaker must short-circuit: backend saw %d extra requests after opening", got-before)
 	}
 }
@@ -308,9 +308,9 @@ func TestGetEmbedding_CircuitBreakerOpensAfterConsecutiveFailures(t *testing.T) 
 func TestGetEmbedding_RetriesOnceOnTransientFailureThenSucceeds(t *testing.T) {
 	withFreshEmbeddingBreaker(t, 3, time.Minute)
 
-	var attempts int32
+	var attempts atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if atomic.AddInt32(&attempts, 1) == 1 {
+		if attempts.Add(1) == 1 {
 			// Simulate a transient network failure (e.g. Ollama mid-restart)
 			// by hijacking and closing the connection with no response, which
 			// surfaces to the client as a network-classified error.
@@ -336,7 +336,7 @@ func TestGetEmbedding_RetriesOnceOnTransientFailureThenSucceeds(t *testing.T) {
 	if len(emb) != 3 {
 		t.Fatalf("expected a 3-dim embedding after retry, got %v", emb)
 	}
-	if got := atomic.LoadInt32(&attempts); got != 2 {
+	if got := attempts.Load(); got != 2 {
 		t.Errorf("expected exactly 2 attempts (1 transient failure + 1 successful retry), got %d", got)
 	}
 }
@@ -415,9 +415,7 @@ const hammerRegisterCap = 300
 // then Wait() on the returned WaitGroup.
 func hammerRegister(kg *KnowledgeGraph, prefix string, stop <-chan struct{}) *sync.WaitGroup {
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		i := 0
 		for {
 			select {
@@ -428,7 +426,7 @@ func hammerRegister(kg *KnowledgeGraph, prefix string, stop <-chan struct{}) *sy
 				i++
 			}
 		}
-	}()
+	})
 	return &wg
 }
 

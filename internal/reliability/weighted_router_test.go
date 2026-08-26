@@ -235,11 +235,9 @@ func TestLeastConnections_PicksExecutorWithFewestActive(t *testing.T) {
 	var wg sync.WaitGroup
 	n := 30
 	for range n {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			_, _ = router.Execute(context.Background(), "agent", "task")
-		}()
+		})
 	}
 	wg.Wait()
 

@@ -237,11 +237,9 @@ func TestErrorHandlerStore_ConcurrentRecordsCountExactly(t *testing.T) {
 	const workers = 12
 	var wg sync.WaitGroup
 	for range workers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			recordErrorHandlerResult("h", "n1", false)
-		}()
+		})
 	}
 	wg.Wait()
 	all := loadErrorHandlerExtensions("h")

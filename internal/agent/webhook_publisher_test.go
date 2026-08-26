@@ -26,9 +26,9 @@ import (
 // HalfOpen — where Allow() always returns false — so every subsequent
 // deliverable event was silently dropped until process restart.
 func TestWebhookPublisher_MarshalErrorDoesNotWedgeHalfOpenBreaker(t *testing.T) {
-	var delivered int32
+	var delivered atomic.Int32
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		atomic.AddInt32(&delivered, 1)
+		delivered.Add(1)
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer ts.Close()
@@ -51,7 +51,7 @@ func TestWebhookPublisher_MarshalErrorDoesNotWedgeHalfOpenBreaker(t *testing.T) 
 	// breaker the marshal failure wedged half-open.
 	pub.handleEvent(AgentEvent{Type: "service_down", Source: "x", Message: "ok", Data: map[string]any{"k": "v"}})
 
-	if got := atomic.LoadInt32(&delivered); got != 1 {
+	if got := delivered.Load(); got != 1 {
 		t.Fatalf("valid event after a marshal-failing one was not delivered (delivered=%d); the marshal failure wedged the half-open breaker", got)
 	}
 }
@@ -62,9 +62,9 @@ func TestWebhookPublisher_MarshalErrorDoesNotWedgeHalfOpenBreaker(t *testing.T) 
 // payload rejections must not suppress the next deliverable event for the
 // whole cooldown window.
 func TestWebhookPublisher_ClientErrorsDoNotTripBreaker(t *testing.T) {
-	var serves int32
+	var serves atomic.Int32
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		n := atomic.AddInt32(&serves, 1)
+		n := serves.Add(1)
 		if n <= 5 { // breaker threshold is 5
 			w.WriteHeader(http.StatusBadRequest)
 			return
@@ -77,7 +77,7 @@ func TestWebhookPublisher_ClientErrorsDoNotTripBreaker(t *testing.T) {
 	for i := range 6 {
 		pub.handleEvent(AgentEvent{Type: "service_down", Source: "x", Message: "m", Data: map[string]any{"i": i}})
 	}
-	if got := atomic.LoadInt32(&serves); got != 6 {
+	if got := serves.Load(); got != 6 {
 		t.Fatalf("server saw %d requests, want 6 — the 6th deliverable event must not be skipped by a breaker opened on 4xx rejections", got)
 	}
 }
@@ -394,9 +394,9 @@ func (panickyPayload) MarshalJSON() ([]byte, error) {
 // publisher, and the loop must keep forwarding subsequent events afterward.
 func TestWebhookPublisherLoop_PanicRecovered(t *testing.T) {
 	if os.Getenv(webhookPublisherPanicSubprocessEnv) == "1" {
-		var requests int64
+		var requests atomic.Int64
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			atomic.AddInt64(&requests, 1)
+			requests.Add(1)
 			w.WriteHeader(http.StatusOK)
 		}))
 		defer server.Close()
@@ -425,7 +425,7 @@ func TestWebhookPublisherLoop_PanicRecovered(t *testing.T) {
 
 		time.Sleep(150 * time.Millisecond)
 
-		if got := atomic.LoadInt64(&requests); got < 3 {
+		if got := requests.Load(); got < 3 {
 			fmt.Fprintf(os.Stderr, "expected at least 3 successful posts despite panicking "+
 				"payloads (publisher loop should keep running), got %d\n", got)
 			os.Exit(3)
@@ -481,11 +481,11 @@ func TestWebhookPublisher_HandleEventRetry(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var requests int64
-			var delivered int64
+			var requests atomic.Int64
+			var delivered atomic.Int64
 
 			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-				n := atomic.AddInt64(&requests, 1)
+				n := requests.Add(1)
 				if int(n) <= tt.failCount {
 					if tt.failStatus == 0 {
 						hj, ok := w.(http.Hijacker)
@@ -502,7 +502,7 @@ func TestWebhookPublisher_HandleEventRetry(t *testing.T) {
 					w.WriteHeader(tt.failStatus)
 					return
 				}
-				atomic.StoreInt64(&delivered, 1)
+				delivered.Store(1)
 				w.WriteHeader(http.StatusOK)
 			}))
 			defer ts.Close()
@@ -520,12 +520,12 @@ func TestWebhookPublisher_HandleEventRetry(t *testing.T) {
 
 			if tt.wantEventually {
 				deadline := time.Now().Add(3 * time.Second)
-				for time.Now().Before(deadline) && atomic.LoadInt64(&delivered) == 0 {
+				for time.Now().Before(deadline) && delivered.Load() == 0 {
 					time.Sleep(10 * time.Millisecond)
 				}
-				if atomic.LoadInt64(&delivered) == 0 {
+				if delivered.Load() == 0 {
 					t.Fatalf("event was not eventually delivered after %d failing attempt(s); got %d requests",
-						tt.failCount, atomic.LoadInt64(&requests))
+						tt.failCount, requests.Load())
 				}
 				return
 			}
@@ -533,7 +533,7 @@ func TestWebhookPublisher_HandleEventRetry(t *testing.T) {
 			// Non-retryable case: give handleEvent time to run its (single,
 			// non-retried) attempt, then confirm no retry followed.
 			time.Sleep(300 * time.Millisecond)
-			if got := atomic.LoadInt64(&requests); got > tt.wantMaxRequests {
+			if got := requests.Load(); got > tt.wantMaxRequests {
 				t.Fatalf("expected non-retryable status %d to result in at most %d request(s), got %d",
 					tt.failStatus, tt.wantMaxRequests, got)
 			}
@@ -553,9 +553,9 @@ func TestWebhookPublisher_HandleEventRetry(t *testing.T) {
 func TestWebhookPublisher_CircuitBreakerTripsAndRecovers(t *testing.T) {
 	const failThreshold = 3 // matches webhookRetryPolicy's MaxRetries: every attempt of the first delivery fails
 
-	var requests int64
+	var requests atomic.Int64
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		n := atomic.AddInt64(&requests, 1)
+		n := requests.Add(1)
 		if n <= failThreshold {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
@@ -578,10 +578,10 @@ func TestWebhookPublisher_CircuitBreakerTripsAndRecovers(t *testing.T) {
 	bus.Publish(AgentEvent{Type: "service_down", Source: "test", Timestamp: time.Now()})
 
 	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) && atomic.LoadInt64(&requests) < failThreshold {
+	for time.Now().Before(deadline) && requests.Load() < failThreshold {
 		time.Sleep(10 * time.Millisecond)
 	}
-	if got := atomic.LoadInt64(&requests); got != failThreshold {
+	if got := requests.Load(); got != failThreshold {
 		t.Fatalf("expected exactly %d requests from the first (failing) delivery attempt, got %d", failThreshold, got)
 	}
 
@@ -599,7 +599,7 @@ func TestWebhookPublisher_CircuitBreakerTripsAndRecovers(t *testing.T) {
 	// hammering the persistently-failing endpoint again.
 	bus.Publish(AgentEvent{Type: "service_down", Source: "test", Timestamp: time.Now()})
 	time.Sleep(100 * time.Millisecond)
-	if got := atomic.LoadInt64(&requests); got != failThreshold {
+	if got := requests.Load(); got != failThreshold {
 		t.Fatalf("expected no further HTTP calls once the breaker tripped, got %d requests (want %d)", got, failThreshold)
 	}
 
@@ -613,10 +613,10 @@ func TestWebhookPublisher_CircuitBreakerTripsAndRecovers(t *testing.T) {
 	bus.Publish(AgentEvent{Type: "service_down", Source: "test", Timestamp: time.Now()})
 
 	deadline = time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) && atomic.LoadInt64(&requests) < failThreshold+2 {
+	for time.Now().Before(deadline) && requests.Load() < failThreshold+2 {
 		time.Sleep(10 * time.Millisecond)
 	}
-	if got := atomic.LoadInt64(&requests); got != failThreshold+2 {
+	if got := requests.Load(); got != failThreshold+2 {
 		t.Fatalf("expected the post-cooldown delivery plus the dead-letter replay (%d requests total), got %d", failThreshold+2, got)
 	}
 
@@ -665,14 +665,14 @@ func TestWebhookPublisher_BreakersUseCircuitBreakerStore(t *testing.T) {
 // handleEvent — must successfully redeliver the event once the mock Hermes
 // endpoint recovers, removing the entry from the DLQ.
 func TestWebhookPublisher_DLQReplayRedeliversAfterRecovery(t *testing.T) {
-	var requests int64
-	var recovered int32
+	var requests atomic.Int64
+	var recovered atomic.Int32
 	var lastSig string
 	var lastBody []byte
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		atomic.AddInt64(&requests, 1)
-		if atomic.LoadInt32(&recovered) == 0 {
+		requests.Add(1)
+		if recovered.Load() == 0 {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -702,7 +702,7 @@ func TestWebhookPublisher_DLQReplayRedeliversAfterRecovery(t *testing.T) {
 	entry := entries[0]
 
 	// Hermes recovers.
-	atomic.StoreInt32(&recovered, 1)
+	recovered.Store(1)
 
 	redelivered, ok := pub.dlq.Replay(entry.ID)
 	if !ok || redelivered == nil {
@@ -734,10 +734,10 @@ func TestWebhookPublisher_DLQReplayRedeliversAfterRecovery(t *testing.T) {
 // successful bt-evolution-event delivery re-hammers the still-broken
 // bt-agent-alert endpoint instead of respecting its open circuit.
 func TestWebhookPublisher_ReplaySkipsOpenCircuitBreaker(t *testing.T) {
-	var alertRequests int64
+	var alertRequests atomic.Int64
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(r.URL.Path, "bt-agent-alert") {
-			atomic.AddInt64(&alertRequests, 1)
+			alertRequests.Add(1)
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
@@ -763,7 +763,7 @@ func TestWebhookPublisher_ReplaySkipsOpenCircuitBreaker(t *testing.T) {
 	if pub.breakers.Allowed("bt-agent-alert") {
 		t.Fatalf("bt-agent-alert breaker should not be Allowed while Open with a long cooldown")
 	}
-	requestsBeforeReplay := atomic.LoadInt64(&alertRequests)
+	requestsBeforeReplay := alertRequests.Load()
 
 	// A wholly unrelated subscription (bt-evolution-event) delivers
 	// successfully, which triggers the background replay sweep over the
@@ -776,7 +776,7 @@ func TestWebhookPublisher_ReplaySkipsOpenCircuitBreaker(t *testing.T) {
 	}
 	time.Sleep(50 * time.Millisecond) // settle any just-started replay goroutine
 
-	if got := atomic.LoadInt64(&alertRequests); got != requestsBeforeReplay {
+	if got := alertRequests.Load(); got != requestsBeforeReplay {
 		t.Fatalf("replay sweep sent %d more request(s) to the open-breaker bt-agent-alert endpoint; "+
 			"replayDeadLetters must skip entries whose subscription breaker is not Allowed", got-requestsBeforeReplay)
 	}

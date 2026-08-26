@@ -82,15 +82,13 @@ func TestSave_ConcurrentWritersDoNotCorruptStore(t *testing.T) {
 	errs := make(chan error, workers)
 	for i := range workers {
 		i := i
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			ps := &ProgramStore{path: path}
 			ps.Add(fmt.Sprintf("Program %d", i), "test", []string{"m1"})
 			if err := ps.Save(); err != nil {
 				errs <- err
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	close(errs)
@@ -143,9 +141,7 @@ func TestUpdatePrograms_ConcurrentWritersAllSurvive(t *testing.T) {
 	errs := make(chan error, workers)
 	for i := range workers {
 		i := i
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			err := UpdatePrograms(path, func(ps *ProgramStore) error {
 				ps.Add(fmt.Sprintf("Program %d", i), "test", []string{"m1"})
 				return nil
@@ -153,7 +149,7 @@ func TestUpdatePrograms_ConcurrentWritersAllSurvive(t *testing.T) {
 			if err != nil {
 				errs <- err
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	close(errs)
