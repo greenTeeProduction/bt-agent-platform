@@ -159,10 +159,10 @@ type workflowJob struct {
 }
 
 type workflowStep struct {
-	Name string      `yaml:"name"`
-	Uses string      `yaml:"uses"`
-	Run  string      `yaml:"run"`
-	With interface{} `yaml:"with"`
+	Name string `yaml:"name"`
+	Uses string `yaml:"uses"`
+	Run  string `yaml:"run"`
+	With any    `yaml:"with"`
 }
 
 func loadWorkflow(path string) (workflow, error) {

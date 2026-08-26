@@ -22,11 +22,11 @@ func (h plannerNodeHeap) Less(i, j int) bool {
 }
 func (h plannerNodeHeap) Swap(i, j int) { h[i], h[j] = h[j], h[i] }
 
-func (h *plannerNodeHeap) Push(x interface{}) {
+func (h *plannerNodeHeap) Push(x any) {
 	*h = append(*h, x.(*plannerNode))
 }
 
-func (h *plannerNodeHeap) Pop() interface{} {
+func (h *plannerNodeHeap) Pop() any {
 	old := *h
 	n := len(old)
 	x := old[n-1]

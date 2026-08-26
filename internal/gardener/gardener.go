@@ -430,12 +430,12 @@ func (mt *MetricsTracker) CyclesForTree(name string) int {
 }
 
 // Summary returns aggregate metrics.
-func (mt *MetricsTracker) Summary() map[string]interface{} {
+func (mt *MetricsTracker) Summary() map[string]any {
 	mt.mu.RLock()
 	defer mt.mu.RUnlock()
 
 	if len(mt.history) == 0 {
-		return map[string]interface{}{"cycles": 0}
+		return map[string]any{"cycles": 0}
 	}
 
 	byTree := make(map[string][]CycleMetrics)
@@ -473,7 +473,7 @@ func (mt *MetricsTracker) Summary() map[string]interface{} {
 		perTree[name] = ts
 	}
 
-	return map[string]interface{}{
+	return map[string]any{
 		"total_cycles":       totalCycles,
 		"total_improvements": totalImprovements,
 		"improvement_rate":   fmt.Sprintf("%.1f%%", float64(totalImprovements)/float64(maxInt(totalCycles, 1))*100),

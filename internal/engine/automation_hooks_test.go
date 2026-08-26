@@ -27,7 +27,7 @@ func TestConsiderTreeCompileAction(t *testing.T) {
 	// Good user-attributed run → hook fires with the user.
 	var gotUser string
 	ConsiderAutomationFn = func(user string) { gotUser = user }
-	bb := &Blackboard{ChainState: map[string]interface{}{"persona_user": "nico"}, Outcome: "success"}
+	bb := &Blackboard{ChainState: map[string]any{"persona_user": "nico"}, Outcome: "success"}
 	if status := run(bb); status != 1 {
 		t.Fatalf("ConsiderTreeCompile must succeed, got status %d", status)
 	}
@@ -46,7 +46,7 @@ func TestConsiderTreeCompileAction(t *testing.T) {
 	}
 
 	// Anonymous run → no proposal.
-	bb = &Blackboard{ChainState: map[string]interface{}{}, Outcome: "success"}
+	bb = &Blackboard{ChainState: map[string]any{}, Outcome: "success"}
 	if status := run(bb); status != 1 {
 		t.Fatalf("anonymous path must return success, got %d", status)
 	}
@@ -56,7 +56,7 @@ func TestConsiderTreeCompileAction(t *testing.T) {
 
 	// Unwired hook → safe no-op.
 	ConsiderAutomationFn = nil
-	bb = &Blackboard{ChainState: map[string]interface{}{"persona_user": "nico"}, Outcome: "success"}
+	bb = &Blackboard{ChainState: map[string]any{"persona_user": "nico"}, Outcome: "success"}
 	if status := run(bb); status != 1 {
 		t.Fatalf("nil-hook path must return success, got %d", status)
 	}

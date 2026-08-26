@@ -49,7 +49,7 @@ func TestOpenAPIGenerator_Generate(t *testing.T) {
 	if !ok {
 		t.Fatal("expected GET method on /api/health")
 	}
-	healthMap := healthGet.(map[string]interface{})
+	healthMap := healthGet.(map[string]any)
 	if healthMap["summary"] != "Health check" {
 		t.Errorf("expected summary 'Health check', got %v", healthMap["summary"])
 	}
@@ -70,7 +70,7 @@ func TestOpenAPIGenerator_GenerateJSON(t *testing.T) {
 	}
 
 	// Verify valid JSON
-	var parsed map[string]interface{}
+	var parsed map[string]any
 	if err := json.Unmarshal(data, &parsed); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
@@ -96,7 +96,7 @@ func TestOpenAPIGenerator_GenerateJSONCompact(t *testing.T) {
 	}
 
 	// Verify valid JSON
-	var parsed map[string]interface{}
+	var parsed map[string]any
 	if err := json.Unmarshal(data, &parsed); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
@@ -126,8 +126,8 @@ func TestOpenAPIGenerator_MultipleRoutes(t *testing.T) {
 	}
 
 	// Check POST route has correct status
-	bPath := spec.Paths["/api/b"]["post"].(map[string]interface{})
-	responses := bPath["responses"].(map[string]interface{})
+	bPath := spec.Paths["/api/b"]["post"].(map[string]any)
+	responses := bPath["responses"].(map[string]any)
 	if _, ok := responses["201"]; !ok {
 		t.Errorf("expected 201 response on /api/b POST, got keys: %v", mapKeys(responses))
 	}
@@ -156,8 +156,8 @@ func TestOpenAPIGenerator_Parameters(t *testing.T) {
 		JSONResponse(200, "Results", ArraySchema(StringSchema("Item"), "")).Build())
 
 	spec := gen.Generate()
-	searchPath := spec.Paths["/api/search"]["get"].(map[string]interface{})
-	params := searchPath["parameters"].([]map[string]interface{})
+	searchPath := spec.Paths["/api/search"]["get"].(map[string]any)
+	params := searchPath["parameters"].([]map[string]any)
 
 	if len(params) != 2 {
 		t.Fatalf("expected 2 parameters, got %d", len(params))
@@ -176,12 +176,12 @@ func TestOpenAPIGenerator_Parameters(t *testing.T) {
 	}
 
 	// Verify schema types
-	qSchema := params[0]["schema"].(map[string]interface{})
+	qSchema := params[0]["schema"].(map[string]any)
 	if qSchema["type"] != "string" {
 		t.Errorf("expected q schema type 'string', got %v", qSchema["type"])
 	}
 
-	limitSchema := params[1]["schema"].(map[string]interface{})
+	limitSchema := params[1]["schema"].(map[string]any)
 	if limitSchema["type"] != "integer" {
 		t.Errorf("expected limit schema type 'integer', got %v", limitSchema["type"])
 	}
@@ -203,21 +203,21 @@ func TestOpenAPIGenerator_RequestBody(t *testing.T) {
 		})).Build())
 
 	spec := gen.Generate()
-	agentPath := spec.Paths["/api/agents"]["post"].(map[string]interface{})
-	reqBody := agentPath["requestBody"].(map[string]interface{})
+	agentPath := spec.Paths["/api/agents"]["post"].(map[string]any)
+	reqBody := agentPath["requestBody"].(map[string]any)
 
 	if reqBody["required"] != true {
 		t.Error("expected requestBody required=true")
 	}
 
-	content := reqBody["content"].(map[string]interface{})
-	jsonContent := content["application/json"].(map[string]interface{})
-	jsonSchema := jsonContent["schema"].(map[string]interface{})
+	content := reqBody["content"].(map[string]any)
+	jsonContent := content["application/json"].(map[string]any)
+	jsonSchema := jsonContent["schema"].(map[string]any)
 
 	if jsonSchema["type"] != "object" {
 		t.Errorf("expected object schema, got %v", jsonSchema["type"])
 	}
-	required := jsonSchema["required"].([]interface{})
+	required := jsonSchema["required"].([]any)
 	if len(required) != 1 || required[0] != "name" {
 		t.Errorf("expected required ['name'], got %v", required)
 	}
@@ -235,8 +235,8 @@ func TestOpenAPIGenerator_ErrorResponses(t *testing.T) {
 		ErrorResponse(500, "Server error").Build())
 
 	spec := gen.Generate()
-	itemPath := spec.Paths["/api/items/{id}"]["get"].(map[string]interface{})
-	responses := itemPath["responses"].(map[string]interface{})
+	itemPath := spec.Paths["/api/items/{id}"]["get"].(map[string]any)
+	responses := itemPath["responses"].(map[string]any)
 
 	if _, ok := responses["200"]; !ok {
 		t.Error("expected 200 response")
@@ -249,10 +249,10 @@ func TestOpenAPIGenerator_ErrorResponses(t *testing.T) {
 	}
 
 	// Check error response has schema
-	error404 := responses["404"].(map[string]interface{})
-	errorContent := error404["content"].(map[string]interface{})
-	errorJSON := errorContent["application/json"].(map[string]interface{})
-	errorSchema := errorJSON["schema"].(map[string]interface{})
+	error404 := responses["404"].(map[string]any)
+	errorContent := error404["content"].(map[string]any)
+	errorJSON := errorContent["application/json"].(map[string]any)
+	errorSchema := errorJSON["schema"].(map[string]any)
 	if errorSchema["type"] != "object" {
 		t.Errorf("expected error schema type 'object', got %v", errorSchema["type"])
 	}
@@ -272,13 +272,13 @@ func TestOpenAPIGenerator_AuthFlag(t *testing.T) {
 	spec := gen.Generate()
 
 	// Public route should NOT have security
-	publicPath := spec.Paths["/api/public"]["get"].(map[string]interface{})
+	publicPath := spec.Paths["/api/public"]["get"].(map[string]any)
 	if _, hasSec := publicPath["security"]; hasSec {
 		t.Error("public route should not have security")
 	}
 
 	// Private route should have security
-	privatePath := spec.Paths["/api/private"]["get"].(map[string]interface{})
+	privatePath := spec.Paths["/api/private"]["get"].(map[string]any)
 	sec, hasSec := privatePath["security"].([]map[string][]string)
 	if !hasSec {
 		t.Error("private route should have security")
@@ -295,7 +295,7 @@ func TestOpenAPIGenerator_AuthFlag(t *testing.T) {
 	if schemes == nil {
 		t.Fatal("expected security schemes in components")
 	}
-	apiKeyScheme := schemes["ApiKeyAuth"].(map[string]interface{})
+	apiKeyScheme := schemes["ApiKeyAuth"].(map[string]any)
 	if apiKeyScheme["type"] != "apiKey" {
 		t.Errorf("expected apiKey type, got %v", apiKeyScheme["type"])
 	}
@@ -315,12 +315,12 @@ func TestOpenAPIGenerator_Deprecated(t *testing.T) {
 
 	spec := gen.Generate()
 
-	oldPath := spec.Paths["/api/v1/old"]["get"].(map[string]interface{})
+	oldPath := spec.Paths["/api/v1/old"]["get"].(map[string]any)
 	if deprecated, ok := oldPath["deprecated"].(bool); !ok || !deprecated {
 		t.Error("expected deprecated=true on old route")
 	}
 
-	newPath := spec.Paths["/api/v2/new"]["get"].(map[string]interface{})
+	newPath := spec.Paths["/api/v2/new"]["get"].(map[string]any)
 	if _, ok := newPath["deprecated"]; ok {
 		t.Error("new route should not have deprecated flag")
 	}
@@ -346,7 +346,7 @@ func TestOpenAPIGenerator_ReusableSchemas(t *testing.T) {
 		t.Error("expected Task schema in components")
 	}
 
-	taskDef := spec.Components.Schemas["Task"].(map[string]interface{})
+	taskDef := spec.Components.Schemas["Task"].(map[string]any)
 	if taskDef["type"] != "object" {
 		t.Errorf("expected object type, got %v", taskDef["type"])
 	}
@@ -393,13 +393,13 @@ func TestSchemaToMap_Object(t *testing.T) {
 		t.Errorf("expected description, got %v", m["description"])
 	}
 
-	required := m["required"].([]interface{})
+	required := m["required"].([]any)
 	if len(required) != 1 || required[0] != "name" {
 		t.Errorf("expected required ['name'], got %v", required)
 	}
 
-	props := m["properties"].(map[string]interface{})
-	nameProp := props["name"].(map[string]interface{})
+	props := m["properties"].(map[string]any)
+	nameProp := props["name"].(map[string]any)
 	if nameProp["type"] != "string" {
 		t.Errorf("expected name type 'string', got %v", nameProp["type"])
 	}
@@ -426,7 +426,7 @@ func TestSchemaToMap_Array(t *testing.T) {
 	if m["type"] != "array" {
 		t.Errorf("expected type 'array', got %v", m["type"])
 	}
-	items := m["items"].(map[string]interface{})
+	items := m["items"].(map[string]any)
 	if items["type"] != "string" {
 		t.Errorf("expected items type 'string', got %v", items["type"])
 	}
@@ -440,7 +440,7 @@ func TestSchemaToMap_Enum(t *testing.T) {
 
 	m := schemaToMap(s)
 
-	enum := m["enum"].([]interface{})
+	enum := m["enum"].([]any)
 	if len(enum) != 3 {
 		t.Fatalf("expected 3 enum values, got %d", len(enum))
 	}
@@ -552,7 +552,7 @@ func TestDashboardRoutes_GeneratesValidSpec(t *testing.T) {
 			t.Errorf("path %s has no methods", path)
 		}
 		for method, obj := range methods {
-			mObj := obj.(map[string]interface{})
+			mObj := obj.(map[string]any)
 			if _, ok := mObj["responses"]; !ok {
 				t.Errorf("path %s method %s missing responses", path, method)
 			}
@@ -608,7 +608,7 @@ func TestDashboardRoutes_AuthConsistency(t *testing.T) {
 	for path := range spec.Paths {
 		for _, method := range []string{"get", "post", "put", "delete"} {
 			if obj, ok := spec.Paths[path][method]; ok {
-				mObj := obj.(map[string]interface{})
+				mObj := obj.(map[string]any)
 				_, hasSec := mObj["security"]
 				if publicPaths[path] && hasSec {
 					t.Errorf("public path %s %s should not have security", path, method)
@@ -779,7 +779,7 @@ func TestDashboardRoutes_SwaggerRoute(t *testing.T) {
 }
 
 // Helper
-func mapKeys(m map[string]interface{}) []string {
+func mapKeys(m map[string]any) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
 		keys = append(keys, k)
@@ -807,7 +807,7 @@ func TestOpenAPIGenerator_OperationID(t *testing.T) {
 		})).Build())
 
 	spec := gen.Generate()
-	healthPath := spec.Paths["/api/health"]["get"].(map[string]interface{})
+	healthPath := spec.Paths["/api/health"]["get"].(map[string]any)
 	if opID, ok := healthPath["operationId"]; !ok {
 		t.Error("expected operationId on /api/health GET")
 	} else if opID != "getHealth" {
@@ -822,7 +822,7 @@ func TestOpenAPIGenerator_NoOperationIDWhenEmpty(t *testing.T) {
 		Tags("System").Build())
 
 	spec := gen.Generate()
-	testPath := spec.Paths["/api/test"]["get"].(map[string]interface{})
+	testPath := spec.Paths["/api/test"]["get"].(map[string]any)
 	if _, ok := testPath["operationId"]; ok {
 		t.Error("expected no operationId when not set")
 	}
@@ -974,7 +974,7 @@ func TestOpenAPIGenerator_DeprecatedRouteHeaders(t *testing.T) {
 	if !ok {
 		t.Fatal("expected GET method on /api/old-endpoint")
 	}
-	oldMap := oldGet.(map[string]interface{})
+	oldMap := oldGet.(map[string]any)
 
 	// Check deprecated flag
 	if deprecated, ok := oldMap["deprecated"]; !ok || deprecated != true {
@@ -982,21 +982,21 @@ func TestOpenAPIGenerator_DeprecatedRouteHeaders(t *testing.T) {
 	}
 
 	// Check response headers
-	responses, ok := oldMap["responses"].(map[string]interface{})
+	responses, ok := oldMap["responses"].(map[string]any)
 	if !ok {
 		t.Fatal("expected responses map")
 	}
-	resp200, ok := responses["200"].(map[string]interface{})
+	resp200, ok := responses["200"].(map[string]any)
 	if !ok {
 		t.Fatal("expected 200 response")
 	}
-	headers, ok := resp200["headers"].(map[string]interface{})
+	headers, ok := resp200["headers"].(map[string]any)
 	if !ok {
 		t.Fatal("expected headers in 200 response for deprecated route")
 	}
 
 	// Check Deprecation header
-	depHeader, ok := headers["Deprecation"].(map[string]interface{})
+	depHeader, ok := headers["Deprecation"].(map[string]any)
 	if !ok {
 		t.Error("expected Deprecation header in response")
 	} else {
@@ -1006,7 +1006,7 @@ func TestOpenAPIGenerator_DeprecatedRouteHeaders(t *testing.T) {
 	}
 
 	// Check Sunset header
-	sunsetHeader, ok := headers["Sunset"].(map[string]interface{})
+	sunsetHeader, ok := headers["Sunset"].(map[string]any)
 	if !ok {
 		t.Error("expected Sunset header in response")
 	} else {
@@ -1028,11 +1028,11 @@ func TestOpenAPIGenerator_DeprecatedWithoutSunset_NoHeaders(t *testing.T) {
 	spec := gen.Generate()
 
 	oldPath := spec.Paths["/api/old-endpoint"]
-	oldMap := oldPath["get"].(map[string]interface{})
+	oldMap := oldPath["get"].(map[string]any)
 
 	// Deprecated=true but no sunset → no headers in response
-	responses := oldMap["responses"].(map[string]interface{})
-	resp200 := responses["200"].(map[string]interface{})
+	responses := oldMap["responses"].(map[string]any)
+	resp200 := responses["200"].(map[string]any)
 	if _, hasHeaders := resp200["headers"]; hasHeaders {
 		t.Error("expected no response headers when Sunset not set (only Deprecated flag)")
 	}
@@ -1049,11 +1049,11 @@ func TestOpenAPIGenerator_NonDeprecatedRoute_NoHeaders(t *testing.T) {
 	spec := gen.Generate()
 
 	activePath := spec.Paths["/api/active-endpoint"]
-	activeMap := activePath["get"].(map[string]interface{})
+	activeMap := activePath["get"].(map[string]any)
 
 	// Not deprecated → no headers
-	responses := activeMap["responses"].(map[string]interface{})
-	resp200 := responses["200"].(map[string]interface{})
+	responses := activeMap["responses"].(map[string]any)
+	resp200 := responses["200"].(map[string]any)
 	if _, hasHeaders := resp200["headers"]; hasHeaders {
 		t.Error("expected no response headers for non-deprecated route")
 	}

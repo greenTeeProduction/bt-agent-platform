@@ -493,7 +493,7 @@ func (s *Server) handleAgentEndpoint(w http.ResponseWriter, r *http.Request) {
 			names = append(names, name)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{"agents": names})
+		_ = json.NewEncoder(w).Encode(map[string]any{"agents": names})
 		return
 	}
 
@@ -509,7 +509,7 @@ func (s *Server) handleAgentEndpoint(w http.ResponseWriter, r *http.Request) {
 // handleHealth serves health check.
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+	_ = json.NewEncoder(w).Encode(map[string]any{
 		"status": "healthy",
 		"server": "a2a",
 		"agents": len(s.cardCacheSnapshot()),

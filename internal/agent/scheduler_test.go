@@ -804,7 +804,7 @@ func TestRunJob_RateLimitCarryoverOutcome_NoFailureReasonPublished(t *testing.T)
 
 	select {
 	case event := <-sub:
-		data, ok := event.Data.(map[string]interface{})
+		data, ok := event.Data.(map[string]any)
 		if !ok {
 			t.Fatalf("event.Data is %T, want map[string]interface{}", event.Data)
 		}
@@ -859,7 +859,7 @@ func TestRunJob_HealthyOutcomes_NoFailureReasonPublished(t *testing.T) {
 
 			select {
 			case event := <-sub:
-				data, ok := event.Data.(map[string]interface{})
+				data, ok := event.Data.(map[string]any)
 				if !ok {
 					t.Fatalf("event.Data is %T, want map[string]interface{}", event.Data)
 				}

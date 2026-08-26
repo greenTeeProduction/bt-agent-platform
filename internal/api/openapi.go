@@ -74,12 +74,12 @@ type Route struct {
 
 // OpenAPISpec represents the top-level OpenAPI 3.0 document.
 type OpenAPISpec struct {
-	OpenAPI    string                            `json:"openapi"`
-	Info       OpenAPIInfo                       `json:"info"`
-	Servers    []OpenAPIServer                   `json:"servers,omitempty"`
-	Paths      map[string]map[string]interface{} `json:"paths"`
-	Components OpenAPIComponents                 `json:"components,omitempty"`
-	Tags       []OpenAPITag                      `json:"tags,omitempty"`
+	OpenAPI    string                    `json:"openapi"`
+	Info       OpenAPIInfo               `json:"info"`
+	Servers    []OpenAPIServer           `json:"servers,omitempty"`
+	Paths      map[string]map[string]any `json:"paths"`
+	Components OpenAPIComponents         `json:"components,omitempty"`
+	Tags       []OpenAPITag              `json:"tags,omitempty"`
 }
 
 // OpenAPIInfo contains API metadata.
@@ -103,8 +103,8 @@ type OpenAPITag struct {
 
 // OpenAPIComponents holds reusable schemas and security definitions.
 type OpenAPIComponents struct {
-	Schemas         map[string]interface{} `json:"schemas,omitempty"`
-	SecuritySchemes map[string]interface{} `json:"securitySchemes,omitempty"`
+	Schemas         map[string]any `json:"schemas,omitempty"`
+	SecuritySchemes map[string]any `json:"securitySchemes,omitempty"`
 }
 
 // OpenAPIGenerator builds OpenAPI 3.0 specifications from route definitions.
@@ -115,7 +115,7 @@ type OpenAPIGenerator struct {
 	servers     []OpenAPIServer
 	tags        []OpenAPITag
 	routes      []Route
-	schemas     map[string]interface{}
+	schemas     map[string]any
 }
 
 // NewOpenAPIGenerator creates a new generator with API metadata.
@@ -124,7 +124,7 @@ func NewOpenAPIGenerator(title, version, description string) *OpenAPIGenerator {
 		title:       title,
 		version:     version,
 		description: description,
-		schemas:     make(map[string]interface{}),
+		schemas:     make(map[string]any),
 	}
 }
 
@@ -144,20 +144,20 @@ func (g *OpenAPIGenerator) AddRoute(r Route) {
 }
 
 // AddSchema registers a reusable component schema.
-func (g *OpenAPIGenerator) AddSchema(name string, schema interface{}) {
+func (g *OpenAPIGenerator) AddSchema(name string, schema any) {
 	g.schemas[name] = schema
 }
 
 // Generate builds the complete OpenAPI 3.0 specification as a JSON-marshalable struct.
 func (g *OpenAPIGenerator) Generate() OpenAPISpec {
-	paths := make(map[string]map[string]interface{})
+	paths := make(map[string]map[string]any)
 
 	for _, route := range g.routes {
 		if _, exists := paths[route.Path]; !exists {
-			paths[route.Path] = make(map[string]interface{})
+			paths[route.Path] = make(map[string]any)
 		}
 
-		methodObj := make(map[string]interface{})
+		methodObj := make(map[string]any)
 		methodObj["summary"] = route.Summary
 
 		if route.Description != "" {
@@ -175,9 +175,9 @@ func (g *OpenAPIGenerator) Generate() OpenAPISpec {
 
 		// Parameters
 		if len(route.Parameters) > 0 {
-			params := make([]map[string]interface{}, 0, len(route.Parameters))
+			params := make([]map[string]any, 0, len(route.Parameters))
 			for _, p := range route.Parameters {
-				paramObj := map[string]interface{}{
+				paramObj := map[string]any{
 					"name":     p.Name,
 					"in":       string(p.In),
 					"required": p.Required,
@@ -193,10 +193,10 @@ func (g *OpenAPIGenerator) Generate() OpenAPISpec {
 
 		// Request body
 		if route.RequestBody != nil {
-			methodObj["requestBody"] = map[string]interface{}{
+			methodObj["requestBody"] = map[string]any{
 				"required": true,
-				"content": map[string]interface{}{
-					"application/json": map[string]interface{}{
+				"content": map[string]any{
+					"application/json": map[string]any{
 						"schema": schemaToMap(route.RequestBody),
 					},
 				},
@@ -204,26 +204,26 @@ func (g *OpenAPIGenerator) Generate() OpenAPISpec {
 		}
 
 		// Responses
-		responses := make(map[string]interface{})
+		responses := make(map[string]any)
 		for _, resp := range route.Responses {
 			statusKey := httpStatusText(resp.StatusCode)
-			respObj := map[string]interface{}{
+			respObj := map[string]any{
 				"description": resp.Description,
 			}
 			if resp.Schema != nil {
-				respObj["content"] = map[string]interface{}{
-					"application/json": map[string]interface{}{
+				respObj["content"] = map[string]any{
+					"application/json": map[string]any{
 						"schema": schemaToMap(resp.Schema),
 					},
 				}
 			}
 			// Deprecation headers — added to all response status codes for deprecated endpoints
 			if len(route.DeprecationHeaders) > 0 {
-				headers := make(map[string]interface{})
+				headers := make(map[string]any)
 				for _, h := range route.DeprecationHeaders {
-					headerObj := map[string]interface{}{
+					headerObj := map[string]any{
 						"description": h.Description,
-						"schema":      map[string]interface{}{"type": "string"},
+						"schema":      map[string]any{"type": "string"},
 					}
 					if h.Value != "" {
 						headerObj["example"] = h.Value
@@ -247,7 +247,7 @@ func (g *OpenAPIGenerator) Generate() OpenAPISpec {
 	}
 
 	// Sort paths for deterministic output
-	sortedPaths := make(map[string]map[string]interface{})
+	sortedPaths := make(map[string]map[string]any)
 	pathKeys := make([]string, 0, len(paths))
 	for k := range paths {
 		pathKeys = append(pathKeys, k)
@@ -259,8 +259,8 @@ func (g *OpenAPIGenerator) Generate() OpenAPISpec {
 
 	components := OpenAPIComponents{
 		Schemas: g.schemas,
-		SecuritySchemes: map[string]interface{}{
-			"ApiKeyAuth": map[string]interface{}{
+		SecuritySchemes: map[string]any{
+			"ApiKeyAuth": map[string]any{
 				"type":        "apiKey",
 				"in":          "header",
 				"name":        "X-API-Key",
@@ -296,12 +296,12 @@ func (g *OpenAPIGenerator) GenerateJSONCompact() ([]byte, error) {
 // ─── Schema Helpers ─────────────────────────────────────────────────────────
 
 // schemaToMap converts an internal Schema to a map representation for OpenAPI.
-func schemaToMap(s *Schema) map[string]interface{} {
+func schemaToMap(s *Schema) map[string]any {
 	if s == nil {
-		return map[string]interface{}{"type": "object"}
+		return map[string]any{"type": "object"}
 	}
 
-	m := map[string]interface{}{
+	m := map[string]any{
 		"type": s.Type,
 	}
 
@@ -336,7 +336,7 @@ func schemaToMap(s *Schema) map[string]interface{} {
 	}
 
 	if s.Type == "object" && len(s.Properties) > 0 {
-		props := make(map[string]interface{})
+		props := make(map[string]any)
 		for k, v := range s.Properties {
 			props[k] = schemaToMap(v)
 		}
@@ -351,8 +351,8 @@ func schemaToMap(s *Schema) map[string]interface{} {
 }
 
 // toAnySlice converts a []string to []interface{} for JSON encoding.
-func toAnySlice(ss []string) []interface{} {
-	out := make([]interface{}, len(ss))
+func toAnySlice(ss []string) []any {
+	out := make([]any, len(ss))
 	for i, s := range ss {
 		out[i] = s
 	}

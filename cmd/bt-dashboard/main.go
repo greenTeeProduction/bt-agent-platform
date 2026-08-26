@@ -635,7 +635,7 @@ func handleSummary(w http.ResponseWriter, _ *http.Request) {
 	if dashConfig != nil && dashConfig.OllamaModel != "" {
 		model = dashConfig.OllamaModel
 	}
-	_ = encodeJSON(w, map[string]interface{}{
+	_ = encodeJSON(w, map[string]any{
 		"total_trees": len(kg.Trees),
 		"categories":  cats,
 		"mcp_tools":   26,
@@ -663,10 +663,10 @@ func handleMetricsLive(w http.ResponseWriter, _ *http.Request) {
 }
 func handleTrees(w http.ResponseWriter, _ *http.Request) {
 	seen := make(map[string]bool, len(kg.Trees))
-	r2 := make([]map[string]interface{}, 0, 8)
+	r2 := make([]map[string]any, 0, 8)
 	for _, t := range kg.Trees {
 		seen[t.ID] = true
-		entry := map[string]interface{}{
+		entry := map[string]any{
 			"id":                 t.ID,
 			"name":               t.Name,
 			"category":           t.Category,
@@ -678,7 +678,7 @@ func handleTrees(w http.ResponseWriter, _ *http.Request) {
 			"last_outcome":       t.LastOutcome,
 		}
 		if baseID, evolvedIDs, ok := kg.EvolutionLineage(t.ID); ok {
-			entry["lineage"] = map[string]interface{}{
+			entry["lineage"] = map[string]any{
 				"base_id":     baseID,
 				"evolved_ids": evolvedIDs,
 			}
@@ -707,7 +707,7 @@ func handleTrees(w http.ResponseWriter, _ *http.Request) {
 		// so an unexplained dropdown entry — for any registry tree described
 		// outside the curated map.
 		desc, _ := domains.DescriptionFor(name)
-		r2 = append(r2, map[string]interface{}{
+		r2 = append(r2, map[string]any{
 			"id":          id,
 			"name":        tree.Name,
 			"category":    "domain",
@@ -720,9 +720,9 @@ func handleTrees(w http.ResponseWriter, _ *http.Request) {
 }
 func handleFellows(w http.ResponseWriter, _ *http.Request) {
 	f := thinktank.DefaultFellows()
-	r2 := make([]map[string]interface{}, 0, 8)
+	r2 := make([]map[string]any, 0, 8)
 	for _, x := range f {
-		r2 = append(r2, map[string]interface{}{"name": x.Name, "role": x.Role, "perspective": x.Perspective, "confidence": x.Confidence})
+		r2 = append(r2, map[string]any{"name": x.Name, "role": x.Role, "perspective": x.Perspective, "confidence": x.Confidence})
 	}
 	_ = encodeJSON(w, r2)
 }
@@ -748,9 +748,9 @@ func handleAnalyze(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ff := make([]map[string]interface{}, 0, 8)
+	ff := make([]map[string]any, 0, 8)
 	for _, f := range tt.ResearchFindings {
-		ff = append(ff, map[string]interface{}{
+		ff = append(ff, map[string]any{
 			"fellow": f.FellowName, "role": f.Role,
 			"insights": f.KeyInsights, "confidence": f.ConfidenceScore,
 		})
@@ -783,7 +783,7 @@ func handleAnalyze(w http.ResponseWriter, r *http.Request) {
 		_ = taskStore.Create(task)
 	}
 
-	_ = encodeJSON(w, map[string]interface{}{"topic": topic, "findings": ff})
+	_ = encodeJSON(w, map[string]any{"topic": topic, "findings": ff})
 }
 
 // handleWorkflowRunFullPipeline drives Workflow.RunFullPipeline end-to-end —
@@ -829,7 +829,7 @@ func handleWorkflowRunFullPipeline(w http.ResponseWriter, r *http.Request) {
 		_ = taskStore.Create(task)
 	}
 
-	_ = encodeJSON(w, map[string]interface{}{"topic": topic, "status": wf.Status})
+	_ = encodeJSON(w, map[string]any{"topic": topic, "status": wf.Status})
 }
 
 func handleDefaultCompany(w http.ResponseWriter, _ *http.Request) {
@@ -875,9 +875,9 @@ func handleChat(w http.ResponseWriter, r *http.Request) {
 func handleTasks(w http.ResponseWriter, _ *http.Request) {
 	tasks := taskStore.List()
 	// Convert to []map for frontend compatibility
-	out := make([]map[string]interface{}, len(tasks))
+	out := make([]map[string]any, len(tasks))
 	for i, t := range tasks {
-		out[i] = map[string]interface{}{
+		out[i] = map[string]any{
 			"id": t.ID, "title": t.Title, "description": t.Description,
 			"priority": t.Priority, "role": t.Assignee, "sprint": t.Sprint,
 			"sp": t.StoryPoints, "status": t.Status, "source": t.Source,
@@ -1061,7 +1061,7 @@ func handleSprintExecute(w http.ResponseWriter, _ *http.Request) {
 	sprintState.Progress = "dispatching"
 	sprintState.Unlock()
 
-	_ = encodeJSON(w, map[string]interface{}{
+	_ = encodeJSON(w, map[string]any{
 		"status": "sprint_started", "job_id": jobID,
 		"message": fmt.Sprintf("Dispatching %d tasks to BT agents", len(approved)),
 		"count":   len(approved),
@@ -1159,7 +1159,7 @@ func handleSprintStatus(w http.ResponseWriter, _ *http.Request) {
 			completed++
 		}
 	}
-	_ = encodeJSON(w, map[string]interface{}{
+	_ = encodeJSON(w, map[string]any{
 		"running": sprintState.Running, "job_id": sprintState.JobID,
 		"elapsed":         time.Since(sprintState.StartedAt).Seconds(),
 		"tasks_completed": completed, "tasks_total": len(tasks),
@@ -1252,10 +1252,10 @@ func handleTreeStructure(w http.ResponseWriter, r *http.Request) {
 			name = name[idx+1:]
 		}
 		if name == treeID {
-			_ = encodeJSON(w, map[string]interface{}{
+			_ = encodeJSON(w, map[string]any{
 				"id": t.ID, "name": t.Name, "type": "Sequence", "node_type": "Sequence",
 				"node_count": t.NodeCount,
-				"children":   []map[string]interface{}{},
+				"children":   []map[string]any{},
 			})
 			return
 		}
@@ -1365,7 +1365,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_ = encodeJSON(w, map[string]interface{}{
+	_ = encodeJSON(w, map[string]any{
 		"status":  "authenticated",
 		"message": "Session created. Include the session cookie in subsequent requests.",
 	})
@@ -1413,7 +1413,7 @@ func handleSession(w http.ResponseWriter, r *http.Request) {
 	if cookie, err := r.Cookie("bt_session"); err == nil {
 		if info := sessionStore.SessionInfo(cookie.Value); info != nil {
 			w.Header().Set("Content-Type", "application/json")
-			_ = encodeJSON(w, map[string]interface{}{
+			_ = encodeJSON(w, map[string]any{
 				"status":      "authenticated",
 				"auth_method": "session",
 				"created_at":  info.CreatedAt,
@@ -1429,7 +1429,7 @@ func handleSession(w http.ResponseWriter, r *http.Request) {
 	apiKey := os.Getenv("BT_API_KEY")
 	if apiKey != "" && r.Header.Get("X-API-Key") == apiKey {
 		w.Header().Set("Content-Type", "application/json")
-		_ = encodeJSON(w, map[string]interface{}{
+		_ = encodeJSON(w, map[string]any{
 			"status":      "authenticated",
 			"auth_method": "api_key",
 		})
@@ -1478,7 +1478,7 @@ func handleDLQ(w http.ResponseWriter, r *http.Request) {
 	// the panel lists the current queue, not this process's boot-time view.
 	dlq.Reload()
 	entries := dlq.List()
-	resp := map[string]interface{}{
+	resp := map[string]any{
 		"count":      len(entries),
 		"entries":    entries,
 		"categories": dlq.CategoryCounts(),
@@ -1520,7 +1520,7 @@ func handleDLQReplay(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := map[string]interface{}{
+	resp := map[string]any{
 		"status":  "requeued",
 		"entry":   entry,
 		"pending": dlq.Len(),
@@ -1538,7 +1538,7 @@ func handleDLQPurge(w http.ResponseWriter, r *http.Request) {
 
 	count := dlq.Len()
 	dlq.Purge()
-	resp := map[string]interface{}{
+	resp := map[string]any{
 		"status":  "purged",
 		"removed": count,
 		"pending": 0,
@@ -1780,7 +1780,7 @@ func handleTaskCreate(w http.ResponseWriter, r *http.Request) {
 		_ = encodeJSON(w, map[string]string{"error": err.Error()})
 		return
 	}
-	_ = encodeJSON(w, map[string]interface{}{"status": "created", "id": task.ID})
+	_ = encodeJSON(w, map[string]any{"status": "created", "id": task.ID})
 }
 
 // ─── Agent Handlers ──────────────────────────────────────────────────────
@@ -1985,7 +1985,7 @@ func handleAgentRun(w http.ResponseWriter, r *http.Request) {
 		dashConcurrencyLimiter.Acquire()
 	}
 
-	result := make(chan map[string]interface{}, 1)
+	result := make(chan map[string]any, 1)
 	if dashWorkerPool != nil {
 		dashWorkerPool.Submit(func() {
 			defer func() {
@@ -1995,7 +1995,7 @@ func handleAgentRun(w http.ResponseWriter, r *http.Request) {
 			}()
 			executor := newAgentExecutor()
 			res, err := executor.RunTaskResult(agentName, task, treeID)
-			resp := map[string]interface{}{
+			resp := map[string]any{
 				"agent": agentName, "outcome": "failure", "output": "",
 			}
 			if res != nil {
@@ -2019,7 +2019,7 @@ func handleAgentRun(w http.ResponseWriter, r *http.Request) {
 		if dashConcurrencyLimiter != nil {
 			dashConcurrencyLimiter.Release()
 		}
-		resp := map[string]interface{}{
+		resp := map[string]any{
 			"agent": agentName, "outcome": "failure", "output": "",
 		}
 		if res != nil {

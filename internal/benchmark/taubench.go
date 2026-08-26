@@ -34,9 +34,9 @@ type TauBenchEntry struct {
 
 // TauBenchAction is a single expected tool call in the evaluation criteria.
 type TauBenchAction struct {
-	ActionID  string                 `json:"action_id"`
-	Name      string                 `json:"name"`
-	Arguments map[string]interface{} `json:"arguments"`
+	ActionID  string         `json:"action_id"`
+	Name      string         `json:"name"`
+	Arguments map[string]any `json:"arguments"`
 }
 
 // TauBenchTool defines a domain-specific tool available to the agent.
@@ -93,9 +93,9 @@ type tauBenchTaskJSON struct {
 	} `json:"user_scenario"`
 	EvaluationCriteria struct {
 		Actions []struct {
-			ActionID  string                 `json:"action_id"`
-			Name      string                 `json:"name"`
-			Arguments map[string]interface{} `json:"arguments"`
+			ActionID  string         `json:"action_id"`
+			Name      string         `json:"name"`
+			Arguments map[string]any `json:"arguments"`
 		} `json:"actions"`
 		NLAssertions []string `json:"nl_assertions"`
 	} `json:"evaluation_criteria"`
@@ -542,8 +542,8 @@ func BuiltinTauBenchAirline() []TauBenchEntry {
 			Scenario:  "You want to book a flight from San Francisco (SFO) to New York (JFK) for 2 passengers on May 20, 2024 in economy class. You want a direct flight if possible.",
 			KnownInfo: "You are Sara Doe. Your user ID is sara_doe_496.",
 			ExpectedActions: []TauBenchAction{
-				{ActionID: "0_0", Name: "get_user_details", Arguments: map[string]interface{}{"user_id": "sara_doe_496"}},
-				{ActionID: "0_1", Name: "search_direct_flight", Arguments: map[string]interface{}{"origin": "SFO", "destination": "JFK", "date": "2024-05-20"}},
+				{ActionID: "0_0", Name: "get_user_details", Arguments: map[string]any{"user_id": "sara_doe_496"}},
+				{ActionID: "0_1", Name: "search_direct_flight", Arguments: map[string]any{"origin": "SFO", "destination": "JFK", "date": "2024-05-20"}},
 				{ActionID: "0_2", Name: "book_reservation", Arguments: nil},
 			},
 			NlAssertions: []string{"Agent should find flights before booking"},
@@ -555,9 +555,9 @@ func BuiltinTauBenchAirline() []TauBenchEntry {
 			Scenario:  "You want to cancel reservation EHGLP3. You were out of town and couldn't cancel within 24 hours.",
 			KnownInfo: "You are Emma Kim. Your user ID is emma_kim_9957.",
 			ExpectedActions: []TauBenchAction{
-				{ActionID: "1_0", Name: "get_user_details", Arguments: map[string]interface{}{"user_id": "emma_kim_9957"}},
-				{ActionID: "1_1", Name: "get_reservation_details", Arguments: map[string]interface{}{"reservation_id": "EHGLP3"}},
-				{ActionID: "1_2", Name: "cancel_reservation", Arguments: map[string]interface{}{"reservation_id": "EHGLP3"}},
+				{ActionID: "1_0", Name: "get_user_details", Arguments: map[string]any{"user_id": "emma_kim_9957"}},
+				{ActionID: "1_1", Name: "get_reservation_details", Arguments: map[string]any{"reservation_id": "EHGLP3"}},
+				{ActionID: "1_2", Name: "cancel_reservation", Arguments: map[string]any{"reservation_id": "EHGLP3"}},
 			},
 			NlAssertions: []string{"Agent should check cancellation policy before proceeding"},
 			Tools:        tools,
@@ -568,7 +568,7 @@ func BuiltinTauBenchAirline() []TauBenchEntry {
 			Scenario:  "You want to change the flight date for reservation ZFA04Y from May 15 to May 18, 2024, same route, economy class.",
 			KnownInfo: "You are John Smith. Your user ID is john_smith_1234. Your reservation is ZFA04Y.",
 			ExpectedActions: []TauBenchAction{
-				{ActionID: "2_0", Name: "get_reservation_details", Arguments: map[string]interface{}{"reservation_id": "ZFA04Y"}},
+				{ActionID: "2_0", Name: "get_reservation_details", Arguments: map[string]any{"reservation_id": "ZFA04Y"}},
 				{ActionID: "2_1", Name: "search_direct_flight", Arguments: nil},
 				{ActionID: "2_2", Name: "update_reservation_flights", Arguments: nil},
 			},
@@ -581,7 +581,7 @@ func BuiltinTauBenchAirline() []TauBenchEntry {
 			Scenario:  "You want to check the status of flight AA123 on May 15, 2024. You're worried it might be delayed.",
 			KnownInfo: "You are Mike Jones. Your user ID is mike_jones_5678.",
 			ExpectedActions: []TauBenchAction{
-				{ActionID: "3_0", Name: "get_flight_status", Arguments: map[string]interface{}{"flight_number": "AA123", "date": "2024-05-15"}},
+				{ActionID: "3_0", Name: "get_flight_status", Arguments: map[string]any{"flight_number": "AA123", "date": "2024-05-15"}},
 			},
 			NlAssertions: []string{"Agent should provide clear flight status information"},
 			Tools:        tools,
@@ -592,8 +592,8 @@ func BuiltinTauBenchAirline() []TauBenchEntry {
 			Scenario:  "Your flight in reservation 4OG6T3 was delayed by 4 hours. You want compensation for the inconvenience.",
 			KnownInfo: "You are Noah Muller. Your user ID is noah_muller_9847.",
 			ExpectedActions: []TauBenchAction{
-				{ActionID: "4_0", Name: "get_user_details", Arguments: map[string]interface{}{"user_id": "noah_muller_9847"}},
-				{ActionID: "4_1", Name: "get_reservation_details", Arguments: map[string]interface{}{"reservation_id": "4OG6T3"}},
+				{ActionID: "4_0", Name: "get_user_details", Arguments: map[string]any{"user_id": "noah_muller_9847"}},
+				{ActionID: "4_1", Name: "get_reservation_details", Arguments: map[string]any{"reservation_id": "4OG6T3"}},
 				{ActionID: "4_2", Name: "send_certificate", Arguments: nil},
 			},
 			NlAssertions: []string{"Agent should verify the delay before offering compensation"},
@@ -613,8 +613,8 @@ func BuiltinTauBenchRetail() []TauBenchEntry {
 			Scenario:  "You received order #W2378156 and want to check its status. You want to know when it was delivered.",
 			KnownInfo: "You are Yusuf Rossi in zip code 19122.",
 			ExpectedActions: []TauBenchAction{
-				{ActionID: "0_0", Name: "find_user_id_by_name_zip", Arguments: map[string]interface{}{"first_name": "Yusuf", "last_name": "Rossi", "zip": "19122"}},
-				{ActionID: "0_1", Name: "get_order_details", Arguments: map[string]interface{}{"order_id": "#W2378156"}},
+				{ActionID: "0_0", Name: "find_user_id_by_name_zip", Arguments: map[string]any{"first_name": "Yusuf", "last_name": "Rossi", "zip": "19122"}},
+				{ActionID: "0_1", Name: "get_order_details", Arguments: map[string]any{"order_id": "#W2378156"}},
 			},
 			NlAssertions: []string{"Agent should look up the user before checking the order"},
 			Tools:        tools,
@@ -625,7 +625,7 @@ func BuiltinTauBenchRetail() []TauBenchEntry {
 			Scenario:  "You want to return the mechanical keyboard from your delivered order #W2378156. You bought the wrong switch type.",
 			KnownInfo: "You are Yusuf Rossi. Your user ID is yusuf_rossi_8397. Your order ID is #W2378156.",
 			ExpectedActions: []TauBenchAction{
-				{ActionID: "1_0", Name: "get_order_details", Arguments: map[string]interface{}{"order_id": "#W2378156"}},
+				{ActionID: "1_0", Name: "get_order_details", Arguments: map[string]any{"order_id": "#W2378156"}},
 				{ActionID: "1_1", Name: "return_delivered_order_items", Arguments: nil},
 			},
 			NlAssertions: []string{"Agent should verify the order is eligible for return"},
@@ -664,8 +664,8 @@ func BuiltinTauBenchRetail() []TauBenchEntry {
 			Scenario:  "You ordered a laptop 3 days ago (order #W9999999) and it still shows as 'processing'. You want to know when it will ship.",
 			KnownInfo: "You are Maria Garcia. Your email is maria.garcia@email.com.",
 			ExpectedActions: []TauBenchAction{
-				{ActionID: "4_0", Name: "find_user_id_by_email", Arguments: map[string]interface{}{"email": "maria.garcia@email.com"}},
-				{ActionID: "4_1", Name: "get_order_details", Arguments: map[string]interface{}{"order_id": "#W9999999"}},
+				{ActionID: "4_0", Name: "find_user_id_by_email", Arguments: map[string]any{"email": "maria.garcia@email.com"}},
+				{ActionID: "4_1", Name: "get_order_details", Arguments: map[string]any{"order_id": "#W9999999"}},
 			},
 			NlAssertions: []string{"Agent should look up the order and provide a shipping estimate"},
 			Tools:        tools,

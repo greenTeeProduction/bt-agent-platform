@@ -344,7 +344,7 @@ func TestSetA2ATarget_WithWorldState(t *testing.T) {
 		t.Fatal("SetA2ATarget not registered")
 	}
 
-	ws := map[string]interface{}{}
+	ws := map[string]any{}
 	bb := &Blackboard{
 		ChainState: map[string]any{
 			"a2a_target_url":   "http://agent:8080",

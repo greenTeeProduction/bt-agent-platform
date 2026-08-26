@@ -70,7 +70,7 @@ func TestFullTreeIntegration_RunsAllTreesWithRealLLM(t *testing.T) {
 		failures    int
 		duration    time.Duration
 		panicked    bool
-		panicRecov  interface{}
+		panicRecov  any
 	}
 	results := make([]treeResult, 0, 16)
 

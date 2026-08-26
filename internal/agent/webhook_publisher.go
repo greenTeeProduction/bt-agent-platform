@@ -154,7 +154,7 @@ func (p *WebhookPublisher) handleEvent(event AgentEvent) {
 	// "0 new findings" no-op). Only task_complete is throttled — alert and
 	// evolution routes stay untouched.
 	if event.Type == "task_complete" && p.throttle != nil {
-		data, _ := event.Data.(map[string]interface{})
+		data, _ := event.Data.(map[string]any)
 		send, annotated := p.throttle.decide(event.Source, eventDataString(data, "outcome"), eventDataString(data, "summary"))
 		if !send {
 			slog.Info("webhook: routine notification suppressed", "agent", event.Source)
@@ -162,7 +162,7 @@ func (p *WebhookPublisher) handleEvent(event AgentEvent) {
 		}
 		if annotated != "" {
 			// Copy the map — event.Data is shared with other bus subscribers.
-			patched := make(map[string]interface{}, len(data)+1)
+			patched := make(map[string]any, len(data)+1)
 			for k, v := range data {
 				patched[k] = v
 			}
@@ -177,7 +177,7 @@ func (p *WebhookPublisher) handleEvent(event AgentEvent) {
 	}
 
 	// Build JSON payload matching the webhook prompt template variables
-	payload := map[string]interface{}{
+	payload := map[string]any{
 		"type":      event.Type,
 		"source":    event.Source,
 		"message":   event.Message,

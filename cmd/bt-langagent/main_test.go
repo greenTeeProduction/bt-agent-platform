@@ -159,7 +159,7 @@ func TestHandleFitness(t *testing.T) {
 			seedRecords(t, s, tc.records)
 
 			result := s.handleFitness(nil)
-			var out map[string]interface{}
+			var out map[string]any
 			if err := json.Unmarshal([]byte(result.Content[0].Text), &out); err != nil {
 				t.Fatalf("unmarshal handleFitness output %q: %v", result.Content[0].Text, err)
 			}
@@ -189,7 +189,7 @@ func TestHandleEvolve_DefaultTreeHasNoMatchingTargetsSoNothingApplies(t *testing
 	s := newTestServer(t)
 
 	result := s.handleEvolve(nil)
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(result.Content[0].Text), &out); err != nil {
 		t.Fatalf("unmarshal handleEvolve output %q: %v", result.Content[0].Text, err)
 	}
@@ -227,7 +227,7 @@ func TestHandleEvolve_TreeWithAnalyzeTaskGetsWrapRetryApplied(t *testing.T) {
 	}
 
 	result := s.handleEvolve(nil)
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(result.Content[0].Text), &out); err != nil {
 		t.Fatalf("unmarshal handleEvolve output %q: %v", result.Content[0].Text, err)
 	}
@@ -257,7 +257,7 @@ func TestHandleRun_BadJSONReturnsError(t *testing.T) {
 	s := newTestServer(t)
 
 	result := s.handleRun(json.RawMessage(`not json`))
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(result.Content[0].Text), &out); err != nil {
 		t.Fatalf("unmarshal handleRun output %q: %v", result.Content[0].Text, err)
 	}
@@ -274,7 +274,7 @@ func TestHandleRun_SuccessReturnsResultAndOutcome(t *testing.T) {
 	}
 
 	result := s.handleRun(json.RawMessage(`{"task": "do the thing"}`))
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(result.Content[0].Text), &out); err != nil {
 		t.Fatalf("unmarshal handleRun output %q: %v", result.Content[0].Text, err)
 	}
@@ -294,7 +294,7 @@ func TestHandleRun_LLMErrorReturnsError(t *testing.T) {
 	}
 
 	result := s.handleRun(json.RawMessage(`{"task": "do the thing"}`))
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(result.Content[0].Text), &out); err != nil {
 		t.Fatalf("unmarshal handleRun output %q: %v", result.Content[0].Text, err)
 	}

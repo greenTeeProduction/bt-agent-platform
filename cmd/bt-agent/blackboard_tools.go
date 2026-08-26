@@ -79,7 +79,7 @@ func registerBlackboardTools(server *engine.Server, deps *mcpDeps) {
 			if err := mgr.Set(scope, params.Key, params.Value, params.Summary, ct); err != nil {
 				return bbError(err)
 			}
-			data, _ := json.Marshal(map[string]interface{}{
+			data, _ := json.Marshal(map[string]any{
 				"status": "stored", "scope": params.Scope, "scope_id": params.ScopeID,
 				"key": params.Key, "bytes": len(params.Value),
 			})
@@ -117,7 +117,7 @@ func registerBlackboardTools(server *engine.Server, deps *mcpDeps) {
 			if err != nil {
 				return bbError(err)
 			}
-			data, _ := json.Marshal(map[string]interface{}{"entries": entries, "count": len(entries)})
+			data, _ := json.Marshal(map[string]any{"entries": entries, "count": len(entries)})
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 

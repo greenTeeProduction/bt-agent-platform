@@ -29,7 +29,7 @@ func (t *RunTaskTool) Description() string {
 }
 func (t *RunTaskTool) Call(_ context.Context, input string) (string, error) {
 	result := t.run(input)
-	out := map[string]interface{}{
+	out := map[string]any{
 		"result":       result,
 		"outcome":      t.bb.Outcome,
 		"complexity":   t.bb.Complexity,
@@ -59,7 +59,7 @@ func (t *ReflectTool) Call(_ context.Context, _ string) (string, error) {
 		return `{"went_well": "no LLM available", "to_improve": "configure LLM"}`, nil
 	}
 	ww, ti := t.bb.LLM.Reflect(t.bb.Task, t.bb.Outcome, t.bb.Plan)
-	out := map[string]interface{}{
+	out := map[string]any{
 		"went_well":  ww,
 		"to_improve": ti,
 		"task":       t.bb.Task,
@@ -97,7 +97,7 @@ func (t *FitnessTool) Call(_ context.Context, _ string) (string, error) {
 	if tree != nil {
 		nodeCount = evolution.CountNodes(tree)
 	}
-	out := map[string]interface{}{
+	out := map[string]any{
 		"total_tasks":  len(records),
 		"successes":    successes,
 		"failures":     failures,
@@ -149,7 +149,7 @@ func (t *EvolveTool) Call(_ context.Context, _ string) (string, error) {
 			fmt.Fprintf(os.Stderr, "langagent: failed to save tree in Evolve tool: %v\n", err)
 		}
 	}
-	out := map[string]interface{}{
+	out := map[string]any{
 		"evolved":      applied > 0,
 		"applied":      applied,
 		"nodes_before": before,
@@ -207,7 +207,7 @@ func (t *CreateAgentTool) Call(_ context.Context, input string) (string, error) 
 	if err != nil {
 		return fmt.Sprintf(`{"error": %q}`, err.Error()), nil
 	}
-	out := map[string]interface{}{
+	out := map[string]any{
 		"created":    true,
 		"agent_name": agent.Name,
 		"node_count": evolution.CountNodes(agent.SerTree),
@@ -261,7 +261,7 @@ func (t *GetReflectionsTool) Call(_ context.Context, _ string) (string, error) {
 			ToImprove: truncateStr(ti, 100),
 		})
 	}
-	out := map[string]interface{}{
+	out := map[string]any{
 		"total":  n,
 		"recent": items,
 	}

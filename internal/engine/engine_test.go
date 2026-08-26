@@ -608,7 +608,7 @@ func TestPlanStepsToStrings_Empty(t *testing.T) {
 }
 
 func TestGetStringSlice_Existing(t *testing.T) {
-	cs := map[string]interface{}{
+	cs := map[string]any{
 		"my_slice": []string{"a", "b", "c"},
 	}
 	result := getStringSlice(cs, "my_slice")
@@ -621,7 +621,7 @@ func TestGetStringSlice_Existing(t *testing.T) {
 }
 
 func TestGetStringSlice_MissingKey(t *testing.T) {
-	cs := map[string]interface{}{}
+	cs := map[string]any{}
 	result := getStringSlice(cs, "nonexistent")
 	if len(result) != 0 {
 		t.Errorf("expected empty slice, got %v", result)
@@ -629,7 +629,7 @@ func TestGetStringSlice_MissingKey(t *testing.T) {
 }
 
 func TestGetStringSlice_WrongType(t *testing.T) {
-	cs := map[string]interface{}{
+	cs := map[string]any{
 		"bad_slice": []int{1, 2, 3},
 	}
 	result := getStringSlice(cs, "bad_slice")
@@ -646,7 +646,7 @@ func TestGetStringSlice_NilMap(t *testing.T) {
 }
 
 func TestBuildGoapStepPrompt(t *testing.T) {
-	cs := map[string]interface{}{
+	cs := map[string]any{
 		"goap_step_index": 0,
 	}
 	prompt := buildGoapStepPrompt("fix the bug", "analyze_code", cs)
@@ -665,7 +665,7 @@ func TestBuildGoapStepPrompt(t *testing.T) {
 }
 
 func TestWorldStateFromMap(t *testing.T) {
-	input := map[string]interface{}{"key": "value", "num": 42}
+	input := map[string]any{"key": "value", "num": 42}
 	result := worldStateFromMap(input)
 	if len(result) != 2 {
 		t.Errorf("expected 2 entries, got %d", len(result))
@@ -676,7 +676,7 @@ func TestWorldStateFromMap(t *testing.T) {
 }
 
 func TestStringField_Exists(t *testing.T) {
-	m := map[string]interface{}{"name": "test_value"}
+	m := map[string]any{"name": "test_value"}
 	result := stringField(m, "name")
 	if result != "test_value" {
 		t.Errorf("expected 'test_value', got %q", result)
@@ -684,7 +684,7 @@ func TestStringField_Exists(t *testing.T) {
 }
 
 func TestStringField_Missing(t *testing.T) {
-	m := map[string]interface{}{}
+	m := map[string]any{}
 	result := stringField(m, "name")
 	if result != "" {
 		t.Errorf("expected empty string, got %q", result)
@@ -692,7 +692,7 @@ func TestStringField_Missing(t *testing.T) {
 }
 
 func TestStringField_WrongType(t *testing.T) {
-	m := map[string]interface{}{"name": 42}
+	m := map[string]any{"name": 42}
 	result := stringField(m, "name")
 	if result != "" {
 		t.Errorf("expected empty string for wrong type, got %q", result)
@@ -700,7 +700,7 @@ func TestStringField_WrongType(t *testing.T) {
 }
 
 func TestFloatField_Exists(t *testing.T) {
-	m := map[string]interface{}{"cost": 3.14}
+	m := map[string]any{"cost": 3.14}
 	result := floatField(m, "cost", 1.0)
 	if result != 3.14 {
 		t.Errorf("expected 3.14, got %f", result)
@@ -708,7 +708,7 @@ func TestFloatField_Exists(t *testing.T) {
 }
 
 func TestFloatField_IntConversion(t *testing.T) {
-	m := map[string]interface{}{"count": 5}
+	m := map[string]any{"count": 5}
 	result := floatField(m, "count", 1.0)
 	if result != 5.0 {
 		t.Errorf("expected 5.0, got %f", result)
@@ -716,7 +716,7 @@ func TestFloatField_IntConversion(t *testing.T) {
 }
 
 func TestFloatField_Missing_UsesDefault(t *testing.T) {
-	m := map[string]interface{}{}
+	m := map[string]any{}
 	result := floatField(m, "cost", 2.5)
 	if result != 2.5 {
 		t.Errorf("expected default 2.5, got %f", result)
@@ -724,7 +724,7 @@ func TestFloatField_Missing_UsesDefault(t *testing.T) {
 }
 
 func TestFloatField_WrongType_UsesDefault(t *testing.T) {
-	m := map[string]interface{}{"cost": "expensive"}
+	m := map[string]any{"cost": "expensive"}
 	result := floatField(m, "cost", 0.0)
 	if result != 0.0 {
 		t.Errorf("expected default 0.0 for wrong type, got %f", result)

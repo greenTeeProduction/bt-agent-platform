@@ -86,14 +86,14 @@ func (a *Agent) AddGoal(goal *Goal) {
 }
 
 // SetState sets a world state variable.
-func (a *Agent) SetState(key string, value interface{}) {
+func (a *Agent) SetState(key string, value any) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.WorldState[key] = value
 }
 
 // GetState reads a world state variable.
-func (a *Agent) GetState(key string) (interface{}, bool) {
+func (a *Agent) GetState(key string) (any, bool) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	v, ok := a.WorldState[key]

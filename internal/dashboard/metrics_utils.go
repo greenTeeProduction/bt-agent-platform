@@ -766,11 +766,11 @@ func labelString(labels map[string]string) string {
 // ─── JSON Export ────────────────────────────────────────────────────────────
 
 // MetricsJSON returns all metrics as a JSON-serializable map.
-func MetricsJSON() map[string]interface{} {
+func MetricsJSON() map[string]any {
 	globalMetrics.mu.RLock()
 	defer globalMetrics.mu.RUnlock()
 
-	agentStats := make([]map[string]interface{}, 0, len(globalMetrics.agents))
+	agentStats := make([]map[string]any, 0, len(globalMetrics.agents))
 	for _, s := range globalMetrics.agents {
 		successRate := 0.0
 		if s.TotalCount > 0 {
@@ -780,7 +780,7 @@ func MetricsJSON() map[string]interface{} {
 		if s.TotalCount > 0 {
 			avgDuration = float64(s.TotalDurationMs) / float64(s.TotalCount)
 		}
-		agentStats = append(agentStats, map[string]interface{}{
+		agentStats = append(agentStats, map[string]any{
 			"name":            s.Name,
 			"success_count":   s.SuccessCount,
 			"error_count":     s.ErrorCount,
@@ -791,7 +791,7 @@ func MetricsJSON() map[string]interface{} {
 		})
 	}
 
-	return map[string]interface{}{
+	return map[string]any{
 		"http_requests_total":     httpRequestsTotal.Value(),
 		"http_errors_total":       httpErrorsTotal.Value(),
 		"total_requests":          globalMetrics.TotalRequests.Value(),
@@ -805,11 +805,11 @@ func MetricsJSON() map[string]interface{} {
 
 // labeledSnapshotToMap converts a labeled counter snapshot to a JSON-friendly format
 // with parsed label keys.
-func labeledSnapshotToMap(snapshot map[string]uint64) []map[string]interface{} {
-	result := make([]map[string]interface{}, 0, len(snapshot))
+func labeledSnapshotToMap(snapshot map[string]uint64) []map[string]any {
+	result := make([]map[string]any, 0, len(snapshot))
 	for key, val := range snapshot {
 		labels := parseLabelKey(key)
-		entry := make(map[string]interface{})
+		entry := make(map[string]any)
 		for k, v := range labels {
 			entry[k] = v
 		}

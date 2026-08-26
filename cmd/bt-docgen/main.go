@@ -323,7 +323,7 @@ func buildSectionMap() map[string]goap.SectionMapping {
 	return m
 }
 
-func setChainState(bb *engine.Blackboard, key string, val interface{}) {
+func setChainState(bb *engine.Blackboard, key string, val any) {
 	if bb.ChainState == nil {
 		bb.ChainState = make(map[string]any)
 	}
@@ -418,7 +418,7 @@ func fileHash(path string) string {
 }
 
 // hashSectionSources computes a combined hash of all source files a section depends on.
-func hashSectionSources(section int, _ interface{}) string {
+func hashSectionSources(section int, _ any) string {
 	files, ok := sectionSourceFiles[section]
 	if !ok {
 		return fmt.Sprintf("section-%d-no-sources", section)

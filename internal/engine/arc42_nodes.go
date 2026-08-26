@@ -328,7 +328,7 @@ func registerArc42Nodes() {
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-func setChainState(bb *Blackboard, key string, val interface{}) {
+func setChainState(bb *Blackboard, key string, val any) {
 	if bb.ChainState == nil {
 		bb.ChainState = make(map[string]any)
 	}

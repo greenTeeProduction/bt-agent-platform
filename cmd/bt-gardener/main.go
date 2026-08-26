@@ -84,7 +84,7 @@ func (t *GardenerRunCycleTool) Call(_ context.Context, _ string) (string, error)
 	for _, m := range results {
 		items = append(items, r{Tree: m.TreeName, Improved: m.Improved, Delta: m.Delta, Mutations: m.Mutations})
 	}
-	data, _ := json.Marshal(map[string]interface{}{"trees": len(results), "results": items})
+	data, _ := json.Marshal(map[string]any{"trees": len(results), "results": items})
 	return string(data), nil
 }
 
@@ -105,7 +105,7 @@ func (t *GardenerRollbackTool) Call(_ context.Context, input string) (string, er
 	if err := t.registry.RollbackTree(name, t.snapshotDir); err != nil {
 		return fmt.Sprintf(`{"error": %q}`, err.Error()), nil
 	}
-	data, _ := json.Marshal(map[string]interface{}{"tree": name, "rolled_back": true})
+	data, _ := json.Marshal(map[string]any{"tree": name, "rolled_back": true})
 	return string(data), nil
 }
 
@@ -119,7 +119,7 @@ func (t *GardenerDeactivateAllTool) Description() string {
 }
 func (t *GardenerDeactivateAllTool) Call(_ context.Context, _ string) (string, error) {
 	deactivated := t.registry.DeactivateAll()
-	data, _ := json.Marshal(map[string]interface{}{"deactivated": deactivated})
+	data, _ := json.Marshal(map[string]any{"deactivated": deactivated})
 	return string(data), nil
 }
 
@@ -161,7 +161,7 @@ func (t *GardenerRecommendTool) Call(_ context.Context, _ string) (string, error
 		}
 		recs = append(recs, rec{Tree: e.Name, Fitness: f.Composite, Nodes: evolution.CountNodes(e.Tree), Action: action})
 	}
-	data, _ := json.Marshal(map[string]interface{}{"total": len(recs), "recommendations": recs})
+	data, _ := json.Marshal(map[string]any{"total": len(recs), "recommendations": recs})
 	return string(data), nil
 }
 

@@ -120,7 +120,7 @@ func TestBTFeedbackRegistered(t *testing.T) {
 	if !ok || res == nil || len(res.Content) == 0 {
 		t.Fatal("bt_feedback returned no content")
 	}
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 		t.Fatalf("result is not valid JSON: %v", err)
 	}
@@ -163,7 +163,7 @@ func TestPersistGeneratedTreeForUser_UserWorkspaceAndFallback(t *testing.T) {
 	}
 
 	// User-attributed: the tree lands in the user's workspace trees dir.
-	result := map[string]interface{}{}
+	result := map[string]any{}
 	persistGeneratedTreeForUser(deps, "nico", "goal:automate_reports", tree, result)
 	if result["persisted"] != true {
 		t.Fatalf("persist failed: %v", result)
@@ -181,7 +181,7 @@ func TestPersistGeneratedTreeForUser_UserWorkspaceAndFallback(t *testing.T) {
 	}
 
 	// No user: falls back to the shared tree store.
-	shared := map[string]interface{}{}
+	shared := map[string]any{}
 	persistGeneratedTreeForUser(deps, "", "goal:automate_reports", tree, shared)
 	if shared["persisted"] != true {
 		t.Fatalf("shared persist failed: %v", shared)

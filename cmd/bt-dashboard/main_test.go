@@ -323,7 +323,7 @@ func TestHandleHealth_UsesDashboardHealthJSON(t *testing.T) {
 
 	// A handler that truly delegates to dashboard.HealthJSON produces exactly
 	// the HealthResponse fields — no leftover hand-rolled "packages"/"trees" keys.
-	var raw map[string]interface{}
+	var raw map[string]any
 	if err := json.Unmarshal(rr.Body.Bytes(), &raw); err != nil {
 		t.Fatalf("decode raw response: %v", err)
 	}
@@ -462,7 +462,7 @@ func TestHandleDLQ_IncludesCategoryCounts(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
 	}
 
-	var resp map[string]interface{}
+	var resp map[string]any
 	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshaling response: %v; body=%s", err, rr.Body.String())
 	}
@@ -471,7 +471,7 @@ func TestHandleDLQ_IncludesCategoryCounts(t *testing.T) {
 	if !ok {
 		t.Fatalf("response has no \"categories\" field; body=%s", rr.Body.String())
 	}
-	cats, ok := rawCats.(map[string]interface{})
+	cats, ok := rawCats.(map[string]any)
 	if !ok {
 		t.Fatalf("categories = %v (%T), want a map", rawCats, rawCats)
 	}
@@ -1622,12 +1622,12 @@ func TestHandleTrees_IncludesFitnessAndLineage(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
 	}
 
-	var trees []map[string]interface{}
+	var trees []map[string]any
 	if err := json.Unmarshal(rr.Body.Bytes(), &trees); err != nil {
 		t.Fatalf("decode response: %v; body=%s", err, rr.Body.String())
 	}
 
-	var base map[string]interface{}
+	var base map[string]any
 	for _, tr := range trees {
 		if tr["id"] == "base:tree" {
 			base = tr
@@ -1654,14 +1654,14 @@ func TestHandleTrees_IncludesFitnessAndLineage(t *testing.T) {
 		t.Errorf("last_outcome = %v, want %v", got, want)
 	}
 
-	lineage, ok := base["lineage"].(map[string]interface{})
+	lineage, ok := base["lineage"].(map[string]any)
 	if !ok {
 		t.Fatalf("lineage missing or not an object; body=%s", rr.Body.String())
 	}
 	if got, want := lineage["base_id"], "base:tree"; got != want {
 		t.Errorf("lineage.base_id = %v, want %v", got, want)
 	}
-	evolvedIDs, ok := lineage["evolved_ids"].([]interface{})
+	evolvedIDs, ok := lineage["evolved_ids"].([]any)
 	if !ok || len(evolvedIDs) != 1 || evolvedIDs[0] != "base:tree-evolved-1" {
 		t.Errorf("lineage.evolved_ids = %v, want [base:tree-evolved-1]", lineage["evolved_ids"])
 	}
@@ -1699,7 +1699,7 @@ func TestHandleTrees_IncludesFullDomainCatalog(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
 	}
 
-	var trees []map[string]interface{}
+	var trees []map[string]any
 	if err := json.Unmarshal(rr.Body.Bytes(), &trees); err != nil {
 		t.Fatalf("decode response: %v; body=%s", err, rr.Body.String())
 	}
@@ -1758,7 +1758,7 @@ func TestHandleTrees_DomainEntriesCarryDescription(t *testing.T) {
 		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
 	}
 
-	var trees []map[string]interface{}
+	var trees []map[string]any
 	if err := json.Unmarshal(rr.Body.Bytes(), &trees); err != nil {
 		t.Fatalf("decode response: %v; body=%s", err, rr.Body.String())
 	}
@@ -1768,7 +1768,7 @@ func TestHandleTrees_DomainEntriesCarryDescription(t *testing.T) {
 		t.Fatal("domains.Descriptions[\"goap_fusion\"] is empty; test fixture assumption broken")
 	}
 
-	var entry map[string]interface{}
+	var entry map[string]any
 	for _, tr := range trees {
 		if tr["id"] == "domain:goap_fusion" {
 			entry = tr
@@ -1849,13 +1849,13 @@ func TestHandleTrees_DomainDescriptionsResolveThroughDescriptionFor(t *testing.T
 		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
 	}
 
-	var trees []map[string]interface{}
+	var trees []map[string]any
 	if err := json.Unmarshal(rr.Body.Bytes(), &trees); err != nil {
 		t.Fatalf("decode response: %v; body=%s", err, rr.Body.String())
 	}
 
 	id := "domain:" + treeName
-	var entry map[string]interface{}
+	var entry map[string]any
 	for _, tr := range trees {
 		if tr["id"] == id {
 			entry = tr

@@ -46,11 +46,11 @@ func (h goalHeap) Swap(i, j int) {
 	h[i], h[j] = h[j], h[i]
 }
 
-func (h *goalHeap) Push(x interface{}) {
+func (h *goalHeap) Push(x any) {
 	*h = append(*h, x.(*goalEntry))
 }
 
-func (h *goalHeap) Pop() interface{} {
+func (h *goalHeap) Pop() any {
 	old := *h
 	n := len(old)
 	x := old[n-1]

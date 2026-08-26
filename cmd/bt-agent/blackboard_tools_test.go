@@ -23,7 +23,7 @@ func newBBServer(t *testing.T) *engine.Server {
 
 // invokeBB invokes a registered bt_bb_* tool and decodes its single text
 // content item as JSON.
-func invokeBB(t *testing.T, server *engine.Server, tool, args string) map[string]interface{} {
+func invokeBB(t *testing.T, server *engine.Server, tool, args string) map[string]any {
 	t.Helper()
 	res, ok := server.Invoke(tool, json.RawMessage(args))
 	if !ok {
@@ -32,7 +32,7 @@ func invokeBB(t *testing.T, server *engine.Server, tool, args string) map[string
 	if res == nil || len(res.Content) == 0 {
 		t.Fatalf("%s returned no content for args %s", tool, args)
 	}
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 		t.Fatalf("%s result is not valid JSON: %v (text=%q)", tool, err, res.Content[0].Text)
 	}
@@ -209,7 +209,7 @@ func TestBTBBListDefaultsLimitAndFiltersByPrefix(t *testing.T) {
 	if count, _ := filtered["count"].(float64); count != 2 {
 		t.Errorf("bt_bb_list with prefix \"task:\" count = %v, want 2", filtered["count"])
 	}
-	entries, _ := filtered["entries"].([]interface{})
+	entries, _ := filtered["entries"].([]any)
 	if len(entries) != 2 {
 		t.Fatalf("bt_bb_list entries length = %d, want 2", len(entries))
 	}

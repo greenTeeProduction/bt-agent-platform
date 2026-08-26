@@ -200,7 +200,7 @@ func recordEvolvedFitness(deps *mcpDeps, treeID string, eliteFitness float64) {
 // failure-targeted: each evolved tree is annotated with the concrete failing
 // task that motivated it. Both empty (no recorded failure) is a no-op, so trees
 // without a trace get an unannotated entry rather than empty keys.
-func addFailureContext(entry map[string]interface{}, failureTask, failureOutcome string) {
+func addFailureContext(entry map[string]any, failureTask, failureOutcome string) {
 	if failureTask == "" && failureOutcome == "" {
 		return
 	}
@@ -208,7 +208,7 @@ func addFailureContext(entry map[string]interface{}, failureTask, failureOutcome
 	entry["last_failure_outcome"] = failureOutcome
 }
 
-func persistGeneratedTree(deps *mcpDeps, treeID string, tree *evolution.SerializableNode, result map[string]interface{}) {
+func persistGeneratedTree(deps *mcpDeps, treeID string, tree *evolution.SerializableNode, result map[string]any) {
 	result["persisted"] = false
 	if info := engine.ValidateTreeFull(tree); !info.Valid() {
 		result["validation_errors"] = info.Errors
@@ -265,7 +265,7 @@ func lineageSkipsReEvolution(kg *knowledge.KnowledgeGraph, treeID string, baseFi
 	return track.WinRate() >= 0.5
 }
 
-func persistEvolvedWinner(deps *mcpDeps, baseTreeID string, winner *evolution.SerializableNode, fitness float64, result map[string]interface{}) {
+func persistEvolvedWinner(deps *mcpDeps, baseTreeID string, winner *evolution.SerializableNode, fitness float64, result map[string]any) {
 	evolvedID := baseTreeID + "-evolved"
 	result["evolved_tree_id"] = evolvedID
 	if deps.kg != nil && !deps.kg.EvolvedFitnessImproves(evolvedID, fitness) {
@@ -291,7 +291,7 @@ func persistEvolvedWinner(deps *mcpDeps, baseTreeID string, winner *evolution.Se
 // gardener evolves it per user and the dynamic resolver's user-workspace
 // fallback finds it. Falls back to the shared store when no user or persona
 // store is available, so behavior degrades to Phase 0 rather than failing.
-func persistGeneratedTreeForUser(deps *mcpDeps, user, treeID string, tree *evolution.SerializableNode, result map[string]interface{}) {
+func persistGeneratedTreeForUser(deps *mcpDeps, user, treeID string, tree *evolution.SerializableNode, result map[string]any) {
 	if strings.TrimSpace(user) == "" || deps.personaStore == nil {
 		persistGeneratedTree(deps, treeID, tree, result)
 		return
@@ -414,13 +414,13 @@ func newProductionPopulation(size int, base *evolution.SerializableNode) *evolut
 // directly (whose CrisisReasons field is omitempty and would serialize to null
 // or vanish when the run stayed healthy), crisis_reasons is always emitted as an
 // array so a consumer can parse it unconditionally.
-func evolveHealthProjection(pop *evolution.Population) map[string]interface{} {
+func evolveHealthProjection(pop *evolution.Population) map[string]any {
 	snap := pop.HealthSnapshot()
 	reasons := snap.CrisisReasons
 	if reasons == nil {
 		reasons = []string{}
 	}
-	return map[string]interface{}{
+	return map[string]any{
 		"crisis_reasons":     reasons,
 		"resurrections":      snap.Resurrections,
 		"last_mutation_rate": snap.LastMutationRate,
@@ -502,7 +502,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			if err != nil {
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: fmt.Sprintf(`{"error": %q}`, err.Error())}}}
 			}
-			summary := map[string]interface{}{"total": len(records), "failures": deps.refStore.CountFailures(), "records": records}
+			summary := map[string]any{"total": len(records), "failures": deps.refStore.CountFailures(), "records": records}
 			data, _ := json.MarshalIndent(summary, "", "  ")
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
@@ -528,7 +528,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			if applied > 0 {
 				_ = deps.treeStore.Save(tree)
 			}
-			result := map[string]interface{}{"evolved": applied > 0, "applied": applied, "nodes_before": before, "nodes_after": after}
+			result := map[string]any{"evolved": applied > 0, "applied": applied, "nodes_before": before, "nodes_after": after}
 			data, _ := json.Marshal(result)
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
@@ -554,7 +554,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			if len(records) > 0 {
 				successRate = float64(successes) / float64(len(records))
 			}
-			stats := map[string]interface{}{"total_tasks": len(records), "successes": successes, "failures": failures, "success_rate": fmt.Sprintf("%.2f", successRate), "node_count": evolution.CountNodes(tree)}
+			stats := map[string]any{"total_tasks": len(records), "successes": successes, "failures": failures, "success_rate": fmt.Sprintf("%.2f", successRate), "node_count": evolution.CountNodes(tree)}
 			data, _ := json.Marshal(stats)
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
@@ -571,7 +571,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			if err != nil {
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: fmt.Sprintf(`{"error": %q}`, err.Error())}}}
 			}
-			result := map[string]interface{}{"created": true, "agent_name": agent.Name, "root_type": agent.SerTree.Type, "node_count": evolution.CountNodes(agent.SerTree)}
+			result := map[string]any{"created": true, "agent_name": agent.Name, "root_type": agent.SerTree.Type, "node_count": evolution.CountNodes(agent.SerTree)}
 			data, _ := json.Marshal(result)
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
@@ -585,7 +585,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			_ = deps.treeStore.Save(tree)
 			newBt := engine.BuildTree(tree, deps.bb)
 			*deps.bt = newBt
-			result := map[string]interface{}{"switched": true, "tree": "GoDeveloperTree", "node_count": evolution.CountNodes(tree), "strategies": 5}
+			result := map[string]any{"switched": true, "tree": "GoDeveloperTree", "node_count": evolution.CountNodes(tree), "strategies": 5}
 			data, _ := json.Marshal(result)
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
@@ -609,7 +609,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			}
 			_ = deps.treeStore.Save(tree)
 			*deps.bt = engine.BuildTree(tree, deps.bb)
-			result := map[string]interface{}{"switched": true, "agent": params.Agent, "description": evolution.AgentDescriptions[params.Agent], "node_count": evolution.CountNodes(tree)}
+			result := map[string]any{"switched": true, "agent": params.Agent, "description": evolution.AgentDescriptions[params.Agent], "node_count": evolution.CountNodes(tree)}
 			data, _ := json.Marshal(result)
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
@@ -627,7 +627,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			for name, tree := range trees {
 				agents = append(agents, agent{Name: name, Description: evolution.AgentDescriptions[name], Nodes: evolution.CountNodes(tree)})
 			}
-			result := map[string]interface{}{"total": len(agents), "agents": agents}
+			result := map[string]any{"total": len(agents), "agents": agents}
 			data, _ := json.Marshal(result)
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
@@ -650,7 +650,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			}
 			_ = deps.treeStore.Save(tree)
 			*deps.bt = engine.BuildTree(tree, deps.bb)
-			result := map[string]interface{}{"switched": true, "variant": params.Variant, "description": evolution.Descriptions[params.Variant], "node_count": evolution.CountNodes(tree)}
+			result := map[string]any{"switched": true, "variant": params.Variant, "description": evolution.Descriptions[params.Variant], "node_count": evolution.CountNodes(tree)}
 			data, _ := json.Marshal(result)
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
@@ -680,7 +680,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			// curated map, telling the caller nothing about the tree it just
 			// moved onto.
 			desc, _ := domains.DescriptionFor(params.Tree)
-			result := map[string]interface{}{"switched": true, "tree": params.Tree, "description": desc, "node_count": evolution.CountNodes(tree)}
+			result := map[string]any{"switched": true, "tree": params.Tree, "description": desc, "node_count": evolution.CountNodes(tree)}
 			data, _ := json.Marshal(result)
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
@@ -704,17 +704,17 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				company.Name = params.Company
 			}
 			orch := startup.NewOrchestrator(company, deps.llmClient)
-			var result map[string]interface{}
+			var result map[string]any
 			switch params.Mode {
 			case "sprint":
 				s := orch.RunSprint()
-				result = map[string]interface{}{"sprint": s.SprintNum, "goal": s.Goal, "completed": s.Completed, "velocity": s.Velocity, "company_state": company}
+				result = map[string]any{"sprint": s.SprintNum, "goal": s.Goal, "completed": s.Completed, "velocity": s.Velocity, "company_state": company}
 			case "quarter":
 				q := orch.RunQuarter()
-				result = map[string]interface{}{"quarter": q.Quarter, "revenue": q.Revenue, "growth_pct": q.Growth, "highlights": q.Highlights, "company_state": company}
+				result = map[string]any{"quarter": q.Quarter, "revenue": q.Revenue, "growth_pct": q.Growth, "highlights": q.Highlights, "company_state": company}
 			case "year":
 				quarters := orch.RunYear()
-				result = map[string]interface{}{"quarters": quarters, "company_state": company}
+				result = map[string]any{"quarters": quarters, "company_state": company}
 			default:
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: `{"error": "unknown mode, use sprint/quarter/year"}`}}}
 			}
@@ -753,16 +753,16 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			tt := thinktank.NewThinkTank(params.Name, params.Topic)
 			orch := &thinktank.ThinkTankOrchestrator{Tank: tt, LLM: deps.llmClient}
 			if err := orch.RunFullAnalysis(params.Topic); err != nil {
-				data, _ := json.Marshal(map[string]interface{}{"error": "think tank analysis failed: " + err.Error(), "topic": params.Topic})
+				data, _ := json.Marshal(map[string]any{"error": "think tank analysis failed: " + err.Error(), "topic": params.Topic})
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 			}
-			var scenarios []map[string]interface{}
+			var scenarios []map[string]any
 			if tt.FinalReport != nil {
 				for _, s := range tt.FinalReport.Scenarios {
-					scenarios = append(scenarios, map[string]interface{}{"name": s.Name, "probability": s.Probability, "impact": s.Impact})
+					scenarios = append(scenarios, map[string]any{"name": s.Name, "probability": s.Probability, "impact": s.Impact})
 				}
 			}
-			result := map[string]interface{}{"topic": params.Topic, "fellows": len(tt.Fellows), "findings": len(tt.ResearchFindings), "debate_turns": len(tt.DebateTranscript), "scenarios": scenarios}
+			result := map[string]any{"topic": params.Topic, "fellows": len(tt.Fellows), "findings": len(tt.ResearchFindings), "debate_turns": len(tt.DebateTranscript), "scenarios": scenarios}
 			if tt.FinalReport != nil {
 				result["recommendation"] = tt.FinalReport.Recommendation
 				result["confidence"] = tt.FinalReport.ConfidenceLevel
@@ -801,7 +801,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			deps.bb.Task = params.Task
 			*deps.bt = engine.BuildTree(tree, deps.bb)
 			output := engine.RunTask(deps.bb, *deps.bt)
-			result := map[string]interface{}{"delegated_to": params.Tree, "outcome": deps.bb.Outcome, "output": output}
+			result := map[string]any{"delegated_to": params.Tree, "outcome": deps.bb.Outcome, "output": output}
 			data, _ := json.Marshal(result)
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
@@ -819,7 +819,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: fmt.Sprintf(`{"error": %q}`, err.Error())}}}
 			}
 			treeID, confidence := deps.kg.Discover(params.Task)
-			result := map[string]interface{}{"tree_id": treeID, "confidence": confidence, "found": treeID != ""}
+			result := map[string]any{"tree_id": treeID, "confidence": confidence, "found": treeID != ""}
 			data, _ := json.Marshal(result)
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
@@ -835,14 +835,14 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: fmt.Sprintf(`{"error": %q}`, err.Error())}}}
 			}
 			trees := deps.kg.Query(params.Capability)
-			var results []map[string]interface{}
+			var results []map[string]any
 			for _, t := range trees {
-				results = append(results, map[string]interface{}{"id": t.ID, "name": t.Name, "category": t.Category, "description": t.Description, "fitness": t.Fitness, "node_count": t.NodeCount})
+				results = append(results, map[string]any{"id": t.ID, "name": t.Name, "category": t.Category, "description": t.Description, "fitness": t.Fitness, "node_count": t.NodeCount})
 			}
 			if results == nil {
-				results = []map[string]interface{}{}
+				results = []map[string]any{}
 			}
-			data, _ := json.Marshal(map[string]interface{}{"total": len(results), "trees": results})
+			data, _ := json.Marshal(map[string]any{"total": len(results), "trees": results})
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 
@@ -864,7 +864,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			if autoTree == nil {
 				action = "discovered"
 			}
-			result := map[string]interface{}{"action": action, "tree_id": treeID}
+			result := map[string]any{"action": action, "tree_id": treeID}
 			if autoTree != nil {
 				result["node_count"] = evolution.CountNodes(autoTree)
 				persistGeneratedTree(deps, treeID, autoTree, result)
@@ -881,7 +881,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			for _, t := range deps.kg.Trees {
 				categories[t.Category]++
 			}
-			result := map[string]interface{}{"summary": summary, "total_trees": len(deps.kg.Trees), "total_edges": len(deps.kg.Edges), "categories": categories}
+			result := map[string]any{"summary": summary, "total_trees": len(deps.kg.Trees), "total_edges": len(deps.kg.Edges), "categories": categories}
 			data, _ := json.Marshal(result)
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
@@ -897,14 +897,14 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: fmt.Sprintf(`{"error": %q}`, err.Error())}}}
 			}
 			trees := deps.kg.ListByCategory(params.Category)
-			var results []map[string]interface{}
+			var results []map[string]any
 			for _, t := range trees {
-				results = append(results, map[string]interface{}{"id": t.ID, "name": t.Name, "description": t.Description, "fitness": t.Fitness, "node_count": t.NodeCount})
+				results = append(results, map[string]any{"id": t.ID, "name": t.Name, "description": t.Description, "fitness": t.Fitness, "node_count": t.NodeCount})
 			}
 			if results == nil {
-				results = []map[string]interface{}{}
+				results = []map[string]any{}
 			}
-			data, _ := json.Marshal(map[string]interface{}{"category": params.Category, "total": len(results), "trees": results})
+			data, _ := json.Marshal(map[string]any{"category": params.Category, "total": len(results), "trees": results})
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 
@@ -970,7 +970,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			if deps.expBank != nil {
 				bankEntries = deps.expBank.Count()
 			}
-			result := map[string]interface{}{
+			result := map[string]any{
 				"tree": params.Tree, "generations": pop.Generation,
 				"best_fitness": pop.BestFitness, "diversity": pop.Diversity(),
 				"convergence_rate": pop.ConvergenceRate(), "best_nodes": evolution.CountNodes(best),
@@ -1097,7 +1097,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			// knowledge graph so fitness-aware discovery can surface the
 			// archive-improved tree on the next run (milestone 4/5).
 			recordEvolvedFitness(deps, params.Tree, grid.Stats().BestFitness)
-			result := map[string]interface{}{
+			result := map[string]any{
 				"tree": params.Tree, "domain": params.Domain, "generations": mp.Generation,
 				"diversity_score": grid.DiversityScore(), "cell_count": grid.CellCount(),
 				"elites": len(grid.Elites()), "specialist_distribution": grid.SpecialistDistribution(),
@@ -1256,7 +1256,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				warmStarted = false
 				archiveLoadErr = err.Error()
 			}
-			result := map[string]interface{}{
+			result := map[string]any{
 				"tree": params.Tree, "generations": nsga.Generation,
 				"dimensions": dimNames, "node_count": evolution.CountNodes(best),
 				"dimension_bests": dimBests, "pareto_front_size": frontSize,
@@ -1406,7 +1406,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			}
 			archive.AddFromPopulation(pp.Population, evolution.StructuralMultiFitness)
 			stats := archive.Stats()
-			result := map[string]interface{}{
+			result := map[string]any{
 				"tree": params.Tree, "generations": pp.Generation,
 				"node_count":      evolution.CountNodes(best),
 				"front_size":      stats.FrontSize,
@@ -1506,7 +1506,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			case "tabu":
 				searchStrategy = evolution.TabuSearch
 			default:
-				data, _ := json.Marshal(map[string]interface{}{
+				data, _ := json.Marshal(map[string]any{
 					"error": "unknown strategy: " + params.Strategy,
 				})
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
@@ -1520,7 +1520,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			pop := newProductionPopulation(population, baseTree)
 			searcher := evolution.NewLocalSearcher(searchStrategy)
 			best := pop.MemeticEvolve(params.Generations, structuralFitnessFn, searcher, 2)
-			result := map[string]interface{}{
+			result := map[string]any{
 				"tree": params.Tree, "strategy": params.Strategy,
 				"generations": pop.Generation, "best_fitness": pop.BestFitness,
 				"best_nodes": evolution.CountNodes(best), "diversity": pop.Diversity(),
@@ -1645,7 +1645,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			rl.LearningRate = params.LearningRate
 			best := pop.EvolveQLearning(params.Generations, structuralFitnessFn, qt, category, rl, ek)
 			learned := qt.LearnedActions()
-			result := map[string]interface{}{
+			result := map[string]any{
 				"tree": params.Tree, "generations": pop.Generation,
 				"best_fitness": pop.BestFitness, "best_nodes": evolution.CountNodes(best),
 				"diversity": pop.Diversity(), "epsilon": epsilon,
@@ -1924,7 +1924,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				}
 				recordEvolvedFitness(deps, params.Tree, bestElite)
 			}
-			result := map[string]interface{}{
+			result := map[string]any{
 				"tree": params.Tree, "islands": params.Islands, "generations": params.Generations,
 				"per_island_best": perIslandBest, "migrations": stats.Migrations,
 				"cross_diversity": stats.CrossDiversity, "warm_started": warmStarted,
@@ -2031,7 +2031,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			// corrupt file is surfaced non-fatally under stats_load_error so the
 			// empty-telemetry contract still holds.
 			so := evolution.NewSelectorOptimizer(evolution.ParseSelectorOrderingStrategy(os.Getenv("BT_SELECTOR_ORDERING_STRATEGY")))
-			result := map[string]interface{}{"tree": params.Tree}
+			result := map[string]any{"tree": params.Tree}
 			if params.StatsPath != "" {
 				if err := so.LoadSelectorStats(params.StatsPath); err != nil {
 					result["stats_load_error"] = err.Error()
@@ -2119,7 +2119,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			if deps.expBank != nil {
 				bankEntries = deps.expBank.Count()
 			}
-			report := []map[string]interface{}{}
+			report := []map[string]any{}
 			skipped := []string{}
 			lineageSkipped := []string{}
 			algorithms := map[string]int{}
@@ -2149,7 +2149,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				// parameterless trees fall back to structural genetic evolution.
 				if tunedTree, tunedParams, bestFitness, tuned := evolution.TuneTreeParameters(baseTree, population, params.Generations, structuralFitnessFn); tuned {
 					algorithms["cmaes"]++
-					entry := map[string]interface{}{
+					entry := map[string]any{
 						"tree":           b.TreeID,
 						"before_fitness": b.SuccessRate,
 						"after_fitness":  bestFitness,
@@ -2171,7 +2171,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				// empty LastFailureTask falls back to RetrieveByTreeType inside
 				// EvolveWithExperienceContext, matching EvolveWithExperience.
 				best := pop.EvolveWithExperienceContext(params.Generations, structuralFitnessFn, deps.expBank, b.LastFailureTask)
-				entry := map[string]interface{}{
+				entry := map[string]any{
 					"tree":           b.TreeID,
 					"before_fitness": b.SuccessRate,
 					"after_fitness":  pop.BestFitness,
@@ -2186,7 +2186,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				persistEvolvedWinner(deps, b.TreeID, best, pop.BestFitness, entry)
 				report = append(report, entry)
 			}
-			data, _ := json.Marshal(map[string]interface{}{
+			data, _ := json.Marshal(map[string]any{
 				"bottlenecks":             len(bottlenecks),
 				"report":                  report,
 				"skipped":                 skipped,
@@ -2231,7 +2231,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			if deps.expBank != nil {
 				bankEntries = deps.expBank.Count()
 			}
-			report := []map[string]interface{}{}
+			report := []map[string]any{}
 			skipped := []string{}
 			lineageSkipped := []string{}
 			for _, sp := range pressure {
@@ -2253,7 +2253,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				pop := newProductionPopulation(population, baseTree)
 				best := pop.EvolveWithExperience(params.Generations, structuralFitnessFn, deps.expBank)
 				recordEvolvedFitness(deps, sp.TreeID, pop.BestFitness)
-				entry := map[string]interface{}{
+				entry := map[string]any{
 					"tree":           sp.TreeID,
 					"before_fitness": sp.Fitness,
 					"after_fitness":  pop.BestFitness,
@@ -2267,7 +2267,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				persistEvolvedWinner(deps, sp.TreeID, best, pop.BestFitness, entry)
 				report = append(report, entry)
 			}
-			data, _ := json.Marshal(map[string]interface{}{
+			data, _ := json.Marshal(map[string]any{
 				"selection_pressure":      len(pressure),
 				"report":                  report,
 				"skipped":                 skipped,
@@ -2301,9 +2301,9 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			if len(entries) > params.Limit {
 				entries = entries[len(entries)-params.Limit:]
 			}
-			out := make([]map[string]interface{}, 0, len(entries))
+			out := make([]map[string]any, 0, len(entries))
 			for _, e := range entries {
-				item := map[string]interface{}{
+				item := map[string]any{
 					"id":        e.ID,
 					"agent":     e.Agent,
 					"task":      truncateDLQField(e.Task, 140),
@@ -2318,7 +2318,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				}
 				out = append(out, item)
 			}
-			data, _ := json.Marshal(map[string]interface{}{"count": total, "entries": out})
+			data, _ := json.Marshal(map[string]any{"count": total, "entries": out})
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 
@@ -2337,7 +2337,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				Wait bool   `json:"wait"`
 			}
 			_ = json.Unmarshal(args, &params)
-			result := map[string]interface{}{}
+			result := map[string]any{}
 			// Requeue merge-saves from this instance's in-memory view; reload
 			// first so sibling stamps on the shared file aren't overwritten
 			// with stale state.
@@ -2403,15 +2403,15 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			}
 			patterns := ek.RecommendMutations(t)
 			antiPatterns := ek.DetectAntiPatterns(t)
-			var recs []map[string]interface{}
+			var recs []map[string]any
 			for _, p := range patterns {
-				recs = append(recs, map[string]interface{}{"name": p.Name, "mutation": p.Mutation, "target": p.Target, "expected_gain": p.ExpectedGain, "confidence": p.Confidence})
+				recs = append(recs, map[string]any{"name": p.Name, "mutation": p.Mutation, "target": p.Target, "expected_gain": p.ExpectedGain, "confidence": p.Confidence})
 			}
-			var issues []map[string]interface{}
+			var issues []map[string]any
 			for _, ap := range antiPatterns {
-				issues = append(issues, map[string]interface{}{"name": ap.Name, "severity": ap.Severity, "fix": ap.Fix})
+				issues = append(issues, map[string]any{"name": ap.Name, "severity": ap.Severity, "fix": ap.Fix})
 			}
-			result := map[string]interface{}{"tree": params.Tree, "recommendations": recs, "anti_patterns": issues, "learned_patterns": ek.LearnedPatterns}
+			result := map[string]any{"tree": params.Tree, "recommendations": recs, "anti_patterns": issues, "learned_patterns": ek.LearnedPatterns}
 			if expertLoadErr != "" {
 				result["expert_archive_load_error"] = expertLoadErr
 			}
@@ -2451,7 +2451,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			if idx := strings.Index(treeID, ":"); idx >= 0 {
 				cat = treeID[:idx]
 			}
-			result := map[string]interface{}{"tree_id": treeID, "node_count": evolution.CountNodes(tree), "parents": []string{params.ParentA, params.ParentB}, "category": cat}
+			result := map[string]any{"tree_id": treeID, "node_count": evolution.CountNodes(tree), "parents": []string{params.ParentA, params.ParentB}, "category": cat}
 			persistGeneratedTree(deps, treeID, tree, result)
 			data, _ := json.Marshal(result)
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
@@ -2493,7 +2493,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 					data, _ := json.Marshal(map[string]string{"error": err.Error()})
 					return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 				}
-				resp := map[string]interface{}{
+				resp := map[string]any{
 					"pipeline": params.Pipeline,
 					"run_id":   result.RunID,
 					"workflow": result.Workflow,
@@ -2525,7 +2525,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				data, _ := json.Marshal(map[string]string{"error": err.Error()})
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 			}
-			resp := map[string]interface{}{
+			resp := map[string]any{
 				"topic":   params.Topic,
 				"tree":    res.TreeID,
 				"outcome": res.Outcome,
@@ -2647,7 +2647,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 					engine.Warn("a2a: card refresh after bt_agent_create failed", "agent", inst.Definition.Name, "error", rerr)
 				}
 			}
-			data, _ := json.Marshal(map[string]interface{}{"status": "created", "agent": inst.Definition.Name, "tree": inst.Definition.Tree, "id": inst.ID})
+			data, _ := json.Marshal(map[string]any{"status": "created", "agent": inst.Definition.Name, "tree": inst.Definition.Tree, "id": inst.ID})
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 
@@ -2655,10 +2655,10 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 		nil, nil,
 		func(args json.RawMessage) *engine.ToolResult {
 			instances := deps.agentReg.List()
-			result := make([]map[string]interface{}, 0, len(instances))
+			result := make([]map[string]any, 0, len(instances))
 			for _, inst := range instances {
 				stats := deps.agentHist.Stats(inst.Definition.Name)
-				result = append(result, map[string]interface{}{
+				result = append(result, map[string]any{
 					"name": inst.Definition.Name, "description": inst.Definition.Description,
 					"tree": inst.Definition.Tree, "state": inst.State,
 					"total_runs": stats.TotalRuns, "success_rate": stats.SuccessRate,
@@ -2700,7 +2700,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				data, _ := json.Marshal(map[string]string{"error": err.Error()})
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 			}
-			resp := map[string]interface{}{
+			resp := map[string]any{
 				"outcome": res.Outcome, "result": res.Output, "quality": res.Quality,
 				"quality_passed": res.QualityPassed, "duration": res.Duration.String(),
 				"tree": res.TreeID, "output_passed": res.OutputPassed,
@@ -2741,7 +2741,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			}
 			runs := deps.agentHist.List(params.Agent, params.Limit)
 			stats := deps.agentHist.Stats(params.Agent)
-			data, _ := json.Marshal(map[string]interface{}{"agent": params.Agent, "stats": stats, "runs": runs})
+			data, _ := json.Marshal(map[string]any{"agent": params.Agent, "stats": stats, "runs": runs})
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 
@@ -2767,7 +2767,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				data, _ := json.Marshal(map[string]string{"error": err.Error()})
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 			}
-			data, _ := json.Marshal(map[string]interface{}{"status": "scheduled", "job_id": job.ID, "agent": job.AgentName, "schedule": job.Schedule, "next_run": job.NextRun})
+			data, _ := json.Marshal(map[string]any{"status": "scheduled", "job_id": job.ID, "agent": job.AgentName, "schedule": job.Schedule, "next_run": job.NextRun})
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 
@@ -2834,7 +2834,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 			}
 			stats := agentMem.Stats()
-			data, _ := json.Marshal(map[string]interface{}{
+			data, _ := json.Marshal(map[string]any{
 				"status": "written",
 				"agent":  params.Agent,
 				"key":    params.Key,
@@ -2880,7 +2880,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 
 			entries := agentMem.Query(params.Category, params.Priority, params.Limit)
 			contextBlock := agentMem.ContextBlock()
-			data, _ := json.Marshal(map[string]interface{}{
+			data, _ := json.Marshal(map[string]any{
 				"agent":   params.Agent,
 				"entries": entries,
 				"context": contextBlock,
@@ -2909,7 +2909,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			}
 
 			deleted := agentMem.Delete(params.Key)
-			data, _ := json.Marshal(map[string]interface{}{"status": "deleted", "agent": params.Agent, "key": params.Key, "deleted": deleted})
+			data, _ := json.Marshal(map[string]any{"status": "deleted", "agent": params.Agent, "key": params.Key, "deleted": deleted})
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 
@@ -2957,10 +2957,10 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			status := cbStore.Status()
 			if params.Agent != "" {
 				if s, ok := status[params.Agent]; ok {
-					data, _ := json.Marshal(map[string]interface{}{"agent": params.Agent, "status": s})
+					data, _ := json.Marshal(map[string]any{"agent": params.Agent, "status": s})
 					return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 				}
-				data, _ := json.Marshal(map[string]interface{}{
+				data, _ := json.Marshal(map[string]any{
 					"agent": params.Agent,
 					"status": agent.CircuitSummary{
 						State:        agent.CircuitClosed,
@@ -2973,7 +2973,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 			}
 
-			data, _ := json.Marshal(map[string]interface{}{"circuit_breakers": status, "agent_count": len(status)})
+			data, _ := json.Marshal(map[string]any{"circuit_breakers": status, "agent_count": len(status)})
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 

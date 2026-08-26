@@ -596,7 +596,7 @@ func setFloatMeta(node *SerializableNode, key string, val float64) {
 	node.Metadata[key] = val
 }
 
-func toFloat64(v interface{}) (float64, bool) {
+func toFloat64(v any) (float64, bool) {
 	switch val := v.(type) {
 	case float64:
 		return val, true

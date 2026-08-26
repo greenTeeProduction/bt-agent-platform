@@ -11,17 +11,17 @@ type fakeBlackboard struct {
 	plan       string
 	result     string
 	outcome    string
-	chainState map[string]interface{}
+	chainState map[string]any
 }
 
-func (f *fakeBlackboard) GetTask() string                       { return f.task }
-func (f *fakeBlackboard) GetPlan() string                       { return f.plan }
-func (f *fakeBlackboard) GetResult() string                     { return f.result }
-func (f *fakeBlackboard) GetOutcome() string                    { return f.outcome }
-func (f *fakeBlackboard) SetOutcome(v string)                   { f.outcome = v }
-func (f *fakeBlackboard) SetPlan(v string)                      { f.plan = v }
-func (f *fakeBlackboard) SetResult(v string)                    { f.result = v }
-func (f *fakeBlackboard) GetChainState() map[string]interface{} { return f.chainState }
+func (f *fakeBlackboard) GetTask() string               { return f.task }
+func (f *fakeBlackboard) GetPlan() string               { return f.plan }
+func (f *fakeBlackboard) GetResult() string             { return f.result }
+func (f *fakeBlackboard) GetOutcome() string            { return f.outcome }
+func (f *fakeBlackboard) SetOutcome(v string)           { f.outcome = v }
+func (f *fakeBlackboard) SetPlan(v string)              { f.plan = v }
+func (f *fakeBlackboard) SetResult(v string)            { f.result = v }
+func (f *fakeBlackboard) GetChainState() map[string]any { return f.chainState }
 
 func TestDocPlannerWorldStateRoundTripAndCounts(t *testing.T) {
 	original := DocPlannerWorldState{
@@ -183,7 +183,7 @@ func TestBlackboardBridgeSyncAndPlanSuccess(t *testing.T) {
 	})
 	agent.SetState("ready", true)
 	agent.SetGoals(NewGoal("done", 1, WorldState{"done": true}))
-	bb := &fakeBlackboard{chainState: map[string]interface{}{"has_plan": true, "has_resources": true, "task_status": "ready", "ready": true}}
+	bb := &fakeBlackboard{chainState: map[string]any{"has_plan": true, "has_resources": true, "task_status": "ready", "ready": true}}
 	bridge := NewBlackboardBridge(agent, bb)
 	bridge.RegisterLLMAction("finish", "do {{.ActionName}}")
 	if bridge.LLMActions["finish"] == "" {

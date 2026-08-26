@@ -104,7 +104,7 @@ func TestBTEvolveQDRegisteredAndReturnsQDMetrics(t *testing.T) {
 		t.Fatal("bt_evolve_qd returned no content")
 	}
 
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 		t.Fatalf("bt_evolve_qd result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
 	}
@@ -126,7 +126,7 @@ func TestBTEvolveQDRegisteredAndReturnsQDMetrics(t *testing.T) {
 	if unknown == nil || len(unknown.Content) == 0 {
 		t.Fatal("bt_evolve_qd returned no content for an unknown tree")
 	}
-	var errOut map[string]interface{}
+	var errOut map[string]any
 	if err := json.Unmarshal([]byte(unknown.Content[0].Text), &errOut); err != nil {
 		t.Fatalf("bt_evolve_qd unknown-tree result is not valid JSON: %v", err)
 	}
@@ -168,7 +168,7 @@ func TestBTEvolveQDAccumulatesDurableArchive(t *testing.T) {
 	registerMCPTools(server, &mcpDeps{})
 
 	args := json.RawMessage(`{"tree":"godev","population":4,"generations":2}`)
-	invoke := func(label string) map[string]interface{} {
+	invoke := func(label string) map[string]any {
 		t.Helper()
 		res, ok := server.Invoke("bt_evolve_qd", args)
 		if !ok {
@@ -177,7 +177,7 @@ func TestBTEvolveQDAccumulatesDurableArchive(t *testing.T) {
 		if res == nil || len(res.Content) == 0 {
 			t.Fatalf("bt_evolve_qd returned no content on the %s run", label)
 		}
-		var out map[string]interface{}
+		var out map[string]any
 		if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 			t.Fatalf("bt_evolve_qd %s-run result is not valid JSON: %v (text=%q)", label, err, res.Content[0].Text)
 		}
@@ -253,7 +253,7 @@ func TestBTEvolveQDBenchmarkGateRejectsRegressedWinner(t *testing.T) {
 	if res == nil || len(res.Content) == 0 {
 		t.Fatal("bt_evolve_qd returned no content")
 	}
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 		t.Fatalf("bt_evolve_qd result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
 	}
@@ -327,7 +327,7 @@ func TestBTEvolveQDAndMultiObjectiveShareTrackRecordDrivenGenerationBudget(t *te
 	server := engine.NewServer("test")
 	registerMCPTools(server, &mcpDeps{})
 
-	invoke := func(tool, args, label string) map[string]interface{} {
+	invoke := func(tool, args, label string) map[string]any {
 		t.Helper()
 		res, ok := server.Invoke(tool, json.RawMessage(args))
 		if !ok {
@@ -336,7 +336,7 @@ func TestBTEvolveQDAndMultiObjectiveShareTrackRecordDrivenGenerationBudget(t *te
 		if res == nil || len(res.Content) == 0 {
 			t.Fatalf("%s returned no content on the %s run", tool, label)
 		}
-		var out map[string]interface{}
+		var out map[string]any
 		if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 			t.Fatalf("%s %s-run result is not valid JSON: %v (text=%q)", tool, label, err, res.Content[0].Text)
 		}
@@ -413,7 +413,7 @@ func TestBTEvolveParetoAndQLearningShareTrackRecordDrivenGenerationBudget(t *tes
 	server := engine.NewServer("test")
 	registerMCPTools(server, &mcpDeps{})
 
-	invoke := func(tool, args, label string) map[string]interface{} {
+	invoke := func(tool, args, label string) map[string]any {
 		t.Helper()
 		res, ok := server.Invoke(tool, json.RawMessage(args))
 		if !ok {
@@ -422,7 +422,7 @@ func TestBTEvolveParetoAndQLearningShareTrackRecordDrivenGenerationBudget(t *tes
 		if res == nil || len(res.Content) == 0 {
 			t.Fatalf("%s returned no content on the %s run", tool, label)
 		}
-		var out map[string]interface{}
+		var out map[string]any
 		if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 			t.Fatalf("%s %s-run result is not valid JSON: %v (text=%q)", tool, label, err, res.Content[0].Text)
 		}
@@ -499,7 +499,7 @@ func TestBTEvolveIslandSharesTrackRecordDrivenGenerationBudget(t *testing.T) {
 	server := engine.NewServer("test")
 	registerMCPTools(server, &mcpDeps{})
 
-	invoke := func(tool, args, label string) map[string]interface{} {
+	invoke := func(tool, args, label string) map[string]any {
 		t.Helper()
 		res, ok := server.Invoke(tool, json.RawMessage(args))
 		if !ok {
@@ -508,7 +508,7 @@ func TestBTEvolveIslandSharesTrackRecordDrivenGenerationBudget(t *testing.T) {
 		if res == nil || len(res.Content) == 0 {
 			t.Fatalf("%s returned no content on the %s run", tool, label)
 		}
-		var out map[string]interface{}
+		var out map[string]any
 		if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 			t.Fatalf("%s %s-run result is not valid JSON: %v (text=%q)", tool, label, err, res.Content[0].Text)
 		}
@@ -578,7 +578,7 @@ func TestBTEvolveIslandRegisteredAndReturnsIslandMetrics(t *testing.T) {
 		t.Fatal("bt_evolve_island returned no content")
 	}
 
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 		t.Fatalf("bt_evolve_island result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
 	}
@@ -592,7 +592,7 @@ func TestBTEvolveIslandRegisteredAndReturnsIslandMetrics(t *testing.T) {
 	}
 
 	// per_island_best must hold exactly one best-fitness entry per island.
-	perIsland, ok := out["per_island_best"].(map[string]interface{})
+	perIsland, ok := out["per_island_best"].(map[string]any)
 	if !ok {
 		t.Fatalf("bt_evolve_island 'per_island_best' must be a JSON object; got %T (%v)", out["per_island_best"], out["per_island_best"])
 	}
@@ -614,7 +614,7 @@ func TestBTEvolveIslandRegisteredAndReturnsIslandMetrics(t *testing.T) {
 	if unknown == nil || len(unknown.Content) == 0 {
 		t.Fatal("bt_evolve_island returned no content for an unknown tree")
 	}
-	var errOut map[string]interface{}
+	var errOut map[string]any
 	if err := json.Unmarshal([]byte(unknown.Content[0].Text), &errOut); err != nil {
 		t.Fatalf("bt_evolve_island unknown-tree result is not valid JSON: %v", err)
 	}
@@ -652,7 +652,7 @@ func TestBTEvolveIslandDomainSeeding(t *testing.T) {
 		t.Fatal("bt_evolve_island returned no content for domain-seeded islands")
 	}
 
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 		t.Fatalf("bt_evolve_island domain-seeded result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
 	}
@@ -660,7 +660,7 @@ func TestBTEvolveIslandDomainSeeding(t *testing.T) {
 		t.Fatalf("bt_evolve_island unexpectedly returned an error for registered domains: %v", out)
 	}
 
-	perIsland, isObj := out["per_island_best"].(map[string]interface{})
+	perIsland, isObj := out["per_island_best"].(map[string]any)
 	if !isObj {
 		t.Fatalf("bt_evolve_island 'per_island_best' must be a JSON object; got %T (%v)", out["per_island_best"], out["per_island_best"])
 	}
@@ -683,7 +683,7 @@ func TestBTEvolveIslandDomainSeeding(t *testing.T) {
 	if unknown == nil || len(unknown.Content) == 0 {
 		t.Fatal("bt_evolve_island returned no content for an unknown domain")
 	}
-	var errOut map[string]interface{}
+	var errOut map[string]any
 	if err := json.Unmarshal([]byte(unknown.Content[0].Text), &errOut); err != nil {
 		t.Fatalf("bt_evolve_island unknown-domain result is not valid JSON: %v", err)
 	}
@@ -740,7 +740,7 @@ func TestBTEvolveIslandWiresExperienceBankIntoMigration(t *testing.T) {
 	if res == nil || len(res.Content) == 0 {
 		t.Fatal("bt_evolve_island returned no content")
 	}
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 		t.Fatalf("bt_evolve_island result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
 	}
@@ -814,14 +814,14 @@ func TestBTEvolveIslandDomainsModeWritesFitnessBackPerDomain(t *testing.T) {
 	if res == nil || len(res.Content) == 0 {
 		t.Fatal("bt_evolve_island returned no content for domain-seeded islands")
 	}
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 		t.Fatalf("bt_evolve_island domain-seeded result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
 	}
 	if _, isErr := out["error"]; isErr {
 		t.Fatalf("bt_evolve_island unexpectedly returned an error for registered domains: %v", out)
 	}
-	perIsland, isObj := out["per_island_best"].(map[string]interface{})
+	perIsland, isObj := out["per_island_best"].(map[string]any)
 	if !isObj {
 		t.Fatalf("bt_evolve_island 'per_island_best' must be a JSON object; got %T (%v)", out["per_island_best"], out["per_island_best"])
 	}
@@ -881,7 +881,7 @@ func TestBTEvolveIslandDomainsModeWritesFitnessBackPerDomain(t *testing.T) {
 	if defaultRes == nil || len(defaultRes.Content) == 0 {
 		t.Fatal("bt_evolve_island returned no content on the default-mode run")
 	}
-	var defaultOut map[string]interface{}
+	var defaultOut map[string]any
 	if err := json.Unmarshal([]byte(defaultRes.Content[0].Text), &defaultOut); err != nil {
 		t.Fatalf("bt_evolve_island default-mode result is not valid JSON: %v (text=%q)", err, defaultRes.Content[0].Text)
 	}
@@ -929,7 +929,7 @@ func TestBTEvolveIslandAccumulatesDurableArchive(t *testing.T) {
 	// Identical args for both runs so warm-start island keys line up. Params
 	// stay tiny so the deterministic structural evolution remains -short-safe.
 	args := json.RawMessage(`{"tree":"godev","islands":2,"population":4,"generations":2,"migration_interval":1,"migration_rate":0.5}`)
-	invoke := func(label string) map[string]interface{} {
+	invoke := func(label string) map[string]any {
 		t.Helper()
 		res, ok := server.Invoke("bt_evolve_island", args)
 		if !ok {
@@ -938,7 +938,7 @@ func TestBTEvolveIslandAccumulatesDurableArchive(t *testing.T) {
 		if res == nil || len(res.Content) == 0 {
 			t.Fatalf("bt_evolve_island returned no content on the %s run", label)
 		}
-		var out map[string]interface{}
+		var out map[string]any
 		if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 			t.Fatalf("bt_evolve_island %s-run result is not valid JSON: %v (text=%q)", label, err, res.Content[0].Text)
 		}
@@ -1050,7 +1050,7 @@ func TestBTEvolveIslandBenchmarkGateRejectsRegressedWinner(t *testing.T) {
 	if res == nil || len(res.Content) == 0 {
 		t.Fatal("bt_evolve_island returned no content")
 	}
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 		t.Fatalf("bt_evolve_island result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
 	}
@@ -1124,7 +1124,7 @@ func TestBTEvolveIslandArchiveIsScopedPerBaseTree(t *testing.T) {
 		if res == nil || len(res.Content) == 0 {
 			t.Fatalf("bt_evolve_island returned no content on the %s run", label)
 		}
-		var out map[string]interface{}
+		var out map[string]any
 		if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 			t.Fatalf("bt_evolve_island %s-run result is not valid JSON: %v (text=%q)", label, err, res.Content[0].Text)
 		}
@@ -1225,7 +1225,7 @@ func TestBTEvolveIslandCapsBoundDurableArchiveAcrossCalls(t *testing.T) {
 		}
 		return len(pop.Individuals)
 	}
-	invoke := func(t *testing.T, server *engine.Server, label, args string) map[string]interface{} {
+	invoke := func(t *testing.T, server *engine.Server, label, args string) map[string]any {
 		t.Helper()
 		res, ok := server.Invoke("bt_evolve_island", json.RawMessage(args))
 		if !ok {
@@ -1234,7 +1234,7 @@ func TestBTEvolveIslandCapsBoundDurableArchiveAcrossCalls(t *testing.T) {
 		if res == nil || len(res.Content) == 0 {
 			t.Fatalf("bt_evolve_island returned no content on the %s run", label)
 		}
-		var out map[string]interface{}
+		var out map[string]any
 		if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 			t.Fatalf("bt_evolve_island %s-run result is not valid JSON: %v (text=%q)", label, err, res.Content[0].Text)
 		}
@@ -1371,7 +1371,7 @@ func TestBTEvolveIslandSurfacesEvictionCounters(t *testing.T) {
 	if res == nil || len(res.Content) == 0 {
 		t.Fatal("bt_evolve_island returned no content")
 	}
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 		t.Fatalf("bt_evolve_island result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
 	}
@@ -1429,13 +1429,13 @@ func TestBTEvolveIslandAdoptsLegacyGlobalArchiveOnce(t *testing.T) {
 	server := engine.NewServer("test")
 	registerMCPTools(server, &mcpDeps{})
 	args := json.RawMessage(`{"tree":"godev","islands":2,"population":4,"generations":1,"migration_interval":1,"migration_rate":0.5}`)
-	invoke := func(label string) map[string]interface{} {
+	invoke := func(label string) map[string]any {
 		t.Helper()
 		res, ok := server.Invoke("bt_evolve_island", args)
 		if !ok || res == nil || len(res.Content) == 0 {
 			t.Fatalf("bt_evolve_island returned nothing on the %s run", label)
 		}
-		var out map[string]interface{}
+		var out map[string]any
 		if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 			t.Fatalf("bt_evolve_island %s result is not valid JSON: %v", label, err)
 		}
@@ -1524,7 +1524,7 @@ func TestBTEvolveMultiObjectiveRegisteredAndReturnsParetoMetrics(t *testing.T) {
 		t.Fatal("bt_evolve_multiobjective returned no content")
 	}
 
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 		t.Fatalf("bt_evolve_multiobjective result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
 	}
@@ -1534,7 +1534,7 @@ func TestBTEvolveMultiObjectiveRegisteredAndReturnsParetoMetrics(t *testing.T) {
 
 	// The objective dimensions must be echoed as a non-empty list including the
 	// three fixed axes the tool optimizes over.
-	dims, ok := out["dimensions"].([]interface{})
+	dims, ok := out["dimensions"].([]any)
 	if !ok || len(dims) == 0 {
 		t.Fatalf("bt_evolve_multiobjective result must echo a non-empty 'dimensions' list; got %v", out["dimensions"])
 	}
@@ -1581,13 +1581,13 @@ func TestBTEvolveMultiObjectiveRegisteredAndReturnsParetoMetrics(t *testing.T) {
 	if !healthPresent {
 		t.Fatal("bt_evolve_multiobjective response must surface Population.HealthSnapshot() under a 'health' object, matching the sibling evolve tools; it is absent")
 	}
-	healthObj, isObj := health.(map[string]interface{})
+	healthObj, isObj := health.(map[string]any)
 	if !isObj {
 		t.Fatalf("bt_evolve_multiobjective 'health' must be a JSON object projecting Population.HealthSnapshot(); got %T (%v)", health, health)
 	}
 	if reasons, hasReasons := healthObj["crisis_reasons"]; !hasReasons {
 		t.Errorf("bt_evolve_multiobjective health object must report a 'crisis_reasons' key (an empty array when the run stayed healthy); got %v", healthObj)
-	} else if _, isList := reasons.([]interface{}); !isList {
+	} else if _, isList := reasons.([]any); !isList {
 		t.Errorf("bt_evolve_multiobjective health 'crisis_reasons' must be a JSON array; got %T (%v)", reasons, reasons)
 	}
 	if res, isNum := healthObj["resurrections"].(float64); !isNum || res < 0 {
@@ -1606,7 +1606,7 @@ func TestBTEvolveMultiObjectiveRegisteredAndReturnsParetoMetrics(t *testing.T) {
 	if unknown == nil || len(unknown.Content) == 0 {
 		t.Fatal("bt_evolve_multiobjective returned no content for an unknown tree")
 	}
-	var errOut2 map[string]interface{}
+	var errOut2 map[string]any
 	if err := json.Unmarshal([]byte(unknown.Content[0].Text), &errOut2); err != nil {
 		t.Fatalf("bt_evolve_multiobjective unknown-tree result is not valid JSON: %v", err)
 	}
@@ -1652,7 +1652,7 @@ func TestBTEvolveMultiObjectiveAccumulatesDurableArchive(t *testing.T) {
 	registerMCPTools(server, &mcpDeps{})
 
 	args := json.RawMessage(`{"tree":"godev","population":4,"generations":2}`)
-	invoke := func(label string) map[string]interface{} {
+	invoke := func(label string) map[string]any {
 		t.Helper()
 		res, ok := server.Invoke("bt_evolve_multiobjective", args)
 		if !ok {
@@ -1661,7 +1661,7 @@ func TestBTEvolveMultiObjectiveAccumulatesDurableArchive(t *testing.T) {
 		if res == nil || len(res.Content) == 0 {
 			t.Fatalf("bt_evolve_multiobjective returned no content on the %s run", label)
 		}
-		var out map[string]interface{}
+		var out map[string]any
 		if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 			t.Fatalf("bt_evolve_multiobjective %s-run result is not valid JSON: %v (text=%q)", label, err, res.Content[0].Text)
 		}
@@ -1738,7 +1738,7 @@ func TestBTEvolveMultiObjectiveBenchmarkGateRejectsRegressedWinner(t *testing.T)
 	if res == nil || len(res.Content) == 0 {
 		t.Fatal("bt_evolve_multiobjective returned no content")
 	}
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 		t.Fatalf("bt_evolve_multiobjective result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
 	}
@@ -1807,7 +1807,7 @@ func TestBTEvolveParetoRegisteredAndReturnsParetoMetrics(t *testing.T) {
 		t.Fatal("bt_evolve_pareto returned no content")
 	}
 
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 		t.Fatalf("bt_evolve_pareto result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
 	}
@@ -1830,7 +1830,7 @@ func TestBTEvolveParetoRegisteredAndReturnsParetoMetrics(t *testing.T) {
 	if _, present := out["diversity_score"]; !present {
 		t.Errorf("bt_evolve_pareto result missing 'diversity_score' key; got keys %v", out)
 	}
-	bestPerDim, ok := out["best_per_dim"].(map[string]interface{})
+	bestPerDim, ok := out["best_per_dim"].(map[string]any)
 	if !ok || len(bestPerDim) == 0 {
 		t.Errorf("bt_evolve_pareto must report a non-empty 'best_per_dim' object; got %v", out["best_per_dim"])
 	}
@@ -1842,13 +1842,13 @@ func TestBTEvolveParetoRegisteredAndReturnsParetoMetrics(t *testing.T) {
 	if !healthPresent {
 		t.Fatal("bt_evolve_pareto response must surface Population.HealthSnapshot() under a 'health' object, matching the sibling evolve tools; it is absent")
 	}
-	healthObj, isObj := health.(map[string]interface{})
+	healthObj, isObj := health.(map[string]any)
 	if !isObj {
 		t.Fatalf("bt_evolve_pareto 'health' must be a JSON object projecting Population.HealthSnapshot(); got %T (%v)", health, health)
 	}
 	if reasons, hasReasons := healthObj["crisis_reasons"]; !hasReasons {
 		t.Errorf("bt_evolve_pareto health object must report a 'crisis_reasons' key (an empty array when the run stayed healthy); got %v", healthObj)
-	} else if _, isList := reasons.([]interface{}); !isList {
+	} else if _, isList := reasons.([]any); !isList {
 		t.Errorf("bt_evolve_pareto health 'crisis_reasons' must be a JSON array; got %T (%v)", reasons, reasons)
 	}
 	if res, isNum := healthObj["resurrections"].(float64); !isNum || res < 0 {
@@ -1867,7 +1867,7 @@ func TestBTEvolveParetoRegisteredAndReturnsParetoMetrics(t *testing.T) {
 	if unknown == nil || len(unknown.Content) == 0 {
 		t.Fatal("bt_evolve_pareto returned no content for an unknown tree")
 	}
-	var errOut2 map[string]interface{}
+	var errOut2 map[string]any
 	if err := json.Unmarshal([]byte(unknown.Content[0].Text), &errOut2); err != nil {
 		t.Fatalf("bt_evolve_pareto unknown-tree result is not valid JSON: %v", err)
 	}
@@ -1908,7 +1908,7 @@ func TestBTEvolveParetoAccumulatesDurableArchive(t *testing.T) {
 	registerMCPTools(server, &mcpDeps{})
 
 	args := json.RawMessage(`{"tree":"godev","population":4,"generations":2}`)
-	invoke := func(label string) map[string]interface{} {
+	invoke := func(label string) map[string]any {
 		t.Helper()
 		res, ok := server.Invoke("bt_evolve_pareto", args)
 		if !ok {
@@ -1917,7 +1917,7 @@ func TestBTEvolveParetoAccumulatesDurableArchive(t *testing.T) {
 		if res == nil || len(res.Content) == 0 {
 			t.Fatalf("bt_evolve_pareto returned no content on the %s run", label)
 		}
-		var out map[string]interface{}
+		var out map[string]any
 		if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 			t.Fatalf("bt_evolve_pareto %s-run result is not valid JSON: %v (text=%q)", label, err, res.Content[0].Text)
 		}
@@ -1992,7 +1992,7 @@ func TestBTEvolveParetoBenchmarkGateRejectsRegressedWinner(t *testing.T) {
 	if res == nil || len(res.Content) == 0 {
 		t.Fatal("bt_evolve_pareto returned no content")
 	}
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 		t.Fatalf("bt_evolve_pareto result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
 	}
@@ -2089,7 +2089,7 @@ func TestBTEvolveBottlenecksRegisteredAndReturnsBeforeAfterReport(t *testing.T) 
 		t.Fatal("bt_evolve_bottlenecks returned no content")
 	}
 
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 		t.Fatalf("bt_evolve_bottlenecks result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
 	}
@@ -2105,16 +2105,16 @@ func TestBTEvolveBottlenecksRegisteredAndReturnsBeforeAfterReport(t *testing.T) 
 	// The per-tree report holds exactly the two resolvable bottlenecks, with
 	// the KG fitness echoed as before_fitness and a computed after_fitness.
 	// Bottleneck ordering is not guaranteed, so entries are looked up by tree.
-	report, isList := out["report"].([]interface{})
+	report, isList := out["report"].([]any)
 	if !isList {
 		t.Fatalf("bt_evolve_bottlenecks must return a 'report' JSON array; got %T (%v)", out["report"], out["report"])
 	}
 	if len(report) != 2 {
 		t.Fatalf("bt_evolve_bottlenecks 'report' must hold exactly the 2 resolvable bottlenecks; got %d entries: %v", len(report), report)
 	}
-	byTree := map[string]map[string]interface{}{}
+	byTree := map[string]map[string]any{}
 	for _, e := range report {
-		m, isMap := e.(map[string]interface{})
+		m, isMap := e.(map[string]any)
 		if !isMap {
 			t.Fatalf("bt_evolve_bottlenecks report entries must be JSON objects; got %T (%v)", e, e)
 		}
@@ -2164,7 +2164,7 @@ func TestBTEvolveBottlenecksRegisteredAndReturnsBeforeAfterReport(t *testing.T) 
 	}
 
 	// The top-level tally states which algorithm handled how many trees.
-	algorithms, isMap := out["algorithms"].(map[string]interface{})
+	algorithms, isMap := out["algorithms"].(map[string]any)
 	if !isMap {
 		t.Fatalf("bt_evolve_bottlenecks must return a top-level 'algorithms' tally object; got %T (%v)", out["algorithms"], out["algorithms"])
 	}
@@ -2177,7 +2177,7 @@ func TestBTEvolveBottlenecksRegisteredAndReturnsBeforeAfterReport(t *testing.T) 
 
 	// The unresolvable bottleneck is surfaced under 'skipped', not silently
 	// dropped and not fatal.
-	skipped, isList := out["skipped"].([]interface{})
+	skipped, isList := out["skipped"].([]any)
 	if !isList || len(skipped) != 1 || skipped[0] != "domain:__no_such_tree__" {
 		t.Errorf("bt_evolve_bottlenecks must list the unresolvable bottleneck under 'skipped' = [\"domain:__no_such_tree__\"]; got %v", out["skipped"])
 	}
@@ -2202,7 +2202,7 @@ func TestBTEvolveBottlenecksRegisteredAndReturnsBeforeAfterReport(t *testing.T) 
 	if empty == nil || len(empty.Content) == 0 {
 		t.Fatal("bt_evolve_bottlenecks returned no content for a healthy graph")
 	}
-	var emptyOut map[string]interface{}
+	var emptyOut map[string]any
 	if err := json.Unmarshal([]byte(empty.Content[0].Text), &emptyOut); err != nil {
 		t.Fatalf("bt_evolve_bottlenecks healthy-graph result is not valid JSON: %v (text=%q)", err, empty.Content[0].Text)
 	}
@@ -2212,7 +2212,7 @@ func TestBTEvolveBottlenecksRegisteredAndReturnsBeforeAfterReport(t *testing.T) 
 	if n, isNum := emptyOut["bottlenecks"].(float64); !isNum || int(n) != 0 {
 		t.Errorf("bt_evolve_bottlenecks must report 'bottlenecks' = 0 for a healthy graph; got %v", emptyOut["bottlenecks"])
 	}
-	if emptyReport, isList := emptyOut["report"].([]interface{}); !isList || len(emptyReport) != 0 {
+	if emptyReport, isList := emptyOut["report"].([]any); !isList || len(emptyReport) != 0 {
 		t.Errorf("bt_evolve_bottlenecks must return an empty 'report' array for a healthy graph; got %v", emptyOut["report"])
 	}
 }
@@ -2278,15 +2278,15 @@ func TestBTEvolveBottlenecksGeneticPathQueriesExperienceByFailureTask(t *testing
 	if res == nil || len(res.Content) == 0 {
 		t.Fatal("bt_evolve_bottlenecks returned no content")
 	}
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 		t.Fatalf("bt_evolve_bottlenecks result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
 	}
-	report, isList := out["report"].([]interface{})
+	report, isList := out["report"].([]any)
 	if !isList || len(report) != 1 {
 		t.Fatalf("expected exactly one bt_evolve_bottlenecks report entry for the single genetic-path bottleneck; got %d: %v", len(report), out["report"])
 	}
-	entry, _ := report[0].(map[string]interface{})
+	entry, _ := report[0].(map[string]any)
 	if entry["algorithm"] != "genetic" {
 		t.Fatalf("fixture bottleneck must route to the genetic path; got algorithm=%v", entry["algorithm"])
 	}
@@ -2377,7 +2377,7 @@ func TestBTEvolveSelectionPressureRegisteredAndBreedsProvenUnderbredTrees(t *tes
 		t.Fatal("bt_evolve_selection_pressure returned no content")
 	}
 
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 		t.Fatalf("bt_evolve_selection_pressure result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
 	}
@@ -2393,16 +2393,16 @@ func TestBTEvolveSelectionPressureRegisteredAndBreedsProvenUnderbredTrees(t *tes
 
 	// The per-tree report holds exactly the two resolvable pressure entries, with
 	// the KG fitness echoed as before_fitness and a computed after_fitness.
-	report, isList := out["report"].([]interface{})
+	report, isList := out["report"].([]any)
 	if !isList {
 		t.Fatalf("bt_evolve_selection_pressure must return a 'report' JSON array; got %T (%v)", out["report"], out["report"])
 	}
 	if len(report) != 2 {
 		t.Fatalf("bt_evolve_selection_pressure 'report' must hold exactly the 2 resolvable pressure entries; got %d entries: %v", len(report), report)
 	}
-	byTree := map[string]map[string]interface{}{}
+	byTree := map[string]map[string]any{}
 	for _, e := range report {
-		m, isMap := e.(map[string]interface{})
+		m, isMap := e.(map[string]any)
 		if !isMap {
 			t.Fatalf("bt_evolve_selection_pressure report entries must be JSON objects; got %T (%v)", e, e)
 		}
@@ -2434,7 +2434,7 @@ func TestBTEvolveSelectionPressureRegisteredAndBreedsProvenUnderbredTrees(t *tes
 	}
 
 	// The unresolvable pressure entry is surfaced under 'skipped', not fatal.
-	skipped, isList := out["skipped"].([]interface{})
+	skipped, isList := out["skipped"].([]any)
 	if !isList || len(skipped) != 1 || skipped[0] != "domain:__no_such_tree__" {
 		t.Errorf("bt_evolve_selection_pressure must list the unresolvable pressure entry under 'skipped' = [\"domain:__no_such_tree__\"]; got %v", out["skipped"])
 	}
@@ -2480,7 +2480,7 @@ func TestBTEvolveSelectionPressureRegisteredAndBreedsProvenUnderbredTrees(t *tes
 	if empty == nil || len(empty.Content) == 0 {
 		t.Fatal("bt_evolve_selection_pressure returned no content for a no-pressure graph")
 	}
-	var emptyOut map[string]interface{}
+	var emptyOut map[string]any
 	if err := json.Unmarshal([]byte(empty.Content[0].Text), &emptyOut); err != nil {
 		t.Fatalf("bt_evolve_selection_pressure no-pressure result is not valid JSON: %v (text=%q)", err, empty.Content[0].Text)
 	}
@@ -2490,7 +2490,7 @@ func TestBTEvolveSelectionPressureRegisteredAndBreedsProvenUnderbredTrees(t *tes
 	if n, isNum := emptyOut["selection_pressure"].(float64); !isNum || int(n) != 0 {
 		t.Errorf("bt_evolve_selection_pressure must report 'selection_pressure' = 0 for a no-pressure graph; got %v", emptyOut["selection_pressure"])
 	}
-	if emptyReport, isList := emptyOut["report"].([]interface{}); !isList || len(emptyReport) != 0 {
+	if emptyReport, isList := emptyOut["report"].([]any); !isList || len(emptyReport) != 0 {
 		t.Errorf("bt_evolve_selection_pressure must return an empty 'report' array for a no-pressure graph; got %v", emptyOut["report"])
 	}
 
@@ -2505,7 +2505,7 @@ func TestBTEvolveSelectionPressureRegisteredAndBreedsProvenUnderbredTrees(t *tes
 	if blank == nil || len(blank.Content) == 0 {
 		t.Fatal("bt_evolve_selection_pressure returned no content for an empty graph")
 	}
-	var blankOut map[string]interface{}
+	var blankOut map[string]any
 	if err := json.Unmarshal([]byte(blank.Content[0].Text), &blankOut); err != nil {
 		t.Fatalf("bt_evolve_selection_pressure empty-graph result is not valid JSON: %v", err)
 	}
@@ -2546,7 +2546,7 @@ func TestBTEvolveGeneticPersistsEvolvedWinnerTree(t *testing.T) {
 	if res == nil || len(res.Content) == 0 {
 		t.Fatal("bt_evolve_genetic returned no content")
 	}
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 		t.Fatalf("bt_evolve_genetic result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
 	}
@@ -2657,15 +2657,15 @@ func TestBTEvolveBottlenecksPersistsEvolvedWinnerTree(t *testing.T) {
 	if res == nil || len(res.Content) == 0 {
 		t.Fatal("bt_evolve_bottlenecks returned no content")
 	}
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 		t.Fatalf("bt_evolve_bottlenecks result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
 	}
-	report, isList := out["report"].([]interface{})
+	report, isList := out["report"].([]any)
 	if !isList || len(report) != 1 {
 		t.Fatalf("expected exactly one bt_evolve_bottlenecks report entry for the single genetic-path bottleneck; got %d: %v", len(report), out["report"])
 	}
-	entry, _ := report[0].(map[string]interface{})
+	entry, _ := report[0].(map[string]any)
 	if entry["algorithm"] != "genetic" {
 		t.Fatalf("fixture bottleneck must route to the genetic path; got algorithm=%v", entry["algorithm"])
 	}
@@ -2721,15 +2721,15 @@ func TestBTEvolveBottlenecksCMAESPersistsEvolvedWinnerTree(t *testing.T) {
 	if res == nil || len(res.Content) == 0 {
 		t.Fatal("bt_evolve_bottlenecks returned no content")
 	}
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 		t.Fatalf("bt_evolve_bottlenecks result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
 	}
-	report, isList := out["report"].([]interface{})
+	report, isList := out["report"].([]any)
 	if !isList || len(report) != 1 {
 		t.Fatalf("expected exactly one bt_evolve_bottlenecks report entry for the single cmaes-path bottleneck; got %d: %v", len(report), out["report"])
 	}
-	entry, _ := report[0].(map[string]interface{})
+	entry, _ := report[0].(map[string]any)
 	if entry["algorithm"] != "cmaes" {
 		t.Fatalf("fixture bottleneck must route to the cmaes path; got algorithm=%v", entry["algorithm"])
 	}
@@ -2800,7 +2800,7 @@ func TestBTEvolveBottlenecksSkipsTreeWithFitterNonRegressingEvolvedDescendant(t 
 	if res == nil || len(res.Content) == 0 {
 		t.Fatal("bt_evolve_bottlenecks returned no content")
 	}
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 		t.Fatalf("bt_evolve_bottlenecks result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
 	}
@@ -2809,20 +2809,20 @@ func TestBTEvolveBottlenecksSkipsTreeWithFitterNonRegressingEvolvedDescendant(t 
 		t.Fatalf("bt_evolve_bottlenecks must still detect domain:alert_router as a bottleneck (RunCount>=3, Fitness<30); got %v", out["bottlenecks"])
 	}
 
-	report, _ := out["report"].([]interface{})
+	report, _ := out["report"].([]any)
 	for _, e := range report {
-		m, _ := e.(map[string]interface{})
+		m, _ := e.(map[string]any)
 		if m["tree"] == "domain:alert_router" {
 			t.Fatalf("bt_evolve_bottlenecks must not spend another evolution budget on domain:alert_router: EvolutionLineage already shows a fitter, non-regressing evolved descendant (domain:alert_router-evolved, StructuralFitness=90 > base SuccessRate=8, cold TrackRecord WinRate()==1) — got a full report entry instead of a skip: %v", m)
 		}
 	}
 
-	algorithms, _ := out["algorithms"].(map[string]interface{})
+	algorithms, _ := out["algorithms"].(map[string]any)
 	if n, isNum := algorithms["genetic"].(float64); isNum && n > 0 {
 		t.Errorf("bt_evolve_bottlenecks must not tally domain:alert_router under 'algorithms': its evolution should have been skipped via EvolutionLineage rather than executed; got algorithms=%v", algorithms)
 	}
 
-	lineageSkipped, _ := out["lineage_skipped"].([]interface{})
+	lineageSkipped, _ := out["lineage_skipped"].([]any)
 	found := false
 	for _, s := range lineageSkipped {
 		if id, _ := s.(string); id == "domain:alert_router" {
@@ -2875,7 +2875,7 @@ func TestBTEvolveSelectionPressureSkipsTreeWithFitterNonRegressingEvolvedDescend
 	if res == nil || len(res.Content) == 0 {
 		t.Fatal("bt_evolve_selection_pressure returned no content")
 	}
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 		t.Fatalf("bt_evolve_selection_pressure result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
 	}
@@ -2884,20 +2884,20 @@ func TestBTEvolveSelectionPressureSkipsTreeWithFitterNonRegressingEvolvedDescend
 		t.Fatalf("bt_evolve_selection_pressure must still detect domain:code_review as proven+underbred (Fitness>=70, RunCount<5); got %v", out["selection_pressure"])
 	}
 
-	report, _ := out["report"].([]interface{})
+	report, _ := out["report"].([]any)
 	for _, e := range report {
-		m, _ := e.(map[string]interface{})
+		m, _ := e.(map[string]any)
 		if m["tree"] == "domain:code_review" {
 			t.Fatalf("bt_evolve_selection_pressure must not spend another evolution budget on domain:code_review: EvolutionLineage already shows a fitter, non-regressing evolved descendant (domain:code_review-evolved, StructuralFitness=95 > base Fitness=90, cold TrackRecord WinRate()==1) — got a full report entry instead of a skip: %v", m)
 		}
 	}
 
-	algorithms, _ := out["algorithms"].(map[string]interface{})
+	algorithms, _ := out["algorithms"].(map[string]any)
 	if n, isNum := algorithms["genetic"].(float64); isNum && n > 0 {
 		t.Errorf("bt_evolve_selection_pressure must not tally domain:code_review under 'algorithms': its evolution should have been skipped via EvolutionLineage rather than executed; got algorithms=%v", algorithms)
 	}
 
-	lineageSkipped, _ := out["lineage_skipped"].([]interface{})
+	lineageSkipped, _ := out["lineage_skipped"].([]any)
 	found := false
 	for _, s := range lineageSkipped {
 		if id, _ := s.(string); id == "domain:code_review" {
@@ -2937,15 +2937,15 @@ func TestBTEvolveSelectionPressurePersistsEvolvedWinnerTree(t *testing.T) {
 	if res == nil || len(res.Content) == 0 {
 		t.Fatal("bt_evolve_selection_pressure returned no content")
 	}
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 		t.Fatalf("bt_evolve_selection_pressure result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
 	}
-	report, isList := out["report"].([]interface{})
+	report, isList := out["report"].([]any)
 	if !isList || len(report) != 1 {
 		t.Fatalf("expected exactly one bt_evolve_selection_pressure report entry for the single proven+underbred tree; got %d: %v", len(report), out["report"])
 	}
-	entry, _ := report[0].(map[string]interface{})
+	entry, _ := report[0].(map[string]any)
 
 	const wantID = "domain:code_review-evolved"
 	evolvedID, _ := entry["evolved_tree_id"].(string)
@@ -2994,13 +2994,13 @@ func TestPersistEvolvedWinner_SkipsOverwriteWhenFitnessDoesNotImprove(t *testing
 	}
 	const wantID = "godev-evolved"
 
-	first := map[string]interface{}{}
+	first := map[string]any{}
 	persistEvolvedWinner(deps, "godev", strong, 90, first)
 	if persisted, _ := first["persisted"].(bool); !persisted {
 		t.Fatalf("first persistEvolvedWinner call must persist the initial winner; result=%v", first)
 	}
 
-	second := map[string]interface{}{}
+	second := map[string]any{}
 	persistEvolvedWinner(deps, "godev", weak, 50, second)
 
 	if persisted, _ := second["persisted"].(bool); persisted {
@@ -3050,14 +3050,14 @@ func TestPersistEvolvedWinner_AtomicWithFailedDiskWrite(t *testing.T) {
 	strong := &evolution.SerializableNode{Type: "Action", Name: "AddCitations"}
 	const wantID = "godev-evolved"
 
-	first := map[string]interface{}{}
+	first := map[string]any{}
 	persistEvolvedWinner(deps, "godev", strong, 90, first)
 	if persisted, _ := first["persisted"].(bool); !persisted {
 		t.Fatalf("first persistEvolvedWinner call must persist the initial winner; result=%v", first)
 	}
 
 	invalid := &evolution.SerializableNode{Type: "TotallyBogusNodeType", Name: "invalid-winner"}
-	second := map[string]interface{}{}
+	second := map[string]any{}
 	persistEvolvedWinner(deps, "godev", invalid, 95, second)
 
 	if persisted, _ := second["persisted"].(bool); persisted {
@@ -3118,7 +3118,7 @@ func TestPersistEvolvedWinner_FlushesFeedbackToDisk(t *testing.T) {
 	winner := &evolution.SerializableNode{Type: "Action", Name: "AddCitations"}
 	const wantID = "godev-evolved"
 
-	result := map[string]interface{}{}
+	result := map[string]any{}
 	persistEvolvedWinner(deps, "godev", winner, 90, result)
 	if persisted, _ := result["persisted"].(bool); !persisted {
 		t.Fatalf("persistEvolvedWinner must persist the winner; result=%v", result)
@@ -3163,20 +3163,20 @@ func TestEvolveToolsSurfacePopulationHealthSnapshot(t *testing.T) {
 	// Population.HealthSnapshot() with all three self-healing fields present. It
 	// uses Errorf (not Fatalf) so a single RED run reports every tool still
 	// missing the health projection rather than stopping at the first.
-	assertHealth := func(t *testing.T, tool string, health interface{}, present bool) {
+	assertHealth := func(t *testing.T, tool string, health any, present bool) {
 		t.Helper()
 		if !present {
 			t.Errorf("%s response must surface Population.HealthSnapshot() under a 'health' object; it is absent", tool)
 			return
 		}
-		h, isObj := health.(map[string]interface{})
+		h, isObj := health.(map[string]any)
 		if !isObj {
 			t.Errorf("%s 'health' must be a JSON object projecting Population.HealthSnapshot(); got %T (%v)", tool, health, health)
 			return
 		}
 		if reasons, hasReasons := h["crisis_reasons"]; !hasReasons {
 			t.Errorf("%s health object must report a 'crisis_reasons' key (an empty array when the run stayed healthy); got %v", tool, h)
-		} else if _, isList := reasons.([]interface{}); !isList {
+		} else if _, isList := reasons.([]any); !isList {
 			t.Errorf("%s health 'crisis_reasons' must be a JSON array; got %T (%v)", tool, reasons, reasons)
 		}
 		if res, isNum := h["resurrections"].(float64); !isNum || res < 0 {
@@ -3196,7 +3196,7 @@ func TestEvolveToolsSurfacePopulationHealthSnapshot(t *testing.T) {
 	if !ok || genRes == nil || len(genRes.Content) == 0 {
 		t.Fatal("Invoke(bt_evolve_genetic) returned no content")
 	}
-	var genOut map[string]interface{}
+	var genOut map[string]any
 	if err := json.Unmarshal([]byte(genRes.Content[0].Text), &genOut); err != nil {
 		t.Fatalf("bt_evolve_genetic result is not valid JSON: %v (text=%q)", err, genRes.Content[0].Text)
 	}
@@ -3221,15 +3221,15 @@ func TestEvolveToolsSurfacePopulationHealthSnapshot(t *testing.T) {
 	if !ok || bnRes == nil || len(bnRes.Content) == 0 {
 		t.Fatal("Invoke(bt_evolve_bottlenecks) returned no content")
 	}
-	var bnOut map[string]interface{}
+	var bnOut map[string]any
 	if err := json.Unmarshal([]byte(bnRes.Content[0].Text), &bnOut); err != nil {
 		t.Fatalf("bt_evolve_bottlenecks result is not valid JSON: %v (text=%q)", err, bnRes.Content[0].Text)
 	}
-	bnReport, isList := bnOut["report"].([]interface{})
+	bnReport, isList := bnOut["report"].([]any)
 	if !isList || len(bnReport) != 1 {
 		t.Fatalf("bt_evolve_bottlenecks must return a 'report' array holding the single genetic bottleneck; got %v", bnOut["report"])
 	}
-	bnEntry, isObj := bnReport[0].(map[string]interface{})
+	bnEntry, isObj := bnReport[0].(map[string]any)
 	if !isObj {
 		t.Fatalf("bt_evolve_bottlenecks report entry must be a JSON object; got %T (%v)", bnReport[0], bnReport[0])
 	}
@@ -3252,15 +3252,15 @@ func TestEvolveToolsSurfacePopulationHealthSnapshot(t *testing.T) {
 	if !ok || spRes == nil || len(spRes.Content) == 0 {
 		t.Fatal("Invoke(bt_evolve_selection_pressure) returned no content")
 	}
-	var spOut map[string]interface{}
+	var spOut map[string]any
 	if err := json.Unmarshal([]byte(spRes.Content[0].Text), &spOut); err != nil {
 		t.Fatalf("bt_evolve_selection_pressure result is not valid JSON: %v (text=%q)", err, spRes.Content[0].Text)
 	}
-	spReport, isList := spOut["report"].([]interface{})
+	spReport, isList := spOut["report"].([]any)
 	if !isList || len(spReport) != 1 {
 		t.Fatalf("bt_evolve_selection_pressure must return a 'report' array holding the single bred tree; got %v", spOut["report"])
 	}
-	spEntry, isObj := spReport[0].(map[string]interface{})
+	spEntry, isObj := spReport[0].(map[string]any)
 	if !isObj {
 		t.Fatalf("bt_evolve_selection_pressure report entry must be a JSON object; got %T (%v)", spReport[0], spReport[0])
 	}
@@ -3279,20 +3279,20 @@ func TestEvolveToolsSurfacePopulationHealthSnapshot(t *testing.T) {
 // (a non-negative count), and "last_mutation_rate" (the positive rate the run
 // actually applied).
 func TestBTEvolveQLearningAndMemeticSurfacePopulationHealthSnapshot(t *testing.T) {
-	assertHealth := func(t *testing.T, tool string, health interface{}, present bool) {
+	assertHealth := func(t *testing.T, tool string, health any, present bool) {
 		t.Helper()
 		if !present {
 			t.Errorf("%s response must surface Population.HealthSnapshot() under a 'health' object; it is absent", tool)
 			return
 		}
-		h, isObj := health.(map[string]interface{})
+		h, isObj := health.(map[string]any)
 		if !isObj {
 			t.Errorf("%s 'health' must be a JSON object projecting Population.HealthSnapshot(); got %T (%v)", tool, health, health)
 			return
 		}
 		if reasons, hasReasons := h["crisis_reasons"]; !hasReasons {
 			t.Errorf("%s health object must report a 'crisis_reasons' key (an empty array when the run stayed healthy); got %v", tool, h)
-		} else if _, isList := reasons.([]interface{}); !isList {
+		} else if _, isList := reasons.([]any); !isList {
 			t.Errorf("%s health 'crisis_reasons' must be a JSON array; got %T (%v)", tool, reasons, reasons)
 		}
 		if res, isNum := h["resurrections"].(float64); !isNum || res < 0 {
@@ -3310,7 +3310,7 @@ func TestBTEvolveQLearningAndMemeticSurfacePopulationHealthSnapshot(t *testing.T
 	if !ok || qlRes == nil || len(qlRes.Content) == 0 {
 		t.Fatal("Invoke(bt_evolve_qlearning) returned no content")
 	}
-	var qlOut map[string]interface{}
+	var qlOut map[string]any
 	if err := json.Unmarshal([]byte(qlRes.Content[0].Text), &qlOut); err != nil {
 		t.Fatalf("bt_evolve_qlearning result is not valid JSON: %v (text=%q)", err, qlRes.Content[0].Text)
 	}
@@ -3324,7 +3324,7 @@ func TestBTEvolveQLearningAndMemeticSurfacePopulationHealthSnapshot(t *testing.T
 	if !ok || memRes == nil || len(memRes.Content) == 0 {
 		t.Fatal("Invoke(bt_evolve_memetic) returned no content")
 	}
-	var memOut map[string]interface{}
+	var memOut map[string]any
 	if err := json.Unmarshal([]byte(memRes.Content[0].Text), &memOut); err != nil {
 		t.Fatalf("bt_evolve_memetic result is not valid JSON: %v (text=%q)", err, memRes.Content[0].Text)
 	}
@@ -3368,7 +3368,7 @@ func TestBTEvolveMemeticRegisteredAndValidatesStrategy(t *testing.T) {
 			if res == nil || len(res.Content) == 0 {
 				t.Fatal("bt_evolve_memetic returned no content")
 			}
-			var out map[string]interface{}
+			var out map[string]any
 			if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 				t.Fatalf("bt_evolve_memetic result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
 			}
@@ -3397,7 +3397,7 @@ func TestBTEvolveMemeticRegisteredAndValidatesStrategy(t *testing.T) {
 	if def == nil || len(def.Content) == 0 {
 		t.Fatal("bt_evolve_memetic returned no content for an omitted strategy")
 	}
-	var defOut map[string]interface{}
+	var defOut map[string]any
 	if err := json.Unmarshal([]byte(def.Content[0].Text), &defOut); err != nil {
 		t.Fatalf("bt_evolve_memetic omitted-strategy result is not valid JSON: %v (text=%q)", err, def.Content[0].Text)
 	}
@@ -3418,7 +3418,7 @@ func TestBTEvolveMemeticRegisteredAndValidatesStrategy(t *testing.T) {
 	if bad == nil || len(bad.Content) == 0 {
 		t.Fatal("bt_evolve_memetic returned no content for an unknown strategy")
 	}
-	var badOut map[string]interface{}
+	var badOut map[string]any
 	if err := json.Unmarshal([]byte(bad.Content[0].Text), &badOut); err != nil {
 		t.Fatalf("bt_evolve_memetic unknown-strategy result is not valid JSON: %v", err)
 	}
@@ -3438,7 +3438,7 @@ func TestBTEvolveMemeticRegisteredAndValidatesStrategy(t *testing.T) {
 	if unknown == nil || len(unknown.Content) == 0 {
 		t.Fatal("bt_evolve_memetic returned no content for an unknown tree")
 	}
-	var errOut map[string]interface{}
+	var errOut map[string]any
 	if err := json.Unmarshal([]byte(unknown.Content[0].Text), &errOut); err != nil {
 		t.Fatalf("bt_evolve_memetic unknown-tree result is not valid JSON: %v", err)
 	}
@@ -3473,7 +3473,7 @@ func TestBTEvolveMemeticPersistsEvolvedWinnerTree(t *testing.T) {
 	if res == nil || len(res.Content) == 0 {
 		t.Fatal("bt_evolve_memetic returned no content")
 	}
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 		t.Fatalf("bt_evolve_memetic result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
 	}
@@ -3559,7 +3559,7 @@ func TestEvolveToolsRejectDegeneratePopulationAtMCPBoundary(t *testing.T) {
 			if res == nil || len(res.Content) == 0 {
 				t.Fatalf("%s returned no content for population=%d", tc.tool, pop)
 			}
-			var out map[string]interface{}
+			var out map[string]any
 			if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 				t.Fatalf("%s population=%d result is not valid JSON: %v (text=%q)", tc.tool, pop, err, res.Content[0].Text)
 			}
@@ -3581,7 +3581,7 @@ func TestEvolveToolsRejectDegeneratePopulationAtMCPBoundary(t *testing.T) {
 	if res == nil || len(res.Content) == 0 {
 		t.Fatal("bt_evolve_genetic returned no content for an omitted population")
 	}
-	var defOut map[string]interface{}
+	var defOut map[string]any
 	if err := json.Unmarshal([]byte(res.Content[0].Text), &defOut); err != nil {
 		t.Fatalf("bt_evolve_genetic omitted-population result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
 	}
@@ -3599,7 +3599,7 @@ func TestEvolveToolsRejectDegeneratePopulationAtMCPBoundary(t *testing.T) {
 	if kgless == nil || len(kgless.Content) == 0 {
 		t.Fatal("bt_evolve_bottlenecks returned no content without a knowledge graph")
 	}
-	var kglessOut map[string]interface{}
+	var kglessOut map[string]any
 	if err := json.Unmarshal([]byte(kgless.Content[0].Text), &kglessOut); err != nil {
 		t.Fatalf("bt_evolve_bottlenecks kg-less result is not valid JSON: %v", err)
 	}
@@ -3636,7 +3636,7 @@ func TestBTEvolveQLearningRegisteredAndLearnsGreedily(t *testing.T) {
 		t.Fatal("bt_evolve_qlearning returned no content")
 	}
 
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 		t.Fatalf("bt_evolve_qlearning result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
 	}
@@ -3658,7 +3658,7 @@ func TestBTEvolveQLearningRegisteredAndLearnsGreedily(t *testing.T) {
 	// learned_actions is the per-state best-action map extracted from the
 	// QTable after the final generation. Running generations>=1 with Update
 	// applied each generation guarantees at least one learned state.
-	learned, isObj := out["learned_actions"].(map[string]interface{})
+	learned, isObj := out["learned_actions"].(map[string]any)
 	if !isObj {
 		t.Fatalf("bt_evolve_qlearning 'learned_actions' must be a JSON object mapping state -> best action; got %T (%v)", out["learned_actions"], out["learned_actions"])
 	}
@@ -3688,7 +3688,7 @@ func TestBTEvolveQLearningRegisteredAndLearnsGreedily(t *testing.T) {
 	if unknown == nil || len(unknown.Content) == 0 {
 		t.Fatal("bt_evolve_qlearning returned no content for an unknown tree")
 	}
-	var errOut map[string]interface{}
+	var errOut map[string]any
 	if err := json.Unmarshal([]byte(unknown.Content[0].Text), &errOut); err != nil {
 		t.Fatalf("bt_evolve_qlearning unknown-tree result is not valid JSON: %v", err)
 	}
@@ -3749,7 +3749,7 @@ func TestBTEvolveQLearningBenchmarkGateRejectsRegressedWinner(t *testing.T) {
 	if res == nil || len(res.Content) == 0 {
 		t.Fatal("bt_evolve_qlearning returned no content")
 	}
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 		t.Fatalf("bt_evolve_qlearning result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
 	}
@@ -3814,7 +3814,7 @@ func TestBTEvolveQLearningAccumulatesDurableArchive(t *testing.T) {
 	// keeps action selection deterministic (pure greedy) once Q-values exist,
 	// matching TestBTEvolveQLearningRegisteredAndLearnsGreedily.
 	args := json.RawMessage(`{"tree":"godev","population":4,"generations":3,"epsilon":0}`)
-	invoke := func(label string) map[string]interface{} {
+	invoke := func(label string) map[string]any {
 		t.Helper()
 		res, ok := server.Invoke("bt_evolve_qlearning", args)
 		if !ok {
@@ -3823,7 +3823,7 @@ func TestBTEvolveQLearningAccumulatesDurableArchive(t *testing.T) {
 		if res == nil || len(res.Content) == 0 {
 			t.Fatalf("bt_evolve_qlearning returned no content on the %s run", label)
 		}
-		var out map[string]interface{}
+		var out map[string]any
 		if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 			t.Fatalf("bt_evolve_qlearning %s-run result is not valid JSON: %v (text=%q)", label, err, res.Content[0].Text)
 		}
@@ -3908,7 +3908,7 @@ func TestBTEvolveExpertSurfacesLearnedPatternFromQLearning(t *testing.T) {
 	if qlRes == nil || len(qlRes.Content) == 0 {
 		t.Fatal("bt_evolve_qlearning returned no content")
 	}
-	var qlOut map[string]interface{}
+	var qlOut map[string]any
 	if err := json.Unmarshal([]byte(qlRes.Content[0].Text), &qlOut); err != nil {
 		t.Fatalf("bt_evolve_qlearning result is not valid JSON: %v (text=%q)", err, qlRes.Content[0].Text)
 	}
@@ -3923,7 +3923,7 @@ func TestBTEvolveExpertSurfacesLearnedPatternFromQLearning(t *testing.T) {
 	if expRes == nil || len(expRes.Content) == 0 {
 		t.Fatal("bt_evolve_expert returned no content")
 	}
-	var expOut map[string]interface{}
+	var expOut map[string]any
 	if err := json.Unmarshal([]byte(expRes.Content[0].Text), &expOut); err != nil {
 		t.Fatalf("bt_evolve_expert result is not valid JSON: %v (text=%q)", err, expRes.Content[0].Text)
 	}
@@ -3931,12 +3931,12 @@ func TestBTEvolveExpertSurfacesLearnedPatternFromQLearning(t *testing.T) {
 		t.Fatalf("bt_evolve_expert unexpectedly returned an error: %v", expOut)
 	}
 
-	learned, isArr := expOut["learned_patterns"].([]interface{})
+	learned, isArr := expOut["learned_patterns"].([]any)
 	if !isArr || len(learned) == 0 {
 		t.Fatalf("bt_evolve_expert must warm-start from the same expert archive bt_evolve_qlearning persisted to and surface a non-empty 'learned_patterns'; got %v (%T)", expOut["learned_patterns"], expOut["learned_patterns"])
 	}
 	for i, raw := range learned {
-		entry, isObj := raw.(map[string]interface{})
+		entry, isObj := raw.(map[string]any)
 		if !isObj {
 			t.Fatalf("bt_evolve_expert 'learned_patterns'[%d] must be an object; got %T", i, raw)
 		}
@@ -3965,7 +3965,7 @@ func assertExpertArchiveFedFromRun(t *testing.T, server *engine.Server, tree, wr
 	if expRes == nil || len(expRes.Content) == 0 {
 		t.Fatal("bt_evolve_expert returned no content")
 	}
-	var expOut map[string]interface{}
+	var expOut map[string]any
 	if err := json.Unmarshal([]byte(expRes.Content[0].Text), &expOut); err != nil {
 		t.Fatalf("bt_evolve_expert result is not valid JSON: %v (text=%q)", err, expRes.Content[0].Text)
 	}
@@ -3973,12 +3973,12 @@ func assertExpertArchiveFedFromRun(t *testing.T, server *engine.Server, tree, wr
 		t.Fatalf("bt_evolve_expert unexpectedly returned an error: %v", expOut)
 	}
 
-	learned, isArr := expOut["learned_patterns"].([]interface{})
+	learned, isArr := expOut["learned_patterns"].([]any)
 	if !isArr || len(learned) == 0 {
 		t.Fatalf("bt_evolve_expert must warm-start from the same expert archive %s persists to and surface a non-empty 'learned_patterns'; got %v (%T)", writerTool, expOut["learned_patterns"], expOut["learned_patterns"])
 	}
 	for i, raw := range learned {
-		entry, isObj := raw.(map[string]interface{})
+		entry, isObj := raw.(map[string]any)
 		if !isObj {
 			t.Fatalf("bt_evolve_expert 'learned_patterns'[%d] must be an object; got %T", i, raw)
 		}
@@ -4031,7 +4031,7 @@ func TestBTEvolveIslandFeedsExpertKnowledgeArchive(t *testing.T) {
 	if res == nil || len(res.Content) == 0 {
 		t.Fatal("bt_evolve_island returned no content")
 	}
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 		t.Fatalf("bt_evolve_island result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
 	}
@@ -4081,7 +4081,7 @@ func TestBTEvolveMultiObjectiveFeedsExpertKnowledgeArchive(t *testing.T) {
 	if res == nil || len(res.Content) == 0 {
 		t.Fatal("bt_evolve_multiobjective returned no content")
 	}
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 		t.Fatalf("bt_evolve_multiobjective result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
 	}
@@ -4128,7 +4128,7 @@ func TestBTEvolveParetoFeedsExpertKnowledgeArchive(t *testing.T) {
 	if res == nil || len(res.Content) == 0 {
 		t.Fatal("bt_evolve_pareto returned no content")
 	}
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 		t.Fatalf("bt_evolve_pareto result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
 	}
@@ -4182,7 +4182,7 @@ func TestBTEvolveQdFeedsExpertKnowledgeArchive(t *testing.T) {
 	if res == nil || len(res.Content) == 0 {
 		t.Fatal("bt_evolve_qd returned no content")
 	}
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 		t.Fatalf("bt_evolve_qd result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
 	}
@@ -4250,7 +4250,7 @@ func TestBTEvolveQLearningStateCapBoundsDurableArchive(t *testing.T) {
 		}
 		return len(values)
 	}
-	invoke := func(t *testing.T, server *engine.Server, args string) map[string]interface{} {
+	invoke := func(t *testing.T, server *engine.Server, args string) map[string]any {
 		t.Helper()
 		res, ok := server.Invoke("bt_evolve_qlearning", json.RawMessage(args))
 		if !ok {
@@ -4259,7 +4259,7 @@ func TestBTEvolveQLearningStateCapBoundsDurableArchive(t *testing.T) {
 		if res == nil || len(res.Content) == 0 {
 			t.Fatal("bt_evolve_qlearning returned no content")
 		}
-		var out map[string]interface{}
+		var out map[string]any
 		if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 			t.Fatalf("bt_evolve_qlearning result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
 		}
@@ -4403,7 +4403,7 @@ func TestBTEvolveSelectorsRegisteredAndReordersFromDurableStats(t *testing.T) {
 		t.Fatal("bt_evolve_selectors returned no content")
 	}
 
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 		t.Fatalf("bt_evolve_selectors result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
 	}
@@ -4446,7 +4446,7 @@ func TestBTEvolveSelectorsRegisteredAndReordersFromDurableStats(t *testing.T) {
 	if empty == nil || len(empty.Content) == 0 {
 		t.Fatal("bt_evolve_selectors returned no content for empty stats")
 	}
-	var emptyOut map[string]interface{}
+	var emptyOut map[string]any
 	if err := json.Unmarshal([]byte(empty.Content[0].Text), &emptyOut); err != nil {
 		t.Fatalf("bt_evolve_selectors empty-stats result is not valid JSON: %v (text=%q)", err, empty.Content[0].Text)
 	}
@@ -4466,7 +4466,7 @@ func TestBTEvolveSelectorsRegisteredAndReordersFromDurableStats(t *testing.T) {
 	if unknown == nil || len(unknown.Content) == 0 {
 		t.Fatal("bt_evolve_selectors returned no content for an unknown tree")
 	}
-	var errOut2 map[string]interface{}
+	var errOut2 map[string]any
 	if err := json.Unmarshal([]byte(unknown.Content[0].Text), &errOut2); err != nil {
 		t.Fatalf("bt_evolve_selectors unknown-tree result is not valid JSON: %v", err)
 	}
@@ -4525,7 +4525,7 @@ func TestBTEvolveSelectorsHonorsEnvOrderingStrategy(t *testing.T) {
 	if res == nil || len(res.Content) == 0 {
 		t.Fatal("bt_evolve_selectors returned no content")
 	}
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 		t.Fatalf("bt_evolve_selectors result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
 	}
@@ -4596,7 +4596,7 @@ func TestBTGardenerDTDiagnosticsRegisteredAndReturnsReport(t *testing.T) {
 		t.Fatal("bt_gardener_dt_diagnostics returned no content")
 	}
 
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 		t.Fatalf("bt_gardener_dt_diagnostics result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
 	}
@@ -4632,7 +4632,7 @@ func TestBTGardenerDTDiagnosticsRegisteredAndReturnsReport(t *testing.T) {
 	if unknown == nil || len(unknown.Content) == 0 {
 		t.Fatal("bt_gardener_dt_diagnostics returned no content for an unknown tree")
 	}
-	var errOut map[string]interface{}
+	var errOut map[string]any
 	if err := json.Unmarshal([]byte(unknown.Content[0].Text), &errOut); err != nil {
 		t.Fatalf("bt_gardener_dt_diagnostics unknown-tree result is not valid JSON: %v", err)
 	}
@@ -4676,14 +4676,14 @@ func TestBTDLQToolsListAndReplay(t *testing.T) {
 	if !ok || res == nil || len(res.Content) == 0 {
 		t.Fatal("bt_dlq_list returned no content")
 	}
-	var listOut map[string]interface{}
+	var listOut map[string]any
 	if err := json.Unmarshal([]byte(res.Content[0].Text), &listOut); err != nil {
 		t.Fatalf("bt_dlq_list result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
 	}
 	if n, isNum := listOut["count"].(float64); !isNum || int(n) != 2 {
 		t.Fatalf("bt_dlq_list count = %v, want 2", listOut["count"])
 	}
-	if entries, isList := listOut["entries"].([]interface{}); !isList || len(entries) != 2 {
+	if entries, isList := listOut["entries"].([]any); !isList || len(entries) != 2 {
 		t.Fatalf("bt_dlq_list entries = %v, want 2 entries", listOut["entries"])
 	}
 
@@ -4692,7 +4692,7 @@ func TestBTDLQToolsListAndReplay(t *testing.T) {
 	if !ok || rep == nil || len(rep.Content) == 0 {
 		t.Fatal("bt_dlq_replay returned no content")
 	}
-	var repOut map[string]interface{}
+	var repOut map[string]any
 	if err := json.Unmarshal([]byte(rep.Content[0].Text), &repOut); err != nil {
 		t.Fatalf("bt_dlq_replay result is not valid JSON: %v", err)
 	}
@@ -4708,7 +4708,7 @@ func TestBTDLQToolsListAndReplay(t *testing.T) {
 
 	// Unknown id: refused with a reason, nothing executed.
 	unknownRep, _ := server.Invoke("bt_dlq_replay", json.RawMessage(`{"id":"no-such","wait":true}`))
-	var unknownOut map[string]interface{}
+	var unknownOut map[string]any
 	if err := json.Unmarshal([]byte(unknownRep.Content[0].Text), &unknownOut); err != nil {
 		t.Fatalf("bt_dlq_replay unknown-id result is not valid JSON: %v", err)
 	}
@@ -4747,7 +4747,7 @@ func TestDLQReplayWaitReportsFailureOutcome(t *testing.T) {
 	if !ok || rep == nil || len(rep.Content) == 0 {
 		t.Fatal("bt_dlq_replay returned no content")
 	}
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(rep.Content[0].Text), &out); err != nil {
 		t.Fatalf("bt_dlq_replay result is not valid JSON: %v", err)
 	}
@@ -4776,7 +4776,7 @@ func TestDLQReplayWaitReportsFailureOutcome(t *testing.T) {
 	if !ok || rep2 == nil || len(rep2.Content) == 0 {
 		t.Fatal("bt_dlq_replay (no executor) returned no content")
 	}
-	var out2 map[string]interface{}
+	var out2 map[string]any
 	if err := json.Unmarshal([]byte(rep2.Content[0].Text), &out2); err != nil {
 		t.Fatalf("bt_dlq_replay (no executor) result is not valid JSON: %v", err)
 	}
@@ -4855,7 +4855,7 @@ func TestBTDLQToolsWithoutQueue(t *testing.T) {
 		if !ok || res == nil || len(res.Content) == 0 {
 			t.Fatalf("%s returned no content", tool)
 		}
-		var out map[string]interface{}
+		var out map[string]any
 		if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 			t.Fatalf("%s result is not valid JSON: %v", tool, err)
 		}
@@ -4892,7 +4892,7 @@ func TestBTThinkTankAnalyzeSurfacesOrchestratorError(t *testing.T) {
 		t.Fatal("bt_thinktank_analyze returned no content")
 	}
 
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 		t.Fatalf("bt_thinktank_analyze result is not valid JSON: %v", err)
 	}
@@ -4972,7 +4972,7 @@ func TestBTRunTaskConcurrentCallsDoNotRaceOnSharedBlackboard(t *testing.T) {
 				errs[i] = fmt.Errorf("bt_run_task returned no content for task %q", task)
 				return
 			}
-			var out map[string]interface{}
+			var out map[string]any
 			if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 				errs[i] = fmt.Errorf("bt_run_task result is not valid JSON: %w (text=%q)", err, res.Content[0].Text)
 				return
@@ -5101,7 +5101,7 @@ func TestBTUseDomainTreeDescriptionResolvesThroughDescriptionFor(t *testing.T) {
 		t.Fatal("bt_use_domain_tree returned no content")
 	}
 
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 		t.Fatalf("bt_use_domain_tree result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
 	}

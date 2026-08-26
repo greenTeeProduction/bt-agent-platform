@@ -88,7 +88,7 @@ func registerA2ANodes() {
 			b.Outcome = "failure"
 			return -1
 		}
-		if ws, ok := cs["goap_world_state"].(map[string]interface{}); ok {
+		if ws, ok := cs["goap_world_state"].(map[string]any); ok {
 			ws["has_a2a_target"] = true
 		}
 		return 1

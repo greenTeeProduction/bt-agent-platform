@@ -934,7 +934,7 @@ func execFusion(cfg ChainConfig, bb *Blackboard) int {
 	return 1
 }
 
-type fusionCaller struct{ llm interface{} }
+type fusionCaller struct{ llm any }
 
 func (c fusionCaller) GenerateWithModel(ctx context.Context, model, system, prompt string) (string, error) {
 	if m, ok := c.llm.(interface {

@@ -25,7 +25,7 @@ const feedbackReviewThreshold = 2
 
 // recordUserFeedback persists one feedback signal and returns the tool
 // result: current satisfaction ratio, signal counts, and the review flag.
-func recordUserFeedback(deps *mcpDeps, user, treeID, signal, comment string) map[string]interface{} {
+func recordUserFeedback(deps *mcpDeps, user, treeID, signal, comment string) map[string]any {
 	signal = strings.ToLower(strings.TrimSpace(signal))
 	switch signal {
 	case "👍", "up", "+1":
@@ -34,7 +34,7 @@ func recordUserFeedback(deps *mcpDeps, user, treeID, signal, comment string) map
 		signal = evolution.FeedbackNegative
 	}
 	if signal != evolution.FeedbackPositive && signal != evolution.FeedbackNegative {
-		return map[string]interface{}{"error": fmt.Sprintf("signal must be %q or %q", evolution.FeedbackPositive, evolution.FeedbackNegative)}
+		return map[string]any{"error": fmt.Sprintf("signal must be %q or %q", evolution.FeedbackPositive, evolution.FeedbackNegative)}
 	}
 	// Canonicalize once: the record, the slug, and the cumulative
 	// FilterByTreeNameStrict tally must all see the same identifier, or a
@@ -42,10 +42,10 @@ func recordUserFeedback(deps *mcpDeps, user, treeID, signal, comment string) map
 	user = strings.TrimSpace(user)
 	treeID = strings.TrimSpace(treeID)
 	if user == "" || treeID == "" {
-		return map[string]interface{}{"error": "user and tree are required"}
+		return map[string]any{"error": "user and tree are required"}
 	}
 	if deps.refStore == nil {
-		return map[string]interface{}{"error": "reflection store not configured"}
+		return map[string]any{"error": "reflection store not configured"}
 	}
 
 	// Unique TaskID: the store's default (millisecond timestamp) can collide
@@ -71,7 +71,7 @@ func recordUserFeedback(deps *mcpDeps, user, treeID, signal, comment string) map
 		}
 	}
 	if err := deps.refStore.Save(rec); err != nil {
-		return map[string]interface{}{"error": err.Error()}
+		return map[string]any{"error": err.Error()}
 	}
 
 	// Report the tree's cumulative feedback standing.
@@ -86,7 +86,7 @@ func recordUserFeedback(deps *mcpDeps, user, treeID, signal, comment string) map
 			}
 		}
 	}
-	result := map[string]interface{}{
+	result := map[string]any{
 		"recorded":  true,
 		"tree_id":   treeID,
 		"signal":    signal,

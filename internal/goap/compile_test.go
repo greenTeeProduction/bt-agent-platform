@@ -149,7 +149,7 @@ func TestCompilePlanToTree_ExecutableNodeSelection(t *testing.T) {
 func TestCompilePlanToTree_Provenance(t *testing.T) {
 	plan := compileTestPlan()
 	tree, _ := CompilePlanToTree(plan, CompileOptions{
-		Provenance: map[string]interface{}{"user": "nico"},
+		Provenance: map[string]any{"user": "nico"},
 	})
 	meta := tree.Metadata
 	if meta["generated_by"] != "goap_compiler" || meta["goal"] != "ship feature" || meta["user"] != "nico" {
@@ -158,7 +158,7 @@ func TestCompilePlanToTree_Provenance(t *testing.T) {
 	if meta["plan_hash"] != PlanHash(plan) {
 		t.Fatalf("plan hash mismatch: %v vs %s", meta["plan_hash"], PlanHash(plan))
 	}
-	steps, ok := meta["plan_steps"].([]interface{})
+	steps, ok := meta["plan_steps"].([]any)
 	if !ok || len(steps) != 2 {
 		t.Fatalf("plan_steps = %v", meta["plan_steps"])
 	}

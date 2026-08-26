@@ -78,7 +78,7 @@ func TestHandleEvaluate_WithTreeAndRecordsReportsFitnessFields(t *testing.T) {
 	seedRecords(t, s)
 
 	result := s.handleEvaluate(nil)
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(result.Content[0].Text), &out); err != nil {
 		t.Fatalf("unmarshal handleEvaluate output %q: %v", result.Content[0].Text, err)
 	}
@@ -108,12 +108,12 @@ func TestHandleOrderMutations_ReturnsCandidatesAndTotal(t *testing.T) {
 	seedRecords(t, s)
 
 	result := s.handleOrderMutations(nil)
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(result.Content[0].Text), &out); err != nil {
 		t.Fatalf("unmarshal handleOrderMutations output %q: %v", result.Content[0].Text, err)
 	}
 
-	candidates, ok := out["candidates"].([]interface{})
+	candidates, ok := out["candidates"].([]any)
 	if !ok {
 		t.Fatalf("candidates field missing or wrong type: %v", out)
 	}
@@ -134,7 +134,7 @@ func TestHandleDeepen_DefaultsMaxDepthAndAutoSavesTT(t *testing.T) {
 	seedRecords(t, s)
 
 	result := s.handleDeepen(json.RawMessage(`{}`))
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(result.Content[0].Text), &out); err != nil {
 		t.Fatalf("unmarshal handleDeepen output %q: %v", result.Content[0].Text, err)
 	}
@@ -154,7 +154,7 @@ func TestHandleDeepen_HonorsExplicitMaxDepth(t *testing.T) {
 	seedRecords(t, s)
 
 	result := s.handleDeepen(json.RawMessage(`{"max_depth": 1}`))
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(result.Content[0].Text), &out); err != nil {
 		t.Fatalf("unmarshal handleDeepen output %q: %v", result.Content[0].Text, err)
 	}
@@ -171,7 +171,7 @@ func TestHandleTTStats_ReportsEntriesMaxSizeAndPath(t *testing.T) {
 	}
 
 	result := s.handleTTStats(nil)
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(result.Content[0].Text), &out); err != nil {
 		t.Fatalf("unmarshal handleTTStats output %q: %v", result.Content[0].Text, err)
 	}
@@ -197,7 +197,7 @@ func TestHandleTTSave_PersistsAndReportsEntryCount(t *testing.T) {
 	s.handleDeepen(json.RawMessage(`{}`))
 
 	result := s.handleTTSave(nil)
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(result.Content[0].Text), &out); err != nil {
 		t.Fatalf("unmarshal handleTTSave output %q: %v", result.Content[0].Text, err)
 	}

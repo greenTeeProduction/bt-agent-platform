@@ -462,7 +462,7 @@ func main() {
 			Type:      "task_complete",
 			Source:    source,
 			Message:   fmt.Sprintf("%s: %s", source, outcome),
-			Data:      map[string]interface{}{"outcome": outcome, "summary": summary},
+			Data:      map[string]any{"outcome": outcome, "summary": summary},
 			Timestamp: time.Now(),
 		})
 	}

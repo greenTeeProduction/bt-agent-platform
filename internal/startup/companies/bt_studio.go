@@ -44,7 +44,7 @@ func BTStudioCompany() *startup.CompanyState {
 		Risks:         []string{"Flutter desktop performance on complex trees", "no revenue yet", "team too small"},
 		Opportunities: []string{"growing BT adoption in AI agents", "no good visual BT editor exists", "Ollama ecosystem growth"},
 
-		Metrics: map[string]interface{}{
+		Metrics: map[string]any{
 			"waitlist_signups":     340,
 			"github_stars":         120,
 			"flutter_widget_count": 45,

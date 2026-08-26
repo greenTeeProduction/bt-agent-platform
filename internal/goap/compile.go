@@ -32,7 +32,7 @@ type CompileOptions struct {
 	DisableReplan bool
 	// Provenance is merged into the root node metadata (user, source
 	// pattern, parent goals — recorded for evolution lineage).
-	Provenance map[string]interface{}
+	Provenance map[string]any
 }
 
 // CompilePlanToTree compiles a GOAP plan into a persistent, evolvable
@@ -140,7 +140,7 @@ func executableNode(step Action, opts CompileOptions) SerializableNode {
 	return SerializableNode{
 		Type: "ChainAction",
 		Name: "llm_call:" + prompt,
-		Metadata: map[string]interface{}{
+		Metadata: map[string]any{
 			"max_tokens":  float64(maxTokens),
 			"goap_step":   step.Name,
 			"plan_source": "goap_compiler",
@@ -229,7 +229,7 @@ func outcomeSelector(opts CompileOptions) SerializableNode {
 			{
 				Type:     "ChainAction",
 				Name:     "llm_call:" + prompt,
-				Metadata: map[string]interface{}{"max_tokens": float64(512)},
+				Metadata: map[string]any{"max_tokens": float64(512)},
 			},
 		},
 	}
@@ -238,12 +238,12 @@ func outcomeSelector(opts CompileOptions) SerializableNode {
 // provenanceMetadata records how the tree was manufactured so evolution and
 // audits can trace lineage (goal, plan hash, steps, plus caller-supplied
 // provenance like user and source pattern).
-func provenanceMetadata(plan *Plan, opts CompileOptions) map[string]interface{} {
-	steps := make([]interface{}, 0, len(plan.Steps))
+func provenanceMetadata(plan *Plan, opts CompileOptions) map[string]any {
+	steps := make([]any, 0, len(plan.Steps))
 	for _, s := range plan.Steps {
 		steps = append(steps, s.Name)
 	}
-	meta := map[string]interface{}{
+	meta := map[string]any{
 		"generated_by": "goap_compiler",
 		"goal":         plan.Goal.Name,
 		"plan_hash":    PlanHash(plan),

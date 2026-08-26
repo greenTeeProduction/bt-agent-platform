@@ -51,7 +51,7 @@ func (ec *EmbeddingClient) GetEmbedding(text string) (Embedding, error) {
 		return nil, fmt.Errorf("ollama embedding: circuit breaker open")
 	}
 
-	payload := map[string]interface{}{
+	payload := map[string]any{
 		"model":  ec.Model,
 		"prompt": text,
 	}

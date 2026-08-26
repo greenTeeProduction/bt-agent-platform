@@ -114,7 +114,7 @@ func (s *langAgentServer) handleRun(args json.RawMessage) *engine.ToolResult {
 		}
 	}
 
-	response := map[string]interface{}{
+	response := map[string]any{
 		"result":  result,
 		"outcome": s.bb.Outcome,
 	}
@@ -138,7 +138,7 @@ func (s *langAgentServer) handleFitness(args json.RawMessage) *engine.ToolResult
 	if tree != nil {
 		nodeCount = evolution.CountNodes(tree)
 	}
-	result := map[string]interface{}{
+	result := map[string]any{
 		"total_tasks":  len(records),
 		"successes":    successes,
 		"failures":     failures,
@@ -170,7 +170,7 @@ func (s *langAgentServer) handleEvolve(args json.RawMessage) *engine.ToolResult 
 	if applied > 0 {
 		_ = s.treeStore.Save(tree)
 	}
-	result := map[string]interface{}{
+	result := map[string]any{
 		"evolved":      applied > 0,
 		"mutations":    applied,
 		"nodes_before": before,

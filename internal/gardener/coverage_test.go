@@ -325,7 +325,7 @@ func TestMetricsTracker_Summary_Basic(t *testing.T) {
 
 // perTreeStats extracts the per_tree map from the summary using JSON round-trip
 // because treeStats is a local type inside Summary() and can't be type-asserted directly.
-func perTreeStats(summary map[string]interface{}) map[string]testTreeStats {
+func perTreeStats(summary map[string]any) map[string]testTreeStats {
 	data, _ := json.Marshal(summary["per_tree"])
 	var result map[string]testTreeStats
 	_ = json.Unmarshal(data, &result)

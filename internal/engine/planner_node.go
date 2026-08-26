@@ -85,16 +85,16 @@ func readGoals(node *evolution.SerializableNode, bb *Blackboard) []GoalDefinitio
 
 	if raw, ok := node.Metadata["goals"]; ok {
 		switch g := raw.(type) {
-		case []interface{}:
+		case []any:
 			var goals []GoalDefinition
 			for _, item := range g {
-				if m, ok := item.(map[string]interface{}); ok {
+				if m, ok := item.(map[string]any); ok {
 					goal := GoalDefinition{
 						Name:        stringFromMap(m, "name"),
 						Priority:    floatFromMap(m, "priority"),
 						Description: stringFromMap(m, "description"),
 					}
-					if pre, ok := m["preconditions"].([]interface{}); ok {
+					if pre, ok := m["preconditions"].([]any); ok {
 						for _, p := range pre {
 							if s, ok := p.(string); ok {
 								goal.Preconditions = append(goal.Preconditions, s)
@@ -118,14 +118,14 @@ func readGoals(node *evolution.SerializableNode, bb *Blackboard) []GoalDefinitio
 	return nil
 }
 
-func stringFromMap(m map[string]interface{}, key string) string {
+func stringFromMap(m map[string]any, key string) string {
 	if v, ok := m[key].(string); ok {
 		return v
 	}
 	return ""
 }
 
-func floatFromMap(m map[string]interface{}, key string) float64 {
+func floatFromMap(m map[string]any, key string) float64 {
 	if v, ok := m[key].(float64); ok {
 		return v
 	}
@@ -134,7 +134,7 @@ func floatFromMap(m map[string]interface{}, key string) float64 {
 
 // intSliceFromInterface converts various input types to []int.
 // Handles: nil, []float64, []interface{} with float64 or int elements.
-func intSliceFromInterface(v interface{}) []int {
+func intSliceFromInterface(v any) []int {
 	if v == nil {
 		return nil
 	}
@@ -145,7 +145,7 @@ func intSliceFromInterface(v interface{}) []int {
 			out[i] = int(f)
 		}
 		return out
-	case []interface{}:
+	case []any:
 		if len(val) == 0 {
 			return []int{}
 		}

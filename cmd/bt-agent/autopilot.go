@@ -26,34 +26,34 @@ import (
 // deliberately LLM-free — pattern mining uses keyword clustering and the
 // goal/plan/compile path is deterministic — so it can run synchronously
 // after bt_run_task without noticeable latency.
-func considerAutomation(deps *mcpDeps, user string) map[string]interface{} {
+func considerAutomation(deps *mcpDeps, user string) map[string]any {
 	if deps.personaStore == nil {
-		return map[string]interface{}{"proposed": false, "skipped": "persona store not configured"}
+		return map[string]any{"proposed": false, "skipped": "persona store not configured"}
 	}
 	if strings.TrimSpace(user) == "" {
-		return map[string]interface{}{"proposed": false, "skipped": "no user"}
+		return map[string]any{"proposed": false, "skipped": "no user"}
 	}
 
 	profile, err := deps.personaStore.Load(user)
 	if err != nil {
-		return map[string]interface{}{"proposed": false, "error": err.Error()}
+		return map[string]any{"proposed": false, "error": err.Error()}
 	}
 	ledger, err := persona.NewAutomationStore(deps.personaStore.Workspace(user))
 	if err != nil {
-		return map[string]interface{}{"proposed": false, "error": err.Error()}
+		return map[string]any{"proposed": false, "error": err.Error()}
 	}
 
 	// Automation-spam guard: cap active auto-created agents per user.
 	approved, err := ledger.CountApproved()
 	if err != nil {
-		return map[string]interface{}{"proposed": false, "error": err.Error()}
+		return map[string]any{"proposed": false, "error": err.Error()}
 	}
 	maxActive := profile.Approval.MaxAutoCreatedAgents
 	if maxActive <= 0 {
 		maxActive = 3
 	}
 	if approved >= maxActive {
-		return map[string]interface{}{
+		return map[string]any{
 			"proposed": false,
 			"skipped":  fmt.Sprintf("automation cap reached (%d/%d active)", approved, maxActive),
 		}
@@ -62,10 +62,10 @@ func considerAutomation(deps *mcpDeps, user string) map[string]interface{} {
 	// Keyword-only mining keeps the in-run hook fast and Ollama-independent.
 	patterns, _, err := mineUserPatterns(deps, user, 0, 0, false)
 	if err != nil {
-		return map[string]interface{}{"proposed": false, "error": err.Error()}
+		return map[string]any{"proposed": false, "error": err.Error()}
 	}
 	if len(patterns) == 0 {
-		return map[string]interface{}{"proposed": false, "skipped": "no recurring patterns"}
+		return map[string]any{"proposed": false, "skipped": "no recurring patterns"}
 	}
 
 	// First pattern without a ledger entry (pending, approved, or rejected —
@@ -77,19 +77,19 @@ func considerAutomation(deps *mcpDeps, user string) map[string]interface{} {
 		}
 		return proposeAutomation(deps, user, profile, ledger, pattern, signature)
 	}
-	return map[string]interface{}{"proposed": false, "skipped": "all recurring patterns already proposed"}
+	return map[string]any{"proposed": false, "skipped": "all recurring patterns already proposed"}
 }
 
 // proposeAutomation compiles the pattern into a tree and raises the HITL
 // proposal (or activates directly when policy allows).
-func proposeAutomation(deps *mcpDeps, user string, profile *persona.Profile, ledger *persona.AutomationStore, pattern persona.RecurringPattern, signature string) map[string]interface{} {
+func proposeAutomation(deps *mcpDeps, user string, profile *persona.Profile, ledger *persona.AutomationStore, pattern persona.RecurringPattern, signature string) map[string]any {
 	// Goal → plan → compiled tree (Phases 2+3, deterministic path).
 	factory := goalFactory(deps)
 	goal := factory.FromPattern(pattern.Representative, pattern.Count)
 	planner := goap.NewPlanner(factory.Actions, 50, 10000)
 	plan := planner.Plan(factory.InitialState.Clone(), goal)
 	if plan == nil || len(plan.Steps) == 0 {
-		return map[string]interface{}{"proposed": false, "error": "no plan for automation goal " + goal.Name}
+		return map[string]any{"proposed": false, "error": "no plan for automation goal " + goal.Name}
 	}
 
 	treeID := "goal:" + goalTreeSlug(goal.Name)
@@ -98,7 +98,7 @@ func proposeAutomation(deps *mcpDeps, user string, profile *persona.Profile, led
 		InitialState: factory.InitialState,
 		KnownAction:  func(name string) bool { return engine.GetAction(name) != nil },
 		StyleHints:   personaStyleHints(deps, user),
-		Provenance: map[string]interface{}{
+		Provenance: map[string]any{
 			"user":              user,
 			"source":            "autopilot",
 			"pattern_signature": signature,
@@ -106,11 +106,11 @@ func proposeAutomation(deps *mcpDeps, user string, profile *persona.Profile, led
 		},
 	})
 	if err != nil {
-		return map[string]interface{}{"proposed": false, "error": err.Error()}
+		return map[string]any{"proposed": false, "error": err.Error()}
 	}
 	tree := evolution.FromGoapNode(goapNode)
 
-	result := map[string]interface{}{
+	result := map[string]any{
 		"tree_id":   treeID,
 		"pattern":   pattern.Representative,
 		"count":     pattern.Count,
@@ -239,7 +239,7 @@ func activateAutomation(deps *mcpDeps, user, agentName, treeID, signature, sched
 // from bt_hitl_approve/bt_hitl_reject for requests carrying the automation
 // context. Delegates the binary-agnostic finalization to
 // persona.FinalizeAutomationApproval and refreshes A2A cards on activation.
-func finalizeAutomationApproval(deps *mcpDeps, req *hitl.Request, approved bool) map[string]interface{} {
+func finalizeAutomationApproval(deps *mcpDeps, req *hitl.Request, approved bool) map[string]any {
 	out := persona.FinalizeAutomationApproval(deps.agentReg, deps.personaStore, req, approved)
 	if out != nil && out["activated"] == true && deps.refreshA2ACards != nil {
 		agentName, _ := out["agent"].(string)

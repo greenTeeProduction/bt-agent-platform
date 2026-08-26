@@ -20,7 +20,7 @@ import (
 
 // WorldState is a key-value representation of the agent's world.
 // Keys are strings, values can be any comparable type.
-type WorldState map[string]interface{}
+type WorldState map[string]any
 
 // Goal represents a desired world state. Only the specified keys must match;
 // other keys in the world state are ignored during goal satisfaction checks.
@@ -34,11 +34,11 @@ type Goal struct {
 // Action is an operator that transforms the world state.
 // It has preconditions (must be true to execute) and effects (what changes).
 type Action struct {
-	Name          string                 `json:"name"`
-	Cost          float64                `json:"cost"`               // execution cost (1.0 default)
-	Preconditions WorldState             `json:"preconditions"`      // must all match
-	Effects       WorldState             `json:"effects"`            // state changes after execution
-	Metadata      map[string]interface{} `json:"metadata,omitempty"` // arbitrary data
+	Name          string         `json:"name"`
+	Cost          float64        `json:"cost"`               // execution cost (1.0 default)
+	Preconditions WorldState     `json:"preconditions"`      // must all match
+	Effects       WorldState     `json:"effects"`            // state changes after execution
+	Metadata      map[string]any `json:"metadata,omitempty"` // arbitrary data
 }
 
 // Plan is an ordered sequence of actions to achieve a goal.

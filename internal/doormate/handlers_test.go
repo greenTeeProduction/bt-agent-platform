@@ -29,7 +29,7 @@ func TestHandleIntent(t *testing.T) {
 		t.Fatalf("expected status 200, got %d", rr.Code)
 	}
 
-	var res map[string]interface{}
+	var res map[string]any
 	if err := json.Unmarshal(rr.Body.Bytes(), &res); err != nil {
 		t.Fatalf("invalid json response: %v", err)
 	}
@@ -53,7 +53,7 @@ func TestHandleIntent(t *testing.T) {
 		t.Errorf("expected saved session intent to be security, got %s", sess.Intent)
 	}
 
-	pageData, ok := res["page"].(map[string]interface{})
+	pageData, ok := res["page"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected page in response")
 	}
@@ -120,7 +120,7 @@ func TestHandleBookmark(t *testing.T) {
 		t.Fatalf("expected status 200, got %d", rr.Code)
 	}
 
-	var res map[string]interface{}
+	var res map[string]any
 	if err := json.Unmarshal(rr.Body.Bytes(), &res); err != nil {
 		t.Fatalf("invalid json response: %v", err)
 	}
@@ -176,7 +176,7 @@ func TestHandleBookmark(t *testing.T) {
 		t.Fatalf("expected status 200, got %d", rr2.Code)
 	}
 
-	var res2 map[string]interface{}
+	var res2 map[string]any
 	if err := json.Unmarshal(rr2.Body.Bytes(), &res2); err != nil {
 		t.Fatalf("invalid json response: %v", err)
 	}
@@ -222,7 +222,7 @@ func TestHandleRate(t *testing.T) {
 	}
 
 	// Test rating
-	reqBody, _ := json.Marshal(map[string]interface{}{"page_id": page.ID, "rating": 5})
+	reqBody, _ := json.Marshal(map[string]any{"page_id": page.ID, "rating": 5})
 	req := httptest.NewRequest("POST", "/api/doormate/rate", bytes.NewReader(reqBody))
 	rr := httptest.NewRecorder()
 
@@ -232,7 +232,7 @@ func TestHandleRate(t *testing.T) {
 		t.Fatalf("expected status 200, got %d", rr.Code)
 	}
 
-	var res map[string]interface{}
+	var res map[string]any
 	if err := json.Unmarshal(rr.Body.Bytes(), &res); err != nil {
 		t.Fatalf("invalid json response: %v", err)
 	}
@@ -291,7 +291,7 @@ func TestHandleProfile(t *testing.T) {
 
 	// Test POST profile (saves user profile preferences)
 	prefTags := []string{"security", "automation"}
-	reqBody, _ := json.Marshal(map[string]interface{}{
+	reqBody, _ := json.Marshal(map[string]any{
 		"tags":  prefTags,
 		"style": "minimal",
 	})

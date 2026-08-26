@@ -49,7 +49,7 @@ func TestWebhookPublisher_MarshalErrorDoesNotWedgeHalfOpenBreaker(t *testing.T) 
 
 	// A subsequent well-formed event must be delivered, not dropped by a
 	// breaker the marshal failure wedged half-open.
-	pub.handleEvent(AgentEvent{Type: "service_down", Source: "x", Message: "ok", Data: map[string]interface{}{"k": "v"}})
+	pub.handleEvent(AgentEvent{Type: "service_down", Source: "x", Message: "ok", Data: map[string]any{"k": "v"}})
 
 	if got := atomic.LoadInt32(&delivered); got != 1 {
 		t.Fatalf("valid event after a marshal-failing one was not delivered (delivered=%d); the marshal failure wedged the half-open breaker", got)
@@ -75,7 +75,7 @@ func TestWebhookPublisher_ClientErrorsDoNotTripBreaker(t *testing.T) {
 
 	pub := NewWebhookPublisher(ts.URL, DefaultWebhookSecrets())
 	for i := 0; i < 6; i++ {
-		pub.handleEvent(AgentEvent{Type: "service_down", Source: "x", Message: "m", Data: map[string]interface{}{"i": i}})
+		pub.handleEvent(AgentEvent{Type: "service_down", Source: "x", Message: "m", Data: map[string]any{"i": i}})
 	}
 	if got := atomic.LoadInt32(&serves); got != 6 {
 		t.Fatalf("server saw %d requests, want 6 — the 6th deliverable event must not be skipped by a breaker opened on 4xx rejections", got)
@@ -110,7 +110,7 @@ func TestWebhookPublisher_ReplaysDeadLettersOnRecovery(t *testing.T) {
 	mu.Lock()
 	fail = true
 	mu.Unlock()
-	pub.handleEvent(AgentEvent{Type: "service_down", Source: "x", Message: "first", Data: map[string]interface{}{"n": 1}})
+	pub.handleEvent(AgentEvent{Type: "service_down", Source: "x", Message: "first", Data: map[string]any{"n": 1}})
 	if pub.dlq.Len() != 1 {
 		t.Fatalf("dlq.Len() = %d, want 1 after a failed delivery", pub.dlq.Len())
 	}
@@ -119,7 +119,7 @@ func TestWebhookPublisher_ReplaysDeadLettersOnRecovery(t *testing.T) {
 	mu.Lock()
 	fail = false
 	mu.Unlock()
-	pub.handleEvent(AgentEvent{Type: "service_down", Source: "x", Message: "second", Data: map[string]interface{}{"n": 2}})
+	pub.handleEvent(AgentEvent{Type: "service_down", Source: "x", Message: "second", Data: map[string]any{"n": 2}})
 
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {

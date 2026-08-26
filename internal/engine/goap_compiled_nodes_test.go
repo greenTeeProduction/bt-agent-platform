@@ -29,7 +29,7 @@ func TestCompiledGoapCondition(t *testing.T) {
 		t.Fatal("guard must fail without world state")
 	}
 
-	bb := &Blackboard{ChainState: map[string]interface{}{
+	bb := &Blackboard{ChainState: map[string]any{
 		"goap_world_state": goap.WorldState{"has_analysis": true, "task_type": "build"},
 	}}
 	if !fn(bb) {
@@ -42,7 +42,7 @@ func TestCompiledGoapCondition(t *testing.T) {
 	}
 
 	// Plain-map form (JSON roundtrip) is accepted too.
-	bb.ChainState["goap_world_state"] = map[string]interface{}{"has_analysis": true, "task_type": "build"}
+	bb.ChainState["goap_world_state"] = map[string]any{"has_analysis": true, "task_type": "build"}
 	if !fn(bb) {
 		t.Fatal("guard should read plain-map world state")
 	}

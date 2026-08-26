@@ -61,7 +61,7 @@ func TestRunJob_WebhookIncludesBuildRevision(t *testing.T) {
 		t.Fatal("no events published to AgentBus")
 	}
 	last := events[len(events)-1]
-	data, ok := last.Data.(map[string]interface{})
+	data, ok := last.Data.(map[string]any)
 	if !ok {
 		t.Fatalf("event Data is not a map: %#v", last.Data)
 	}

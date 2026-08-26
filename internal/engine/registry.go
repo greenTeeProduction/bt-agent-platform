@@ -177,7 +177,7 @@ func (e *Engine) GetCondition(name string) ConditionFunc {
 }
 
 // RegisterProviders calls RegisterActions/RegisterConditions on each provider.
-func RegisterProviders(providers ...interface{}) {
+func RegisterProviders(providers ...any) {
 	for _, p := range providers {
 		if ap, ok := p.(ActionProvider); ok {
 			ap.RegisterActions()
@@ -669,7 +669,7 @@ func init() {
 			"HOME="+home,
 		)
 
-		logf := func(f string, a ...interface{}) {
+		logf := func(f string, a ...any) {
 			Info("HermesUpdateAgent: " + fmt.Sprintf(f, a...))
 		}
 		logf("ENTERED action")

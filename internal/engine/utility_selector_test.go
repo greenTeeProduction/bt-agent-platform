@@ -232,9 +232,9 @@ func TestBuildPlannerNode_WithGoals(t *testing.T) {
 	node := &evolution.SerializableNode{
 		Type: "PlannerNode", Name: "Planner",
 		Metadata: map[string]any{
-			"goals": []interface{}{
-				map[string]interface{}{"name": "collect_metrics", "priority": 0.9},
-				map[string]interface{}{"name": "health_check", "priority": 0.5},
+			"goals": []any{
+				map[string]any{"name": "collect_metrics", "priority": 0.9},
+				map[string]any{"name": "health_check", "priority": 0.5},
 			},
 		},
 		Children: []evolution.SerializableNode{
@@ -265,9 +265,9 @@ func TestBuildPlannerNode_GoalStackPopOnFailure(t *testing.T) {
 	node := &evolution.SerializableNode{
 		Type: "PlannerNode", Name: "Planner",
 		Metadata: map[string]any{
-			"goals": []interface{}{
-				map[string]interface{}{"name": "should_fail", "priority": 0.9},
-				map[string]interface{}{"name": "should_succeed", "priority": 0.5},
+			"goals": []any{
+				map[string]any{"name": "should_fail", "priority": 0.9},
+				map[string]any{"name": "should_succeed", "priority": 0.5},
 			},
 		},
 		Children: []evolution.SerializableNode{

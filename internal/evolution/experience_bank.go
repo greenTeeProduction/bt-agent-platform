@@ -338,11 +338,11 @@ func (eb *ExperienceBank) persistLocked() error {
 }
 
 // Stats returns a summary of the experience bank.
-func (eb *ExperienceBank) Stats() map[string]interface{} {
+func (eb *ExperienceBank) Stats() map[string]any {
 	eb.mu.RLock()
 	defer eb.mu.RUnlock()
 
-	stats := map[string]interface{}{
+	stats := map[string]any{
 		"total_entries": len(eb.Entries),
 	}
 

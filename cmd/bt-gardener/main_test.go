@@ -189,7 +189,7 @@ func TestGardenerDeactivateAllTool_CallDeactivatesAllTrees(t *testing.T) {
 		t.Fatalf("tool.Call: %v", err)
 	}
 
-	var resp map[string]interface{}
+	var resp map[string]any
 	if err := json.Unmarshal([]byte(out), &resp); err != nil {
 		t.Fatalf("tool.Call output is not valid JSON: %v (%s)", err, out)
 	}
