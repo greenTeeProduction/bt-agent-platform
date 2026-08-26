@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -62,9 +63,33 @@ func TestWebhookPublisher_MarshalErrorDoesNotWedgeHalfOpenBreaker(t *testing.T) 
 // payload rejections must not suppress the next deliverable event for the
 // whole cooldown window.
 func TestWebhookPublisher_ClientErrorsDoNotTripBreaker(t *testing.T) {
-	var serves atomic.Int32
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		n := serves.Add(1)
+	// Assert on WHICH events arrived, not on how many requests did. The five
+	// rejected deliveries are dead-lettered, so the sixth one's success fires
+	// replayDeadLetters in the background and those replays land on this same
+	// server — a request count raced that sweep and saw 6 or 7 or 11
+	// depending on scheduling. Replays can only ever repeat events 0..4, so
+	// the arrival of event 5 is the timing-independent signal that the
+	// breaker stayed closed.
+	var mu sync.Mutex
+	var serves int
+	seen := map[int]bool{}
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var payload struct {
+			Data struct {
+				I *int `json:"i"`
+			} `json:"data"`
+		}
+		_ = json.Unmarshal(body, &payload)
+
+		mu.Lock()
+		serves++
+		n := serves
+		if payload.Data.I != nil {
+			seen[*payload.Data.I] = true
+		}
+		mu.Unlock()
+
 		if n <= 5 { // breaker threshold is 5
 			w.WriteHeader(http.StatusBadRequest)
 			return
@@ -77,8 +102,25 @@ func TestWebhookPublisher_ClientErrorsDoNotTripBreaker(t *testing.T) {
 	for i := range 6 {
 		pub.handleEvent(AgentEvent{Type: "service_down", Source: "x", Message: "m", Data: map[string]any{"i": i}})
 	}
-	if got := serves.Load(); got != 6 {
-		t.Fatalf("server saw %d requests, want 6 — the 6th deliverable event must not be skipped by a breaker opened on 4xx rejections", got)
+
+	mu.Lock()
+	missing := []int{}
+	for i := range 6 {
+		if !seen[i] {
+			missing = append(missing, i)
+		}
+	}
+	got, arrived := serves, len(seen)
+	mu.Unlock()
+	if len(missing) > 0 {
+		t.Fatalf("events %v never reached the server (%d distinct of 6, %d requests total) — a deliverable event must not be skipped by a breaker opened on 4xx rejections", missing, arrived, got)
+	}
+
+	// The sixth delivery succeeded, so a replay sweep is in flight. Let it
+	// finish before the deferred ts.Close() pulls the server out from under it.
+	deadline := time.Now().Add(5 * time.Second)
+	for pub.replaying.Load() && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 
