@@ -12,7 +12,9 @@ import (
 // only supported way to obtain a reproducible evolution run: it swaps the
 // package-level source every draw on the breeding path reads from.
 //
-// Two families of draw go through the seam. The mutation primitives —
+// Three families of draw go through the seam. CMA-ES samples its candidate
+// population through sampleStdNormal, so a seeded source makes a parameter
+// tuning run replay exactly. The mutation primitives —
 // randomMutation, randomNodeName, materializeMutationOp and
 // applyReorderChildren — decide WHAT a mutation does. The breeding loops decide
 // WHETHER and TO WHOM it happens: the `< mutationRate` gate in each production

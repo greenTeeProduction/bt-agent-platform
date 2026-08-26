@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"fmt"
 	"math"
-	"math/rand"
 	"slices"
 
 	"github.com/nico/go-bt-evolve/internal/util"
@@ -524,8 +523,8 @@ func sampleStdNormal(n int) []float64 {
 	v := make([]float64, n)
 	for i := range v {
 		// Box-Muller transform
-		u1 := rand.Float64()
-		u2 := rand.Float64()
+		u1 := evoFloat64()
+		u2 := evoFloat64()
 		v[i] = math.Sqrt(-2*math.Log(u1)) * math.Cos(2*math.Pi*u2)
 	}
 	return v

@@ -2,6 +2,7 @@ package evolution
 
 import (
 	"math"
+	"math/rand"
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/util"
@@ -21,6 +22,8 @@ func TestNewCMAESOptimizer(t *testing.T) {
 }
 
 func TestCMAESOptimizer_SimpleSphere(t *testing.T) {
+	defer SetEvolutionRand(rand.New(rand.NewSource(42)))()
+
 	cma := NewCMAESOptimizer()
 	cma.PopulationSize = 8
 	cma.MaxGenerations = 15
@@ -56,6 +59,11 @@ func TestCMAESOptimizer_SimpleSphere(t *testing.T) {
 }
 
 func TestCMAESOptimizer_Convergence(t *testing.T) {
+	// CMA-ES draws its population from the package RNG seam. Pin the source:
+	// unseeded, eight generations of six samples land outside the asserted band
+	// often enough to redden CI on its own (measured 4-6 failures per 300 runs).
+	defer SetEvolutionRand(rand.New(rand.NewSource(42)))()
+
 	cma := NewCMAESOptimizer()
 	cma.MaxGenerations = 8
 	cma.PopulationSize = 6
