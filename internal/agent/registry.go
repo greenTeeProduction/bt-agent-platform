@@ -5,8 +5,10 @@ package agent
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"time"
 
@@ -142,10 +144,7 @@ func (r *Registry) List() []*Instance {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	result := make([]*Instance, 0, len(r.instances))
-	for _, inst := range r.instances {
-		result = append(result, inst)
-	}
+	result := slices.Collect(maps.Values(r.instances))
 	return result
 }
 

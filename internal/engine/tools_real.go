@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"os"
@@ -81,11 +82,7 @@ func buildRealTools(names ...string) []any {
 
 func allRealToolNames() []string {
 	factory := NewRealToolFactory()
-	names := make([]string, 0, len(factory))
-	for name := range factory {
-		names = append(names, name)
-	}
-	slices.Sort(names)
+	names := slices.Sorted(maps.Keys(factory))
 	return names
 }
 

@@ -2,6 +2,7 @@ package persona
 
 import (
 	"cmp"
+	"maps"
 	"math"
 	"slices"
 	"strings"
@@ -217,10 +218,7 @@ func cosine(a, b []float64) float64 {
 }
 
 func sortedByCount(counts map[string]int) []string {
-	ids := make([]string, 0, len(counts))
-	for id := range counts {
-		ids = append(ids, id)
-	}
+	ids := slices.Collect(maps.Keys(counts))
 	slices.SortFunc(ids, func(a, b string) int {
 		return cmp.Or(
 			cmp.Compare(counts[b], counts[a]),

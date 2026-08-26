@@ -107,11 +107,7 @@ func (r *Registry) List() []Block {
 func (r *Registry) IDs() []string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	ids := make([]string, 0, len(r.blocks))
-	for id := range r.blocks {
-		ids = append(ids, id)
-	}
-	slices.Sort(ids)
+	ids := slices.Sorted(maps.Keys(r.blocks))
 	return ids
 }
 

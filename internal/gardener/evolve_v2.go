@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"math"
 	"os"
 	"path/filepath"
@@ -1072,10 +1073,7 @@ func biasCandidatesWithExperience(bank *evolution.ExperienceBank, tree *evolutio
 		return cmp.Compare(b.Score, a.Score)
 	})
 
-	reusedIDs := make([]string, 0, len(reused))
-	for id := range reused {
-		reusedIDs = append(reusedIDs, id)
-	}
+	reusedIDs := slices.Collect(maps.Keys(reused))
 	if err := bank.MarkReused(reusedIDs); err != nil {
 		slog.Warn("gardener/v2: marking experience entries reused failed", "error", err)
 	}

@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"go/parser"
 	"go/token"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -159,11 +160,7 @@ func BuildImpactGraph(root string) (*ImpactGraph, error) {
 
 	tests := make(map[string][]string, len(edges))
 	for source, set := range edges {
-		list := make([]string, 0, len(set))
-		for test := range set {
-			list = append(list, test)
-		}
-		slices.Sort(list)
+		list := slices.Sorted(maps.Keys(set))
 		tests[source] = list
 	}
 

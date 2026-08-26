@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -138,10 +139,7 @@ func (im *IslandModel) Migrate() int {
 	}
 
 	migrated := 0
-	domains := make([]string, 0, len(im.Islands))
-	for d := range im.Islands {
-		domains = append(domains, d)
-	}
+	domains := slices.Collect(maps.Keys(im.Islands))
 
 	for _, srcDomain := range domains {
 		srcPop := im.Islands[srcDomain]
@@ -295,10 +293,7 @@ func (im *IslandModel) DiversityAcrossIslands() float64 {
 	// Jaccard distance between all pairs
 	totalDist := 0.0
 	pairs := 0
-	domains := make([]string, 0, len(islandGenomes))
-	for d := range islandGenomes {
-		domains = append(domains, d)
-	}
+	domains := slices.Collect(maps.Keys(islandGenomes))
 
 	for i := 0; i < len(domains); i++ {
 		for j := i + 1; j < len(domains); j++ {

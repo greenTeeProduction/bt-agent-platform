@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"math"
 	"os"
 	"slices"
@@ -393,10 +394,7 @@ func (so *SelectorOptimizer) OrderChildren(selectorName string) []string {
 		return nil // not enough data
 	}
 
-	children := make([]*ChildStats, 0, len(stats.Children))
-	for _, cs := range stats.Children {
-		children = append(children, cs)
-	}
+	children := slices.Collect(maps.Values(stats.Children))
 
 	switch so.Strategy {
 	case OrderByIG:

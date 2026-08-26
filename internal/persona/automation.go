@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -216,11 +217,7 @@ func (s *AutomationStore) saveLocked(records []AutomationRecord) error {
 // representative still map to the same automation proposal.
 func PatternSignature(representative string) string {
 	set := keywordSet(representative)
-	words := make([]string, 0, len(set))
-	for w := range set {
-		words = append(words, w)
-	}
-	slices.Sort(words)
+	words := slices.Sorted(maps.Keys(set))
 	if len(words) > 5 {
 		words = words[:5]
 	}

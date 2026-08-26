@@ -205,11 +205,7 @@ func GetCondition(name string) ConditionFunc {
 func RegisteredActionNames() []string {
 	regMu.RLock()
 	defer regMu.RUnlock()
-	names := make([]string, 0, len(actionRegistry))
-	for name := range actionRegistry {
-		names = append(names, name)
-	}
-	slices.Sort(names)
+	names := slices.Sorted(maps.Keys(actionRegistry))
 	return names
 }
 
@@ -218,11 +214,7 @@ func RegisteredActionNames() []string {
 func RegisteredConditionNames() []string {
 	regMu.RLock()
 	defer regMu.RUnlock()
-	names := make([]string, 0, len(conditionRegistry))
-	for name := range conditionRegistry {
-		names = append(names, name)
-	}
-	slices.Sort(names)
+	names := slices.Sorted(maps.Keys(conditionRegistry))
 	return names
 }
 

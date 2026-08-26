@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -493,11 +494,7 @@ func markGoapFusionReportedSnapshots(bb *Blackboard, names []string) {
 	for _, n := range names {
 		reported[n] = true
 	}
-	all := make([]string, 0, len(reported))
-	for n := range reported {
-		all = append(all, n)
-	}
-	slices.Sort(all)
+	all := slices.Sorted(maps.Keys(reported))
 	_ = bb.BB.Mgr.Set(scope, "goap_fusion_reported_materializer_snapshots", strings.Join(all, "\n"),
 		"durable set of materializer snapshot filenames already surfaced in a cycle report", "text")
 }

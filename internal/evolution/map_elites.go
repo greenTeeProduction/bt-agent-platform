@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -128,10 +129,7 @@ func (g *MAPElitesGrid) Elites() []*Individual {
 	}
 
 	// Collect all cell winners
-	elites := make([]*Individual, 0, len(g.Cells))
-	for _, ind := range g.Cells {
-		elites = append(elites, ind)
-	}
+	elites := slices.Collect(maps.Values(g.Cells))
 
 	// Sort by fitness descending
 	slices.SortFunc(elites, func(a, b *Individual) int {

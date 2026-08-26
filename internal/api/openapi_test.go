@@ -3,8 +3,10 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"maps"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -780,10 +782,7 @@ func TestDashboardRoutes_SwaggerRoute(t *testing.T) {
 
 // Helper
 func mapKeys(m map[string]any) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
+	keys := slices.Collect(maps.Keys(m))
 	return keys
 }
 

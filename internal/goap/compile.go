@@ -276,11 +276,7 @@ func encodePairs(ws WorldState) string {
 	if len(ws) == 0 {
 		return ""
 	}
-	keys := make([]string, 0, len(ws))
-	for k := range ws {
-		keys = append(keys, k)
-	}
-	slices.Sort(keys)
+	keys := slices.Sorted(maps.Keys(ws))
 	var parts []string
 	for _, k := range keys {
 		v := fmt.Sprintf("%v", ws[k])
@@ -294,11 +290,7 @@ func encodePairs(ws WorldState) string {
 
 // encodePairsReadable renders a world state for prompts ("k = v, k2 = v2").
 func encodePairsReadable(ws WorldState) string {
-	keys := make([]string, 0, len(ws))
-	for k := range ws {
-		keys = append(keys, k)
-	}
-	slices.Sort(keys)
+	keys := slices.Sorted(maps.Keys(ws))
 	parts := make([]string, 0, len(keys))
 	for _, k := range keys {
 		parts = append(parts, fmt.Sprintf("%s = %v", k, ws[k]))

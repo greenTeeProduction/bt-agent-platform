@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"iter"
 	"log/slog"
+	"maps"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -488,10 +490,7 @@ func (s *Server) handleAgentEndpoint(w http.ResponseWriter, r *http.Request) {
 	cards := s.cardCacheSnapshot()
 
 	if agentName == "" {
-		names := make([]string, 0, len(cards))
-		for name := range cards {
-			names = append(names, name)
-		}
+		names := slices.Collect(maps.Keys(cards))
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{"agents": names})
 		return

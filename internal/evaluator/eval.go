@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -232,10 +233,7 @@ func buildScorecard(results []SuiteEvalResult) PlatformScorecard {
 	}
 
 	// Sort by automation fit
-	sorted := make([]UseCaseScore, 0, len(cases))
-	for _, v := range cases {
-		sorted = append(sorted, v)
-	}
+	sorted := slices.Collect(maps.Values(cases))
 	slices.SortFunc(sorted, func(a, b UseCaseScore) int {
 		return cmp.Compare(b.AutomationFit, a.AutomationFit)
 	})

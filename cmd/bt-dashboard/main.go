@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -691,11 +692,7 @@ func handleTrees(w http.ResponseWriter, _ *http.Request) {
 	// dropdown can fetch a single, complete tree list from this endpoint
 	// instead of relying on a hardcoded client-side list.
 	domainTrees := domains.AllDomainTrees()
-	names := make([]string, 0, len(domainTrees))
-	for name := range domainTrees {
-		names = append(names, name)
-	}
-	slices.Sort(names)
+	names := slices.Sorted(maps.Keys(domainTrees))
 	for _, name := range names {
 		id := "domain:" + name
 		if seen[id] || seen[name] {

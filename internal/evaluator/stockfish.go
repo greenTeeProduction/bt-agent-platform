@@ -12,6 +12,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -540,10 +541,7 @@ func findFailureNodes(records []evolution.Record) []string {
 			}
 		}
 	}
-	result := make([]string, 0, 16)
-	for node := range seen {
-		result = append(result, node)
-	}
+	result := slices.Collect(maps.Keys(seen))
 	return result
 }
 

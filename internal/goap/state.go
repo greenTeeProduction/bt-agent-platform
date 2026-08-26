@@ -108,11 +108,7 @@ func (ws WorldState) Equals(other WorldState) bool {
 
 // String returns a sorted representation of the world state.
 func (ws WorldState) String() string {
-	keys := make([]string, 0, len(ws))
-	for k := range ws {
-		keys = append(keys, k)
-	}
-	slices.Sort(keys)
+	keys := slices.Sorted(maps.Keys(ws))
 	var sb strings.Builder
 	sb.WriteString("{")
 	for i, k := range keys {

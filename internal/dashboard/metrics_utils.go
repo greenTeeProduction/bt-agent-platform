@@ -9,6 +9,7 @@ import (
 	"maps"
 	"net/http"
 	"runtime/debug"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -194,10 +195,7 @@ func labelKey(labels map[string]string) string {
 		return ""
 	}
 	// Build a canonical key: sort by key name for deterministic ordering.
-	keys := make([]string, 0, len(labels))
-	for k := range labels {
-		keys = append(keys, k)
-	}
+	keys := slices.Collect(maps.Keys(labels))
 	sortStrings(keys)
 	b := make([]byte, 0, 256)
 	for i, k := range keys {
@@ -535,10 +533,7 @@ func formatPromLabels(labels map[string]string) string {
 	if len(labels) == 0 {
 		return ""
 	}
-	keys := make([]string, 0, len(labels))
-	for k := range labels {
-		keys = append(keys, k)
-	}
+	keys := slices.Collect(maps.Keys(labels))
 	sortStrings(keys)
 	var b strings.Builder
 	b.WriteByte('{')
@@ -744,10 +739,7 @@ func labelString(labels map[string]string) string {
 	if len(labels) == 0 {
 		return ""
 	}
-	keys := make([]string, 0, len(labels))
-	for k := range labels {
-		keys = append(keys, k)
-	}
+	keys := slices.Collect(maps.Keys(labels))
 	sortStrings(keys)
 	b := make([]byte, 0, 256)
 	for i, k := range keys {

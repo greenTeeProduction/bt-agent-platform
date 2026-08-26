@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -48,11 +49,7 @@ func (f *fakeTransport) SendTask(_ context.Context, agentURL, taskText string) (
 func (f *fakeTransport) sentURLs() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	urls := make([]string, 0, len(f.sent))
-	for u := range f.sent {
-		urls = append(urls, u)
-	}
-	slices.Sort(urls)
+	urls := slices.Sorted(maps.Keys(f.sent))
 	return urls
 }
 

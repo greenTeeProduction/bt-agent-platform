@@ -2293,11 +2293,7 @@ func TestEveryResolverReachableDomainTreeIsCovered(t *testing.T) {
 		t.Fatalf("no bare-ID domains-package branches found in %s — the AST guard stopped matching the real resolver and is silently vacuous", resolverBareIDFile)
 	}
 
-	names := make([]string, 0, len(ids))
-	for id := range ids {
-		names = append(names, id)
-	}
-	slices.Sort(names)
+	names := slices.Sorted(maps.Keys(ids))
 
 	mock := benchmark.DefaultMock()
 	for _, id := range names {
@@ -2452,11 +2448,7 @@ func resolverBareIDLiterals(t *testing.T) []string {
 		return true
 	})
 
-	ids := make([]string, 0, len(seen))
-	for id := range seen {
-		ids = append(ids, id)
-	}
-	slices.Sort(ids)
+	ids := slices.Sorted(maps.Keys(seen))
 	return ids
 }
 

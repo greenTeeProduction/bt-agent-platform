@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"maps"
 	"os"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -842,10 +843,7 @@ func (ss *SchedulerState) Get(id string) (JobState, bool) {
 func (ss *SchedulerState) List() []JobState {
 	ss.mu.Lock()
 	defer ss.mu.Unlock()
-	result := make([]JobState, 0, len(ss.jobs))
-	for _, s := range ss.jobs {
-		result = append(result, s)
-	}
+	result := slices.Collect(maps.Values(ss.jobs))
 	return result
 }
 

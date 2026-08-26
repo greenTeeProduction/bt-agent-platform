@@ -2,8 +2,10 @@ package evolution
 
 import (
 	"encoding/json"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -273,10 +275,7 @@ func TestIslandModel_SaveLoadMergesPerDomainSubpopulations(t *testing.T) {
 	}
 
 	if len(loaded.Islands) != 3 {
-		domains := make([]string, 0, len(loaded.Islands))
-		for d := range loaded.Islands {
-			domains = append(domains, d)
-		}
+		domains := slices.Collect(maps.Keys(loaded.Islands))
 		t.Fatalf("merged model has %d islands %v, want 3 (go, ops, fin)", len(domains), domains)
 	}
 	if ops := loaded.GetIsland("ops"); ops == nil || len(ops.Individuals) != 1 || ops.Individuals[0].Fitness != 55 {
@@ -463,10 +462,7 @@ func TestIslandModel_LoadEnforcesIslandCapByEvictingLowestBestFitnessAdoptedIsla
 	}
 
 	if got := len(loaded.Islands); got != 2 {
-		domains := make([]string, 0, len(loaded.Islands))
-		for d := range loaded.Islands {
-			domains = append(domains, d)
-		}
+		domains := slices.Collect(maps.Keys(loaded.Islands))
 		t.Fatalf("island count = %d %v, want IslandCap=2", got, domains)
 	}
 	if loaded.GetIsland("go") == nil {

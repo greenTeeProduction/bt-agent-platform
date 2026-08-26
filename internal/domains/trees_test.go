@@ -1,6 +1,7 @@
 package domains
 
 import (
+	"maps"
 	"slices"
 	"testing"
 
@@ -165,10 +166,6 @@ func TestHasNodeDetectsMissingAndNestedNames(t *testing.T) {
 // sortedTreeNames gives the registry sweeps a deterministic subtest order so
 // failures are reported in a stable, diffable sequence across runs.
 func sortedTreeNames(trees map[string]*evolution.SerializableNode) []string {
-	names := make([]string, 0, len(trees))
-	for name := range trees {
-		names = append(names, name)
-	}
-	slices.Sort(names)
+	names := slices.Sorted(maps.Keys(trees))
 	return names
 }

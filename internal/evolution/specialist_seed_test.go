@@ -1,6 +1,10 @@
 package evolution
 
-import "testing"
+import (
+	"maps"
+	"slices"
+	"testing"
+)
 
 // SeedSpecialistRegistry gives production populations resurrection material:
 // without it, Population.Specialists stays nil everywhere outside tests and
@@ -12,10 +16,7 @@ func TestSeedSpecialistRegistry_PreloadsValidatedArchetypes(t *testing.T) {
 	}
 	if _, ok := reg.Archetypes["goap"]; !ok {
 		t.Fatalf("expected the goap specialist archetype, got %v", func() []string {
-			keys := make([]string, 0, len(reg.Archetypes))
-			for k := range reg.Archetypes {
-				keys = append(keys, k)
-			}
+			keys := slices.Collect(maps.Keys(reg.Archetypes))
 			return keys
 		}())
 	}

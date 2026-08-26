@@ -1,6 +1,7 @@
 package goap
 
 import (
+	"maps"
 	"slices"
 	"strings"
 )
@@ -77,11 +78,7 @@ func (v *Vocabulary) Canonical(raw string) (string, bool) {
 
 // Keys returns all registered keys, sorted.
 func (v *Vocabulary) Keys() []string {
-	keys := make([]string, 0, len(v.descriptions))
-	for k := range v.descriptions {
-		keys = append(keys, k)
-	}
-	slices.Sort(keys)
+	keys := slices.Sorted(maps.Keys(v.descriptions))
 	return keys
 }
 

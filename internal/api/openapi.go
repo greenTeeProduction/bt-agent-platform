@@ -3,6 +3,7 @@ package api
 
 import (
 	"encoding/json"
+	"maps"
 	"net/http"
 	"slices"
 )
@@ -248,11 +249,7 @@ func (g *OpenAPIGenerator) Generate() OpenAPISpec {
 
 	// Sort paths for deterministic output
 	sortedPaths := make(map[string]map[string]any)
-	pathKeys := make([]string, 0, len(paths))
-	for k := range paths {
-		pathKeys = append(pathKeys, k)
-	}
-	slices.Sort(pathKeys)
+	pathKeys := slices.Sorted(maps.Keys(paths))
 	for _, k := range pathKeys {
 		sortedPaths[k] = paths[k]
 	}
