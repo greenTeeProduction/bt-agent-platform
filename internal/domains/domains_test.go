@@ -7,7 +7,6 @@ import (
 	"go/token"
 	"maps"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -1720,7 +1719,7 @@ func TestExpectedDomainIDsIsSortedAndComplete(t *testing.T) {
 		t.Errorf("ExpectedDomainIDs is missing ids: %v", want)
 	}
 
-	if !sort.StringsAreSorted(ids) {
+	if !slices.IsSorted(ids) {
 		t.Errorf("ExpectedDomainIDs(registry) is not sorted: %v", ids)
 	}
 }

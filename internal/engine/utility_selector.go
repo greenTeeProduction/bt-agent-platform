@@ -1,7 +1,8 @@
 package engine
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	btcore "github.com/rvitorper/go-bt/core"
@@ -156,18 +157,20 @@ func ScoreChildren(node *evolution.SerializableNode, bb *Blackboard, criteria Sc
 		scores = append(scores, score)
 	}
 	// Sort by weighted score descending
-	sort.Slice(scores, func(i, j int) bool {
-		if !scores[i].Valid {
-			return false
+	slices.SortFunc(scores, func(a, b UtilityScore) int {
+		if !a.Valid {
+			if !b.Valid {
+				return 0
+			}
+			return 1 // invalid scores sink to the end
 		}
-		if !scores[j].Valid {
-			return true
+		if !b.Valid {
+			return -1
 		}
-		if scores[i].WeightedScore == scores[j].WeightedScore {
-			// Tie-break: lower cost wins
-			return scores[i].CostEstimate < scores[j].CostEstimate
-		}
-		return scores[i].WeightedScore > scores[j].WeightedScore
+		return cmp.Or(
+			cmp.Compare(b.WeightedScore, a.WeightedScore),
+			cmp.Compare(a.CostEstimate, b.CostEstimate), // tie-break: lower cost wins
+		)
 	})
 	return scores
 }

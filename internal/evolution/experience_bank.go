@@ -19,7 +19,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -446,17 +445,20 @@ func (eb *ExperienceBank) enforceCapLocked() {
 	for i := range order {
 		order[i] = i
 	}
-	sort.SliceStable(order, func(a, b int) bool {
-		ea, ebEntry := eb.Entries[order[a]], eb.Entries[order[b]]
-		protA := ea.TimesReused >= experienceReuseProtection
-		protB := ebEntry.TimesReused >= experienceReuseProtection
+	slices.SortStableFunc(order, func(a, b int) int {
+		entA, entB := eb.Entries[a], eb.Entries[b]
+		protA := entA.TimesReused >= experienceReuseProtection
+		protB := entB.TimesReused >= experienceReuseProtection
 		if protA != protB {
-			return !protA // unprotected entries are evicted first
+			if protA {
+				return 1
+			}
+			return -1 // unprotected entries are evicted first
 		}
-		if ea.QualityScore != ebEntry.QualityScore {
-			return ea.QualityScore < ebEntry.QualityScore
-		}
-		return ea.CreatedAt.Before(ebEntry.CreatedAt)
+		return cmp.Or(
+			cmp.Compare(entA.QualityScore, entB.QualityScore),
+			entA.CreatedAt.Compare(entB.CreatedAt),
+		)
 	})
 
 	evict := make(map[int]bool, excess)

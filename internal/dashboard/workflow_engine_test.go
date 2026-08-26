@@ -874,7 +874,7 @@ func TestRecommendationsToTasks_LongTextTruncation(t *testing.T) {
 // ─── sortTasks stability ───
 
 func TestSortTasks_StableOrder(t *testing.T) {
-	// sort.SliceStable preserves order of equal elements
+	// slices.SortStableFunc preserves order of equal elements
 	tasks := []WorkflowTask{
 		{ID: "high-a", Priority: PriorityHigh},
 		{ID: "high-b", Priority: PriorityHigh},

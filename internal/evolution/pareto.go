@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
 )
 
@@ -218,11 +217,11 @@ func cappedIndividuals(individuals []*MultiIndividual, limit int) []*MultiIndivi
 	}
 	sorted := make([]*MultiIndividual, len(individuals))
 	copy(sorted, individuals)
-	sort.Slice(sorted, func(i, j int) bool {
-		if sorted[i].Fitness != sorted[j].Fitness {
-			return sorted[i].Fitness > sorted[j].Fitness
-		}
-		return sorted[i].Genome < sorted[j].Genome
+	slices.SortFunc(sorted, func(a, b *MultiIndividual) int {
+		return cmp.Or(
+			cmp.Compare(b.Fitness, a.Fitness),
+			cmp.Compare(a.Genome, b.Genome),
+		)
 	})
 	return sorted[:limit]
 }
@@ -297,10 +296,8 @@ func (pf *ParetoFront) Load(path string) error {
 
 // Best returns all Pareto-optimal individuals sorted by composite score.
 func (pf *ParetoFront) Best(n int) []*MultiIndividual {
-	sort.Slice(pf.Individuals, func(i, j int) bool {
-		ci := pf.Individuals[i].FitnessVec.CompositeScore(nil)
-		cj := pf.Individuals[j].FitnessVec.CompositeScore(nil)
-		return ci > cj
+	slices.SortFunc(pf.Individuals, func(a, b *MultiIndividual) int {
+		return cmp.Compare(b.FitnessVec.CompositeScore(nil), a.FitnessVec.CompositeScore(nil))
 	})
 	if n > 0 && n < len(pf.Individuals) {
 		return pf.Individuals[:n]

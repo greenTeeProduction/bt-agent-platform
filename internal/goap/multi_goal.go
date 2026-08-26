@@ -5,7 +5,6 @@ import (
 	"container/heap"
 	"fmt"
 	"slices"
-	"sort"
 	"sync"
 )
 
@@ -178,8 +177,14 @@ func (gq *GoalQueue) SelectGoal(state WorldState) *Goal {
 	// goal queues are typically small (<100 goals).
 	sorted := make([]*goalEntry, len(gq.heap))
 	copy(sorted, gq.heap)
-	sort.Slice(sorted, func(i, j int) bool {
-		return entryLess(sorted[i], sorted[j])
+	slices.SortFunc(sorted, func(a, b *goalEntry) int {
+		if entryLess(a, b) {
+			return -1
+		}
+		if entryLess(b, a) {
+			return 1
+		}
+		return 0
 	})
 
 	for _, entry := range sorted {

@@ -4,7 +4,6 @@ import (
 	"cmp"
 	"fmt"
 	"slices"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -210,11 +209,11 @@ func (s *scopedStore) listRecent(prefix string, limit int) []Entry {
 			out = append(out, e)
 		}
 	}
-	sort.Slice(out, func(i, j int) bool {
-		if !out[i].UpdatedAt.Equal(out[j].UpdatedAt) {
-			return out[i].UpdatedAt.After(out[j].UpdatedAt)
-		}
-		return out[i].Key < out[j].Key
+	slices.SortFunc(out, func(a, b Entry) int {
+		return cmp.Or(
+			b.UpdatedAt.Compare(a.UpdatedAt),
+			cmp.Compare(a.Key, b.Key),
+		)
 	})
 	if len(out) > limit {
 		out = out[:limit]

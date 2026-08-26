@@ -1,10 +1,11 @@
 package dashboard
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"os"
-	"sort"
+	"slices"
 	"sync"
 	"time"
 
@@ -246,12 +247,11 @@ func (s *TaskStore) Approved() []Task {
 			out = append(out, t)
 		}
 	}
-	sort.SliceStable(out, func(i, j int) bool {
-		ri, rj := priorityRank(out[i].Priority), priorityRank(out[j].Priority)
-		if ri != rj {
-			return ri < rj
-		}
-		return out[i].Sprint < out[j].Sprint
+	slices.SortStableFunc(out, func(a, b Task) int {
+		return cmp.Or(
+			cmp.Compare(priorityRank(a.Priority), priorityRank(b.Priority)),
+			cmp.Compare(a.Sprint, b.Sprint),
+		)
 	})
 	return out
 }

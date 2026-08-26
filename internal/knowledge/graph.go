@@ -17,7 +17,8 @@
 package knowledge
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -339,9 +340,9 @@ func (kg *KnowledgeGraph) stringMatch(task string) (string, float64) {
 		}
 	}
 	if len(hits) > 0 {
-		sort.Slice(hits, func(i, j int) bool {
-			if li, lj := len(hits[i].keyword), len(hits[j].keyword); li != lj {
-				return li > lj // longest / most-specific keyword first
+		slices.SortFunc(hits, func(a, b kwHit) int {
+			if la, lb := len(a.keyword), len(b.keyword); la != lb {
+				return cmp.Compare(lb, la) // longest / most-specific keyword first
 			}
 			// Equal specificity: blend persisted fitness so the tie resolves
 			// toward the fitter tree, mirroring the embedding path's
@@ -350,12 +351,12 @@ func (kg *KnowledgeGraph) stringMatch(task string) (string, float64) {
 			// run cannot dominate a tree proven across many runs, and the tree's
 			// evolved structural fitness is blended in (gated by RunCount) so an
 			// unproven-but-archive-improved tree can still surface.
-			ti, tj := kg.Trees[hits[i].treeID], kg.Trees[hits[j].treeID]
-			if fi, fj := blendedSelectionFitness(ti.Fitness, ti.StructuralFitness, ti.RunCount),
-				blendedSelectionFitness(tj.Fitness, tj.StructuralFitness, tj.RunCount); fi != fj {
-				return fi > fj // more-trustworthy fitter tree wins the tie
+			ta, tb := kg.Trees[a.treeID], kg.Trees[b.treeID]
+			if fa, fb := blendedSelectionFitness(ta.Fitness, ta.StructuralFitness, ta.RunCount),
+				blendedSelectionFitness(tb.Fitness, tb.StructuralFitness, tb.RunCount); fa != fb {
+				return cmp.Compare(fb, fa) // more-trustworthy fitter tree wins the tie
 			}
-			return hits[i].treeID < hits[j].treeID // final deterministic fallback
+			return cmp.Compare(a.treeID, b.treeID) // final deterministic fallback
 		})
 		winner := hits[0].treeID
 		matched := 0

@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/agent"
@@ -1290,12 +1289,11 @@ func (g *Gardener) RunCycleV2(cfg EvolveV2Config) ([]CycleMetrics, error) {
 
 	entries := g.cfg.Registry.List()
 	ranks := g.treePriorityRanks()
-	sort.SliceStable(entries, func(i, j int) bool {
-		ri, rj := treePriorityRank(ranks, entries[i].Name), treePriorityRank(ranks, entries[j].Name)
-		if ri != rj {
-			return ri < rj
-		}
-		return entries[i].Name < entries[j].Name
+	slices.SortStableFunc(entries, func(a, b TreeEntry) int {
+		return cmp.Or(
+			cmp.Compare(treePriorityRank(ranks, a.Name), treePriorityRank(ranks, b.Name)),
+			cmp.Compare(a.Name, b.Name),
+		)
 	})
 
 	// ── Island-model population exploration ──

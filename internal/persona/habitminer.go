@@ -1,8 +1,9 @@
 package persona
 
 import (
+	"cmp"
 	"math"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 )
@@ -128,11 +129,11 @@ func (m *HabitMiner) Mine(interactions []Interaction, now time.Time) []Recurring
 		patterns = append(patterns, p)
 	}
 
-	sort.Slice(patterns, func(i, j int) bool {
-		if patterns[i].Count != patterns[j].Count {
-			return patterns[i].Count > patterns[j].Count
-		}
-		return patterns[i].LastSeen > patterns[j].LastSeen
+	slices.SortFunc(patterns, func(a, b RecurringPattern) int {
+		return cmp.Or(
+			cmp.Compare(b.Count, a.Count),
+			cmp.Compare(b.LastSeen, a.LastSeen),
+		)
 	})
 	return patterns
 }
@@ -220,11 +221,11 @@ func sortedByCount(counts map[string]int) []string {
 	for id := range counts {
 		ids = append(ids, id)
 	}
-	sort.Slice(ids, func(i, j int) bool {
-		if counts[ids[i]] != counts[ids[j]] {
-			return counts[ids[i]] > counts[ids[j]]
-		}
-		return ids[i] < ids[j]
+	slices.SortFunc(ids, func(a, b string) int {
+		return cmp.Or(
+			cmp.Compare(counts[b], counts[a]),
+			cmp.Compare(a, b),
+		)
 	})
 	return ids
 }

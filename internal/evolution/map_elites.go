@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 )
 
 // FeatureDimension defines a behavioral feature axis for MAP-Elites.
@@ -422,11 +421,11 @@ func cappedCells(cells map[string]*Individual, limit int) map[string]*Individual
 	for key, ind := range cells {
 		niches = append(niches, niche{key: key, ind: ind})
 	}
-	sort.Slice(niches, func(i, j int) bool {
-		if niches[i].ind.Fitness != niches[j].ind.Fitness {
-			return niches[i].ind.Fitness > niches[j].ind.Fitness
-		}
-		return niches[i].key < niches[j].key
+	slices.SortFunc(niches, func(a, b niche) int {
+		return cmp.Or(
+			cmp.Compare(b.ind.Fitness, a.ind.Fitness),
+			cmp.Compare(a.key, b.key),
+		)
 	})
 	bounded := make(map[string]*Individual, limit)
 	for _, n := range niches[:limit] {

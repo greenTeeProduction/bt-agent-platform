@@ -4,11 +4,12 @@
 package benchmark
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"os"
 	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -171,12 +172,12 @@ func (c *Comparator) Compare(current []BenchmarkResult) []ComparisonResult {
 	}
 
 	// Sort: critical > warning > ok, then by name
-	sort.Slice(results, func(i, j int) bool {
-		order := map[string]int{"critical": 0, "warning": 1, "ok": 2}
-		if order[results[i].Severity] != order[results[j].Severity] {
-			return order[results[i].Severity] < order[results[j].Severity]
-		}
-		return results[i].Name < results[j].Name
+	severityOrder := map[string]int{"critical": 0, "warning": 1, "ok": 2}
+	slices.SortFunc(results, func(a, b ComparisonResult) int {
+		return cmp.Or(
+			cmp.Compare(severityOrder[a.Severity], severityOrder[b.Severity]),
+			cmp.Compare(a.Name, b.Name),
+		)
 	})
 
 	return results

@@ -7,7 +7,6 @@ import (
 	"math"
 	"os"
 	"slices"
-	"sort"
 	"sync"
 )
 
@@ -417,15 +416,13 @@ func (so *SelectorOptimizer) OrderChildren(selectorName string) []string {
 			return cmp.Compare(b.LastSuccessTick, a.LastSuccessTick)
 		})
 	case OrderByHybrid:
-		sort.Slice(children, func(i, j int) bool {
-			// Normalize IG and Gini into [0,1] and combine
-			scoreI := normalizedIG(children[i], stats)
-			scoreJ := normalizedIG(children[j], stats)
-			giniI := 1.0 - GiniImpurity(children[i]) // invert so high = good
-			giniJ := 1.0 - GiniImpurity(children[j])
-			hybridI := 0.7*scoreI + 0.3*giniI
-			hybridJ := 0.7*scoreJ + 0.3*giniJ
-			return hybridI > hybridJ
+		// Normalize IG and Gini into [0,1] and combine; Gini is inverted so
+		// high = good, matching the direction of the information gain term.
+		hybrid := func(c *ChildStats) float64 {
+			return 0.7*normalizedIG(c, stats) + 0.3*(1.0-GiniImpurity(c))
+		}
+		slices.SortFunc(children, func(a, b *ChildStats) int {
+			return cmp.Compare(hybrid(b), hybrid(a))
 		})
 	}
 
@@ -477,16 +474,19 @@ func (so *SelectorOptimizer) applyLearnedNode(node *SerializableNode, changes *i
 			for i := range idx {
 				idx[i] = i
 			}
-			sort.SliceStable(idx, func(a, b int) bool {
-				ca, cb := &node.Children[idx[a]], &node.Children[idx[b]]
+			slices.SortStableFunc(idx, func(a, b int) int {
+				ca, cb := &node.Children[a], &node.Children[b]
 				da, db := isSelectorFallback(ca), isSelectorFallback(cb)
 				if da != db {
-					return !da // non-default paths first; fallbacks stay last
+					if da {
+						return 1
+					}
+					return -1 // non-default paths first; fallbacks stay last
 				}
 				if da {
-					return false // both fallbacks: preserve relative order
+					return 0 // both fallbacks: preserve relative order
 				}
-				return rank[ca.Name] < rank[cb.Name]
+				return cmp.Compare(rank[ca.Name], rank[cb.Name])
 			})
 			reordered := make([]SerializableNode, len(node.Children))
 			changed := false
