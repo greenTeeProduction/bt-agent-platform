@@ -542,17 +542,18 @@ func (kg *KnowledgeGraph) Summary() string {
 		categories[t.Category]++
 	}
 
-	s := "Knowledge Graph: "
+	var s strings.Builder
+	s.WriteString("Knowledge Graph: ")
 	first := true
 	for cat, count := range categories {
 		if !first {
-			s += ", "
+			s.WriteString(", ")
 		}
-		s += cat + "(" + strconv.Itoa(count) + ")"
+		s.WriteString(cat + "(" + strconv.Itoa(count) + ")")
 		first = false
 	}
-	s += " | " + strconv.Itoa(len(kg.Trees)) + " trees, " + strconv.Itoa(len(kg.Edges)) + " edges"
-	return s
+	s.WriteString(" | " + strconv.Itoa(len(kg.Trees)) + " trees, " + strconv.Itoa(len(kg.Edges)) + " edges")
+	return s.String()
 }
 
 // DiscoverRelated returns trees connected to the given tree via edges.

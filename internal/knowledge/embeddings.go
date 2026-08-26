@@ -9,6 +9,7 @@ import (
 	"maps"
 	"math"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/reliability"
@@ -159,11 +160,12 @@ func (kg *KnowledgeGraph) BuildIndex() error {
 
 	for id, tree := range trees {
 		reliability.SafeGo(fmt.Sprintf("knowledge.BuildIndex tree %s", id), func() {
-			text := tree.Name + " " + tree.Description
+			var text strings.Builder
+			text.WriteString(tree.Name + " " + tree.Description)
 			for _, cap := range tree.Capabilities {
-				text += " " + cap.Action + " in " + cap.Domain
+				text.WriteString(" " + cap.Action + " in " + cap.Domain)
 			}
-			emb, err := defaultEmbeddingClient.GetEmbedding(text)
+			emb, err := defaultEmbeddingClient.GetEmbedding(text.String())
 			kg.mu.Lock()
 			if err == nil {
 				tree.Embedding = emb

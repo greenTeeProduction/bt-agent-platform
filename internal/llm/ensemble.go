@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -227,51 +228,52 @@ type PriorSolution struct {
 // BuildMutationPrompt constructs a rich prompt for the LLM to generate mutations.
 // Incorporates AlphaEvolve-style context: prior solutions, evaluator breakdown, research hints.
 func BuildMutationPrompt(ctx EvolutionContext) string {
-	prompt := fmt.Sprintf(`## Behavior Tree Evolution — Mutation Request
+	var prompt strings.Builder
+	prompt.WriteString(fmt.Sprintf(`## Behavior Tree Evolution — Mutation Request
 
 ### Current Tree (fitness: %.1f, domain: %s)
 %s
 
-`, ctx.CurrentFitness, ctx.Domain, ctx.CurrentTree)
+`, ctx.CurrentFitness, ctx.Domain, ctx.CurrentTree))
 
 	// Evaluator breakdown
 	if len(ctx.EvaluatorBreakdown) > 0 {
-		prompt += "### Evaluator Breakdown\n"
+		prompt.WriteString("### Evaluator Breakdown\n")
 		for metric, score := range ctx.EvaluatorBreakdown {
-			prompt += fmt.Sprintf("- **%s**: %.1f/100\n", metric, score)
+			prompt.WriteString(fmt.Sprintf("- **%s**: %.1f/100\n", metric, score))
 		}
-		prompt += "\n"
+		prompt.WriteString("\n")
 	}
 
 	// Prior solutions
 	if len(ctx.PriorSolutions) > 0 {
-		prompt += "### Top Prior Solutions\n"
+		prompt.WriteString("### Top Prior Solutions\n")
 		for i, sol := range ctx.PriorSolutions {
-			prompt += fmt.Sprintf("%d. (fitness: %.1f, gen %d) — %s\n",
-				i+1, sol.Fitness, sol.Generation, sol.Description)
+			prompt.WriteString(fmt.Sprintf("%d. (fitness: %.1f, gen %d) — %s\n",
+				i+1, sol.Fitness, sol.Generation, sol.Description))
 		}
-		prompt += "\n"
+		prompt.WriteString("\n")
 	}
 
 	// Research context
 	if len(ctx.ResearchHints) > 0 {
-		prompt += "### Research Context\n"
+		prompt.WriteString("### Research Context\n")
 		for _, hint := range ctx.ResearchHints {
-			prompt += fmt.Sprintf("- %s\n", hint)
+			prompt.WriteString(fmt.Sprintf("- %s\n", hint))
 		}
-		prompt += "\n"
+		prompt.WriteString("\n")
 	}
 
 	// Mutation history
 	if len(ctx.MutationHistory) > 0 {
-		prompt += "### Recent Mutations\n"
+		prompt.WriteString("### Recent Mutations\n")
 		for _, m := range ctx.MutationHistory {
-			prompt += fmt.Sprintf("- %s\n", m)
+			prompt.WriteString(fmt.Sprintf("- %s\n", m))
 		}
-		prompt += "\n"
+		prompt.WriteString("\n")
 	}
 
-	prompt += `### Task
+	prompt.WriteString(`### Task
 Propose one targeted mutation to improve the lowest-scoring dimension in the evaluator breakdown.
 Choose from: add_before (prepend a Condition or Action), add_after (append), add_fallback (add fallback path),
 replace_node (swap a node), remove_node (delete dead node), adjust_retries (change MaxRetries).
@@ -279,8 +281,8 @@ replace_node (swap a node), remove_node (delete dead node), adjust_retries (chan
 Respond in SEARCH/REPLACE format:
 SEARCH: <node name or description to find>
 REPLACE: <new node definition>
-`
-	return prompt
+`)
+	return prompt.String()
 }
 
 // DefaultResearchHints returns research paper citations for the evolution prompt.

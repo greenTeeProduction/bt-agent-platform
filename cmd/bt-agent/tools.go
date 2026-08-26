@@ -601,11 +601,11 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			allTrees := evolution.AllFinanceTrees()
 			tree, ok := allTrees[params.Agent]
 			if !ok {
-				names := ""
+				var names strings.Builder
 				for k := range allTrees {
-					names += k + ", "
+					names.WriteString(k + ", ")
 				}
-				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: fmt.Sprintf(`{"error": "unknown agent", "available": %q}`, names)}}}
+				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: fmt.Sprintf(`{"error": "unknown agent", "available": %q}`, names.String())}}}
 			}
 			_ = deps.treeStore.Save(tree)
 			*deps.bt = engine.BuildTree(tree, deps.bb)
@@ -666,11 +666,11 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			allTrees := domains.AllDomainTrees()
 			tree, ok := allTrees[params.Tree]
 			if !ok {
-				names := ""
+				var names strings.Builder
 				for k := range allTrees {
-					names += k + ", "
+					names.WriteString(k + ", ")
 				}
-				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: fmt.Sprintf(`{"error": "unknown tree", "available": %q}`, names)}}}
+				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: fmt.Sprintf(`{"error": "unknown tree", "available": %q}`, names.String())}}}
 			}
 			_ = deps.treeStore.Save(tree)
 			*deps.bt = engine.BuildTree(tree, deps.bb)

@@ -2,6 +2,7 @@ package knowledge
 
 import (
 	"slices"
+	"strings"
 	"sync"
 	"time"
 )
@@ -122,23 +123,24 @@ func (kg *KnowledgeGraph) ExplainLastFailure(treeID string) string {
 		return "no failure traces found for " + treeID
 	}
 
-	s := "Tree: " + trace.TreeID + "\n"
-	s += "Task: " + trace.Task + "\n"
-	s += "Outcome: " + trace.Outcome + "\n"
-	s += "Duration: " + trace.EndedAt.Sub(trace.StartedAt).String() + "\n"
-	s += "Path:\n"
+	var s strings.Builder
+	s.WriteString("Tree: " + trace.TreeID + "\n")
+	s.WriteString("Task: " + trace.Task + "\n")
+	s.WriteString("Outcome: " + trace.Outcome + "\n")
+	s.WriteString("Duration: " + trace.EndedAt.Sub(trace.StartedAt).String() + "\n")
+	s.WriteString("Path:\n")
 
 	for _, step := range trace.Steps {
 		icon := "\u2713" // ✓
 		if step.Status != "success" && step.Status != "chain_success" {
 			icon = "\u2717" // ✗
 		}
-		s += "  " + icon + " " + step.NodeName + " (" + step.NodeType + ") "
-		s += "[" + step.Status + "]"
+		s.WriteString("  " + icon + " " + step.NodeName + " (" + step.NodeType + ") ")
+		s.WriteString("[" + step.Status + "]")
 		if step.Error != "" {
-			s += " ERROR: " + step.Error
+			s.WriteString(" ERROR: " + step.Error)
 		}
-		s += "\n"
+		s.WriteString("\n")
 	}
-	return s
+	return s.String()
 }

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 )
 
@@ -537,12 +538,13 @@ func enforceIslandCap(pop *Population, islandCap int) int {
 // Summary returns a human-readable island model summary.
 func (im *IslandModel) Summary() string {
 	stats := im.Stats()
-	s := fmt.Sprintf("IslandModel: %d domains, %d total pop, gen %d, migrations %d\n",
-		stats.Domains, stats.TotalPop, im.Generation, stats.Migrations)
+	var s strings.Builder
+	s.WriteString(fmt.Sprintf("IslandModel: %d domains, %d total pop, gen %d, migrations %d\n",
+		stats.Domains, stats.TotalPop, im.Generation, stats.Migrations))
 	for domain, best := range stats.BestPerDomain {
-		s += fmt.Sprintf("  %s: best=%.1f\n", domain, best)
+		s.WriteString(fmt.Sprintf("  %s: best=%.1f\n", domain, best))
 	}
-	s += fmt.Sprintf("  cross-diversity: %.2f\n", stats.CrossDiversity)
-	s += fmt.Sprintf("  evicted: %d individuals, %d islands\n", stats.EvictedIndividuals, stats.EvictedIslands)
-	return s
+	s.WriteString(fmt.Sprintf("  cross-diversity: %.2f\n", stats.CrossDiversity))
+	s.WriteString(fmt.Sprintf("  evicted: %d individuals, %d islands\n", stats.EvictedIndividuals, stats.EvictedIslands))
+	return s.String()
 }

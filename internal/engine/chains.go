@@ -436,14 +436,15 @@ func execToolCall(cfg ChainConfig, bb *Blackboard) int {
 	// Tool-calling via langchain: describe available tools and let LLM choose
 	prompt := expandTemplate(cfg.Prompt, bb)
 
-	toolDesc := "Available tools:\n"
+	var toolDesc strings.Builder
+	toolDesc.WriteString("Available tools:\n")
 	if cfg.Tools != nil {
 		for _, t := range cfg.Tools {
-			toolDesc += fmt.Sprintf("- %s\n", t)
+			toolDesc.WriteString(fmt.Sprintf("- %s\n", t))
 		}
 	} else if bb.ChainTools != nil {
 		for _, t := range bb.ChainTools {
-			toolDesc += fmt.Sprintf("- %v\n", t)
+			toolDesc.WriteString(fmt.Sprintf("- %v\n", t))
 		}
 	}
 
@@ -454,7 +455,7 @@ Using these tools, complete this task:
 %s
 
 If you need to use a tool, respond with: TOOL: <tool_name>
-Otherwise, respond directly.`, toolDesc, prompt)
+Otherwise, respond directly.`, toolDesc.String(), prompt)
 
 	if bb.LLM == nil {
 		bb.Outcome = "chain_failed"
@@ -709,9 +710,10 @@ func execMapReduce(cfg ChainConfig, bb *Blackboard) int {
 	// each block to the right part of the decomposition (and notice if a result
 	// drifted off its subtask) instead of combining anonymous, unlabeled blobs —
 	// symmetric with the failed-subtask list below, which already names its parts.
-	reducePrompt := fmt.Sprintf("Combine these subtask results into a unified answer for the original task:\nTask: %s\n\nResults:\n", task)
+	var reducePrompt strings.Builder
+	reducePrompt.WriteString(fmt.Sprintf("Combine these subtask results into a unified answer for the original task:\nTask: %s\n\nResults:\n", task))
 	for i, r := range results {
-		reducePrompt += fmt.Sprintf("%d. Subtask: %s\n   Result: %s\n", i+1, r.task, r.result)
+		reducePrompt.WriteString(fmt.Sprintf("%d. Subtask: %s\n   Result: %s\n", i+1, r.task, r.result))
 	}
 	if failed > 0 {
 		// Name the specific subtasks that are missing rather than only their count.
@@ -720,13 +722,13 @@ func execMapReduce(cfg ChainConfig, bb *Blackboard) int {
 		// (and resist fabricating the missing piece) instead of vaguely noting that
 		// "N parts" are absent. Mirrors execAgent's incompleteInvestigationNote, which
 		// names why an investigation was cut short.
-		reducePrompt += fmt.Sprintf("\nNote: %d subtask(s) could not be completed and are MISSING from the results above:\n", failed)
+		reducePrompt.WriteString(fmt.Sprintf("\nNote: %d subtask(s) could not be completed and are MISSING from the results above:\n", failed))
 		for _, ft := range failedSubtasks {
-			reducePrompt += fmt.Sprintf("  - %s\n", ft)
+			reducePrompt.WriteString(fmt.Sprintf("  - %s\n", ft))
 		}
-		reducePrompt += "Produce the best answer from the available results. Explicitly flag each missing subtask above as unresolved — do not fabricate a result for it.\n"
+		reducePrompt.WriteString("Produce the best answer from the available results. Explicitly flag each missing subtask above as unresolved — do not fabricate a result for it.\n")
 	}
-	reducePrompt += "\nUnified answer:"
+	reducePrompt.WriteString("\nUnified answer:")
 
 	// Reduce phase: combine. A failure here after subtasks have already completed
 	// would otherwise discard every completed result and fail the whole node over a
@@ -736,7 +738,7 @@ func execMapReduce(cfg ChainConfig, bb *Blackboard) int {
 	// then fall back to a deterministic synthesis that stitches the completed
 	// subtask results together rather than throwing them away. Downstream nodes
 	// can detect the degraded combine via map_reduce_reduce_degraded.
-	final, err := generateWithRetryPolicy(bb, reducePrompt, 0, func(_ int, _ reliability.ErrorCategory, _ time.Duration) {
+	final, err := generateWithRetryPolicy(bb, reducePrompt.String(), 0, func(_ int, _ reliability.ErrorCategory, _ time.Duration) {
 		bb.ChainState["map_reduce_reduce_retried"] = true
 	})
 	if err != nil {
