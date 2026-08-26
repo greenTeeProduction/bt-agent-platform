@@ -43,10 +43,7 @@ type heartbeatEntry struct {
 // A background goroutine runs periodic cleanup at cleanupInterval
 // (or TTL/2 if cleanupInterval is zero). Call Stop() to shut down.
 func NewNodeHeartbeat(ttl time.Duration) *NodeHeartbeat {
-	cleanupInterval := ttl / 2
-	if cleanupInterval < time.Second {
-		cleanupInterval = time.Second
-	}
+	cleanupInterval := max(ttl/2, time.Second)
 	hb := &NodeHeartbeat{
 		nodes:           make(map[string]*heartbeatEntry),
 		ttl:             ttl,

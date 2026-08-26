@@ -159,10 +159,7 @@ type llmGoal struct {
 
 func (f *GoalFactory) fromIntentLLM(userText string) (*Goal, *GroundingReport, error) {
 	feedback := ""
-	attempts := f.MaxRepairAttempts
-	if attempts < 1 {
-		attempts = 1
-	}
+	attempts := max(f.MaxRepairAttempts, 1)
 	var lastErr error
 	for attempt := 0; attempt < attempts; attempt++ {
 		raw, err := f.LLM.Generate(f.extractionPrompt(userText, feedback))

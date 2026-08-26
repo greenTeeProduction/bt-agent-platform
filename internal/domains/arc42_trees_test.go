@@ -166,7 +166,7 @@ func TestArc42TreesChainHelperBuildsChainActionNode(t *testing.T) {
 // each sectionN function build its root inline as a value.
 func TestArc42TreesTreeHelperWrapsRoot(t *testing.T) {
 	root := seq("Root", "root description", cond("C1", "d1"))
-	got := tree(root)
+	got := new(root)
 	if got == nil {
 		t.Fatal("tree() returned nil")
 	}

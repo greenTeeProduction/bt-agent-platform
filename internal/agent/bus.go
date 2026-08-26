@@ -108,10 +108,7 @@ func (b *AgentBus) History(limit int) []AgentEvent {
 	if limit <= 0 || limit > len(b.history) {
 		limit = len(b.history)
 	}
-	start := len(b.history) - limit
-	if start < 0 {
-		start = 0
-	}
+	start := max(len(b.history)-limit, 0)
 	result := make([]AgentEvent, limit)
 	copy(result, b.history[start:])
 	return result

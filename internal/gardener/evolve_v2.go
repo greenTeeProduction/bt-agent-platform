@@ -302,10 +302,7 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 			} else if rate >= 1 {
 				rate = 0.99
 			}
-			maxMutations = int(math.Ceil(float64(g.cfg.MaxMutations) / (1 - rate)))
-			if maxMutations < 1 {
-				maxMutations = 1
-			}
+			maxMutations = max(int(math.Ceil(float64(g.cfg.MaxMutations)/(1-rate))), 1)
 			crisisIntervened = true
 			crisisReason = reason
 			slog.Info("gardener/v2: crisis intervention — boosting mutation budget",

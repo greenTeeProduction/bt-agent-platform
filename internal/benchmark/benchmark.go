@@ -326,10 +326,7 @@ func fishersExact(s1, f1, s2, f2 int) float64 {
 	if c := n1 + s2 - N; c > minA {
 		minA = c
 	}
-	maxA := n1
-	if s1+s2 < maxA {
-		maxA = s1 + s2
-	}
+	maxA := min(s1+s2, n1)
 
 	pObs := hypergeometricProb(a, b, c, d)
 	pValue := 0.0

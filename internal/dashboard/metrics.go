@@ -196,10 +196,7 @@ func collectSystem() SystemMetrics {
 		}
 		total := parseMem("MemTotal") / 1024 // MB → GB
 		avail := parseMem("MemAvailable") / 1024
-		used := total - avail
-		if used < 0 {
-			used = 0
-		}
+		used := max(total-avail, 0)
 		pct := 0
 		if total > 0 {
 			pct = (used * 100) / total

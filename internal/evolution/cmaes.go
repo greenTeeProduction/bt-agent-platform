@@ -339,10 +339,7 @@ func (cma *CMAESOptimizer) Optimize(
 	n := len(params)
 
 	// CMA-ES hyperparameters
-	lambda := cma.PopulationSize
-	if lambda < 5 {
-		lambda = 5
-	}
+	lambda := max(cma.PopulationSize, 5)
 	mu := lambda / 2 // number of parents
 	weights := make([]float64, mu)
 	for i := range mu {

@@ -508,10 +508,7 @@ func (f *Factory) selectParents(category, _ string) []string {
 	// Pick 2-3 parents, weighted by template fitness so high-fitness parents
 	// are drawn far more often than uniform shuffle would allow (milestone 1/5
 	// of the selection-pressure program: fitness-driven breeding).
-	n := 2 + f.randIntn(2)
-	if n > len(candidates) {
-		n = len(candidates)
-	}
+	n := min(2+f.randIntn(2), len(candidates))
 	return f.weightedSampleParents(candidates, n)
 }
 

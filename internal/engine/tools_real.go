@@ -477,10 +477,7 @@ var nlmRun = func(timeout time.Duration, args ...string) string {
 	var lastOut string
 	for attempt := range maxRetries {
 		if attempt > 0 {
-			delay := baseDelay * time.Duration(1<<(attempt-1))
-			if delay > maxDelay {
-				delay = maxDelay
-			}
+			delay := min(baseDelay*time.Duration(1<<(attempt-1)), maxDelay)
 			time.Sleep(delay)
 		}
 

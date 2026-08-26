@@ -78,8 +78,7 @@ func TestOpenAICompat_429NonJSONBody(t *testing.T) {
 	client := NewOpenAICompatClient(OpenAICompatConfig{BaseURL: server.URL, Timeout: time.Second})
 	_, err := client.Generate("prompt")
 
-	var rle *reliability.RateLimitError
-	if !errors.As(err, &rle) {
+	if _, ok := errors.AsType[*reliability.RateLimitError](err); !ok {
 		t.Fatalf("expected RateLimitError for non-JSON 429 body, got %T: %v", err, err)
 	}
 }

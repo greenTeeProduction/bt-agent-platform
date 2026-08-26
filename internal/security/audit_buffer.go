@@ -76,10 +76,7 @@ func (ab *AuditBuffer) Recent(n int) []AuditEvent {
 	}
 
 	// Determine start and effective length in ring
-	effectiveLen := ab.capacity
-	if ab.count < ab.capacity {
-		effectiveLen = ab.count
-	}
+	effectiveLen := min(ab.count, ab.capacity)
 	if n > effectiveLen {
 		n = effectiveLen
 	}

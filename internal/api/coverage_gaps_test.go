@@ -776,7 +776,7 @@ func TestValidate_OutputSchemaError(t *testing.T) {
 		Version:      "1.0.0",
 		InputType:    ContentTypeText,
 		OutputType:   ContentTypeText,
-		OutputSchema: &Schema{Type: "object", MinLength: intPtr(5), MaxLength: intPtr(3)},
+		OutputSchema: &Schema{Type: "object", MinLength: new(5), MaxLength: new(3)},
 	}
 	if err := def.Validate(); err == nil {
 		t.Error("expected error for minLength > maxLength on non-string type")

@@ -70,7 +70,7 @@ func TestBlockMutationsInsert(t *testing.T) {
 	op := evolution.MutationOp{
 		Operation: "insert_block_after",
 		Target:    "PreGate",
-		Node:      ptr(SubTreeRefNode("core:reflect_only")),
+		Node:      new(SubTreeRefNode("core:reflect_only")),
 	}
 	if !ApplyBlockMutations(reg, tree, op) {
 		t.Fatal("insert_block_after not applied")
@@ -91,8 +91,6 @@ func TestPromoteSubtree(t *testing.T) {
 		t.Fatal("promoted block not in registry")
 	}
 }
-
-func ptr(n evolution.SerializableNode) *evolution.SerializableNode { return &n }
 
 func TestWrapReliable_HasTimeoutAndFallbacks(t *testing.T) {
 	child := evolution.SerializableNode{Type: "Action", Name: "MarkSuccessful"}

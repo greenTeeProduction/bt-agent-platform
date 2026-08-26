@@ -92,10 +92,7 @@ func TestMainGatesSchedulerOnDaemonMode(t *testing.T) {
 			t.Errorf("main.go no longer contains %q — gating pin needs updating", marker)
 			return
 		}
-		windowStart := idx - 900
-		if windowStart < 0 {
-			windowStart = 0
-		}
+		windowStart := max(idx-900, 0)
 		if !strings.Contains(s[windowStart:idx], "noMCPMode()") {
 			t.Errorf("%q must sit inside a noMCPMode() gate (no noMCPMode() found in the preceding window) — sibling instances must not run the scheduler", marker)
 		}

@@ -119,8 +119,7 @@ func NewCategorizedError(category ErrorCategory, err error) *CategorizedError {
 // GetCategory extracts the ErrorCategory from an error chain.
 // Returns ErrCatUnknown if no CategorizedError is found.
 func GetCategory(err error) ErrorCategory {
-	var ce *CategorizedError
-	if errors.As(err, &ce) {
+	if ce, ok := errors.AsType[*CategorizedError](err); ok {
 		return ce.Category
 	}
 	return ErrCatUnknown
@@ -142,8 +141,7 @@ func ClassifyError(err error) ErrorCategory {
 
 	// A typed RateLimitError in the chain is authoritative — classification
 	// must not depend on its message dodging the string patterns below.
-	var rle *RateLimitError
-	if errors.As(err, &rle) {
+	if _, ok := errors.AsType[*RateLimitError](err); ok {
 		return ErrCatRateLimited
 	}
 
@@ -293,16 +291,13 @@ func isTimeoutError(err error, lower string) bool {
 // isTypedNetworkError reports whether the chain carries typed transport-layer
 // evidence (net.Error, *url.Error, *net.DNSError, *net.OpError).
 func isTypedNetworkError(err error) bool {
-	var netErr net.Error
-	if errors.As(err, &netErr) {
+	if _, ok := errors.AsType[net.Error](err); ok {
 		return true
 	}
-	var urlErr *url.Error
-	if errors.As(err, &urlErr) {
+	if _, ok := errors.AsType[*url.Error](err); ok {
 		return true
 	}
-	var dnsErr *net.DNSError
-	if errors.As(err, &dnsErr) {
+	if _, ok := errors.AsType[*net.DNSError](err); ok {
 		return true
 	}
 	var opErr *net.OpError
@@ -435,8 +430,7 @@ func (rle *RateLimitError) Unwrap() error {
 // RetryAfterFromError extracts the Retry-After duration from an error chain.
 // Returns 0 if no RateLimitError is found.
 func RetryAfterFromError(err error) time.Duration {
-	var rle *RateLimitError
-	if errors.As(err, &rle) {
+	if rle, ok := errors.AsType[*RateLimitError](err); ok {
 		return rle.RetryAfter
 	}
 	return 0
@@ -526,10 +520,7 @@ func DecorrelatedJitter(previousSleep time.Duration, base time.Duration, maxDela
 	if previousSleep <= 0 {
 		previousSleep = base
 	}
-	next := previousSleep * 3
-	if next > maxDelay {
-		next = maxDelay
-	}
+	next := min(previousSleep*3, maxDelay)
 	minVal := base
 	if minVal <= 0 {
 		minVal = time.Millisecond
@@ -879,8 +870,7 @@ func (ec *ErrorContext) WithCategory(cat ErrorCategory) *ErrorContext {
 // GetErrorContext extracts an ErrorContext from an error chain.
 // Returns nil if no ErrorContext is found.
 func GetErrorContext(err error) *ErrorContext {
-	var ec *ErrorContext
-	if errors.As(err, &ec) {
+	if ec, ok := errors.AsType[*ErrorContext](err); ok {
 		return ec
 	}
 	return nil

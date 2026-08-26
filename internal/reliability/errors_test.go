@@ -1053,8 +1053,7 @@ func TestRetryPolicy_RetryRefusedWrapsError(t *testing.T) {
 	if !errors.Is(err, origErr) {
 		t.Errorf("retry refused error should wrap original via %%w: got %v", err)
 	}
-	var catErr *CategorizedError
-	if errors.As(err, &catErr) {
+	if catErr, ok := errors.AsType[*CategorizedError](err); ok {
 		t.Logf("inner error is CategorizedError: %v", catErr)
 	}
 }

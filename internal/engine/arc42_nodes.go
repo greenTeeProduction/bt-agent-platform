@@ -201,10 +201,7 @@ func registerArc42Nodes() {
 			return 1
 		}
 		lines := strings.Split(string(data), "\n")
-		end := 150
-		if len(lines) < end {
-			end = len(lines)
-		}
+		end := min(len(lines), 150)
 		bb.CachedResult = strings.Join(lines[:end], "\n")
 		return 1
 	})
