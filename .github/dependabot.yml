@@ -33,6 +33,17 @@ updates:
         update-types:
           - minor
           - patch
+      # The OpenTelemetry modules are released as one train and must move
+      # together: otel/log v0.21 changed log.KeyValue, so a tree mixing
+      # 0.20 and 0.21 members of the log family does not compile. Without
+      # this group each module arrives as its own PR and three of them are
+      # individually unbuildable.
+      otel:
+        patterns:
+          - "go.opentelemetry.io/*"
+        update-types:
+          - minor
+          - patch
 
   # GitHub Actions workflow dependency updates
   - package-ecosystem: github-actions
