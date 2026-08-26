@@ -293,7 +293,7 @@ func (im *IslandModel) DiversityAcrossIslands() float64 {
 	pairs := 0
 	domains := slices.Collect(maps.Keys(islandGenomes))
 
-	for i := 0; i < len(domains); i++ {
+	for i := range domains {
 		for j := i + 1; j < len(domains); j++ {
 			gi := islandGenomes[domains[i]]
 			gj := islandGenomes[domains[j]]

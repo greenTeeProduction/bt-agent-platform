@@ -81,7 +81,6 @@ func TestSave_ConcurrentWritersDoNotCorruptStore(t *testing.T) {
 	var wg sync.WaitGroup
 	errs := make(chan error, workers)
 	for i := range workers {
-		i := i
 		wg.Go(func() {
 			ps := &ProgramStore{path: path}
 			ps.Add(fmt.Sprintf("Program %d", i), "test", []string{"m1"})
@@ -140,7 +139,6 @@ func TestUpdatePrograms_ConcurrentWritersAllSurvive(t *testing.T) {
 	var wg sync.WaitGroup
 	errs := make(chan error, workers)
 	for i := range workers {
-		i := i
 		wg.Go(func() {
 			err := UpdatePrograms(path, func(ps *ProgramStore) error {
 				ps.Add(fmt.Sprintf("Program %d", i), "test", []string{"m1"})

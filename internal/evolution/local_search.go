@@ -398,7 +398,7 @@ func (p *Population) MemeticEvolve(
 
 		// --- MEMETIC: Local search on top N individuals ---
 		refineCount := min(refineTopN, eliteCount)
-		for i := 0; i < refineCount; i++ {
+		for i := range refineCount {
 			refined, delta := searcher.Search(p.Individuals[i].Tree, fitnessFn)
 			if delta > 0 {
 				p.Individuals[i].Tree = refined

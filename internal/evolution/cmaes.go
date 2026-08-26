@@ -378,7 +378,7 @@ func (cma *CMAESOptimizer) Optimize(
 		// 1. Sample λ candidates
 		candidates := make([][]float64, lambda)
 		fitnesses := make([]float64, lambda)
-		for k := 0; k < lambda; k++ {
+		for k := range lambda {
 			// Sample from N(mean, sigma²*C)
 			z := sampleStdNormal(n)          // standard normal vector
 			zC := multiplyCholesky(cma.C, z) // sqrt(C) * z
@@ -578,7 +578,7 @@ func invertCholesky(cov [][]float64) [][]float64 {
 	for i := range n {
 		Linv[i] = make([]float64, n)
 		Linv[i][i] = 1.0 / L[i][i]
-		for j := 0; j < i; j++ {
+		for j := range i {
 			s := 0.0
 			for k := j; k < i; k++ {
 				s += L[i][k] * Linv[k][j]

@@ -366,7 +366,6 @@ func TestSeedCodeFixProgram_ConcurrentDistinctSigs(t *testing.T) {
 	const workers = 12
 	var wg sync.WaitGroup
 	for i := range workers {
-		i := i
 		wg.Go(func() {
 			sig := fmt.Sprintf("sig%d", i)
 			seedCodeFixProgram(sig, "Fix "+sig, "fix file"+sig+".go: defect", "self-fix:test:"+sig)

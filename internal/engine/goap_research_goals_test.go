@@ -603,7 +603,6 @@ func TestPersistGoapProgram_ConcurrentCallersAllSurvive(t *testing.T) {
 	const workers = 30
 	var wg sync.WaitGroup
 	for i := range workers {
-		i := i
 		wg.Go(func() {
 			bb := &Blackboard{ChainState: map[string]any{}}
 			spec := &goapProgramSpec{
@@ -649,7 +648,6 @@ func TestCompleteGoapProgramMilestone_ConcurrentCallersAllSurvive(t *testing.T) 
 
 	var wg sync.WaitGroup
 	for i := range workers {
-		i := i
 		wg.Go(func() {
 			bb := &Blackboard{ChainState: map[string]any{
 				"goap_fusion_program_milestone": ids[i] + ":0",

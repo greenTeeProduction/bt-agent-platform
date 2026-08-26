@@ -154,7 +154,6 @@ func TestPrioritizeGoapGoals_ConcurrentWithPersistGoapProgramAllSurvive(t *testi
 	const chargers = 30
 	var wg sync.WaitGroup
 	for i := range writers {
-		i := i
 		wg.Go(func() {
 			bb := &Blackboard{ChainState: map[string]any{}}
 			spec := &goapProgramSpec{

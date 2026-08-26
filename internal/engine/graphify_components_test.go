@@ -307,7 +307,6 @@ func TestSeedCodeFixProgram_ConcurrentWithPersistGoapProgramAllSurvive(t *testin
 	const workers = 20
 	var wg sync.WaitGroup
 	for i := range workers {
-		i := i
 		wg.Go(func() {
 			sig := fmt.Sprintf("cross-sig-%d", i)
 			seedCodeFixProgram(sig, fmt.Sprintf("Cross fix %d", i), fmt.Sprintf("fix cross_%d.go: defect", i), "self-fix:test:"+sig)

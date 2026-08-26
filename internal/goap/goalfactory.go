@@ -161,7 +161,7 @@ func (f *GoalFactory) fromIntentLLM(userText string) (*Goal, *GroundingReport, e
 	feedback := ""
 	attempts := max(f.MaxRepairAttempts, 1)
 	var lastErr error
-	for attempt := 0; attempt < attempts; attempt++ {
+	for attempt := range attempts {
 		raw, err := f.LLM.Generate(f.extractionPrompt(userText, feedback))
 		if err != nil {
 			return nil, nil, fmt.Errorf("goalfactory: llm: %w", err)
