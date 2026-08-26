@@ -3,7 +3,7 @@ module github.com/nico/go-bt-evolve
 go 1.26.5
 
 require (
-	github.com/a2aproject/a2a-go/v2 v2.4.0
+	github.com/a2aproject/a2a-go/v2 v2.5.0
 	github.com/rvitorper/go-bt v0.1.0
 	github.com/tmc/langchaingo v0.1.14
 	go.opentelemetry.io/contrib/bridges/otelslog v0.20.0
@@ -56,7 +56,7 @@ require (
 	github.com/pelletier/go-toml/v2 v2.0.9 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pkoukk/tiktoken-go v0.1.6 // indirect
-	github.com/redis/go-redis/v9 v9.21.0
+	github.com/redis/go-redis/v9 v9.22.0
 	github.com/shopspring/decimal v1.2.0 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/spf13/cast v1.3.1 // indirect
