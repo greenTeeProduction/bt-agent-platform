@@ -1167,6 +1167,12 @@ func TestCheckRuntime_AllOk(t *testing.T) {
 	c.LLMProvider = "deepseek"
 	c.DeepSeekKey = "sk-test"
 
+	// CheckRuntime probes the real DeepSeek host; stub the reachability seam so
+	// a transient network hiccup cannot fail an assertion about Ok=true.
+	oldChecker := deepseekChecker
+	deepseekChecker = func(_ string) bool { return true }
+	defer func() { deepseekChecker = oldChecker }()
+
 	report := c.CheckRuntime()
 	if !report.Ok {
 		t.Errorf("expected Ok=true, got Ok=false with %d issues: %+v", len(report.Issues), report.Issues)
@@ -1365,6 +1371,12 @@ func TestCheckRuntime_DeepSeekNoOllamaCheck(t *testing.T) {
 	c.DeepSeekKey = "sk-test"
 	c.ReflectionsDir = tmp
 
+	// CheckRuntime probes the real DeepSeek host; stub the reachability seam so
+	// a transient network hiccup cannot fail an assertion about Ok=true.
+	oldChecker := deepseekChecker
+	deepseekChecker = func(_ string) bool { return true }
+	defer func() { deepseekChecker = oldChecker }()
+
 	report := c.CheckRuntime()
 	if !report.Ok {
 		t.Errorf("expected Ok=true for deepseek provider (no Ollama check), got: %+v", report.Issues)
@@ -1469,6 +1481,12 @@ func TestCheckRuntime_AllEmptyPaths(t *testing.T) {
 	c.LogDir = ""
 	c.LLMProvider = "deepseek"
 	c.DeepSeekKey = "sk-test"
+
+	// CheckRuntime probes the real DeepSeek host; stub the reachability seam so
+	// a transient network hiccup cannot fail an assertion about Ok=true.
+	oldChecker := deepseekChecker
+	deepseekChecker = func(_ string) bool { return true }
+	defer func() { deepseekChecker = oldChecker }()
 
 	report := c.CheckRuntime()
 	if !report.Ok {
