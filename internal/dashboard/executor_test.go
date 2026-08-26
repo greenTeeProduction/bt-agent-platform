@@ -48,7 +48,7 @@ func TestRecordCircuitBreakerOutcome_NilResultTripsBreaker(t *testing.T) {
 	})
 	exec := &AgentExecutor{CBStore: cbStore}
 
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		exec.recordCircuitBreakerOutcome("broken-agent", nil, errAgentBroken)
 	}
 	if cb := cbStore.Get("broken-agent"); cb.State() != agent.CircuitOpen {
@@ -97,7 +97,6 @@ func TestRecordTaskMetric_NilResultRecordsFailure(t *testing.T) {
 
 	var stats *AgentStats
 	for _, s := range GetAgentMetrics() {
-		s := s
 		if s.Name == agentName {
 			stats = &s
 			break
@@ -127,7 +126,6 @@ func TestRecordTaskMetric_HealthyOutcomeWithRunErrorIsFailure(t *testing.T) {
 
 	var stats *AgentStats
 	for _, s := range GetAgentMetrics() {
-		s := s
 		if s.Name == agentName {
 			stats = &s
 			break
@@ -174,7 +172,7 @@ func TestRunTaskResult_RecordsCircuitBreakerOutcome(t *testing.T) {
 	}
 
 	const agentName = "flaky-dashboard-agent"
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		res, err := exec.RunTaskResult(agentName, "do the thing", "flaky-tree")
 		if res == nil {
 			t.Fatalf("run %d: RunTaskResult returned nil result (err=%v)", i, err)
@@ -279,7 +277,6 @@ func TestRunTaskResult_RecordsTaskMetric(t *testing.T) {
 
 	var stats *AgentStats
 	for _, s := range GetAgentMetrics() {
-		s := s
 		if s.Name == agentName {
 			stats = &s
 			break
@@ -317,7 +314,6 @@ func TestRecordTaskMetric_RateLimitCarryoverOutcome_CountsAsSuccess(t *testing.T
 
 	var stats *AgentStats
 	for _, s := range GetAgentMetrics() {
-		s := s
 		if s.Name == agentName {
 			stats = &s
 			break

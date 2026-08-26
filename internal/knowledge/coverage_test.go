@@ -59,7 +59,7 @@ func TestRegister_SynonymIndexing(t *testing.T) {
 
 func TestRegister_MultipleEdges(t *testing.T) {
 	kg := NewKnowledgeGraph()
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		kg.Register(&TreeMeta{
 			ID:       fmt.Sprintf("t%d", i),
 			Name:     fmt.Sprintf("Tree %d", i),

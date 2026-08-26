@@ -10,6 +10,7 @@ package config
 import (
 	"log/slog"
 	"os"
+	"slices"
 	"sync"
 	"time"
 
@@ -245,8 +246,7 @@ func (w *ConfigWatcher) checkAndReload() {
 			}
 		}
 	}
-	cbs := make([]ChangeCallback, len(w.cbs))
-	copy(cbs, w.cbs)
+	cbs := slices.Clone(w.cbs)
 	w.mu.Unlock()
 
 	slog.Info("config-watcher: reloaded",

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"reflect"
-	"sort"
+	"slices"
 	"testing"
 )
 
@@ -40,7 +40,7 @@ func cellFitnesses(g *MAPElitesGrid) []float64 {
 	for _, ind := range g.Cells {
 		out = append(out, ind.Fitness)
 	}
-	sort.Float64s(out)
+	slices.Sort(out)
 	return out
 }
 

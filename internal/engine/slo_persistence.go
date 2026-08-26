@@ -3,9 +3,10 @@ package engine
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"sync"
 	"time"
 )
@@ -100,11 +101,8 @@ func SaveSLOMetrics(path string) error {
 		merged[s.AgentName+":"+s.TreeName] = s
 		return true
 	})
-	keys := make([]string, 0, len(merged))
-	for k := range merged {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys) // deterministic file (map iteration order is random)
+	keys := slices.Collect(maps.Keys(merged))
+	slices.Sort(keys) // deterministic file (map iteration order is random)
 	snapshots := make([]SLOSnapshot, 0, len(merged))
 	for _, k := range keys {
 		snapshots = append(snapshots, merged[k])

@@ -12,6 +12,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/url"
 	"strings"
@@ -271,11 +272,9 @@ func OAuth2IntrospectionValidator(cfg OAuth2IntrospectionConfig) TokenValidator 
 		// Simple cache eviction: keep at most 10000 entries by purging expired
 		if len(cache) > 10000 {
 			now := time.Now()
-			for k, v := range cache {
-				if now.After(v.Expires) {
-					delete(cache, k)
-				}
-			}
+			maps.DeleteFunc(cache, func(_ string, v introspectionResult) bool {
+				return now.After(v.Expires)
+			})
 		}
 		mu.Unlock()
 

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 
@@ -70,7 +70,7 @@ func TestFullTreeIntegration_RunsAllTreesWithRealLLM(t *testing.T) {
 		failures    int
 		duration    time.Duration
 		panicked    bool
-		panicRecov  interface{}
+		panicRecov  any
 	}
 	results := make([]treeResult, 0, 16)
 
@@ -288,7 +288,7 @@ func TestSuiteForTree_CoversAllRegisteredTrees(t *testing.T) {
 		}
 	}
 	if len(pathMismatches) > 0 {
-		sort.Strings(pathMismatches)
+		slices.Sort(pathMismatches)
 		t.Errorf("%d domain tasks declare ExpectedPath values that don't occur in their own tree:", len(pathMismatches))
 		for _, m := range pathMismatches {
 			t.Errorf("  %s", m)
@@ -395,7 +395,7 @@ func TestAllRegisteredSuites_BaselinePathMatchRate(t *testing.T) {
 	}
 
 	if len(failures) > 0 {
-		sort.Strings(failures)
+		slices.Sort(failures)
 		t.Errorf("%d tree/suite pairs failed to reach baseline PathMatchRate at runtime:", len(failures))
 		for _, f := range failures {
 			t.Errorf("  %s", f)

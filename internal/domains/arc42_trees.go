@@ -26,7 +26,7 @@ func Arc42Trees() map[string]*evolution.SerializableNode {
 }
 
 func section1IntroGoals() *evolution.SerializableNode {
-	return tree(
+	return new(
 		seq("Sec1_Main", "Generate arc42 section 1 (introduction and goals): gate, generate, validate, save",
 			// PreGate: check prerequisites
 			seq("PreGate", "Check graphify freshness and register arc42 doc tools",
@@ -55,7 +55,7 @@ func section1IntroGoals() *evolution.SerializableNode {
 }
 
 func section2Constraints() *evolution.SerializableNode {
-	return tree(
+	return new(
 		seq("Sec2_Main", "Generate arc42 section 2 (architecture constraints): gate, generate, validate, save",
 			seq("PreGate", "Check graphify freshness before generation",
 				cond("GraphIsFresh", "graphify has been run"),
@@ -77,7 +77,7 @@ func section2Constraints() *evolution.SerializableNode {
 }
 
 func section3ContextScope() *evolution.SerializableNode {
-	return tree(
+	return new(
 		seq("Sec3_Main", "Generate arc42 section 3 (context and scope): gate, generate, validate, save",
 			seq("PreGate", "Check graphify freshness before generation", cond("GraphIsFresh", "graphify has been run")),
 			sel("StrategyRouter", "Single generation path: scan external APIs and MCP tools, then render business/technical context via LLM",
@@ -96,7 +96,7 @@ func section3ContextScope() *evolution.SerializableNode {
 }
 
 func section4SolutionStrategy() *evolution.SerializableNode {
-	return tree(
+	return new(
 		seq("Sec4_Main", "Generate arc42 section 4 (solution strategy): gate, generate, validate, save",
 			seq("PreGate", "Require section 1 to be complete", cond("Section1Done", "section 1 must be complete")),
 			sel("StrategyRouter", "Single generation path: read quality goals and ADRs, then render the solution strategy via LLM",
@@ -115,7 +115,7 @@ func section4SolutionStrategy() *evolution.SerializableNode {
 }
 
 func section5BuildingBlocks() *evolution.SerializableNode {
-	return tree(
+	return new(
 		seq("Sec5_Main", "Generate arc42 section 5 (building block view): gate, generate levels 1-3, validate, save",
 			seq("PreGate", "Require sections 1 and 4 to be complete",
 				cond("Section1Done", "section 1 must be complete"),
@@ -159,7 +159,7 @@ func section5BuildingBlocks() *evolution.SerializableNode {
 }
 
 func section6RuntimeView() *evolution.SerializableNode {
-	return tree(
+	return new(
 		seq("Sec6_Main", "Generate arc42 section 6 (runtime view): gate, generate, validate, save",
 			seq("PreGate", "Require section 5 to be complete", cond("Section5Done", "section 5 must be complete")),
 			sel("StrategyRouter", "Single generation path: render the four runtime scenarios via LLM",
@@ -176,7 +176,7 @@ func section6RuntimeView() *evolution.SerializableNode {
 }
 
 func section7Deployment() *evolution.SerializableNode {
-	return tree(
+	return new(
 		seq("Sec7_Main", "Generate arc42 section 7 (deployment view): gate, generate, validate, save",
 			seq("PreGate", "Require section 5 to be complete", cond("Section5Done", "section 5 must be complete")),
 			sel("StrategyRouter", "Single generation path: detect hardware and processes, then render the deployment view via LLM",
@@ -195,7 +195,7 @@ func section7Deployment() *evolution.SerializableNode {
 }
 
 func section8Concepts() *evolution.SerializableNode {
-	return tree(
+	return new(
 		seq("Sec8_Main", "Generate arc42 section 8 (crosscutting concepts): gate, generate, validate, save",
 			seq("PreGate", "Require section 5 to be complete", cond("Section5Done", "section 5 must be complete")),
 			sel("StrategyRouter", "Single generation path: render the eight crosscutting concepts via LLM",
@@ -212,7 +212,7 @@ func section8Concepts() *evolution.SerializableNode {
 }
 
 func section9Decisions() *evolution.SerializableNode {
-	return tree(
+	return new(
 		seq("Sec9_Main", "Generate arc42 section 9 (architecture decisions): gate, generate, validate, save",
 			seq("PreGate", "Require section 4 to be complete", cond("Section4Done", "section 4 must be complete")),
 			sel("StrategyRouter", "Single generation path: read ADRs and render them in Nygard format via LLM",
@@ -230,7 +230,7 @@ func section9Decisions() *evolution.SerializableNode {
 }
 
 func section10Quality() *evolution.SerializableNode {
-	return tree(
+	return new(
 		seq("Sec10_Main", "Generate arc42 section 10 (quality requirements): gate, generate, validate, save",
 			seq("PreGate", "Require section 1 to be complete", cond("Section1Done", "section 1 must be complete")),
 			sel("StrategyRouter", "Single generation path: read section 1 quality goals and render the quality tree and scenarios via LLM",
@@ -248,7 +248,7 @@ func section10Quality() *evolution.SerializableNode {
 }
 
 func section11Risks() *evolution.SerializableNode {
-	return tree(
+	return new(
 		seq("Sec11_Main", "Generate arc42 section 11 (risks and technical debt): gate, generate, validate, save",
 			seq("PreGate", "Require section 1 to be complete", cond("Section1Done", "section 1 must be complete")),
 			sel("StrategyRouter", "Single generation path: gather graph, coverage, and error data, then render the risk table via LLM",
@@ -268,7 +268,7 @@ func section11Risks() *evolution.SerializableNode {
 }
 
 func section12Glossary() *evolution.SerializableNode {
-	return tree(
+	return new(
 		seq("Sec12_Main", "Generate arc42 section 12 (glossary): gate, generate, validate, save",
 			seq("PreGate", "Require section 1 to be complete", cond("Section1Done", "section 1 must be complete")),
 			sel("StrategyRouter", "Single generation path: scan code comments, types, and ADR terms, then render the glossary table via LLM",
@@ -288,10 +288,6 @@ func section12Glossary() *evolution.SerializableNode {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
-
-func tree(root evolution.SerializableNode) *evolution.SerializableNode {
-	return &root
-}
 
 func chain(desc, prompt string, maxTokens int) evolution.SerializableNode {
 	return evolution.SerializableNode{

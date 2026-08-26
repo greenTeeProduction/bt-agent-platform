@@ -106,7 +106,7 @@ func TestParetoFront_Best(t *testing.T) {
 	pf := NewParetoFront([]FitnessDimension{DimSuccessRate, DimPathCoverage})
 
 	// Add non-dominated individuals (different trade-offs)
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		tree := makeTestTree("t"+strconv.Itoa(i), 2, 3)
 		ind := &Individual{Tree: tree, Fitness: 50, Genome: hashTree(tree)}
 		fv := NewMultiFitness()
@@ -138,7 +138,7 @@ func TestParetoFront_DiversityScore(t *testing.T) {
 	}
 
 	// Add two diverse individuals
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		tree := makeTestTree("t"+strconv.Itoa(i), 2, 3)
 		ind := &Individual{Tree: tree, Fitness: 50, Genome: hashTree(tree)}
 		fv := NewMultiFitness()
@@ -179,10 +179,10 @@ func TestStructuralMultiFitness(t *testing.T) {
 
 func makeOptimalParetoTree() *SerializableNode {
 	root := &SerializableNode{Type: "Selector", Name: "pareto_opt"}
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		root.Children = append(root.Children, SerializableNode{Type: "Condition", Name: "cond_" + strconv.Itoa(i)})
 	}
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		root.Children = append(root.Children, SerializableNode{Type: "Action", Name: "act_" + strconv.Itoa(i)})
 	}
 	// Add depth
@@ -370,7 +370,7 @@ func TestParetoPopulation_EvolvePareto_ResurrectsExtinctSpecialist(t *testing.T)
 		Generation:  500,
 		Specialists: registry,
 	}
-	for i := 0; i < size; i++ {
+	for i := range size {
 		// Identical, non-specialist genomes → Diversity() == 1/size == 0.1
 		// (< 0.2 threshold) trips diversity_collapse, and the goap niche is
 		// absent → the archetype qualifies as extinct.

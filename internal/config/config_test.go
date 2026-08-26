@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -47,8 +48,7 @@ func TestLoad_Defaults(t *testing.T) {
 
 func TestLoad_FallbackModelsEnvOverride(t *testing.T) {
 	os.Unsetenv("BT_CONFIG_FILE")
-	os.Setenv("BT_FALLBACK_MODELS", "deepseek:deepseek-v4-pro,ollama:qwen3.6:35b-a3b")
-	defer os.Unsetenv("BT_FALLBACK_MODELS")
+	t.Setenv("BT_FALLBACK_MODELS", "deepseek:deepseek-v4-pro,ollama:qwen3.6:35b-a3b")
 
 	c, err := Load()
 	if err != nil {
@@ -61,16 +61,10 @@ func TestLoad_FallbackModelsEnvOverride(t *testing.T) {
 
 func TestLoad_EnvOverrides(t *testing.T) {
 	os.Unsetenv("BT_CONFIG_FILE")
-	os.Setenv("BT_DASHBOARD_PORT", "8080")
-	os.Setenv("BT_OLLAMA_MODEL", "custom-model")
-	os.Setenv("BT_LLM_TIMEOUT", "120")
-	os.Setenv("BT_FEATURE_GARDENER", "false")
-	defer func() {
-		os.Unsetenv("BT_DASHBOARD_PORT")
-		os.Unsetenv("BT_OLLAMA_MODEL")
-		os.Unsetenv("BT_LLM_TIMEOUT")
-		os.Unsetenv("BT_FEATURE_GARDENER")
-	}()
+	t.Setenv("BT_DASHBOARD_PORT", "8080")
+	t.Setenv("BT_OLLAMA_MODEL", "custom-model")
+	t.Setenv("BT_LLM_TIMEOUT", "120")
+	t.Setenv("BT_FEATURE_GARDENER", "false")
 
 	c, err := Load()
 	if err != nil {
@@ -150,8 +144,7 @@ func TestLoadFile_EnvOverridesFile(t *testing.T) {
 	}
 
 	// Env should override file
-	os.Setenv("BT_DASHBOARD_PORT", "9999")
-	defer os.Unsetenv("BT_DASHBOARD_PORT")
+	t.Setenv("BT_DASHBOARD_PORT", "9999")
 	os.Unsetenv("BT_OLLAMA_MODEL")
 
 	c, err := LoadFile(cf)
@@ -198,8 +191,7 @@ func TestLoad_BTConfigFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	os.Setenv("BT_CONFIG_FILE", cf)
-	defer os.Unsetenv("BT_CONFIG_FILE")
+	t.Setenv("BT_CONFIG_FILE", cf)
 	os.Unsetenv("BT_DASHBOARD_PORT")
 	os.Unsetenv("BT_OLLAMA_MODEL")
 
@@ -230,12 +222,8 @@ func TestLoad_BTConfigFile_EnvOverrides(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	os.Setenv("BT_CONFIG_FILE", cf)
-	os.Setenv("BT_DASHBOARD_PORT", "7777") // env overrides file
-	defer func() {
-		os.Unsetenv("BT_CONFIG_FILE")
-		os.Unsetenv("BT_DASHBOARD_PORT")
-	}()
+	t.Setenv("BT_CONFIG_FILE", cf)
+	t.Setenv("BT_DASHBOARD_PORT", "7777") // env overrides file
 	os.Unsetenv("BT_OLLAMA_MODEL")
 
 	c, err := Load()
@@ -379,7 +367,7 @@ func TestEnvBool(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		os.Setenv("_TEST_BOOL", tt.val)
+		t.Setenv("_TEST_BOOL", tt.val)
 		got := envBool("_TEST_BOOL", !tt.expected) // use opposite default
 		os.Unsetenv("_TEST_BOOL")
 		if got != tt.expected {
@@ -402,10 +390,8 @@ func TestTLS_Defaults(t *testing.T) {
 }
 
 func TestTLS_Enabled(t *testing.T) {
-	os.Setenv("BT_TLS_CERT", "/etc/certs/server.crt")
-	os.Setenv("BT_TLS_KEY", "/etc/certs/server.key")
-	defer os.Unsetenv("BT_TLS_CERT")
-	defer os.Unsetenv("BT_TLS_KEY")
+	t.Setenv("BT_TLS_CERT", "/etc/certs/server.crt")
+	t.Setenv("BT_TLS_KEY", "/etc/certs/server.key")
 
 	c, _ := Load()
 	if !c.TLSEnabled() {
@@ -423,9 +409,8 @@ func TestTLS_Enabled(t *testing.T) {
 }
 
 func TestTLS_MissingKey(t *testing.T) {
-	os.Setenv("BT_TLS_CERT", "/etc/certs/server.crt")
+	t.Setenv("BT_TLS_CERT", "/etc/certs/server.crt")
 	os.Unsetenv("BT_TLS_KEY")
-	defer os.Unsetenv("BT_TLS_CERT")
 
 	c, _ := Load()
 	if c.TLSEnabled() {
@@ -439,8 +424,7 @@ func TestTLS_MissingKey(t *testing.T) {
 
 func TestTLS_MissingCert(t *testing.T) {
 	os.Unsetenv("BT_TLS_CERT")
-	os.Setenv("BT_TLS_KEY", "/etc/certs/server.key")
-	defer os.Unsetenv("BT_TLS_KEY")
+	t.Setenv("BT_TLS_KEY", "/etc/certs/server.key")
 
 	c, _ := Load()
 	if c.TLSEnabled() {
@@ -650,8 +634,7 @@ func TestLoad_DotEnvFile(t *testing.T) {
 	}
 
 	// Set BT_DOTENV_FILE and clear env vars
-	os.Setenv("BT_DOTENV_FILE", envFile)
-	defer os.Unsetenv("BT_DOTENV_FILE")
+	t.Setenv("BT_DOTENV_FILE", envFile)
 	os.Unsetenv("BT_CONFIG_FILE")
 	os.Unsetenv("BT_DASHBOARD_PORT")
 	os.Unsetenv("BT_OLLAMA_MODEL")
@@ -686,12 +669,8 @@ func TestLoad_DotEnvOverriddenByEnvVar(t *testing.T) {
 	}
 
 	// .env says 6666 but env var says 8888 — env var must win
-	os.Setenv("BT_DOTENV_FILE", envFile)
-	os.Setenv("BT_DASHBOARD_PORT", "8888")
-	defer func() {
-		os.Unsetenv("BT_DOTENV_FILE")
-		os.Unsetenv("BT_DASHBOARD_PORT")
-	}()
+	t.Setenv("BT_DOTENV_FILE", envFile)
+	t.Setenv("BT_DASHBOARD_PORT", "8888")
 	os.Unsetenv("BT_CONFIG_FILE")
 
 	c, err := Load()
@@ -713,12 +692,8 @@ func TestLoad_DotEnvRespectsEnvVarPrecedence(t *testing.T) {
 	}
 
 	// Only set BT_API_KEY env var, not BT_OLLAMA_MODEL
-	os.Setenv("BT_DOTENV_FILE", envFile)
-	os.Setenv("BT_API_KEY", "env-var-key")
-	defer func() {
-		os.Unsetenv("BT_DOTENV_FILE")
-		os.Unsetenv("BT_API_KEY")
-	}()
+	t.Setenv("BT_DOTENV_FILE", envFile)
+	t.Setenv("BT_API_KEY", "env-var-key")
 	os.Unsetenv("BT_CONFIG_FILE")
 	os.Unsetenv("BT_OLLAMA_MODEL")
 
@@ -755,12 +730,8 @@ func TestLoad_DotEnvAndConfigFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	os.Setenv("BT_CONFIG_FILE", cfgFile)
-	os.Setenv("BT_DOTENV_FILE", envFile)
-	defer func() {
-		os.Unsetenv("BT_CONFIG_FILE")
-		os.Unsetenv("BT_DOTENV_FILE")
-	}()
+	t.Setenv("BT_CONFIG_FILE", cfgFile)
+	t.Setenv("BT_DOTENV_FILE", envFile)
 
 	c, err := Load()
 	if err != nil {
@@ -785,8 +756,7 @@ func TestLoad_DotEnvDeepSeekKey(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	os.Setenv("BT_DOTENV_FILE", envFile)
-	defer os.Unsetenv("BT_DOTENV_FILE")
+	t.Setenv("BT_DOTENV_FILE", envFile)
 	os.Unsetenv("BT_CONFIG_FILE")
 	os.Unsetenv("BT_DEEPSEEK_KEY")
 	os.Unsetenv("DEEPSEEK_API_KEY")
@@ -1197,6 +1167,12 @@ func TestCheckRuntime_AllOk(t *testing.T) {
 	c.LLMProvider = "deepseek"
 	c.DeepSeekKey = "sk-test"
 
+	// CheckRuntime probes the real DeepSeek host; stub the reachability seam so
+	// a transient network hiccup cannot fail an assertion about Ok=true.
+	oldChecker := deepseekChecker
+	deepseekChecker = func(_ string) bool { return true }
+	defer func() { deepseekChecker = oldChecker }()
+
 	report := c.CheckRuntime()
 	if !report.Ok {
 		t.Errorf("expected Ok=true, got Ok=false with %d issues: %+v", len(report.Issues), report.Issues)
@@ -1395,6 +1371,12 @@ func TestCheckRuntime_DeepSeekNoOllamaCheck(t *testing.T) {
 	c.DeepSeekKey = "sk-test"
 	c.ReflectionsDir = tmp
 
+	// CheckRuntime probes the real DeepSeek host; stub the reachability seam so
+	// a transient network hiccup cannot fail an assertion about Ok=true.
+	oldChecker := deepseekChecker
+	deepseekChecker = func(_ string) bool { return true }
+	defer func() { deepseekChecker = oldChecker }()
+
 	report := c.CheckRuntime()
 	if !report.Ok {
 		t.Errorf("expected Ok=true for deepseek provider (no Ollama check), got: %+v", report.Issues)
@@ -1499,6 +1481,12 @@ func TestCheckRuntime_AllEmptyPaths(t *testing.T) {
 	c.LogDir = ""
 	c.LLMProvider = "deepseek"
 	c.DeepSeekKey = "sk-test"
+
+	// CheckRuntime probes the real DeepSeek host; stub the reachability seam so
+	// a transient network hiccup cannot fail an assertion about Ok=true.
+	oldChecker := deepseekChecker
+	deepseekChecker = func(_ string) bool { return true }
+	defer func() { deepseekChecker = oldChecker }()
 
 	report := c.CheckRuntime()
 	if !report.Ok {
@@ -2117,12 +2105,8 @@ func TestConfig_ResolvePaths_WithOverrides(t *testing.T) {
 
 func TestEnvOverride_RateLimiting(t *testing.T) {
 	os.Unsetenv("BT_CONFIG_FILE")
-	os.Setenv("BT_RATE_LIMIT_RPS", "10.5")
-	os.Setenv("BT_RATE_LIMIT_BURST", "20")
-	defer func() {
-		os.Unsetenv("BT_RATE_LIMIT_RPS")
-		os.Unsetenv("BT_RATE_LIMIT_BURST")
-	}()
+	t.Setenv("BT_RATE_LIMIT_RPS", "10.5")
+	t.Setenv("BT_RATE_LIMIT_BURST", "20")
 	c, err := Load()
 	if err != nil {
 		t.Fatalf("Load() failed: %v", err)
@@ -2137,14 +2121,9 @@ func TestEnvOverride_RateLimiting(t *testing.T) {
 
 func TestEnvOverride_GardenerParams(t *testing.T) {
 	os.Unsetenv("BT_CONFIG_FILE")
-	os.Setenv("BT_GARDENER_CYCLE", "300")
-	os.Setenv("BT_GARDENER_MUTATIONS", "5")
-	os.Setenv("BT_GARDENER_MAX_NODES", "50")
-	defer func() {
-		os.Unsetenv("BT_GARDENER_CYCLE")
-		os.Unsetenv("BT_GARDENER_MUTATIONS")
-		os.Unsetenv("BT_GARDENER_MAX_NODES")
-	}()
+	t.Setenv("BT_GARDENER_CYCLE", "300")
+	t.Setenv("BT_GARDENER_MUTATIONS", "5")
+	t.Setenv("BT_GARDENER_MAX_NODES", "50")
 	c, err := Load()
 	if err != nil {
 		t.Fatalf("Load() failed: %v", err)
@@ -2162,8 +2141,7 @@ func TestEnvOverride_GardenerParams(t *testing.T) {
 
 func TestEnvOverride_Scheduler(t *testing.T) {
 	os.Unsetenv("BT_CONFIG_FILE")
-	os.Setenv("BT_SCHEDULER_INTERVAL", "120")
-	defer os.Unsetenv("BT_SCHEDULER_INTERVAL")
+	t.Setenv("BT_SCHEDULER_INTERVAL", "120")
 
 	c, err := Load()
 	if err != nil {
@@ -2176,26 +2154,15 @@ func TestEnvOverride_Scheduler(t *testing.T) {
 
 func TestEnvOverride_ErrorHandling(t *testing.T) {
 	os.Unsetenv("BT_CONFIG_FILE")
-	os.Setenv("BT_RETRY_MAX_RETRIES", "3")
-	os.Setenv("BT_RETRY_BASE_DELAY_MS", "500")
-	os.Setenv("BT_RETRY_MAX_DELAY_MS", "5000")
-	os.Setenv("BT_RETRY_LLM_BASE_MS", "2000")
-	os.Setenv("BT_RETRY_JITTER", "full_jitter")
-	os.Setenv("BT_RETRY_UNKNOWN", "true")
-	os.Setenv("BT_CB_THRESHOLD", "5")
-	os.Setenv("BT_CB_COOLDOWN_SECS", "60")
-	os.Setenv("BT_DLQ_MAX_ENTRIES", "1000")
-	defer func() {
-		os.Unsetenv("BT_RETRY_MAX_RETRIES")
-		os.Unsetenv("BT_RETRY_BASE_DELAY_MS")
-		os.Unsetenv("BT_RETRY_MAX_DELAY_MS")
-		os.Unsetenv("BT_RETRY_LLM_BASE_MS")
-		os.Unsetenv("BT_RETRY_JITTER")
-		os.Unsetenv("BT_RETRY_UNKNOWN")
-		os.Unsetenv("BT_CB_THRESHOLD")
-		os.Unsetenv("BT_CB_COOLDOWN_SECS")
-		os.Unsetenv("BT_DLQ_MAX_ENTRIES")
-	}()
+	t.Setenv("BT_RETRY_MAX_RETRIES", "3")
+	t.Setenv("BT_RETRY_BASE_DELAY_MS", "500")
+	t.Setenv("BT_RETRY_MAX_DELAY_MS", "5000")
+	t.Setenv("BT_RETRY_LLM_BASE_MS", "2000")
+	t.Setenv("BT_RETRY_JITTER", "full_jitter")
+	t.Setenv("BT_RETRY_UNKNOWN", "true")
+	t.Setenv("BT_CB_THRESHOLD", "5")
+	t.Setenv("BT_CB_COOLDOWN_SECS", "60")
+	t.Setenv("BT_DLQ_MAX_ENTRIES", "1000")
 	c, err := Load()
 	if err != nil {
 		t.Fatalf("Load() failed: %v", err)
@@ -2231,14 +2198,9 @@ func TestEnvOverride_ErrorHandling(t *testing.T) {
 
 func TestEnvOverride_DeepSeek(t *testing.T) {
 	os.Unsetenv("BT_CONFIG_FILE")
-	os.Setenv("BT_DEEPSEEK_HOST", "https://api.deepseek.com")
-	os.Setenv("BT_DEEPSEEK_MODEL", "deepseek-v4-pro")
-	os.Setenv("BT_DEEPSEEK_KEY", "sk-test-key")
-	defer func() {
-		os.Unsetenv("BT_DEEPSEEK_HOST")
-		os.Unsetenv("BT_DEEPSEEK_MODEL")
-		os.Unsetenv("BT_DEEPSEEK_KEY")
-	}()
+	t.Setenv("BT_DEEPSEEK_HOST", "https://api.deepseek.com")
+	t.Setenv("BT_DEEPSEEK_MODEL", "deepseek-v4-pro")
+	t.Setenv("BT_DEEPSEEK_KEY", "sk-test-key")
 	c, err := Load()
 	if err != nil {
 		t.Fatalf("Load() failed: %v", err)
@@ -2258,8 +2220,7 @@ func TestEnvOverride_DeepSeekKeyFallback(t *testing.T) {
 	os.Unsetenv("BT_CONFIG_FILE")
 	// Only set DEEPSEEK_API_KEY (the fallback), NOT BT_DEEPSEEK_KEY
 	os.Unsetenv("BT_DEEPSEEK_KEY")
-	os.Setenv("DEEPSEEK_API_KEY", "sk-fallback-key")
-	defer os.Unsetenv("DEEPSEEK_API_KEY")
+	t.Setenv("DEEPSEEK_API_KEY", "sk-fallback-key")
 
 	c, err := Load()
 	if err != nil {
@@ -2272,14 +2233,9 @@ func TestEnvOverride_DeepSeekKeyFallback(t *testing.T) {
 
 func TestEnvOverride_ACP(t *testing.T) {
 	os.Unsetenv("BT_CONFIG_FILE")
-	os.Setenv("BT_ACP_COMMAND", "acp")
-	os.Setenv("BT_ACP_ARGS", "--verbose")
-	os.Setenv("BT_ACP_CWD", "/tmp/acp-workdir")
-	defer func() {
-		os.Unsetenv("BT_ACP_COMMAND")
-		os.Unsetenv("BT_ACP_ARGS")
-		os.Unsetenv("BT_ACP_CWD")
-	}()
+	t.Setenv("BT_ACP_COMMAND", "acp")
+	t.Setenv("BT_ACP_ARGS", "--verbose")
+	t.Setenv("BT_ACP_CWD", "/tmp/acp-workdir")
 	c, err := Load()
 	if err != nil {
 		t.Fatalf("Load() failed: %v", err)
@@ -2297,12 +2253,8 @@ func TestEnvOverride_ACP(t *testing.T) {
 
 func TestEnvOverride_LLMProvider(t *testing.T) {
 	os.Unsetenv("BT_CONFIG_FILE")
-	os.Setenv("BT_LLM_PROVIDER", "deepseek")
-	os.Setenv("BT_DEEPSEEK_KEY", "sk-test-key-for-validation")
-	defer func() {
-		os.Unsetenv("BT_LLM_PROVIDER")
-		os.Unsetenv("BT_DEEPSEEK_KEY")
-	}()
+	t.Setenv("BT_LLM_PROVIDER", "deepseek")
+	t.Setenv("BT_DEEPSEEK_KEY", "sk-test-key-for-validation")
 	c, err := Load()
 	if err != nil {
 		t.Fatalf("Load() failed: %v", err)
@@ -2317,16 +2269,10 @@ func TestEnvOverride_LLMProvider(t *testing.T) {
 
 func TestEnvOverride_PersistenceDirs(t *testing.T) {
 	os.Unsetenv("BT_CONFIG_FILE")
-	os.Setenv("BT_REFLECTIONS_DIR", "/custom/reflections")
-	os.Setenv("BT_AGENT_DEFS_DIR", "/custom/agents")
-	os.Setenv("BT_HISTORY_DIR", "/custom/history")
-	os.Setenv("BT_LOG_DIR", "/custom/logs")
-	defer func() {
-		os.Unsetenv("BT_REFLECTIONS_DIR")
-		os.Unsetenv("BT_AGENT_DEFS_DIR")
-		os.Unsetenv("BT_HISTORY_DIR")
-		os.Unsetenv("BT_LOG_DIR")
-	}()
+	t.Setenv("BT_REFLECTIONS_DIR", "/custom/reflections")
+	t.Setenv("BT_AGENT_DEFS_DIR", "/custom/agents")
+	t.Setenv("BT_HISTORY_DIR", "/custom/history")
+	t.Setenv("BT_LOG_DIR", "/custom/logs")
 	c, err := Load()
 	if err != nil {
 		t.Fatalf("Load() failed: %v", err)
@@ -2347,14 +2293,9 @@ func TestEnvOverride_PersistenceDirs(t *testing.T) {
 
 func TestEnvOverride_FeatureFlags(t *testing.T) {
 	os.Unsetenv("BT_CONFIG_FILE")
-	os.Setenv("BT_FEATURE_SCHEDULER", "true")
-	os.Setenv("BT_FEATURE_KANBAN", "true")
-	os.Setenv("BT_FEATURE_STARTUP_SIM", "false")
-	defer func() {
-		os.Unsetenv("BT_FEATURE_SCHEDULER")
-		os.Unsetenv("BT_FEATURE_KANBAN")
-		os.Unsetenv("BT_FEATURE_STARTUP_SIM")
-	}()
+	t.Setenv("BT_FEATURE_SCHEDULER", "true")
+	t.Setenv("BT_FEATURE_KANBAN", "true")
+	t.Setenv("BT_FEATURE_STARTUP_SIM", "false")
 	c, err := Load()
 	if err != nil {
 		t.Fatalf("Load() failed: %v", err)
@@ -2372,8 +2313,7 @@ func TestEnvOverride_FeatureFlags(t *testing.T) {
 
 func TestEnvOverride_MaxBodySize(t *testing.T) {
 	os.Unsetenv("BT_CONFIG_FILE")
-	os.Setenv("BT_MAX_BODY_SIZE", "1048576")
-	defer os.Unsetenv("BT_MAX_BODY_SIZE")
+	t.Setenv("BT_MAX_BODY_SIZE", "1048576")
 
 	c, err := Load()
 	if err != nil {
@@ -2386,8 +2326,7 @@ func TestEnvOverride_MaxBodySize(t *testing.T) {
 
 func TestEnvOverride_APIKey(t *testing.T) {
 	os.Unsetenv("BT_CONFIG_FILE")
-	os.Setenv("BT_API_KEY", "test-api-key-123")
-	defer os.Unsetenv("BT_API_KEY")
+	t.Setenv("BT_API_KEY", "test-api-key-123")
 
 	c, err := Load()
 	if err != nil {
@@ -2481,14 +2420,9 @@ func TestLoad_DotEnvAlreadySetByEnvVar_Skip(t *testing.T) {
 	}
 
 	// Set env vars that MATCH the .env keys — these should win
-	os.Setenv("BT_DOTENV_FILE", envFile)
-	os.Setenv("BT_DASHBOARD_PORT", "9999")
-	os.Setenv("BT_OLLAMA_MODEL", "env-wins-model")
-	defer func() {
-		os.Unsetenv("BT_DOTENV_FILE")
-		os.Unsetenv("BT_DASHBOARD_PORT")
-		os.Unsetenv("BT_OLLAMA_MODEL")
-	}()
+	t.Setenv("BT_DOTENV_FILE", envFile)
+	t.Setenv("BT_DASHBOARD_PORT", "9999")
+	t.Setenv("BT_OLLAMA_MODEL", "env-wins-model")
 	os.Unsetenv("BT_CONFIG_FILE")
 
 	c, err := Load()
@@ -2518,8 +2452,7 @@ func TestLoad_DotEnvInvalidInt_SilentlyIgnored(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	os.Setenv("BT_DOTENV_FILE", envFile)
-	defer os.Unsetenv("BT_DOTENV_FILE")
+	t.Setenv("BT_DOTENV_FILE", envFile)
 	os.Unsetenv("BT_CONFIG_FILE")
 	os.Unsetenv("BT_LLM_TIMEOUT")
 
@@ -2544,8 +2477,7 @@ func TestLoad_DotEnvInvalidFloat_SilentlyIgnored(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	os.Setenv("BT_DOTENV_FILE", envFile)
-	defer os.Unsetenv("BT_DOTENV_FILE")
+	t.Setenv("BT_DOTENV_FILE", envFile)
 	os.Unsetenv("BT_CONFIG_FILE")
 	os.Unsetenv("BT_RATE_LIMIT_RPS")
 
@@ -2623,8 +2555,7 @@ func TestLoad_DotEnvFileLoadError_LogsWarning(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	os.Setenv("BT_DOTENV_FILE", envFile)
-	defer os.Unsetenv("BT_DOTENV_FILE")
+	t.Setenv("BT_DOTENV_FILE", envFile)
 	os.Unsetenv("BT_CONFIG_FILE")
 	os.Unsetenv("BT_DASHBOARD_PORT")
 
@@ -2653,16 +2584,10 @@ func TestLoad_DotEnvIntFloatBoolAlreadySetByEnvVar_Skip(t *testing.T) {
 	}
 
 	// Set env vars for the same fields — these should win (early return)
-	os.Setenv("BT_DOTENV_FILE", envFile)
-	os.Setenv("BT_LLM_TIMEOUT", "999")
-	os.Setenv("BT_RATE_LIMIT_RPS", "999.0")
-	os.Setenv("BT_FEATURE_GARDENER", "false")
-	defer func() {
-		os.Unsetenv("BT_DOTENV_FILE")
-		os.Unsetenv("BT_LLM_TIMEOUT")
-		os.Unsetenv("BT_RATE_LIMIT_RPS")
-		os.Unsetenv("BT_FEATURE_GARDENER")
-	}()
+	t.Setenv("BT_DOTENV_FILE", envFile)
+	t.Setenv("BT_LLM_TIMEOUT", "999")
+	t.Setenv("BT_RATE_LIMIT_RPS", "999.0")
+	t.Setenv("BT_FEATURE_GARDENER", "false")
 	os.Unsetenv("BT_CONFIG_FILE")
 
 	c, err := Load()
@@ -2737,11 +2662,11 @@ func TestLoad_DotEnvSetterClosures_AllTypesExercise(t *testing.T) {
 		"BT_RETRY_UNKNOWN=true",
 	}
 
-	content := ""
+	var content strings.Builder
 	for _, l := range lines {
-		content += l + "\n"
+		content.WriteString(l + "\n")
 	}
-	if err := os.WriteFile(envFile, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(envFile, []byte(content.String()), 0644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -2767,8 +2692,7 @@ func TestLoad_DotEnvSetterClosures_AllTypesExercise(t *testing.T) {
 	for _, k := range dotEnvKeys {
 		os.Unsetenv(k)
 	}
-	os.Setenv("BT_DOTENV_FILE", envFile)
-	defer os.Unsetenv("BT_DOTENV_FILE")
+	t.Setenv("BT_DOTENV_FILE", envFile)
 	os.Unsetenv("BT_CONFIG_FILE")
 
 	c, err := Load()
@@ -2962,13 +2886,6 @@ func TestApplyDotEnvFiles_CwdDotEnv(t *testing.T) {
 	// line 620-622: if _, err := os.Stat(".env"); err == nil { ... }
 	// which is NOT covered by TestLoad_DotEnvFile (uses BT_DOTENV_FILE).
 
-	// Save and restore CWD
-	origDir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = os.Chdir(origDir) }()
-
 	// Create a temp dir with a .env file
 	dir := t.TempDir()
 	envContent := "BT_DASHBOARD_PORT=5555\nBT_OLLAMA_MODEL=cwd-dotenv\n"
@@ -2981,9 +2898,7 @@ func TestApplyDotEnvFiles_CwdDotEnv(t *testing.T) {
 	os.Unsetenv("BT_DASHBOARD_PORT")
 	os.Unsetenv("BT_OLLAMA_MODEL")
 
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
+	t.Chdir(dir)
 
 	c, err := Load()
 	if err != nil {
@@ -3003,12 +2918,6 @@ func TestApplyDotEnvFiles_CwdDotEnvAndExplicitFile(t *testing.T) {
 	// explicit file should be processed first, then cwd .env values
 	// are applied on top (cwd wins for same keys).
 
-	origDir, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = os.Chdir(origDir) }()
-
 	dir := t.TempDir()
 
 	// CWD .env sets DashboardPort=7777
@@ -3022,13 +2931,10 @@ func TestApplyDotEnvFiles_CwdDotEnvAndExplicitFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	os.Setenv("BT_DOTENV_FILE", explicitEnv)
-	defer os.Unsetenv("BT_DOTENV_FILE")
+	t.Setenv("BT_DOTENV_FILE", explicitEnv)
 	os.Unsetenv("BT_DASHBOARD_PORT")
 
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
+	t.Chdir(dir)
 
 	c, err := Load()
 	if err != nil {

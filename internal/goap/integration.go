@@ -3,6 +3,7 @@ package goap
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"strings"
 )
 
@@ -18,7 +19,7 @@ type Blackboard interface {
 	SetOutcome(string)
 	SetPlan(string)
 	SetResult(string)
-	GetChainState() map[string]interface{}
+	GetChainState() map[string]any
 }
 
 // BlackboardBridge connects a GOAP agent to a BT blackboard.
@@ -78,9 +79,7 @@ func (b *BlackboardBridge) SyncToBB() {
 		return
 	}
 	// Write all world state to chain state
-	for k, v := range b.Agent.WorldState {
-		cs[k] = v
-	}
+	maps.Copy(cs, b.Agent.WorldState)
 }
 
 // PlanAndSync runs the planner and writes the plan to the blackboard.
@@ -125,10 +124,10 @@ const (
 
 // SerializableNode mirrors engine.SerializableNode to avoid import cycles.
 type SerializableNode struct {
-	Type     BTNodeType             `json:"type"`
-	Name     string                 `json:"name"`
-	Children []SerializableNode     `json:"children,omitempty"`
-	Metadata map[string]interface{} `json:"metadata,omitempty"`
+	Type     BTNodeType         `json:"type"`
+	Name     string             `json:"name"`
+	Children []SerializableNode `json:"children,omitempty"`
+	Metadata map[string]any     `json:"metadata,omitempty"`
 }
 
 // GOAPTreeDefinition is a complete behavior tree that integrates GOAP planning.
@@ -179,7 +178,7 @@ func BuildSerializableTree(def GOAPTreeDefinition) SerializableNode {
 			{
 				Type: "Condition",
 				Name: "HasGoapGoal",
-				Metadata: map[string]interface{}{
+				Metadata: map[string]any{
 					"goap_goals":       def.Goals,
 					"goap_actions":     def.Actions,
 					"goap_config":      def.Config,
@@ -189,7 +188,7 @@ func BuildSerializableTree(def GOAPTreeDefinition) SerializableNode {
 			{
 				Type: "Action",
 				Name: "PlanGoapActions",
-				Metadata: map[string]interface{}{
+				Metadata: map[string]any{
 					"goap_actions": def.Actions,
 					"goap_config":  def.Config,
 				},
@@ -205,7 +204,7 @@ func BuildSerializableTree(def GOAPTreeDefinition) SerializableNode {
 							{
 								Type: "Action",
 								Name: "ExecuteGoapStep",
-								Metadata: map[string]interface{}{
+								Metadata: map[string]any{
 									"goap_llm_prompts": def.LLMPrompts,
 								},
 							},

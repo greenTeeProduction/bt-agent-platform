@@ -12,6 +12,7 @@
 package engine
 
 import (
+	"maps"
 	"strconv"
 	"strings"
 
@@ -79,15 +80,13 @@ func compiledGoapActionFor(name string) ActionFunc {
 			return -1 // malformed spec: fail loudly instead of no-op success
 		}
 		if b.ChainState == nil {
-			b.ChainState = make(map[string]interface{})
+			b.ChainState = make(map[string]any)
 		}
 		ws := goapWorldStateFrom(b)
 		if ws == nil {
 			ws = make(goap.WorldState)
 		}
-		for k, v := range effects {
-			ws[k] = v
-		}
+		maps.Copy(ws, effects)
 		b.ChainState[goapWorldStateChainKey] = ws
 		return 1
 	}
@@ -103,7 +102,7 @@ func goapWorldStateFrom(b *Blackboard) goap.WorldState {
 	switch v := b.ChainState[goapWorldStateChainKey].(type) {
 	case goap.WorldState:
 		return v
-	case map[string]interface{}:
+	case map[string]any:
 		return goap.WorldState(v)
 	default:
 		return nil
@@ -112,9 +111,9 @@ func goapWorldStateFrom(b *Blackboard) goap.WorldState {
 
 // parseGoapPairs decodes "k=v,k2=v2" into typed values: booleans, numbers,
 // else strings. Malformed fragments (no "=") are skipped.
-func parseGoapPairs(spec string) map[string]interface{} {
-	pairs := make(map[string]interface{})
-	for _, frag := range strings.Split(spec, ",") {
+func parseGoapPairs(spec string) map[string]any {
+	pairs := make(map[string]any)
+	for frag := range strings.SplitSeq(spec, ",") {
 		frag = strings.TrimSpace(frag)
 		if frag == "" {
 			continue
@@ -132,7 +131,7 @@ func parseGoapPairs(spec string) map[string]interface{} {
 	return pairs
 }
 
-func parseGoapValue(raw string) interface{} {
+func parseGoapValue(raw string) any {
 	switch raw {
 	case "true":
 		return true
@@ -148,7 +147,7 @@ func parseGoapValue(raw string) interface{} {
 // goapValuesEqual compares world-state values with numeric tolerance:
 // ints and float64s that JSON/parsing produce for the same number compare
 // equal, everything else falls back to ==.
-func goapValuesEqual(a, b interface{}) bool {
+func goapValuesEqual(a, b any) bool {
 	if af, aok := asFloat(a); aok {
 		if bf, bok := asFloat(b); bok {
 			return af == bf
@@ -158,7 +157,7 @@ func goapValuesEqual(a, b interface{}) bool {
 	return a == b
 }
 
-func asFloat(v interface{}) (float64, bool) {
+func asFloat(v any) (float64, bool) {
 	switch n := v.(type) {
 	case float64:
 		return n, true

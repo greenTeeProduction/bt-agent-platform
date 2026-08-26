@@ -17,7 +17,7 @@ import (
 func WrapWithCheckpointVerifier(tree *SerializableNode, maxRetries int, postconditions string) *SerializableNode {
 	pcMap := make(map[string]any)
 	if postconditions != "" {
-		for _, pair := range strings.Split(postconditions, ",") {
+		for pair := range strings.SplitSeq(postconditions, ",") {
 			parts := strings.SplitN(strings.TrimSpace(pair), "=", 2)
 			if len(parts) == 2 {
 				// Parse boolean values; non-"true" values default to true for string

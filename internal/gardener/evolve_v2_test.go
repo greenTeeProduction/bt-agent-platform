@@ -489,7 +489,7 @@ func TestEvolveTreeV2_BloatGuard(t *testing.T) {
 		Type: "Sequence", Name: "BigTree",
 	}
 	bloatedTree.Children = make([]evolution.SerializableNode, 0)
-	for i := 0; i < 700; i++ {
+	for range 700 {
 		bloatedTree.Children = append(bloatedTree.Children, evolution.SerializableNode{
 			Type: "Action", Name: "Dummy",
 		})
@@ -1016,7 +1016,7 @@ func seedSelectorStats(t *testing.T, path string) {
 	t.Helper()
 	so := evolution.NewSelectorOptimizer(evolution.OrderBySuccessRate)
 	rec := func(child, outcome string, n int) {
-		for i := 0; i < n; i++ {
+		for range n {
 			so.Record("Router", evolution.NodeExecutionRecord{NodeName: child, Outcome: outcome})
 		}
 	}
@@ -1160,7 +1160,7 @@ func seedDTStats(t *testing.T, path string) {
 	t.Helper()
 	da := evolution.NewDTAnalyzer()
 	da.RecordHit("Router", "A", "CondA", true)
-	for i := 0; i < 8; i++ {
+	for range 8 {
 		da.RecordHit("Router", "B", "CondB", true)
 	}
 	da.RecordHit("Router", "C", "CondC", true)
@@ -1260,7 +1260,7 @@ func seedDTStatsPromotingC(t *testing.T, path string) {
 	da := evolution.NewDTAnalyzer()
 	da.RecordHit("Router", "A", "CondA", true)
 	da.RecordHit("Router", "B", "CondB", true)
-	for i := 0; i < 8; i++ {
+	for range 8 {
 		da.RecordHit("Router", "C", "CondC", true)
 	}
 	if err := da.Save(path); err != nil {
@@ -2413,7 +2413,7 @@ func TestEvolveTreeV2_DiversityCollapse_CanFireCrisis(t *testing.T) {
 // MaxDepth (depth) for MAP-Elites niche placement in tests.
 func chainTree(depth int) *evolution.SerializableNode {
 	node := evolution.SerializableNode{Type: "Action", Name: "Leaf"}
-	for i := 0; i < depth; i++ {
+	for range depth {
 		node = evolution.SerializableNode{Type: "Sequence", Name: "Seq", Children: []evolution.SerializableNode{node}}
 	}
 	return &node
@@ -3129,7 +3129,7 @@ func TestRunCycleV2_IslandPass_MigratesWinnerIntoPersistedTree(t *testing.T) {
 	pop := &evolution.Population{
 		Individuals: []evolution.Individual{{Tree: winner, Fitness: winnerComposite}},
 	}
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		pop.Individuals = append(pop.Individuals, evolution.Individual{
 			Tree:    cloneTreeForGardener(entry.Tree),
 			Fitness: baseComposite,
@@ -3227,7 +3227,7 @@ func islandAdoptionFixture(t *testing.T, treeName string) (*Gardener, TreeEntry,
 	pop := &evolution.Population{
 		Individuals: []evolution.Individual{{Tree: winner, Fitness: winnerComposite}},
 	}
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		pop.Individuals = append(pop.Individuals, evolution.Individual{
 			Tree:    cloneTreeForGardener(entry.Tree),
 			Fitness: baseComposite,

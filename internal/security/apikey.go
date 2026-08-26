@@ -31,9 +31,9 @@ import (
 type APIKeyInfo struct {
 	Label     string    `json:"label"`
 	CreatedAt time.Time `json:"created_at"`
-	ExpiresAt time.Time `json:"expires_at,omitempty"` // zero time = never expires
-	LastUsed  time.Time `json:"last_used,omitempty"`  // last successful validation
-	UseCount  int64     `json:"use_count"`            // number of successful validations
+	ExpiresAt time.Time `json:"expires_at,omitzero"` // zero time = never expires
+	LastUsed  time.Time `json:"last_used,omitzero"`  // last successful validation
+	UseCount  int64     `json:"use_count"`           // number of successful validations
 }
 
 // apiKey is the internal representation including the hash.
@@ -41,8 +41,8 @@ type apiKey struct {
 	Hash      string    `json:"hash"` // SHA-256 hex of the raw key
 	Label     string    `json:"label"`
 	CreatedAt time.Time `json:"created_at"`
-	ExpiresAt time.Time `json:"expires_at,omitempty"`
-	LastUsed  time.Time `json:"last_used,omitempty"`
+	ExpiresAt time.Time `json:"expires_at,omitzero"`
+	LastUsed  time.Time `json:"last_used,omitzero"`
 	UseCount  int64     `json:"use_count"`
 }
 

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 )
 
 // Handler implements the REST API handlers for DoorMate endpoints.
@@ -52,20 +53,14 @@ func (h *Handler) HandleIntent(w http.ResponseWriter, r *http.Request) {
 	_ = h.store.SavePage(page)
 
 	// Lightweight profile update based on intent
-	hasTag := false
-	for _, t := range profile.PreferenceTags {
-		if t == sess.Intent {
-			hasTag = true
-			break
-		}
-	}
+	hasTag := slices.Contains(profile.PreferenceTags, sess.Intent)
 	if !hasTag && sess.Intent != "general" {
 		profile.PreferenceTags = append(profile.PreferenceTags, sess.Intent)
 		_ = h.store.SaveProfile(profile)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+	_ = json.NewEncoder(w).Encode(map[string]any{
 		"session_id": sess.ID,
 		"intent":     sess.Intent,
 		"bubbles":    sess.Bubbles,
@@ -116,7 +111,7 @@ func (h *Handler) HandleBookmark(w http.ResponseWriter, r *http.Request) {
 	_ = h.store.SaveProfile(profile)
 
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{"status": "success", "bookmarked": page.Bookmarked})
+	_ = json.NewEncoder(w).Encode(map[string]any{"status": "success", "bookmarked": page.Bookmarked})
 }
 
 // HandleRate sets rating, saves page, logs feedback, and returns success.
@@ -147,7 +142,7 @@ func (h *Handler) HandleRate(w http.ResponseWriter, r *http.Request) {
 	_ = h.store.LogFeedback(&FeedbackEvent{Type: "rate", Value: fmt.Sprintf("%d", body.Rating), PageID: page.ID})
 
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{"status": "success", "rating": page.Rating})
+	_ = json.NewEncoder(w).Encode(map[string]any{"status": "success", "rating": page.Rating})
 }
 
 // HandleProfile loads/saves user profile preferences.

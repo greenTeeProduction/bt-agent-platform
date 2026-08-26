@@ -12,11 +12,12 @@
 package agent
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -138,13 +139,11 @@ func (ms *MemoryStore) Query(category, priority string, limit int) []MemoryEntry
 	}
 
 	// Sort by priority then recency
-	sort.Slice(results, func(i, j int) bool {
-		pi := priorityWeight(results[i].Priority)
-		pj := priorityWeight(results[j].Priority)
-		if pi != pj {
-			return pi > pj
-		}
-		return results[i].UpdatedAt.After(results[j].UpdatedAt)
+	slices.SortFunc(results, func(a, b MemoryEntry) int {
+		return cmp.Or(
+			cmp.Compare(priorityWeight(b.Priority), priorityWeight(a.Priority)),
+			b.UpdatedAt.Compare(a.UpdatedAt),
+		)
 	})
 
 	if limit > 0 && limit < len(results) {
@@ -313,8 +312,8 @@ func (ms *MemoryStore) queryLocked(category, priority string, limit int) []Memor
 		results = append(results, *e)
 	}
 
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].UpdatedAt.After(results[j].UpdatedAt)
+	slices.SortFunc(results, func(a, b MemoryEntry) int {
+		return b.UpdatedAt.Compare(a.UpdatedAt)
 	})
 
 	if limit > 0 && limit < len(results) {

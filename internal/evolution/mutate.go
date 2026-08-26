@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 )
 
 // SerializableNode represents a behavior tree node in a serializable format.
@@ -33,8 +34,8 @@ type SerializableNode struct {
 	Name        string             `json:"name"`
 	Description string             `json:"description,omitempty"`
 	Children    []SerializableNode `json:"children,omitempty"`
-	MaxRetries  int                `json:"max_retries,omitempty"`
-	TimeoutMs   int64              `json:"timeout_ms,omitempty"`
+	MaxRetries  int                `json:"max_retries,omitzero"`
+	TimeoutMs   int64              `json:"timeout_ms,omitzero"`
 	Metadata    map[string]any     `json:"metadata,omitempty"` // chain config, tags, etc.
 	Edges       []TypedEdge        `json:"edges,omitempty"`    // typed edge relationships
 }
@@ -614,10 +615,8 @@ func applyAddTool(tree *SerializableNode, targetName string, meta map[string]any
 				}
 				n.Metadata["tools"] = append(tools, newTool)
 			case []string:
-				for _, t := range tools {
-					if t == newTool {
-						return
-					}
+				if slices.Contains(tools, newTool) {
+					return
 				}
 				n.Metadata["tools"] = append(tools, newTool)
 			default:

@@ -133,7 +133,7 @@ func TestRotatingWriter_MaxBackups(t *testing.T) {
 	chunk := []byte("0123456789") // 10 bytes
 
 	// Write enough to trigger 4 rotations
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		_, err := rw.Write(chunk)
 		if err != nil {
 			t.Fatalf("Write %d: %v", i, err)

@@ -1,11 +1,12 @@
 package dashboard
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -131,8 +132,8 @@ func listRegistryAgents(withCB bool) []AgentWithStatus {
 		agents = append(agents, info)
 	}
 
-	sort.Slice(agents, func(i, j int) bool {
-		return agents[i].Name < agents[j].Name
+	slices.SortFunc(agents, func(a, b AgentWithStatus) int {
+		return cmp.Compare(a.Name, b.Name)
 	})
 	return agents
 }

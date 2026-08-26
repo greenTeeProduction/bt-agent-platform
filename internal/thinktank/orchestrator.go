@@ -2,6 +2,7 @@ package thinktank
 
 import (
 	"fmt"
+	"maps"
 	"strings"
 	"time"
 
@@ -35,9 +36,7 @@ func (o *ThinkTankOrchestrator) newBlackboard(task string) *engine.Blackboard {
 	cs["thinktank"] = o.Tank
 
 	// Copy chain state so prior phase results are available to later phases
-	for k, v := range o.chainState {
-		cs[k] = v
-	}
+	maps.Copy(cs, o.chainState)
 
 	return &engine.Blackboard{
 		Task:       task,
@@ -537,7 +536,7 @@ func findNextSection(text string) int {
 
 	for _, label := range common {
 		ll := strings.ToLower(label)
-		for i := 0; i < len(lower); i++ {
+		for i := range len(lower) {
 			if strings.HasPrefix(lower[i:], ll) {
 				if i == 0 || lower[i-1] == '\n' || lower[i-1] == '.' || lower[i-1] == '!' {
 					if i < best {
@@ -566,7 +565,7 @@ func extractListSection(raw, label string) []string {
 // extractBulletPoints extracts items from bullet-point or numbered-list text.
 func extractBulletPoints(text string) []string {
 	var items []string
-	for _, line := range strings.Split(text, "\n") {
+	for line := range strings.SplitSeq(text, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" {
 			continue
@@ -594,7 +593,7 @@ func extractBulletPoints(text string) []string {
 
 // extractFirstLine returns the first non-empty line.
 func extractFirstLine(text string) string {
-	for _, line := range strings.Split(text, "\n") {
+	for line := range strings.SplitSeq(text, "\n") {
 		if trimmed := strings.TrimSpace(line); trimmed != "" {
 			return trimmed
 		}
@@ -606,7 +605,7 @@ func extractFirstLine(text string) string {
 func splitByNumberedSections(text string) []string {
 	var parts []string
 	current := ""
-	for _, line := range strings.Split(text, "\n") {
+	for line := range strings.SplitSeq(text, "\n") {
 		trimmed := strings.TrimSpace(line)
 		lower := strings.ToLower(trimmed)
 		isNew := false

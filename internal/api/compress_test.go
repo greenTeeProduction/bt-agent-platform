@@ -31,7 +31,7 @@ func TestCompressionMiddleware_GzipRequest(t *testing.T) {
 		_, _ = w.Write([]byte(`{"message":"hello world","count":42}`))
 	}))
 
-	req := httptest.NewRequest("GET", "/api/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/test", nil)
 	req.Header.Set("Accept-Encoding", "gzip")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -70,7 +70,7 @@ func TestCompressionMiddleware_NoGzipHeader(t *testing.T) {
 		_, _ = w.Write([]byte(`{"ok":true}`))
 	}))
 
-	req := httptest.NewRequest("GET", "/api/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/test", nil)
 	// No Accept-Encoding header — client doesn't support gzip.
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -97,7 +97,7 @@ func TestCompressionMiddleware_BinaryContentType(t *testing.T) {
 		_, _ = w.Write([]byte("fake-png-data-here"))
 	}))
 
-	req := httptest.NewRequest("GET", "/api/image", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/image", nil)
 	req.Header.Set("Accept-Encoding", "gzip")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -125,7 +125,7 @@ func TestCompressionMiddleware_HTMLContentType(t *testing.T) {
 		_, _ = w.Write([]byte("<html><body><h1>Dashboard</h1></body></html>"))
 	}))
 
-	req := httptest.NewRequest("GET", "/", nil)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set("Accept-Encoding", "gzip")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -151,7 +151,7 @@ func TestCompressionMiddleware_EmptyBody(t *testing.T) {
 		w.WriteHeader(http.StatusNoContent) // 204, no body
 	}))
 
-	req := httptest.NewRequest("DELETE", "/api/resource", nil)
+	req := httptest.NewRequest(http.MethodDelete, "/api/resource", nil)
 	req.Header.Set("Accept-Encoding", "gzip")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -173,7 +173,7 @@ func TestCompressionMiddleware_LargeJSONResponse(t *testing.T) {
 		_, _ = w.Write([]byte(largePayload))
 	}))
 
-	req := httptest.NewRequest("GET", "/api/big", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/big", nil)
 	req.Header.Set("Accept-Encoding", "gzip")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -204,7 +204,7 @@ func TestCompressionMiddleware_StreamingResponse(t *testing.T) {
 		_, _ = w.Write([]byte(`"item3"]`))
 	}))
 
-	req := httptest.NewRequest("GET", "/api/stream", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/stream", nil)
 	req.Header.Set("Accept-Encoding", "gzip")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -222,7 +222,7 @@ func TestCompressionMiddleware_VaryHeader(t *testing.T) {
 		_, _ = w.Write([]byte(`{}`))
 	}))
 
-	req := httptest.NewRequest("GET", "/api/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/test", nil)
 	req.Header.Set("Accept-Encoding", "gzip")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -244,7 +244,7 @@ func TestCompressionMiddleware_StatusCodePreserved(t *testing.T) {
 				_, _ = w.Write([]byte(`{"error":"test"}`))
 			}))
 
-			req := httptest.NewRequest("GET", "/api/test", nil)
+			req := httptest.NewRequest(http.MethodGet, "/api/test", nil)
 			req.Header.Set("Accept-Encoding", "gzip")
 			rec := httptest.NewRecorder()
 			handler.ServeHTTP(rec, req)
@@ -296,13 +296,13 @@ func TestIsCompressibleContentType(t *testing.T) {
 // Test that gzip writer pool reuses writers (no panic, no leak).
 func TestGzipWriterPool_Reuse(t *testing.T) {
 	// Run many concurrent compression requests to exercise the pool.
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		handler := CompressionMiddleware(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`{"iter":` + strings.Repeat("x", 100) + `}`))
 		}))
-		req := httptest.NewRequest("GET", "/api/pool", nil)
+		req := httptest.NewRequest(http.MethodGet, "/api/pool", nil)
 		req.Header.Set("Accept-Encoding", "gzip")
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
@@ -325,7 +325,7 @@ func TestCompressionMiddleware_AlreadyCompressed(t *testing.T) {
 		_, _ = w.Write([]byte(`{"already":"done"}`))
 	}))
 
-	req := httptest.NewRequest("GET", "/api/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/test", nil)
 	req.Header.Set("Accept-Encoding", "gzip")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)

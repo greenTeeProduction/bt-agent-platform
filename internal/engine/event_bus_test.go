@@ -185,7 +185,7 @@ func TestEventBus_ConcurrentAccess(_ *testing.T) {
 	var wg sync.WaitGroup
 
 	// Concurrent subscribe
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
@@ -196,7 +196,7 @@ func TestEventBus_ConcurrentAccess(_ *testing.T) {
 	}
 
 	// Concurrent publish
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
@@ -206,12 +206,10 @@ func TestEventBus_ConcurrentAccess(_ *testing.T) {
 	}
 
 	// Concurrent has/close
-	for i := 0; i < 3; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 3 {
+		wg.Go(func() {
 			eb.HasFired("concurrent_0")
-		}()
+		})
 	}
 
 	wg.Wait()

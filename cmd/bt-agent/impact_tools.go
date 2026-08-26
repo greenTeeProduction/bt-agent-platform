@@ -13,19 +13,19 @@ import (
 // registers (NotebookLM research: the impact graph had zero production
 // consumers), so a caller can gate a commit on a change-scoped test list
 // instead of always running the full suite.
-func impactTests(root, source string) map[string]interface{} {
+func impactTests(root, source string) map[string]any {
 	if strings.TrimSpace(source) == "" {
-		return map[string]interface{}{"error": "source is required"}
+		return map[string]any{"error": "source is required"}
 	}
 	rel, err := knowledge.NormalizeImpactSource(root, source)
 	if err != nil {
-		return map[string]interface{}{"error": err.Error()}
+		return map[string]any{"error": err.Error()}
 	}
 	tests, err := knowledge.ImpactedTests(root, rel)
 	if err != nil {
-		return map[string]interface{}{"error": err.Error()}
+		return map[string]any{"error": err.Error()}
 	}
-	return map[string]interface{}{"tests": tests, "source": source}
+	return map[string]any{"tests": tests, "source": source}
 }
 
 // registerImpactTools registers the change-impact-analysis MCP surface.

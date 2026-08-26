@@ -18,7 +18,7 @@ func TestGzipResponseWriter_WriteHeader_CustomEncodingPreserved(t *testing.T) {
 	grw := &gzipResponseWriter{ResponseWriter: inner, Writer: nil}
 	grw.Header().Set("Content-Encoding", "deflate")
 	grw.Header().Set("Content-Type", "application/json")
-	grw.WriteHeader(200)
+	grw.WriteHeader(http.StatusOK)
 
 	if inner.Header().Get("Content-Encoding") != "deflate" {
 		t.Errorf("custom Content-Encoding should be preserved, got %q", inner.Header().Get("Content-Encoding"))
@@ -213,14 +213,14 @@ func TestValidateSchema_EmptyType(t *testing.T) {
 // ─── validateAgainstSchema coverage ──────────────────────────────────────────
 
 func TestValidateAgainstSchema_Number(t *testing.T) {
-	s := &Schema{Type: "number", Minimum: floatPtr(0), Maximum: floatPtr(100)}
+	s := &Schema{Type: "number", Minimum: new(0.0), Maximum: new(100.0)}
 	if err := validateAgainstSchema(50.0, s, ""); err != nil {
 		t.Errorf("expected no error, got %v", err)
 	}
 }
 
 func TestValidateAgainstSchema_Number_OutOfRange(t *testing.T) {
-	s := &Schema{Type: "number", Minimum: floatPtr(0), Maximum: floatPtr(100)}
+	s := &Schema{Type: "number", Minimum: new(0.0), Maximum: new(100.0)}
 	if err := validateAgainstSchema(150.0, s, ""); err == nil {
 		t.Error("expected error for out of range number")
 	}
@@ -431,7 +431,7 @@ func TestContentResponse_Non200(t *testing.T) {
 
 	found404 := false
 	for _, resp := range rb.route.Responses {
-		if resp.StatusCode == 404 {
+		if resp.StatusCode == http.StatusNotFound {
 			found404 = true
 			if resp.ContentType != "text/plain" {
 				t.Errorf("expected content type 'text/plain', got %q", resp.ContentType)
@@ -450,7 +450,7 @@ func TestContentResponse_200(t *testing.T) {
 	rb := NewRoute("/test", GET)
 	rb.ContentResponse(200, "text/csv", "CSV data")
 
-	if rb.route.Responses[0].StatusCode != 200 {
+	if rb.route.Responses[0].StatusCode != http.StatusOK {
 		t.Errorf("expected 200, got %d", rb.route.Responses[0].StatusCode)
 	}
 	if rb.route.Responses[0].ContentType != "text/csv" {
@@ -530,7 +530,7 @@ func TestCompressionMiddleware_NoGzipSupport(t *testing.T) {
 		_, _ = w.Write([]byte(`{"ok":true}`))
 	}))
 
-	req := httptest.NewRequest("GET", "/", nil)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	// No Accept-Encoding header
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -552,7 +552,7 @@ func TestCompressionMiddleware_WithGzip(t *testing.T) {
 		_, _ = w.Write([]byte(`{"ok":true,"data":"hello world"}`))
 	}))
 
-	req := httptest.NewRequest("GET", "/", nil)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set("Accept-Encoding", "gzip")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -571,12 +571,12 @@ func TestCompressionMiddleware_WithGzip(t *testing.T) {
 
 func TestDeprecatedHandler_WithSunsetDate(t *testing.T) {
 	h := DeprecatedHandler(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(200)
+		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	}), "2026-12-31")
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/", nil)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	h.ServeHTTP(rec, req)
 
 	if rec.Code != 200 {
@@ -599,7 +599,7 @@ func TestDeprecatedHandler_NoSunset(t *testing.T) {
 	}), "")
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/", nil)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	h.ServeHTTP(rec, req)
 
 	if rec.Header().Get("Deprecation") != "true" {
@@ -616,7 +616,7 @@ func TestDeprecatedHandlerFunc(t *testing.T) {
 	}, "2026-06-30")
 
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/", nil)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	h.ServeHTTP(rec, req)
 
 	if rec.Header().Get("Deprecation") != "true" {
@@ -630,7 +630,7 @@ func TestGzipResponseWriter_NonCompressibleWrite(t *testing.T) {
 	inner := httptest.NewRecorder()
 	grw := &gzipResponseWriter{ResponseWriter: inner, Writer: io.Discard}
 	grw.Header().Set("Content-Type", "application/octet-stream")
-	grw.WriteHeader(200)
+	grw.WriteHeader(http.StatusOK)
 
 	n, err := grw.Write([]byte("raw binary data"))
 	if err != nil {
@@ -650,7 +650,7 @@ func TestGzipResponseWriter_WriteHeaderIdempotent(_ *testing.T) {
 	grw := &gzipResponseWriter{ResponseWriter: inner, Writer: io.Discard}
 	grw.Header().Set("Content-Type", "application/json")
 
-	grw.WriteHeader(200)
+	grw.WriteHeader(http.StatusOK)
 	grw.WriteHeader(299) // second call should be no-op
 	// If it called WriteHeader again, the test would panic (can't set headers after WriteHeader)
 }
@@ -663,7 +663,7 @@ func TestCompressionMiddleware_NonCompressibleType(t *testing.T) {
 		_, _ = w.Write([]byte("PNG data"))
 	}))
 
-	req := httptest.NewRequest("GET", "/", nil)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set("Accept-Encoding", "gzip")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -683,7 +683,7 @@ func TestCompressionMiddleware_NoContentType(t *testing.T) {
 		_, _ = w.Write([]byte("raw data"))
 	}))
 
-	req := httptest.NewRequest("GET", "/", nil)
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set("Accept-Encoding", "gzip")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -776,7 +776,7 @@ func TestValidate_OutputSchemaError(t *testing.T) {
 		Version:      "1.0.0",
 		InputType:    ContentTypeText,
 		OutputType:   ContentTypeText,
-		OutputSchema: &Schema{Type: "object", MinLength: intPtr(5), MaxLength: intPtr(3)},
+		OutputSchema: &Schema{Type: "object", MinLength: new(5), MaxLength: new(3)},
 	}
 	if err := def.Validate(); err == nil {
 		t.Error("expected error for minLength > maxLength on non-string type")

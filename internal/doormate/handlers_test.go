@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 )
 
@@ -20,7 +21,7 @@ func TestHandleIntent(t *testing.T) {
 	handler := NewHandler(store, agent)
 
 	reqBody, _ := json.Marshal(map[string]string{"input": "lock security"})
-	req := httptest.NewRequest("POST", "/api/doormate/intent", bytes.NewReader(reqBody))
+	req := httptest.NewRequest(http.MethodPost, "/api/doormate/intent", bytes.NewReader(reqBody))
 	rr := httptest.NewRecorder()
 
 	handler.HandleIntent(rr, req)
@@ -29,7 +30,7 @@ func TestHandleIntent(t *testing.T) {
 		t.Fatalf("expected status 200, got %d", rr.Code)
 	}
 
-	var res map[string]interface{}
+	var res map[string]any
 	if err := json.Unmarshal(rr.Body.Bytes(), &res); err != nil {
 		t.Fatalf("invalid json response: %v", err)
 	}
@@ -53,7 +54,7 @@ func TestHandleIntent(t *testing.T) {
 		t.Errorf("expected saved session intent to be security, got %s", sess.Intent)
 	}
 
-	pageData, ok := res["page"].(map[string]interface{})
+	pageData, ok := res["page"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected page in response")
 	}
@@ -75,13 +76,7 @@ func TestHandleIntent(t *testing.T) {
 	if err != nil {
 		t.Errorf("failed to load profile: %v", err)
 	}
-	hasTag := false
-	for _, tag := range profile.PreferenceTags {
-		if tag == "security" {
-			hasTag = true
-			break
-		}
-	}
+	hasTag := slices.Contains(profile.PreferenceTags, "security")
 	if !hasTag {
 		t.Errorf("expected profile to be updated with security tag")
 	}
@@ -111,7 +106,7 @@ func TestHandleBookmark(t *testing.T) {
 
 	// Test bookmarking (toggling to true)
 	reqBody, _ := json.Marshal(map[string]string{"page_id": page.ID})
-	req := httptest.NewRequest("POST", "/api/doormate/bookmark", bytes.NewReader(reqBody))
+	req := httptest.NewRequest(http.MethodPost, "/api/doormate/bookmark", bytes.NewReader(reqBody))
 	rr := httptest.NewRecorder()
 
 	handler.HandleBookmark(rr, req)
@@ -120,7 +115,7 @@ func TestHandleBookmark(t *testing.T) {
 		t.Fatalf("expected status 200, got %d", rr.Code)
 	}
 
-	var res map[string]interface{}
+	var res map[string]any
 	if err := json.Unmarshal(rr.Body.Bytes(), &res); err != nil {
 		t.Fatalf("invalid json response: %v", err)
 	}
@@ -145,13 +140,7 @@ func TestHandleBookmark(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to load profile: %v", err)
 	}
-	hasBookmark := false
-	for _, bID := range savedProfile.BookmarkIDs {
-		if bID == page.ID {
-			hasBookmark = true
-			break
-		}
-	}
+	hasBookmark := slices.Contains(savedProfile.BookmarkIDs, page.ID)
 	if !hasBookmark {
 		t.Errorf("expected profile to have bookmark ID %s", page.ID)
 	}
@@ -167,7 +156,7 @@ func TestHandleBookmark(t *testing.T) {
 
 	// Test unbookmarking (toggling to false)
 	reqBody2, _ := json.Marshal(map[string]string{"page_id": page.ID})
-	req2 := httptest.NewRequest("POST", "/api/doormate/bookmark", bytes.NewReader(reqBody2))
+	req2 := httptest.NewRequest(http.MethodPost, "/api/doormate/bookmark", bytes.NewReader(reqBody2))
 	rr2 := httptest.NewRecorder()
 
 	handler.HandleBookmark(rr2, req2)
@@ -176,7 +165,7 @@ func TestHandleBookmark(t *testing.T) {
 		t.Fatalf("expected status 200, got %d", rr2.Code)
 	}
 
-	var res2 map[string]interface{}
+	var res2 map[string]any
 	if err := json.Unmarshal(rr2.Body.Bytes(), &res2); err != nil {
 		t.Fatalf("invalid json response: %v", err)
 	}
@@ -222,8 +211,8 @@ func TestHandleRate(t *testing.T) {
 	}
 
 	// Test rating
-	reqBody, _ := json.Marshal(map[string]interface{}{"page_id": page.ID, "rating": 5})
-	req := httptest.NewRequest("POST", "/api/doormate/rate", bytes.NewReader(reqBody))
+	reqBody, _ := json.Marshal(map[string]any{"page_id": page.ID, "rating": 5})
+	req := httptest.NewRequest(http.MethodPost, "/api/doormate/rate", bytes.NewReader(reqBody))
 	rr := httptest.NewRecorder()
 
 	handler.HandleRate(rr, req)
@@ -232,7 +221,7 @@ func TestHandleRate(t *testing.T) {
 		t.Fatalf("expected status 200, got %d", rr.Code)
 	}
 
-	var res map[string]interface{}
+	var res map[string]any
 	if err := json.Unmarshal(rr.Body.Bytes(), &res); err != nil {
 		t.Fatalf("invalid json response: %v", err)
 	}
@@ -272,7 +261,7 @@ func TestHandleProfile(t *testing.T) {
 	handler := NewHandler(store, agent)
 
 	// Test GET profile (loads user profile preferences)
-	req := httptest.NewRequest("GET", "/api/doormate/profile", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/doormate/profile", nil)
 	rr := httptest.NewRecorder()
 
 	handler.HandleProfile(rr, req)
@@ -291,11 +280,11 @@ func TestHandleProfile(t *testing.T) {
 
 	// Test POST profile (saves user profile preferences)
 	prefTags := []string{"security", "automation"}
-	reqBody, _ := json.Marshal(map[string]interface{}{
+	reqBody, _ := json.Marshal(map[string]any{
 		"tags":  prefTags,
 		"style": "minimal",
 	})
-	req2 := httptest.NewRequest("POST", "/api/doormate/profile", bytes.NewReader(reqBody))
+	req2 := httptest.NewRequest(http.MethodPost, "/api/doormate/profile", bytes.NewReader(reqBody))
 	rr2 := httptest.NewRecorder()
 
 	handler.HandleProfile(rr2, req2)

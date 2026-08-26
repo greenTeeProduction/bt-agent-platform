@@ -31,7 +31,7 @@ func NewStore(dir string) (*Store, error) {
 
 // atomicWrite writes data to path using the atomic-rename pattern to prevent data corruption.
 // It assumes the caller holds the appropriate write lock.
-func (s *Store) atomicWrite(path string, data interface{}) error {
+func (s *Store) atomicWrite(path string, data any) error {
 	if err := util.SaveJSONAtomic(path, data); err != nil {
 		return fmt.Errorf("failed to write %s: %w", path, err)
 	}

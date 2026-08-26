@@ -7,13 +7,15 @@
 package evaluator
 
 import (
+	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 
@@ -516,8 +518,8 @@ func OrderMutations(tree *evolution.SerializableNode, records []evolution.Record
 	}
 
 	// Sort all candidates by descending score for deterministic ordering
-	sort.Slice(candidates, func(i, j int) bool {
-		return candidates[i].Score > candidates[j].Score
+	slices.SortFunc(candidates, func(a, b MutationCandidate) int {
+		return cmp.Compare(b.Score, a.Score)
 	})
 
 	return candidates
@@ -539,10 +541,7 @@ func findFailureNodes(records []evolution.Record) []string {
 			}
 		}
 	}
-	result := make([]string, 0, 16)
-	for node := range seen {
-		result = append(result, node)
-	}
+	result := slices.Collect(maps.Keys(seen))
 	return result
 }
 
@@ -734,10 +733,8 @@ func chainHasTool(n *evolution.SerializableNode, tool string) bool {
 			}
 		}
 	case []string:
-		for _, t := range tools {
-			if t == tool {
-				return true
-			}
+		if slices.Contains(tools, tool) {
+			return true
 		}
 	}
 	return false

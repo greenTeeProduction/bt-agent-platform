@@ -17,7 +17,8 @@
 package knowledge
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -40,7 +41,7 @@ type TreeMeta struct {
 	// gated by RunCount, so an unproven tree surfaces on structural merit while a
 	// well-run tree is judged on its measured runtime success (see
 	// blendedSelectionFitness).
-	StructuralFitness float64 `json:"structural_fitness,omitempty"`
+	StructuralFitness float64 `json:"structural_fitness,omitzero"`
 
 	// Capabilities — what tasks this tree handles
 	Capabilities []Capability `json:"capabilities"`
@@ -86,9 +87,9 @@ const maxRunHistory = 20
 
 // Capability describes what a tree can do.
 type Capability struct {
-	Action   string  `json:"action"`             // what it does (e.g., "analyze_financials", "review_code")
-	Domain   string  `json:"domain"`             // domain area (e.g., "finance", "engineering", "strategy")
-	Strength float64 `json:"strength,omitempty"` // 0-1 how good it is at this (from benchmarks)
+	Action   string  `json:"action"`            // what it does (e.g., "analyze_financials", "review_code")
+	Domain   string  `json:"domain"`            // domain area (e.g., "finance", "engineering", "strategy")
+	Strength float64 `json:"strength,omitzero"` // 0-1 how good it is at this (from benchmarks)
 }
 
 // Relation describes a connection to another tree.
@@ -339,9 +340,9 @@ func (kg *KnowledgeGraph) stringMatch(task string) (string, float64) {
 		}
 	}
 	if len(hits) > 0 {
-		sort.Slice(hits, func(i, j int) bool {
-			if li, lj := len(hits[i].keyword), len(hits[j].keyword); li != lj {
-				return li > lj // longest / most-specific keyword first
+		slices.SortFunc(hits, func(a, b kwHit) int {
+			if la, lb := len(a.keyword), len(b.keyword); la != lb {
+				return cmp.Compare(lb, la) // longest / most-specific keyword first
 			}
 			// Equal specificity: blend persisted fitness so the tie resolves
 			// toward the fitter tree, mirroring the embedding path's
@@ -350,12 +351,12 @@ func (kg *KnowledgeGraph) stringMatch(task string) (string, float64) {
 			// run cannot dominate a tree proven across many runs, and the tree's
 			// evolved structural fitness is blended in (gated by RunCount) so an
 			// unproven-but-archive-improved tree can still surface.
-			ti, tj := kg.Trees[hits[i].treeID], kg.Trees[hits[j].treeID]
-			if fi, fj := blendedSelectionFitness(ti.Fitness, ti.StructuralFitness, ti.RunCount),
-				blendedSelectionFitness(tj.Fitness, tj.StructuralFitness, tj.RunCount); fi != fj {
-				return fi > fj // more-trustworthy fitter tree wins the tie
+			ta, tb := kg.Trees[a.treeID], kg.Trees[b.treeID]
+			if fa, fb := blendedSelectionFitness(ta.Fitness, ta.StructuralFitness, ta.RunCount),
+				blendedSelectionFitness(tb.Fitness, tb.StructuralFitness, tb.RunCount); fa != fb {
+				return cmp.Compare(fb, fa) // more-trustworthy fitter tree wins the tie
 			}
-			return hits[i].treeID < hits[j].treeID // final deterministic fallback
+			return cmp.Compare(a.treeID, b.treeID) // final deterministic fallback
 		})
 		winner := hits[0].treeID
 		matched := 0
@@ -542,17 +543,18 @@ func (kg *KnowledgeGraph) Summary() string {
 		categories[t.Category]++
 	}
 
-	s := "Knowledge Graph: "
+	var s strings.Builder
+	s.WriteString("Knowledge Graph: ")
 	first := true
 	for cat, count := range categories {
 		if !first {
-			s += ", "
+			s.WriteString(", ")
 		}
-		s += cat + "(" + strconv.Itoa(count) + ")"
+		s.WriteString(cat + "(" + strconv.Itoa(count) + ")")
 		first = false
 	}
-	s += " | " + strconv.Itoa(len(kg.Trees)) + " trees, " + strconv.Itoa(len(kg.Edges)) + " edges"
-	return s
+	s.WriteString(" | " + strconv.Itoa(len(kg.Trees)) + " trees, " + strconv.Itoa(len(kg.Edges)) + " edges")
+	return s.String()
 }
 
 // DiscoverRelated returns trees connected to the given tree via edges.

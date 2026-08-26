@@ -153,26 +153,21 @@ func TestPrioritizeGoapGoals_ConcurrentWithPersistGoapProgramAllSurvive(t *testi
 	const writers = 30
 	const chargers = 30
 	var wg sync.WaitGroup
-	for i := 0; i < writers; i++ {
-		i := i
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for i := range writers {
+		wg.Go(func() {
 			bb := &Blackboard{ChainState: map[string]any{}}
 			spec := &goapProgramSpec{
 				Title:      fmt.Sprintf("Concurrent registered program %d", i),
 				Milestones: []string{"m1"},
 			}
 			persistGoapProgram(bb, spec, "test")
-		}()
+		})
 	}
-	for i := 0; i < chargers; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range chargers {
+		wg.Go(func() {
 			bb := &Blackboard{ChainState: map[string]any{}}
 			prioritize(&btcore.BTContext[Blackboard]{Blackboard: bb})
-		}()
+		})
 	}
 	wg.Wait()
 

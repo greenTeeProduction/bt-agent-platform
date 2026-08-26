@@ -103,21 +103,21 @@ func TestValidateOutput(t *testing.T) {
 				"name": {Type: "string"},
 			}, Required: []string{"name"}}, true},
 		{"schema string min length valid", `{"name":"alice"}`, ContentTypeJSON,
-			&Schema{Type: "object", Properties: map[string]*Schema{"name": {Type: "string", MinLength: intPtr(3)}}}, false},
+			&Schema{Type: "object", Properties: map[string]*Schema{"name": {Type: "string", MinLength: new(3)}}}, false},
 		{"schema string min length rejected", `{"name":"al"}`, ContentTypeJSON,
-			&Schema{Type: "object", Properties: map[string]*Schema{"name": {Type: "string", MinLength: intPtr(3)}}}, true},
+			&Schema{Type: "object", Properties: map[string]*Schema{"name": {Type: "string", MinLength: new(3)}}}, true},
 		{"schema string max length rejected", `{"name":"abcdef"}`, ContentTypeJSON,
-			&Schema{Type: "object", Properties: map[string]*Schema{"name": {Type: "string", MaxLength: intPtr(5)}}}, true},
+			&Schema{Type: "object", Properties: map[string]*Schema{"name": {Type: "string", MaxLength: new(5)}}}, true},
 		{"schema string enum rejected", `{"status":"unknown"}`, ContentTypeJSON,
 			&Schema{Type: "object", Properties: map[string]*Schema{"status": {Type: "string", Enum: []string{"ok", "failed"}}}}, true},
 		{"schema string pattern rejected", `{"id":"bad id"}`, ContentTypeJSON,
 			&Schema{Type: "object", Properties: map[string]*Schema{"id": {Type: "string", Pattern: `^[a-z]+-[0-9]+$`}}}, true},
 		{"schema number bounds valid", `{"score":0.75}`, ContentTypeJSON,
-			&Schema{Type: "object", Properties: map[string]*Schema{"score": {Type: "number", Minimum: floatPtr(0), Maximum: floatPtr(1)}}}, false},
+			&Schema{Type: "object", Properties: map[string]*Schema{"score": {Type: "number", Minimum: new(0.0), Maximum: new(1.0)}}}, false},
 		{"schema number minimum rejected", `{"score":-0.1}`, ContentTypeJSON,
-			&Schema{Type: "object", Properties: map[string]*Schema{"score": {Type: "number", Minimum: floatPtr(0)}}}, true},
+			&Schema{Type: "object", Properties: map[string]*Schema{"score": {Type: "number", Minimum: new(0.0)}}}, true},
 		{"schema number maximum rejected", `{"score":1.1}`, ContentTypeJSON,
-			&Schema{Type: "object", Properties: map[string]*Schema{"score": {Type: "number", Maximum: floatPtr(1)}}}, true},
+			&Schema{Type: "object", Properties: map[string]*Schema{"score": {Type: "number", Maximum: new(1.0)}}}, true},
 		{"schema integer rejects decimal", `{"count":1.5}`, ContentTypeJSON,
 			&Schema{Type: "object", Properties: map[string]*Schema{"count": {Type: "integer"}}}, true},
 		{"schema numeric enum rejected", `{"priority":4}`, ContentTypeJSON,
@@ -143,8 +143,8 @@ func TestSchemaValidation(t *testing.T) {
 	}{
 		{"valid schema", &Schema{Type: "object"}, false},
 		{"invalid type", &Schema{Type: "invalid"}, true},
-		{"min > max", &Schema{Type: "string", MinLength: intPtr(10), MaxLength: intPtr(5)}, true},
-		{"valid string", &Schema{Type: "string", MinLength: intPtr(1), MaxLength: intPtr(100)}, false},
+		{"min > max", &Schema{Type: "string", MinLength: new(10), MaxLength: new(5)}, true},
+		{"valid string", &Schema{Type: "string", MinLength: new(1), MaxLength: new(100)}, false},
 		{"valid array", &Schema{Type: "array", Items: &Schema{Type: "string"}}, false},
 	}
 
@@ -157,6 +157,3 @@ func TestSchemaValidation(t *testing.T) {
 		})
 	}
 }
-
-func intPtr(i int) *int           { return &i }
-func floatPtr(f float64) *float64 { return &f }

@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -98,8 +99,7 @@ func (bb *Blackboard) ChildTicks() []ChildTick {
 	}
 	bb.childTicks.mu.Lock()
 	defer bb.childTicks.mu.Unlock()
-	out := make([]ChildTick, len(bb.childTicks.ticks))
-	copy(out, bb.childTicks.ticks)
+	out := slices.Clone(bb.childTicks.ticks)
 	return out
 }
 
@@ -542,7 +542,7 @@ func setHeuristicQuality(b *Blackboard, score float64) {
 func stripFencedBlocks(s string) string {
 	var out strings.Builder
 	inFence := false
-	for _, line := range strings.Split(s, "\n") {
+	for line := range strings.SplitSeq(s, "\n") {
 		if strings.HasPrefix(strings.TrimSpace(line), "```") {
 			inFence = !inFence
 			continue

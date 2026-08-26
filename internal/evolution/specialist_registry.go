@@ -1,5 +1,7 @@
 package evolution
 
+import "slices"
+
 // SpecialistArchetype stores the best observed serialized tree for a specialist
 // family so crisis handling can resurrect it if that niche disappears.
 type SpecialistArchetype struct {
@@ -167,10 +169,8 @@ func firstSpecialistType(tags []string) string {
 
 func appendResurrectedTag(tags []string) []string {
 	out := append([]string(nil), tags...)
-	for _, tag := range out {
-		if tag == "resurrected:true" {
-			return out
-		}
+	if slices.Contains(out, "resurrected:true") {
+		return out
 	}
 	return append(out, "resurrected:true")
 }

@@ -64,7 +64,7 @@ func TestLoginThrottle_Lockout(t *testing.T) {
 	ip := "10.0.0.2"
 
 	// 5 failures → should be blocked
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		lt.RecordFailure(ip)
 	}
 	if !lt.IsBlocked(ip) {
@@ -90,7 +90,7 @@ func TestLoginThrottle_LockoutExpires(t *testing.T) {
 	lt := NewLoginThrottle(cfg)
 	ip := "10.0.0.3"
 
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		lt.RecordFailure(ip)
 	}
 	if !lt.IsBlocked(ip) {
@@ -140,7 +140,7 @@ func TestLoginThrottle_RemainingCooldown(t *testing.T) {
 	ip := "10.0.0.6"
 
 	// 3 failures → first cooldown step: 10s
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		lt.RecordFailure(ip)
 	}
 
@@ -188,7 +188,7 @@ func TestLoginThrottle_ConcurrentAccess(t *testing.T) {
 	var wg sync.WaitGroup
 
 	// 10 goroutines hitting 5 different IPs
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		wg.Add(1)
 		go func(n int) {
 			defer wg.Done()
@@ -211,7 +211,7 @@ func TestLoginThrottle_DifferentIPsIndependent(t *testing.T) {
 	ip1 := "192.168.1.1"
 	ip2 := "192.168.1.2"
 
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		lt.RecordFailure(ip1)
 	}
 
@@ -312,7 +312,7 @@ func TestLoginThrottle_RateLimitMiddleware(t *testing.T) {
 	lt := NewLoginThrottle(cfg)
 	ip := "10.0.0.10"
 
-	for i := 0; i < 15; i++ {
+	for range 15 {
 		lt.RecordFailure(ip)
 	}
 

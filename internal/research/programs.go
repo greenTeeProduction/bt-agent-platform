@@ -19,14 +19,14 @@ import (
 type Milestone struct {
 	Goal         string    `json:"goal"`
 	Status       string    `json:"status"` // pending | done | blocked
-	Attempts     int       `json:"attempts,omitempty"`
+	Attempts     int       `json:"attempts,omitzero"`
 	CompletedRun string    `json:"completed_run,omitempty"`
-	CompletedAt  time.Time `json:"completed_at,omitempty"`
-	BlockedAt    time.Time `json:"blocked_at,omitempty"`
+	CompletedAt  time.Time `json:"completed_at,omitzero"`
+	BlockedAt    time.Time `json:"blocked_at,omitzero"`
 	// RedPassStreak counts consecutive cycles whose RED command unexpectedly
 	// passed for this milestone — evidence the work already exists at HEAD
 	// rather than an unbuildable goal. Reset on any genuine failure.
-	RedPassStreak int `json:"red_pass_streak,omitempty"`
+	RedPassStreak int `json:"red_pass_streak,omitzero"`
 	// LastRedCmd is the RED command whose unexpected pass produced the
 	// streak. The next cycle re-runs it at charge time (the red pre-check,
 	// 2026-07-23 review gap 5): a second pass completes the milestone
@@ -49,7 +49,7 @@ type Program struct {
 	// lease window passed to ClaimActiveForCycle is stale — evidence the
 	// claiming cycle crashed or is simply long done — and is reclaimable by a
 	// different agent.
-	ClaimedAt time.Time `json:"claimed_at,omitempty"`
+	ClaimedAt time.Time `json:"claimed_at,omitzero"`
 }
 
 // NextMilestone returns the first pending milestone and its index, or (-1, nil).

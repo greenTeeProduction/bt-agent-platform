@@ -151,7 +151,7 @@ func TestWorkerPool_MultiplePanics(t *testing.T) {
 	count := 0
 
 	// Submit 3 tasks, all panic
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		wp.Submit(func() {
 			panic("repeated")
 		})

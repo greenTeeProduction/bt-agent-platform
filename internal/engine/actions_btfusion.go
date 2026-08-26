@@ -5,7 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -65,7 +65,7 @@ func btFusionPatternQuestion() string {
 // btFusionResearchFindings extracts bullet findings from a NotebookLM answer.
 func btFusionResearchFindings(answer string) []string {
 	var out []string
-	for _, line := range strings.Split(answer, "\n") {
+	for line := range strings.SplitSeq(answer, "\n") {
 		t := strings.TrimSpace(line)
 		if strings.HasPrefix(t, "- ") || strings.HasPrefix(t, "* ") {
 			t = strings.TrimSpace(t[2:])
@@ -370,7 +370,9 @@ func listFusionVaultNotes() []fusionVaultNote {
 			notes = append(notes, fusionVaultNote{path: filepath.Join(dir, e.Name()), name: e.Name(), mod: info.ModTime()})
 		}
 	}
-	sort.Slice(notes, func(i, j int) bool { return notes[i].mod.After(notes[j].mod) })
+	slices.SortFunc(notes, func(a, b fusionVaultNote) int {
+		return b.mod.Compare(a.mod)
+	})
 	return notes
 }
 

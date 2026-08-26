@@ -1,6 +1,9 @@
 package blocks
 
 import (
+	"maps"
+	"slices"
+
 	"github.com/nico/go-bt-evolve/internal/dashboard"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/reliability"
@@ -27,10 +30,7 @@ func CollectBlockIDs(tree *evolution.SerializableNode) []string {
 		}
 	}
 	walk(tree)
-	out := make([]string, 0, len(seen))
-	for id := range seen {
-		out = append(out, id)
-	}
+	out := slices.Collect(maps.Keys(seen))
 	return out
 }
 

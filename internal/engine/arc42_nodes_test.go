@@ -3,6 +3,7 @@ package engine
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -129,11 +130,11 @@ Features : fp asimd`
 }
 
 func TestCountCPUCores_TwelveCores(t *testing.T) {
-	cpuinfo := ""
-	for i := 0; i < 12; i++ {
-		cpuinfo += "processor\t: " + string(rune('0'+i%10)) + "\n"
+	var cpuinfo strings.Builder
+	for i := range 12 {
+		cpuinfo.WriteString("processor\t: " + string(rune('0'+i%10)) + "\n")
 	}
-	if n := countCPUCores(cpuinfo); n != 12 {
+	if n := countCPUCores(cpuinfo.String()); n != 12 {
 		t.Errorf("expected 12 cores, got %d", n)
 	}
 }

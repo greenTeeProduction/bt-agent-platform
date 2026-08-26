@@ -31,7 +31,7 @@ func TestPopulationEvolve_RecordsCrisisReasons(t *testing.T) {
 		Regressions:    100,
 		TotalMutations: 100,
 	}
-	for i := 0; i < size; i++ {
+	for i := range size {
 		// Identical genome across the population → Diversity() == 1/size == 0.1.
 		pop.Individuals[i] = Individual{Tree: cloneTree(base), Genome: "identical-genome"}
 	}
@@ -75,7 +75,7 @@ func TestPopulationEvolve_CrisisIntervention(t *testing.T) {
 			Regressions:    100,
 			TotalMutations: 100,
 		}
-		for i := 0; i < size; i++ {
+		for i := range size {
 			// Identical genome → Diversity() == 0.1 < 0.2 → diversity_collapse.
 			pop.Individuals[i] = Individual{Tree: cloneTree(base), Genome: "identical"}
 		}
@@ -106,7 +106,7 @@ func TestPopulationEvolve_CrisisIntervention(t *testing.T) {
 
 	t.Run("healthy generation is unaffected", func(t *testing.T) {
 		pop := &Population{Individuals: make([]Individual, size)}
-		for i := 0; i < size; i++ {
+		for i := range size {
 			// Distinct genomes → Diversity() == 1.0: no collapse, no crisis.
 			pop.Individuals[i] = Individual{Tree: cloneTree(base), Genome: fmt.Sprintf("genome-%d", i)}
 		}
@@ -209,7 +209,7 @@ func TestPopulationEvolve_ResurrectsExtinctSpecialist(t *testing.T) {
 		Generation:  500,
 		Specialists: registry,
 	}
-	for i := 0; i < size; i++ {
+	for i := range size {
 		// Identical, non-specialist genomes → Diversity() == 1/size == 0.1
 		// (< 0.2 threshold) trips diversity_collapse, and the goap niche is
 		// absent → the archetype qualifies as extinct.
@@ -274,7 +274,7 @@ func TestPopulationHealthSnapshot_DiversityCollapseRun(t *testing.T) {
 		Generation:  500,
 		Specialists: registry,
 	}
-	for i := 0; i < size; i++ {
+	for i := range size {
 		// Identical, non-specialist genomes → Diversity() == 1/size == 0.1
 		// (< 0.2 threshold) trips diversity_collapse; the goap niche is absent
 		// so the archetype qualifies as extinct.
@@ -372,7 +372,7 @@ func TestSelfHealGeneration_ExtractsEvolveSelfHealingStep(t *testing.T) {
 			Generation:  500,
 			Specialists: registry,
 		}
-		for i := 0; i < size; i++ {
+		for i := range size {
 			// Identical, non-specialist genomes → Diversity() == 0.1 (< 0.2) trips
 			// diversity_collapse and leaves the goap niche absent (extinct).
 			pop.Individuals[i] = Individual{Tree: cloneTree(base), Genome: "identical-genome"}
@@ -437,7 +437,7 @@ func TestSelfHealGeneration_ExtractsEvolveSelfHealingStep(t *testing.T) {
 
 	t.Run("healthy generation keeps the supervisor's recommended rate", func(t *testing.T) {
 		pop := &Population{Individuals: make([]Individual, size)}
-		for i := 0; i < size; i++ {
+		for i := range size {
 			// Distinct genomes → Diversity() == 1.0: no collapse, no crisis.
 			pop.Individuals[i] = Individual{Tree: cloneTree(base), Genome: fmt.Sprintf("genome-%d", i)}
 		}
@@ -484,7 +484,7 @@ func TestSelfHealGeneration_ExtractsEvolveSelfHealingStep(t *testing.T) {
 			Individuals: make([]Individual, size),
 			Specialists: registry,
 		}
-		for i := 0; i < size; i++ {
+		for i := range size {
 			// Distinct genomes keep the generation healthy so Observe is isolated
 			// from crisis/resurrection side effects.
 			pop.Individuals[i] = Individual{Tree: cloneTree(base), Fitness: 0.5, Genome: fmt.Sprintf("genome-%d", i)}
@@ -492,7 +492,7 @@ func TestSelfHealGeneration_ExtractsEvolveSelfHealingStep(t *testing.T) {
 		// The two top-fitness individuals carry validated specialist provenance, so
 		// after the helper's fitness sort they occupy the elite window Observe
 		// archives every generation.
-		for i := 0; i < eliteCount; i++ {
+		for i := range eliteCount {
 			pop.Individuals[i].Fitness = 1.0
 			pop.Individuals[i].Meta = &EvolutionMetadata{
 				TreeID:  fmt.Sprintf("planner-%d", i),
@@ -672,7 +672,7 @@ func TestQTable_CapZeroPreservesUnboundedGrowth(t *testing.T) {
 		t.Fatalf("Cap zero value = %d, want 0", qt.Cap)
 	}
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		qt.Update(fmt.Sprintf("s%d", i), "a1", 1.0, 0.1)
 	}
 
@@ -791,7 +791,7 @@ func TestPopulation_EvolveQLearning_AnnealsEpsilonAcrossGenerations(t *testing.T
 	// math twice.
 	want := NewReinforcementLearner()
 	want.ConfigureEpsilonSchedule(1.0, 0.5, 0.01)
-	for i := 0; i < generations; i++ {
+	for range generations {
 		want.DecayEpsilon()
 	}
 	if rl.Epsilon != want.Epsilon {

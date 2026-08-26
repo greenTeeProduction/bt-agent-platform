@@ -807,7 +807,7 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 			Type:    eventType,
 			Source:  job.AgentName,
 			Message: fmt.Sprintf("%s: %s (%s)", job.AgentName, outcome, duration.Truncate(time.Second)),
-			Data: map[string]interface{}{
+			Data: map[string]any{
 				"tree":           tree,
 				"task":           runCtx.Task,
 				"outcome":        outcome,

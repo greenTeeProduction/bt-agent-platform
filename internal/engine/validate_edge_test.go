@@ -225,7 +225,7 @@ func TestWalkValidate_DepthLimitExceeded(t *testing.T) {
 func TestWalkValidate_NodeCountLimitExceeded(t *testing.T) {
 	// Build tree exceeding DefaultMaxNodes (200)
 	root := &evolution.SerializableNode{Type: "Sequence", Name: "Root"}
-	for i := 0; i < 210; i++ {
+	for range 210 {
 		root.Children = append(root.Children, evolution.SerializableNode{
 			Type: "Action",
 			Name: "SetupDefaultTools",
@@ -255,7 +255,7 @@ func TestWalkValidate_ParallelWidthLimitExceeded(t *testing.T) {
 		Type: "Parallel",
 		Name: "RootPar",
 	}
-	for i := 0; i < 15; i++ {
+	for range 15 {
 		tree.Children = append(tree.Children, evolution.SerializableNode{
 			Type: "Action",
 			Name: "SetupDefaultTools",

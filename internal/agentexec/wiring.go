@@ -3,7 +3,7 @@ package agentexec
 import (
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 
 	"github.com/nico/go-bt-evolve/internal/a2a"
 	"github.com/nico/go-bt-evolve/internal/agent"
@@ -140,7 +140,7 @@ func resolveUserTree(id string) *evolution.SerializableNode {
 			names = append(names, u.Name())
 		}
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	for _, user := range names {
 		tree, err := evolution.LoadNamedTree(filepath.Join(root, user, "trees"), id)
 		if err == nil && tree != nil {

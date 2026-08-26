@@ -84,7 +84,7 @@ func TestStore_MultipleRecords(t *testing.T) {
 	dir := t.TempDir()
 	store, _ := NewStore(dir)
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		outcome := Success
 		if i >= 3 {
 			outcome = Failure

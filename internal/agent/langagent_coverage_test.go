@@ -78,7 +78,7 @@ func TestRunTaskTool_Call(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(result), &out); err != nil {
 		t.Fatalf("failed to unmarshal result: %v", err)
 	}
@@ -124,7 +124,7 @@ func TestReflectTool_Call_WithLLM(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(result), &out); err != nil {
 		t.Fatalf("failed to unmarshal: %v", err)
 	}
@@ -159,7 +159,7 @@ func TestFitnessTool_Call(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(result), &out); err != nil {
 		t.Fatalf("failed to unmarshal: %v", err)
 	}
@@ -188,7 +188,7 @@ func TestFitnessTool_Call_NoData(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(result), &out); err != nil {
 		t.Fatalf("failed to unmarshal: %v", err)
 	}
@@ -319,7 +319,7 @@ func TestGetReflectionsTool_Call_NoRecords(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(result), &out); err != nil {
 		t.Fatalf("failed to unmarshal: %v", err)
 	}
@@ -349,7 +349,7 @@ func TestGetReflectionsTool_Call_WithRecords(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(result), &out); err != nil {
 		t.Fatalf("failed to unmarshal: %v", err)
 	}
@@ -363,7 +363,7 @@ func TestGetReflectionsTool_Call_Truncation(t *testing.T) {
 	// More than 5 → only last 5 returned
 	refStore, _ := newTestStores(t)
 
-	for i := 0; i < 7; i++ {
+	for range 7 {
 		saveRecordWithDelay(t, refStore, &evolution.Record{
 			Task:    "task",
 			Outcome: evolution.Success,
@@ -376,7 +376,7 @@ func TestGetReflectionsTool_Call_Truncation(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(result), &out); err != nil {
 		t.Fatalf("failed to unmarshal: %v", err)
 	}
@@ -532,7 +532,7 @@ func TestEvolvedAgent_Run_WithAutoEvolve(t *testing.T) {
 	cfg.LangLLM = &mockModelCorrect{}
 
 	// Seed 3 failures to trigger auto-evolve
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		saveRecordWithDelay(t, cfg.BB.Reflections, &evolution.Record{
 			Task:    "task",
 			Outcome: evolution.Failure,
@@ -654,7 +654,7 @@ func TestNewEvolvedAgent_AllToolsRegistered(t *testing.T) {
 	}
 
 	// Verify all 6 tools are of correct types (without factory)
-	expectedTypes := map[string]interface{}{
+	expectedTypes := map[string]any{
 		"bt_run_task":        &RunTaskTool{},
 		"bt_reflect":         &ReflectTool{},
 		"bt_get_fitness":     &FitnessTool{},

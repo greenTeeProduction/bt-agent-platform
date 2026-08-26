@@ -60,8 +60,7 @@ func (r *ErrorRecorder) record(err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.lastErr = err
-	var rle *reliability.RateLimitError
-	if errors.As(err, &rle) {
+	if _, ok := errors.AsType[*reliability.RateLimitError](err); ok {
 		r.rateLimitErr = err
 	}
 }

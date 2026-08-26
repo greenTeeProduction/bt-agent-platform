@@ -62,7 +62,6 @@ func TestArc42TreesRootShape(t *testing.T) {
 	wantChildTypes := []string{"Sequence", "Selector", "Action", "Action", "Action"}
 
 	for _, spec := range arc42Sections {
-		spec := spec
 		t.Run(spec.key, func(t *testing.T) {
 			root, ok := trees[spec.key]
 			if !ok || root == nil {
@@ -94,7 +93,6 @@ func TestArc42TreesRootShape(t *testing.T) {
 func TestArc42TreesPreGateConditions(t *testing.T) {
 	trees := Arc42Trees()
 	for _, spec := range arc42Sections {
-		spec := spec
 		t.Run(spec.key, func(t *testing.T) {
 			root := trees[spec.key]
 			if root == nil || len(root.Children) == 0 {
@@ -122,7 +120,6 @@ func TestArc42TreesPreGateConditions(t *testing.T) {
 func TestArc42TreesStrategyRouterChildCount(t *testing.T) {
 	trees := Arc42Trees()
 	for _, spec := range arc42Sections {
-		spec := spec
 		t.Run(spec.key, func(t *testing.T) {
 			root := trees[spec.key]
 			if root == nil || len(root.Children) < 2 {
@@ -161,20 +158,6 @@ func TestArc42TreesChainHelperBuildsChainActionNode(t *testing.T) {
 	}
 	if got != 4096 {
 		t.Errorf("node.Metadata[%q] = %v, want 4096", "max_tokens", got)
-	}
-}
-
-// TestArc42TreesTreeHelperWrapsRoot pins tree()'s behavior: it takes a
-// SerializableNode by value and returns a pointer to an equal copy, letting
-// each sectionN function build its root inline as a value.
-func TestArc42TreesTreeHelperWrapsRoot(t *testing.T) {
-	root := seq("Root", "root description", cond("C1", "d1"))
-	got := tree(root)
-	if got == nil {
-		t.Fatal("tree() returned nil")
-	}
-	if !reflect.DeepEqual(*got, root) {
-		t.Errorf("*tree(root) = %+v, want %+v", *got, root)
 	}
 }
 

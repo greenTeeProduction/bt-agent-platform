@@ -44,12 +44,12 @@ func ActivateAutomation(reg *agent.Registry, user, agentName, treeID, signature,
 // bt_hitl_reject path and the dashboard's HITL resolution path finalize
 // automations identically: dashboard-approved/rejected automations
 // activate, resume, and quarantine exactly like the MCP path.
-func FinalizeAutomationApproval(reg *agent.Registry, store *Store, req *hitl.Request, approved bool) map[string]interface{} {
+func FinalizeAutomationApproval(reg *agent.Registry, store *Store, req *hitl.Request, approved bool) map[string]any {
 	if req == nil || req.Context["automation"] != "true" {
 		return nil
 	}
 	user := req.Context["user"]
-	out := map[string]interface{}{"automation": true, "user": user}
+	out := map[string]any{"automation": true, "user": user}
 	var ledger *AutomationStore
 	if store != nil && user != "" {
 		ledger, _ = NewAutomationStore(store.Workspace(user))

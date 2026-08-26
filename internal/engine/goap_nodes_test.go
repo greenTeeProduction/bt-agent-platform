@@ -22,25 +22,25 @@ func TestAction_PlanGoapActions_JSONActions(t *testing.T) {
 	// The actions must form a valid planning chain: preconditions → effects → goal
 	bb := &Blackboard{
 		Task: "build a deployment pipeline",
-		ChainState: map[string]interface{}{
-			"goap_actions": []interface{}{
-				map[string]interface{}{
+		ChainState: map[string]any{
+			"goap_actions": []any{
+				map[string]any{
 					"name": "analyze_requirements",
 					"cost": 1.0,
-					"preconditions": map[string]interface{}{
+					"preconditions": map[string]any{
 						"has_result": false,
 					},
-					"effects": map[string]interface{}{
+					"effects": map[string]any{
 						"has_analysis": true,
 					},
 				},
-				map[string]interface{}{
+				map[string]any{
 					"name": "execute_build",
 					"cost": 2.0,
-					"preconditions": map[string]interface{}{
+					"preconditions": map[string]any{
 						"has_analysis": true,
 					},
-					"effects": map[string]interface{}{
+					"effects": map[string]any{
 						"has_result":  true,
 						"task_status": "completed",
 					},
@@ -80,26 +80,26 @@ func TestAction_PlanGoapActions_JSONActionsInvalidEntry(t *testing.T) {
 	// actions must still form a viable plan chain.
 	bb := &Blackboard{
 		Task: "build a deployment pipeline",
-		ChainState: map[string]interface{}{
-			"goap_actions": []interface{}{
-				map[string]interface{}{
+		ChainState: map[string]any{
+			"goap_actions": []any{
+				map[string]any{
 					"name": "analyze_requirements",
 					"cost": 1.0,
-					"preconditions": map[string]interface{}{
+					"preconditions": map[string]any{
 						"has_result": false,
 					},
-					"effects": map[string]interface{}{
+					"effects": map[string]any{
 						"has_analysis": true,
 					},
 				},
 				"not_a_map", // invalid entry — should be skipped
-				map[string]interface{}{
+				map[string]any{
 					"name": "execute_build",
 					"cost": 2.0,
-					"preconditions": map[string]interface{}{
+					"preconditions": map[string]any{
 						"has_analysis": true,
 					},
-					"effects": map[string]interface{}{
+					"effects": map[string]any{
 						"has_result":  true,
 						"task_status": "completed",
 					},
@@ -128,8 +128,8 @@ func TestAction_PlanGoapActions_JSONActionsEmptyAfterFilter(t *testing.T) {
 	}
 	bb := &Blackboard{
 		Task: "build something",
-		ChainState: map[string]interface{}{
-			"goap_actions": []interface{}{
+		ChainState: map[string]any{
+			"goap_actions": []any{
 				"not_a_map",
 				"also_not_a_map",
 			},
@@ -152,7 +152,7 @@ func TestAction_PlanGoapActions_CustomGoal(t *testing.T) {
 	}
 	bb := &Blackboard{
 		Task: "build a deployment pipeline",
-		ChainState: map[string]interface{}{
+		ChainState: map[string]any{
 			"goap_actions": []goap.Action{
 				{
 					Name:          "analyze_requirements",
@@ -191,7 +191,7 @@ func TestAction_PlanGoapActions_WorldStateFromTask(t *testing.T) {
 	// Use actions whose preconditions are satisfied by this default state.
 	bb := &Blackboard{
 		Task: "analyze the quarterly results",
-		ChainState: map[string]interface{}{
+		ChainState: map[string]any{
 			"goap_actions": []goap.Action{
 				{
 					Name:          "analyze_requirements",
@@ -230,7 +230,7 @@ func TestAction_PlanGoapActions_NoPlanFound(t *testing.T) {
 	// Impossible goal with no matching actions
 	bb := &Blackboard{
 		Task: "impossible task",
-		ChainState: map[string]interface{}{
+		ChainState: map[string]any{
 			"goap_actions": []goap.Action{
 				{
 					Name:          "simple_action",
@@ -264,7 +264,7 @@ func TestAction_PlanGoapActions_WrongActionsType(t *testing.T) {
 	// goap_actions is a string — not []goap.Action or []interface{}
 	bb := &Blackboard{
 		Task: "build something",
-		ChainState: map[string]interface{}{
+		ChainState: map[string]any{
 			"goap_actions": "not_an_action_slice",
 		},
 	}
@@ -285,7 +285,7 @@ func TestAction_PlanGoapActions_WithGoapConfig(t *testing.T) {
 	}
 	bb := &Blackboard{
 		Task: "build a deployment pipeline",
-		ChainState: map[string]interface{}{
+		ChainState: map[string]any{
 			"goap_actions": []goap.Action{
 				{
 					Name:          "analyze_requirements",
@@ -347,7 +347,7 @@ func TestAction_ExecuteGoapStep_WithLLM(t *testing.T) {
 	bb := &Blackboard{
 		Task: "build a pipeline",
 		LLM:  &MockLLM{},
-		ChainState: map[string]interface{}{
+		ChainState: map[string]any{
 			"goap_step_index": 0,
 			"goap_steps":      []string{"analyze_requirements", "execute_build"},
 			"goap_plan":       stepPlan,
@@ -397,7 +397,7 @@ func TestAction_ExecuteGoapStep_WithNoPlan(t *testing.T) {
 	bb := &Blackboard{
 		Task: "build a pipeline",
 		LLM:  &MockLLM{},
-		ChainState: map[string]interface{}{
+		ChainState: map[string]any{
 			"goap_step_index": 0,
 			"goap_steps":      []string{"analyze_requirements"},
 			// No goap_plan — safe fallback
@@ -422,7 +422,7 @@ func TestAction_ExecuteGoapStep_LLMFailure(t *testing.T) {
 	bb := &Blackboard{
 		Task: "build a pipeline",
 		LLM:  llm,
-		ChainState: map[string]interface{}{
+		ChainState: map[string]any{
 			"goap_step_index": 0,
 			"goap_steps":      []string{"analyze_requirements"},
 		},
@@ -445,7 +445,7 @@ func TestAction_ExecuteGoapStep_NoLLM(t *testing.T) {
 	bb := &Blackboard{
 		Task: "build a pipeline",
 		// No LLM — should fall through to no-LLM path
-		ChainState: map[string]interface{}{
+		ChainState: map[string]any{
 			"goap_step_index": 0,
 			"goap_steps":      []string{"analyze_requirements"},
 		},
@@ -489,7 +489,7 @@ func TestAction_SetupGoapTools_NilChainState(t *testing.T) {
 // ─── buildGoapStepPrompt — prior result injection ──────────────────────────
 
 func TestBuildGoapStepPrompt_IncludesPriorResults(t *testing.T) {
-	cs := map[string]interface{}{
+	cs := map[string]any{
 		"goap_step_results": []GoapStepResult{
 			{Step: 1, Result: "analyzed requirements successfully"},
 			{Step: 2, Result: "built deployment pipeline config"},
@@ -510,7 +510,7 @@ func TestBuildGoapStepPrompt_IncludesPriorResults(t *testing.T) {
 func TestBuildGoapStepPrompt_CapsLongPriorResult(t *testing.T) {
 	// Build a result > goapPriorResultCap (600 chars)
 	longResult := strings.Repeat("x", goapPriorResultCap+200)
-	cs := map[string]interface{}{
+	cs := map[string]any{
 		"goap_step_results": []GoapStepResult{
 			{Step: 1, Result: longResult},
 		},
@@ -527,7 +527,7 @@ func TestBuildGoapStepPrompt_CapsLongPriorResult(t *testing.T) {
 }
 
 func TestBuildGoapStepPrompt_NoPriorResults(t *testing.T) {
-	cs := map[string]interface{}{}
+	cs := map[string]any{}
 	prompt := buildGoapStepPrompt("task", "step1", cs)
 	if stringContains(prompt, "Prior step results:") {
 		t.Error("prompt without prior results should not include header")
@@ -556,7 +556,7 @@ func TestAction_ExecuteGoapStep_AccumulatesAndSynthesizes(t *testing.T) {
 	bb := &Blackboard{
 		Task: "build a pipeline",
 		LLM:  &MockLLM{GenerateResp: "mock step output"},
-		ChainState: map[string]interface{}{
+		ChainState: map[string]any{
 			"goap_step_index": 0,
 			"goap_steps":      []string{"analyze_requirements", "execute_build"},
 			"goap_plan":       stepPlan,
@@ -632,7 +632,7 @@ func TestAction_ExecuteGoapStep_AccumulatesAndSynthesizes(t *testing.T) {
 func TestAction_ReflectGoapOutcome_NoResultsFallsBack(t *testing.T) {
 	bb := &Blackboard{
 		Outcome: "success",
-		ChainState: map[string]interface{}{
+		ChainState: map[string]any{
 			"goap_plan_found": true,
 		},
 	}

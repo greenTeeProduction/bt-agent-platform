@@ -2,9 +2,10 @@ package engine
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -91,7 +92,7 @@ func registerGoapFusionProductionAdditions() {
 		// task, and the biggest catalog/research goals are exactly the ones
 		// that tend to arrive pathless.
 		var scopedLines []string
-		for _, line := range strings.Split(goals, "\n") {
+		for line := range strings.SplitSeq(goals, "\n") {
 			scopedLines = append(scopedLines, scopeGoapGoalLine(line))
 		}
 		// The saturation check hashes the grep-scoped but NOT graphify-enriched
@@ -442,7 +443,7 @@ func goapFusionMaterializerSnapshotsSection(bb *Blackboard) string {
 			continue
 		}
 		changed := 0
-		for _, line := range strings.Split(string(data), "\n") {
+		for line := range strings.SplitSeq(string(data), "\n") {
 			if strings.HasPrefix(line, "diff --git ") {
 				changed++
 			}
@@ -453,7 +454,7 @@ func goapFusionMaterializerSnapshotsSection(bb *Blackboard) string {
 	if len(lines) == 0 {
 		return ""
 	}
-	sort.Strings(lines)
+	slices.Sort(lines)
 	markGoapFusionReportedSnapshots(bb, newNames)
 	return "\n\n## Materializer Snapshots\n\nMaterializer snapshot patch(es) written since the prior cycle (a bare-repo wipe was snapshotted before materializing, never destructive):\n\n" + strings.Join(lines, "\n")
 }
@@ -473,7 +474,7 @@ func loadGoapFusionReportedSnapshots(bb *Blackboard) map[string]bool {
 	if err != nil {
 		return reported
 	}
-	for _, name := range strings.Split(e.Value, "\n") {
+	for name := range strings.SplitSeq(e.Value, "\n") {
 		if name = strings.TrimSpace(name); name != "" {
 			reported[name] = true
 		}
@@ -493,11 +494,7 @@ func markGoapFusionReportedSnapshots(bb *Blackboard, names []string) {
 	for _, n := range names {
 		reported[n] = true
 	}
-	all := make([]string, 0, len(reported))
-	for n := range reported {
-		all = append(all, n)
-	}
-	sort.Strings(all)
+	all := slices.Sorted(maps.Keys(reported))
 	_ = bb.BB.Mgr.Set(scope, "goap_fusion_reported_materializer_snapshots", strings.Join(all, "\n"),
 		"durable set of materializer snapshot filenames already surfaced in a cycle report", "text")
 }
@@ -517,7 +514,7 @@ func goapFusionParkedBranchesSection() string {
 	}
 	cutoff := time.Now().Add(-24 * time.Hour)
 	var lines []string
-	for _, raw := range strings.Split(out, "\n") {
+	for raw := range strings.SplitSeq(out, "\n") {
 		raw = strings.TrimSpace(raw)
 		if raw == "" {
 			continue
@@ -536,7 +533,7 @@ func goapFusionParkedBranchesSection() string {
 	if len(lines) == 0 {
 		return ""
 	}
-	sort.Strings(lines)
+	slices.Sort(lines)
 	return "\n\n## Parked Work (pending_patch)\n\nUnmerged superpowers/* branch(es) older than 24h — parked-run triage backlog:\n\n" + strings.Join(lines, "\n")
 }
 
@@ -547,9 +544,9 @@ func goapBacktickValueAfter(s, prefix string) string {
 	}
 	start := idx + len(prefix)
 	rest := s[start:]
-	end := strings.Index(rest, "`")
-	if end < 0 {
+	before, _, ok := strings.Cut(rest, "`")
+	if !ok {
 		return ""
 	}
-	return strings.TrimSpace(rest[:end])
+	return strings.TrimSpace(before)
 }

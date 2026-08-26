@@ -1,10 +1,11 @@
 package dashboard
 
 import (
+	"cmp"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"sort"
+	"slices"
 	"sync"
 	"time"
 
@@ -431,7 +432,7 @@ func (w *Workflow) distinctSprintTargets() []int {
 			sprints = append(sprints, t.SprintTarget)
 		}
 	}
-	sort.Ints(sprints)
+	slices.Sort(sprints)
 	return sprints
 }
 
@@ -492,10 +493,10 @@ func (w *Workflow) RunFullPipeline(ttOrch interface {
 // ─── Helpers ───
 
 func sortTasks(tasks []WorkflowTask) {
-	sort.SliceStable(tasks, func(i, j int) bool {
-		if tasks[i].Priority != tasks[j].Priority {
-			return tasks[i].Priority < tasks[j].Priority
-		}
-		return tasks[i].SprintTarget < tasks[j].SprintTarget
+	slices.SortStableFunc(tasks, func(a, b WorkflowTask) int {
+		return cmp.Or(
+			cmp.Compare(a.Priority, b.Priority),
+			cmp.Compare(a.SprintTarget, b.SprintTarget),
+		)
 	})
 }

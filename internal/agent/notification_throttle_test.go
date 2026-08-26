@@ -62,7 +62,7 @@ func taskCompleteEvent(agent, outcome, summary string) AgentEvent {
 		Type:      "task_complete",
 		Source:    agent,
 		Message:   agent + ": " + outcome,
-		Data:      map[string]interface{}{"outcome": outcome, "summary": summary, "tree": "domain:test"},
+		Data:      map[string]any{"outcome": outcome, "summary": summary, "tree": "domain:test"},
 		Timestamp: time.Now(),
 	}
 }

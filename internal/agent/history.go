@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"sync"
 	"time"
 )
@@ -213,8 +213,8 @@ func (h *History) loadAll() error {
 
 	// Sort each agent's runs by time
 	for _, runs := range h.byName {
-		sort.Slice(runs, func(i, j int) bool {
-			return runs[i].EndedAt.Before(runs[j].EndedAt)
+		slices.SortFunc(runs, func(a, b RunRecord) int {
+			return a.EndedAt.Compare(b.EndedAt)
 		})
 	}
 
@@ -224,7 +224,7 @@ func (h *History) loadAll() error {
 func splitLines(s string) []string {
 	var lines []string
 	start := 0
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		if s[i] == '\n' {
 			lines = append(lines, s[start:i])
 			start = i + 1

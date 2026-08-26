@@ -7,16 +7,10 @@ import (
 
 func TestEnvOverride_OpenRouter(t *testing.T) {
 	os.Unsetenv("BT_CONFIG_FILE")
-	os.Setenv("BT_LLM_PROVIDER", "openrouter")
-	os.Setenv("OPENROUTER_API_KEY", "sk-or-test")
-	os.Setenv("BT_OPENROUTER_MODEL", "openrouter/model")
-	os.Setenv("OPENROUTER_HOST", "https://example.test/v1")
-	defer func() {
-		os.Unsetenv("BT_LLM_PROVIDER")
-		os.Unsetenv("OPENROUTER_API_KEY")
-		os.Unsetenv("BT_OPENROUTER_MODEL")
-		os.Unsetenv("OPENROUTER_HOST")
-	}()
+	t.Setenv("BT_LLM_PROVIDER", "openrouter")
+	t.Setenv("OPENROUTER_API_KEY", "sk-or-test")
+	t.Setenv("BT_OPENROUTER_MODEL", "openrouter/model")
+	t.Setenv("OPENROUTER_HOST", "https://example.test/v1")
 
 	cfg, err := Load()
 	if err != nil {

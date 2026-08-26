@@ -1,8 +1,9 @@
 package knowledge
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -77,8 +78,8 @@ func (kg *KnowledgeGraph) ComputeAnalytics() Analytics {
 	for id, count := range dependents {
 		a.Centrality = append(a.Centrality, CentralityEntry{TreeID: id, Dependents: count})
 	}
-	sort.Slice(a.Centrality, func(i, j int) bool {
-		return a.Centrality[i].Dependents > a.Centrality[j].Dependents
+	slices.SortFunc(a.Centrality, func(x, y CentralityEntry) int {
+		return cmp.Compare(y.Dependents, x.Dependents)
 	})
 
 	// 2. Tool contention: trees sharing tools
@@ -102,8 +103,8 @@ func (kg *KnowledgeGraph) ComputeAnalytics() Analytics {
 			Risk:   risk,
 		})
 	}
-	sort.Slice(a.ToolContention, func(i, j int) bool {
-		return len(a.ToolContention[i].Trees) > len(a.ToolContention[j].Trees)
+	slices.SortFunc(a.ToolContention, func(x, y ContentionEntry) int {
+		return cmp.Compare(len(y.Trees), len(x.Trees))
 	})
 
 	// 3. Coverage gaps: expected domain trees not registered in the graph. The
@@ -148,8 +149,8 @@ func (kg *KnowledgeGraph) ComputeAnalytics() Analytics {
 			a.Bottlenecks = append(a.Bottlenecks, entry)
 		}
 	}
-	sort.Slice(a.Bottlenecks, func(i, j int) bool {
-		return a.Bottlenecks[i].SuccessRate < a.Bottlenecks[j].SuccessRate
+	slices.SortFunc(a.Bottlenecks, func(x, y BottleneckEntry) int {
+		return cmp.Compare(x.SuccessRate, y.SuccessRate)
 	})
 
 	// 5. Selection pressure: proven trees (high fitness) that are underbred
@@ -164,8 +165,8 @@ func (kg *KnowledgeGraph) ComputeAnalytics() Analytics {
 			})
 		}
 	}
-	sort.Slice(a.SelectionPressure, func(i, j int) bool {
-		return a.SelectionPressure[i].Fitness > a.SelectionPressure[j].Fitness
+	slices.SortFunc(a.SelectionPressure, func(x, y SelectionPressureEntry) int {
+		return cmp.Compare(y.Fitness, x.Fitness)
 	})
 
 	// 6. Suggested actions

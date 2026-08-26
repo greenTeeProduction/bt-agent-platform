@@ -138,10 +138,9 @@ func (o *CompanyOrchestrator) RunSprint() *SprintResult {
 		result.Deferred = append(result.Deferred, fmt.Sprintf("marketing: %v", mktErr))
 	} else {
 		// Simulate user acquisition from marketing
-		newUsers := state.MarketingStaff * 50 // ~50 users per marketer per sprint
-		if newUsers < 10 {
-			newUsers = 10
-		}
+		newUsers := max(
+			// ~50 users per marketer per sprint
+			state.MarketingStaff*50, 10)
 		state.Users += newUsers
 
 		// Marketing spend reduces CAC efficiency slightly but grows top of funnel
@@ -160,10 +159,7 @@ func (o *CompanyOrchestrator) RunSprint() *SprintResult {
 		// Burn rate increases slightly as team produces more
 		state.BurnRate *= 1.01
 		state.CashInBank -= state.BurnRate / 4.0 // weekly burn
-		state.Runway = int(state.CashInBank / state.BurnRate)
-		if state.Runway < 0 {
-			state.Runway = 0
-		}
+		state.Runway = max(int(state.CashInBank/state.BurnRate), 0)
 	}
 
 	// After all roles: update churn trend (slightly improve with better product)
@@ -192,7 +188,7 @@ func (o *CompanyOrchestrator) RunQuarter() *QuarterResult {
 	// Run 12 sprints (2-week sprints = 24 weeks ≈ 1 quarter). RunSprint locks
 	// state itself per call, so the lock must be released here first —
 	// state.Lock() is not reentrant.
-	for i := 0; i < 12; i++ {
+	for range 12 {
 		o.RunSprint()
 	}
 
@@ -244,7 +240,7 @@ func (o *CompanyOrchestrator) RunQuarter() *QuarterResult {
 // RunYear executes four quarters and returns the results.
 func (o *CompanyOrchestrator) RunYear() []QuarterResult {
 	results := make([]QuarterResult, 0, 4)
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		qr := o.RunQuarter()
 		results = append(results, *qr)
 	}

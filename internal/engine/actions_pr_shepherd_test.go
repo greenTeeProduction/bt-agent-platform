@@ -107,15 +107,15 @@ func (g *fakeGitHub) server() *httptest.Server {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		g.requests = append(g.requests, r.Method+" "+r.URL.Path+"?"+r.URL.RawQuery)
 		switch {
-		case r.Method == "GET" && strings.HasSuffix(r.URL.Path, "/pulls"):
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/pulls"):
 			_ = json.NewEncoder(w).Encode(g.openPRs)
-		case r.Method == "POST" && strings.HasSuffix(r.URL.Path, "/pulls"):
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/pulls"):
 			w.WriteHeader(http.StatusCreated)
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"number": 77,
 				"head":   map[string]any{"sha": "localsha", "ref": "fleet/landing"},
 			})
-		case r.Method == "GET" && strings.HasSuffix(r.URL.Path, "/protection/required_status_checks"):
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/protection/required_status_checks"):
 			if g.protectionCode != 0 {
 				w.WriteHeader(g.protectionCode)
 				_ = json.NewEncoder(w).Encode(map[string]any{"message": "no"})
@@ -129,28 +129,28 @@ func (g *fakeGitHub) server() *httptest.Server {
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"strict": g.requiredStrict, "contexts": g.requiredContexts,
 			})
-		case r.Method == "GET" && strings.Contains(r.URL.Path, "/commits/") && strings.HasSuffix(r.URL.Path, "/status"):
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/commits/") && strings.HasSuffix(r.URL.Path, "/status"):
 			parts := strings.Split(r.URL.Path, "/")
 			sha := parts[len(parts)-2]
 			st := g.statuses[sha]
 			_ = json.NewEncoder(w).Encode(map[string]any{"statuses": st})
-		case r.Method == "GET" && strings.Contains(r.URL.Path, "/commits/") && strings.HasSuffix(r.URL.Path, "/check-runs"):
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/commits/") && strings.HasSuffix(r.URL.Path, "/check-runs"):
 			parts := strings.Split(r.URL.Path, "/")
 			sha := parts[len(parts)-2]
 			runs := g.checkRuns[sha]
 			_ = json.NewEncoder(w).Encode(map[string]any{"total_count": len(runs), "check_runs": runs})
-		case r.Method == "GET" && strings.Contains(r.URL.Path, "/check-runs/") && strings.HasSuffix(r.URL.Path, "/annotations"):
+		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/check-runs/") && strings.HasSuffix(r.URL.Path, "/annotations"):
 			var id int64
 			_, _ = fmt.Sscanf(r.URL.Path[strings.Index(r.URL.Path, "/check-runs/")+len("/check-runs/"):], "%d", &id)
 			_ = json.NewEncoder(w).Encode(g.annotations[id])
-		case r.Method == "PUT" && strings.HasSuffix(r.URL.Path, "/merge"):
+		case r.Method == http.MethodPut && strings.HasSuffix(r.URL.Path, "/merge"):
 			if g.mergeCode != 0 {
 				w.WriteHeader(g.mergeCode)
 				_ = json.NewEncoder(w).Encode(map[string]any{"message": g.mergeMsg})
 				return
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"merged": true})
-		case r.Method == "DELETE" && strings.Contains(r.URL.Path, "/git/refs/"):
+		case r.Method == http.MethodDelete && strings.Contains(r.URL.Path, "/git/refs/"):
 			w.WriteHeader(http.StatusNoContent)
 		default:
 			g.t.Errorf("fakeGitHub: unexpected request %s %s", r.Method, r.URL.Path)

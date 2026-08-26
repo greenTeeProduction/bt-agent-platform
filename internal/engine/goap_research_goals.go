@@ -9,10 +9,11 @@ package engine
 // actually fan out to multi-task cycles.
 
 import (
+	"cmp"
 	"fmt"
 	"os/exec"
 	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -54,7 +55,7 @@ var goapGoalBlockRe = regexp.MustCompile(`^(GOAL|GAP|FILES)(\d?):\s*(.*)$`)
 func extractGoapResearchGoals(answer string) []goapResearchGoal {
 	byIndex := map[string]*goapResearchGoal{}
 	var order []string
-	for _, line := range strings.Split(answer, "\n") {
+	for line := range strings.SplitSeq(answer, "\n") {
 		trimmed := strings.TrimSpace(strings.Trim(line, "-*• \t"))
 		trimmed = strings.TrimSpace(strings.ReplaceAll(trimmed, "**", ""))
 		m := goapGoalBlockRe.FindStringSubmatch(strings.ToUpper(trimmed))
@@ -81,7 +82,7 @@ func extractGoapResearchGoals(answer string) []goapResearchGoal {
 			byIndex[idx].Files = value
 		}
 	}
-	sort.Strings(order)
+	slices.Sort(order)
 	var goals []goapResearchGoal
 	for _, idx := range order {
 		if g := byIndex[idx]; strings.TrimSpace(g.Goal) != "" {
@@ -207,7 +208,7 @@ func isActionableGoapGoal(goal string) bool {
 // prose summaries into planned tasks. All-prose answers yield "" (the caller
 // then treats the research as having produced nothing).
 func fallbackGoapGoal(answer string) string {
-	for _, line := range strings.Split(answer, "\n") {
+	for line := range strings.SplitSeq(answer, "\n") {
 		line = strings.TrimSpace(strings.Trim(line, "-*# "))
 		if line == "" || strings.HasPrefix(line, "{") || strings.HasPrefix(line, "}") {
 			continue
@@ -240,10 +241,10 @@ func goapResearchGapLines(bb *Blackboard) []string {
 // the gap analysis (the singular legacy variant returns only the first).
 func goapFusionNotebookLMGoalsFromGaps(gaps string) []string {
 	var out []string
-	for _, line := range strings.Split(gaps, "\n") {
+	for line := range strings.SplitSeq(gaps, "\n") {
 		t := strings.TrimSpace(line)
-		if strings.HasPrefix(t, "NOTEBOOKLM_GOAL:") {
-			out = append(out, strings.TrimSpace(strings.TrimPrefix(t, "NOTEBOOKLM_GOAL:")))
+		if after, ok := strings.CutPrefix(t, "NOTEBOOKLM_GOAL:"); ok {
+			out = append(out, strings.TrimSpace(after))
 		}
 	}
 	return out
@@ -267,7 +268,7 @@ func collapseToSingleLine(s string) string {
 
 func splitNonEmptyLines(s string) []string {
 	var lines []string
-	for _, l := range strings.Split(s, "\n") {
+	for l := range strings.SplitSeq(s, "\n") {
 		if t := strings.TrimSpace(l); t != "" {
 			lines = append(lines, t)
 		}
@@ -287,7 +288,7 @@ var goapMilestoneRe = regexp.MustCompile(`^MILESTONE(\d+):\s*(.+)$`)
 
 func extractGoapProgram(answer string) *goapProgramSpec {
 	var spec *goapProgramSpec
-	for _, line := range strings.Split(answer, "\n") {
+	for line := range strings.SplitSeq(answer, "\n") {
 		trimmed := strings.TrimSpace(strings.Trim(line, "-*• \t"))
 		trimmed = strings.TrimSpace(strings.ReplaceAll(trimmed, "**", ""))
 		if strings.HasPrefix(strings.ToUpper(trimmed), "PROGRAM:") {
@@ -344,7 +345,9 @@ func recentImplementedGoals(n int) []string {
 			entries = append(entries, e)
 		}
 	}
-	sort.Slice(entries, func(i, j int) bool { return entries[i].LastSeen.After(entries[j].LastSeen) })
+	slices.SortFunc(entries, func(a, b *research.Entry) int {
+		return b.LastSeen.Compare(a.LastSeen)
+	})
 	var titles []string
 	for _, e := range entries {
 		titles = append(titles, e.Title)
@@ -437,7 +440,7 @@ func completeGoapProgramMilestone(bb *Blackboard, run *SuperpowersRun) {
 			// A batched cycle stamps several comma-joined refs; each milestone is
 			// verified against the run's file anchors independently before being
 			// checked off.
-			for _, ref := range strings.Split(refBlob, ",") {
+			for ref := range strings.SplitSeq(refBlob, ",") {
 				parts := strings.SplitN(strings.TrimSpace(ref), ":", 2)
 				if len(parts) != 2 {
 					continue
@@ -582,7 +585,7 @@ var goapScopeGrepFn = func(keyword string) []string {
 		return nil
 	}
 	var files []string
-	for _, l := range strings.Split(string(out), "\n") {
+	for l := range strings.SplitSeq(string(out), "\n") {
 		l = strings.TrimSpace(strings.TrimPrefix(l, "HEAD:"))
 		if l != "" && !strings.HasSuffix(l, "_test.go") {
 			files = append(files, l)
@@ -604,7 +607,7 @@ func scopeGoapGoalLine(line string) string {
 	var keywords []string
 	for _, kw := range goapScopeKeywordRe.FindAllString(strings.ToLower(line), -1) {
 		keywords = append(keywords, kw)
-		for _, part := range strings.Split(kw, "-") {
+		for part := range strings.SplitSeq(kw, "-") {
 			if len(part) >= 6 && part != kw {
 				keywords = append(keywords, part)
 			}
@@ -629,7 +632,9 @@ func scopeGoapGoalLine(line string) string {
 	if len(hits) == 0 {
 		return line
 	}
-	sort.SliceStable(hits, func(i, j int) bool { return counts[hits[i]] > counts[hits[j]] })
+	slices.SortStableFunc(hits, func(a, b string) int {
+		return cmp.Compare(counts[b], counts[a])
+	})
 	if len(hits) > 3 {
 		hits = hits[:3]
 	}

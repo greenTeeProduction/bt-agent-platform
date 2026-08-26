@@ -3,6 +3,7 @@ package dashboard
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -82,7 +83,7 @@ func HandleHITL(w http.ResponseWriter, r *http.Request) {
 			Reason   string `json:"reason"`
 		}
 		if r.Method == http.MethodPost {
-			if err := json.NewDecoder(r.Body).Decode(&body); err != nil && err != io.EOF {
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
 				encodeJSON(w, http.StatusBadRequest, map[string]string{"error": "malformed request body: " + err.Error()})
 				return
 			}

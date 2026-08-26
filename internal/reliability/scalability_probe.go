@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -17,12 +18,12 @@ type NodeProbeStatus struct {
 	Name              string             `json:"name"`
 	URL               string             `json:"url"`
 	Healthy           bool               `json:"healthy"`
-	HealthStatusCode  int                `json:"health_status_code,omitempty"`
+	HealthStatusCode  int                `json:"health_status_code,omitzero"`
 	ScalabilityOK     bool               `json:"scalability_ok"`
 	ScalabilityStatus *ScalabilityStatus `json:"scalability_status,omitempty"`
-	ExecuteOK         bool               `json:"execute_ok,omitempty"`
+	ExecuteOK         bool               `json:"execute_ok,omitzero"`
 	ExecuteResult     *AgentResult       `json:"execute_result,omitempty"`
-	LatencyMs         int64              `json:"latency_ms,omitempty"` // total probe duration for this node
+	LatencyMs         int64              `json:"latency_ms,omitzero"` // total probe duration for this node
 	Error             string             `json:"error,omitempty"`
 }
 
@@ -192,7 +193,7 @@ func getJSON(ctx context.Context, client *http.Client, url, apiKey string, dst a
 	}
 	defer resp.Body.Close()
 	if dst != nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		if err := json.NewDecoder(resp.Body).Decode(dst); err != nil && err != io.EOF {
+		if err := json.NewDecoder(resp.Body).Decode(dst); err != nil && !errors.Is(err, io.EOF) {
 			return resp.StatusCode, err
 		}
 	} else {
@@ -238,13 +239,13 @@ type SingleNodeProbeReport struct {
 	CheckedAt         time.Time          `json:"checked_at"`
 	Passed            bool               `json:"passed"`
 	BaseURL           string             `json:"base_url"`
-	HealthStatusCode  int                `json:"health_status_code,omitempty"`
+	HealthStatusCode  int                `json:"health_status_code,omitzero"`
 	Healthy           bool               `json:"healthy"`
 	ScalabilityOK     bool               `json:"scalability_ok"`
 	ScalabilityStatus *ScalabilityStatus `json:"scalability_status,omitempty"`
-	ExecuteOK         bool               `json:"execute_ok,omitempty"`
+	ExecuteOK         bool               `json:"execute_ok,omitzero"`
 	ExecuteResult     *AgentResult       `json:"execute_result,omitempty"`
-	LatencyMs         int64              `json:"latency_ms,omitempty"`
+	LatencyMs         int64              `json:"latency_ms,omitzero"`
 	Error             string             `json:"error,omitempty"`
 }
 

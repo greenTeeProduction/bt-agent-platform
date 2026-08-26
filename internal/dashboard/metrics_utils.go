@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"runtime/debug"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -19,22 +21,22 @@ import (
 
 // Counter is a monotonically increasing counter.
 type Counter struct {
-	value uint64
+	value atomic.Uint64
 }
 
-func (c *Counter) Inc()          { atomic.AddUint64(&c.value, 1) }
-func (c *Counter) Add(n uint64)  { atomic.AddUint64(&c.value, n) }
-func (c *Counter) Value() uint64 { return atomic.LoadUint64(&c.value) }
+func (c *Counter) Inc()          { c.value.Add(1) }
+func (c *Counter) Add(n uint64)  { c.value.Add(n) }
+func (c *Counter) Value() uint64 { return c.value.Load() }
 
 // Gauge is a value that can go up and down.
 type Gauge struct {
-	value int64
+	value atomic.Int64
 }
 
-func (g *Gauge) Set(v int64)  { atomic.StoreInt64(&g.value, v) }
-func (g *Gauge) Inc()         { atomic.AddInt64(&g.value, 1) }
-func (g *Gauge) Dec()         { atomic.AddInt64(&g.value, -1) }
-func (g *Gauge) Value() int64 { return atomic.LoadInt64(&g.value) }
+func (g *Gauge) Set(v int64)  { g.value.Store(v) }
+func (g *Gauge) Inc()         { g.value.Add(1) }
+func (g *Gauge) Dec()         { g.value.Add(-1) }
+func (g *Gauge) Value() int64 { return g.value.Load() }
 
 // Histogram tracks distribution of values.
 type Histogram struct {
@@ -193,10 +195,7 @@ func labelKey(labels map[string]string) string {
 		return ""
 	}
 	// Build a canonical key: sort by key name for deterministic ordering.
-	keys := make([]string, 0, len(labels))
-	for k := range labels {
-		keys = append(keys, k)
-	}
+	keys := slices.Collect(maps.Keys(labels))
 	sortStrings(keys)
 	b := make([]byte, 0, 256)
 	for i, k := range keys {
@@ -320,7 +319,7 @@ func parseLabelKey(key string) map[string]string {
 func splitOn(s string, sep byte) []string {
 	var parts []string
 	start := 0
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		if s[i] == sep {
 			parts = append(parts, s[start:i])
 			start = i + 1
@@ -331,7 +330,7 @@ func splitOn(s string, sep byte) []string {
 }
 
 func indexOf(s string, c byte) int {
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		if s[i] == c {
 			return i
 		}
@@ -534,10 +533,7 @@ func formatPromLabels(labels map[string]string) string {
 	if len(labels) == 0 {
 		return ""
 	}
-	keys := make([]string, 0, len(labels))
-	for k := range labels {
-		keys = append(keys, k)
-	}
+	keys := slices.Collect(maps.Keys(labels))
 	sortStrings(keys)
 	var b strings.Builder
 	b.WriteByte('{')
@@ -575,9 +571,7 @@ func writeLabeledHistogram(w io.Writer, name, help string, lh *LabeledHistogram)
 // withLeLabel returns a copy of labels with the Prometheus "le" bound added.
 func withLeLabel(labels map[string]string, le string) map[string]string {
 	out := make(map[string]string, len(labels)+1)
-	for k, v := range labels {
-		out[k] = v
-	}
+	maps.Copy(out, labels)
 	out["le"] = le
 	return out
 }
@@ -745,10 +739,7 @@ func labelString(labels map[string]string) string {
 	if len(labels) == 0 {
 		return ""
 	}
-	keys := make([]string, 0, len(labels))
-	for k := range labels {
-		keys = append(keys, k)
-	}
+	keys := slices.Collect(maps.Keys(labels))
 	sortStrings(keys)
 	b := make([]byte, 0, 256)
 	for i, k := range keys {
@@ -766,11 +757,11 @@ func labelString(labels map[string]string) string {
 // ─── JSON Export ────────────────────────────────────────────────────────────
 
 // MetricsJSON returns all metrics as a JSON-serializable map.
-func MetricsJSON() map[string]interface{} {
+func MetricsJSON() map[string]any {
 	globalMetrics.mu.RLock()
 	defer globalMetrics.mu.RUnlock()
 
-	agentStats := make([]map[string]interface{}, 0, len(globalMetrics.agents))
+	agentStats := make([]map[string]any, 0, len(globalMetrics.agents))
 	for _, s := range globalMetrics.agents {
 		successRate := 0.0
 		if s.TotalCount > 0 {
@@ -780,7 +771,7 @@ func MetricsJSON() map[string]interface{} {
 		if s.TotalCount > 0 {
 			avgDuration = float64(s.TotalDurationMs) / float64(s.TotalCount)
 		}
-		agentStats = append(agentStats, map[string]interface{}{
+		agentStats = append(agentStats, map[string]any{
 			"name":            s.Name,
 			"success_count":   s.SuccessCount,
 			"error_count":     s.ErrorCount,
@@ -791,7 +782,7 @@ func MetricsJSON() map[string]interface{} {
 		})
 	}
 
-	return map[string]interface{}{
+	return map[string]any{
 		"http_requests_total":     httpRequestsTotal.Value(),
 		"http_errors_total":       httpErrorsTotal.Value(),
 		"total_requests":          globalMetrics.TotalRequests.Value(),
@@ -805,11 +796,11 @@ func MetricsJSON() map[string]interface{} {
 
 // labeledSnapshotToMap converts a labeled counter snapshot to a JSON-friendly format
 // with parsed label keys.
-func labeledSnapshotToMap(snapshot map[string]uint64) []map[string]interface{} {
-	result := make([]map[string]interface{}, 0, len(snapshot))
+func labeledSnapshotToMap(snapshot map[string]uint64) []map[string]any {
+	result := make([]map[string]any, 0, len(snapshot))
 	for key, val := range snapshot {
 		labels := parseLabelKey(key)
-		entry := make(map[string]interface{})
+		entry := make(map[string]any)
 		for k, v := range labels {
 			entry[k] = v
 		}

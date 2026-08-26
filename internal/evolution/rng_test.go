@@ -12,7 +12,7 @@ import (
 func drawMutations(t *testing.T, n int) []string {
 	t.Helper()
 	out := make([]string, 0, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		ops := randomMutation(DefaultTree())
 		if len(ops) == 0 {
 			t.Fatalf("randomMutation returned no ops on draw %d", i)

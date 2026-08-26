@@ -2,7 +2,7 @@ package engine
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 )
@@ -79,7 +79,7 @@ type goapSeedAttempt struct {
 func fetchAcceptableGoapProgram(prompt string, gate func(*goapProgramSpec) string) goapSeedAttempt {
 	att := goapSeedAttempt{}
 	current := prompt
-	for try := 0; try < 2; try++ {
+	for range 2 {
 		att.Fetches++
 		answer := seedProgramFetchFn(current)
 		spec := extractGoapProgram(answer)
@@ -153,7 +153,7 @@ func untestedProductionGoFiles(all []string) []string {
 		}
 		out = append(out, f)
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 

@@ -9,13 +9,13 @@ import (
 // testTree builds a simple tree for testing.
 func testTree(name string, conditions, actions int) *evolution.SerializableNode {
 	root := &evolution.SerializableNode{Type: "Selector", Name: name}
-	for i := 0; i < conditions; i++ {
+	for i := range conditions {
 		root.Children = append(root.Children, evolution.SerializableNode{
 			Type: "Condition",
 			Name: name + "_cond_" + itoaTest(i),
 		})
 	}
-	for i := 0; i < actions; i++ {
+	for i := range actions {
 		root.Children = append(root.Children, evolution.SerializableNode{
 			Type: "Action",
 			Name: name + "_action_" + itoaTest(i),
@@ -66,10 +66,10 @@ func buildOptimalTree() *evolution.SerializableNode {
 	root := &evolution.SerializableNode{Type: "Selector", Name: "optimal"}
 	// Add a Sequence with conditions + actions
 	seq := &evolution.SerializableNode{Type: "Sequence", Name: "main_path"}
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		seq.Children = append(seq.Children, evolution.SerializableNode{Type: "Condition", Name: "cond_" + itoaTest(i)})
 	}
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		seq.Children = append(seq.Children, evolution.SerializableNode{Type: "Action", Name: "action_" + itoaTest(i)})
 	}
 	root.Children = append(root.Children, *seq)
@@ -88,7 +88,7 @@ func buildDeepTree(depth, width int) *evolution.SerializableNode {
 	current := root
 	for d := 1; d < depth; d++ {
 		child := &evolution.SerializableNode{Type: "Sequence", Name: "deep_" + itoaTest(d)}
-		for w := 0; w < width; w++ {
+		for w := range width {
 			child.Children = append(child.Children, evolution.SerializableNode{
 				Type: "Action", Name: "leaf_" + itoaTest(d) + "_" + itoaTest(w),
 			})

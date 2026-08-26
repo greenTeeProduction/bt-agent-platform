@@ -37,8 +37,8 @@ func TestMultiNodeExecutionPipeline(t *testing.T) {
 	// Each implements:
 	//   GET  /api/health          -> {"status":"ok"} (200)
 	//   POST /api/agents/execute -> AgentResult (200)
-	var servers []*httptest.Server
-	for i := 0; i < 3; i++ {
+	servers := make([]*httptest.Server, 0, 3)
+	for i := range 3 {
 		idx := i
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch r.URL.Path {
@@ -103,7 +103,7 @@ func TestMultiNodeExecutionPipeline(t *testing.T) {
 	defer pool.Close()
 
 	execs := make([]AgentExecutor, 3)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		execs[i] = NewRemoteExecutor(RemoteExecutorConfig{
 			Name:    execNames[i],
 			BaseURL: servers[i].URL,
@@ -131,7 +131,7 @@ func TestMultiNodeExecutionPipeline(t *testing.T) {
 	// PHASE 2: Round-robin distribution — 6 tasks, each node gets 2
 	// ----------------------------------------------------------------
 	seenOutputs := make(map[string]bool)
-	for i := 0; i < 6; i++ {
+	for i := range 6 {
 		result, err := router.Execute(context.Background(), "test-agent", "round-robin validation")
 		if err != nil {
 			t.Fatalf("phase 2: router.Execute #%d failed: %v", i, err)
@@ -176,7 +176,7 @@ func TestMultiNodeExecutionPipeline(t *testing.T) {
 	mu.Unlock()
 
 	// Run 3 more tasks — they should all hit node-beta and node-gamma
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		result, err := router.Execute(context.Background(), "test-agent", "fallback validation")
 		if err != nil {
 			// Router should fallback, but if ALL are unhealthy it might error
@@ -279,14 +279,14 @@ func TestMultiNode_ConcurrentAgentExecution(t *testing.T) {
 		t.Skip("multi-node concurrency test skipped in short mode")
 	}
 
-	var callCounter uint64
+	var callCounter atomic.Uint64
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api/health" {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
 		if r.URL.Path == "/api/agents/execute" {
-			atomic.AddUint64(&callCounter, 1)
+			callCounter.Add(1)
 			w.Header().Set("Content-Type", "application/json")
 			_ = json.NewEncoder(w).Encode(&AgentResult{
 				Agent:   "concurrent-agent",
@@ -317,7 +317,7 @@ func TestMultiNode_ConcurrentAgentExecution(t *testing.T) {
 	concurrency := 30
 	errs := make(chan error, concurrency)
 
-	for i := 0; i < concurrency; i++ {
+	for i := range concurrency {
 		wg.Add(1)
 		go func(_ int) {
 			defer wg.Done()
@@ -336,7 +336,7 @@ func TestMultiNode_ConcurrentAgentExecution(t *testing.T) {
 		}
 	}
 
-	final := atomic.LoadUint64(&callCounter)
+	final := callCounter.Load()
 	if final != uint64(concurrency) {
 		t.Errorf("expected %d total calls, got %d", concurrency, final)
 	}

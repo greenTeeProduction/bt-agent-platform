@@ -1,14 +1,16 @@
 package evolution
 
 import (
+	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"math/rand"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 )
 
@@ -62,7 +64,7 @@ type Population struct {
 	// of this Population — the crisis-recovery half of the specialist loop.
 	// Only actual injections count; a Resurrect that finds no replaceable slot
 	// does not.
-	Resurrections int `json:"resurrections,omitempty"`
+	Resurrections int `json:"resurrections,omitzero"`
 }
 
 // PopulationHealth is a read-only snapshot of the GA's self-healing signals —
@@ -132,7 +134,7 @@ func (p *Population) Evaluate(fitnessFn func(*SerializableNode) float64) {
 // Select returns parents via tournament selection (k=3).
 func (p *Population) Select() []*SerializableNode {
 	parents := make([]*SerializableNode, 2)
-	for j := 0; j < 2; j++ {
+	for j := range 2 {
 		// Seed best/bestFit from the first draw instead of a sentinel like
 		// -1.0: fitness functions (e.g. structuralFitnessFn's unbounded
 		// anti-pattern penalty) can legitimately return values <= -1.0, which
@@ -176,7 +178,7 @@ func (p *Population) Evolve(generations int, fitnessFn func(*SerializableNode) f
 	eliteCount := min(max(2, len(p.Individuals)/10), len(p.Individuals))
 	supervisor := NewLLMSupervisor()
 
-	for gen := 0; gen < generations; gen++ {
+	for range generations {
 		p.Generation++
 
 		// Record baseline fitness of each individual BEFORE mutation, and
@@ -288,8 +290,8 @@ func (p *Population) selfHealGeneration(eliteCount int, supervisor *LLMSuperviso
 		containsCrisisReason(reasons, "quality_crash")
 
 	// Sort by fitness descending
-	sort.Slice(p.Individuals, func(i, j int) bool {
-		return p.Individuals[i].Fitness > p.Individuals[j].Fitness
+	slices.SortFunc(p.Individuals, func(a, b Individual) int {
+		return cmp.Compare(b.Fitness, a.Fitness)
 	})
 
 	// Archive validated specialist elites every generation so that if a
@@ -329,13 +331,7 @@ func (p *Population) selfHealGeneration(eliteCount int, supervisor *LLMSuperviso
 // and a later regression spiral) both persist to the end of the run.
 func (p *Population) recordCrisisReasons(reasons []string) {
 	for _, r := range reasons {
-		seen := false
-		for _, existing := range p.CrisisReasons {
-			if existing == r {
-				seen = true
-				break
-			}
-		}
+		seen := slices.Contains(p.CrisisReasons, r)
 		if !seen {
 			p.CrisisReasons = append(p.CrisisReasons, r)
 		}
@@ -345,12 +341,7 @@ func (p *Population) recordCrisisReasons(reasons []string) {
 // containsCrisisReason reports whether the given crisis reason appears in the
 // slice DetectPopulation surfaced this generation.
 func containsCrisisReason(reasons []string, want string) bool {
-	for _, r := range reasons {
-		if r == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(reasons, want)
 }
 
 const (
@@ -503,7 +494,7 @@ func (p *Population) EvolveWithExperienceContext(generations int, fitnessFn func
 	mutator := NewMCTSMutator()
 	mutator.WarmStartHints = hintOps
 
-	for gen := 0; gen < generations; gen++ {
+	for range generations {
 		p.Generation++
 
 		p.selfHealGeneration(eliteCount, supervisor, func(mutationRate float64) {
@@ -776,9 +767,7 @@ func (qt *QTable) Load(path string) error {
 		if qt.Values[state] == nil {
 			qt.Values[state] = make(map[string]float64)
 		}
-		for action, val := range actions {
-			qt.Values[state][action] = val
-		}
+		maps.Copy(qt.Values[state], actions)
 	}
 	return nil
 }
@@ -887,7 +876,7 @@ func (p *Population) EvolveQLearning(generations int, fitnessFn func(*Serializab
 	mutator := NewMCTSMutator()
 	supervisor := NewLLMSupervisor()
 
-	for gen := 0; gen < generations; gen++ {
+	for range generations {
 		p.Generation++
 
 		// Run the same selfHealGeneration envelope Evolve, EvolveWithExperience,
@@ -1001,12 +990,10 @@ func CloneMetadata(src map[string]any) map[string]any {
 	for k, v := range src {
 		switch vv := v.(type) {
 		case []any:
-			cp := make([]any, len(vv))
-			copy(cp, vv)
+			cp := slices.Clone(vv)
 			out[k] = cp
 		case []string:
-			cp := make([]string, len(vv))
-			copy(cp, vv)
+			cp := slices.Clone(vv)
 			out[k] = cp
 		case map[string]any:
 			out[k] = CloneMetadata(vv)

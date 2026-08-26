@@ -123,7 +123,7 @@ func TestSetChainState(t *testing.T) {
 
 func TestSetSectionDoneAndIsSectionDone(t *testing.T) {
 	for section := 1; section <= 12; section++ {
-		section := section
+
 		t.Run(fmt.Sprintf("section %d", section), func(t *testing.T) {
 			var ws goap.DocPlannerWorldState
 			if isSectionDone(ws, section) {

@@ -218,7 +218,7 @@ func handlePipelineRun(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
-	_ = encodeJSON(w, map[string]interface{}{
+	_ = encodeJSON(w, map[string]any{
 		"run_id":   runID,
 		"status":   "running",
 		"pipeline": pipeline.Name,
@@ -260,7 +260,7 @@ func handlePipelineStatus(w http.ResponseWriter, r *http.Request) {
 	result := rec.Result
 	pipelineRunsMu.RUnlock()
 
-	resp := map[string]interface{}{
+	resp := map[string]any{
 		"run_id":     runIDOut,
 		"status":     status,
 		"started_at": startedAt.Format(time.RFC3339),

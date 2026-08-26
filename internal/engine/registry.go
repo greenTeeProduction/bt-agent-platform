@@ -3,11 +3,12 @@ package engine
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -157,12 +158,8 @@ func NewEngine() *Engine {
 	defer regMu.RUnlock()
 	actions := make(map[string]ActionFunc, len(actionRegistry))
 	conditions := make(map[string]ConditionFunc, len(conditionRegistry))
-	for k, v := range actionRegistry {
-		actions[k] = v
-	}
-	for k, v := range conditionRegistry {
-		conditions[k] = v
-	}
+	maps.Copy(actions, actionRegistry)
+	maps.Copy(conditions, conditionRegistry)
 	return &Engine{Actions: actions, Conditions: conditions}
 }
 
@@ -177,7 +174,7 @@ func (e *Engine) GetCondition(name string) ConditionFunc {
 }
 
 // RegisterProviders calls RegisterActions/RegisterConditions on each provider.
-func RegisterProviders(providers ...interface{}) {
+func RegisterProviders(providers ...any) {
 	for _, p := range providers {
 		if ap, ok := p.(ActionProvider); ok {
 			ap.RegisterActions()
@@ -208,11 +205,7 @@ func GetCondition(name string) ConditionFunc {
 func RegisteredActionNames() []string {
 	regMu.RLock()
 	defer regMu.RUnlock()
-	names := make([]string, 0, len(actionRegistry))
-	for name := range actionRegistry {
-		names = append(names, name)
-	}
-	sort.Strings(names)
+	names := slices.Sorted(maps.Keys(actionRegistry))
 	return names
 }
 
@@ -221,11 +214,7 @@ func RegisteredActionNames() []string {
 func RegisteredConditionNames() []string {
 	regMu.RLock()
 	defer regMu.RUnlock()
-	names := make([]string, 0, len(conditionRegistry))
-	for name := range conditionRegistry {
-		names = append(names, name)
-	}
-	sort.Strings(names)
+	names := slices.Sorted(maps.Keys(conditionRegistry))
 	return names
 }
 
@@ -408,8 +397,8 @@ func init() {
 			report.Write(freeOut)
 			report.WriteString("```\n\n")
 			// Parse available memory threshold
-			lines := strings.Split(strings.TrimSpace(string(freeOut)), "\n")
-			for _, line := range lines {
+			lines := strings.SplitSeq(strings.TrimSpace(string(freeOut)), "\n")
+			for line := range lines {
 				if strings.Contains(line, "Mem:") || strings.Contains(line, "Mem.:") {
 					fields := strings.Fields(line)
 					if len(fields) >= 7 {
@@ -480,8 +469,8 @@ func init() {
 			okSections++
 			active, inactive := 0, 0
 			dupes := map[string]int{}
-			lines := strings.Split(string(schedData), "\n")
-			for _, line := range lines {
+			lines := strings.SplitSeq(string(schedData), "\n")
+			for line := range lines {
 				if strings.Contains(line, `"active": true`) {
 					active++
 				}
@@ -669,7 +658,7 @@ func init() {
 			"HOME="+home,
 		)
 
-		logf := func(f string, a ...interface{}) {
+		logf := func(f string, a ...any) {
 			Info("HermesUpdateAgent: " + fmt.Sprintf(f, a...))
 		}
 		logf("ENTERED action")
@@ -837,7 +826,7 @@ func containsAnyLower(s string, keywords ...string) bool {
 	for _, kw := range keywords {
 		for i := 0; i <= len(s)-len(kw); i++ {
 			match := true
-			for j := 0; j < len(kw); j++ {
+			for j := range len(kw) {
 				c := s[i+j]
 				kc := kw[j]
 				if c >= 'A' && c <= 'Z' {

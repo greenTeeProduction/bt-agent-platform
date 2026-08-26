@@ -236,7 +236,7 @@ func TestWireDTOrdering_EnablesDTStatsPath(t *testing.T) {
 	}
 	da := evolution.NewDTAnalyzer()
 	da.RecordHit("Router", "A", "CondA", true)
-	for i := 0; i < 8; i++ {
+	for range 8 {
 		da.RecordHit("Router", "B", "CondB", true)
 	}
 	da.RecordHit("Router", "C", "CondC", true)

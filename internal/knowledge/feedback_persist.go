@@ -34,8 +34,8 @@ type treeFeedback struct {
 	// writes onto an evolved tree's metadata, and Category mirrors the value
 	// (often inherited from the base tree) at registration time — none of
 	// which a fresh Register call after a restart can reconstruct on its own.
-	StructuralFitness float64 `json:"structural_fitness,omitempty"`
-	NodeCount         int     `json:"node_count,omitempty"`
+	StructuralFitness float64 `json:"structural_fitness,omitzero"`
+	NodeCount         int     `json:"node_count,omitzero"`
 	Category          string  `json:"category,omitempty"`
 }
 

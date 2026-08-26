@@ -58,7 +58,7 @@ type RouteDecision struct {
 	// consulted, so downstream nodes can tell "default branch, model not asked"
 	// apart from "default branch, model proposed X at 0.42 (below_threshold)".
 	ModelLabel      string  `json:"model_label,omitempty"`
-	ModelConfidence float64 `json:"model_confidence,omitempty"`
+	ModelConfidence float64 `json:"model_confidence,omitzero"`
 	Rejected        string  `json:"rejected,omitempty"`
 }
 
@@ -290,7 +290,7 @@ func parseRouteResponse(resp string) (label string, confidence float64, rational
 
 	// Line-based fallback for non-JSON model output.
 	var foundLabel bool
-	for _, line := range strings.Split(resp, "\n") {
+	for line := range strings.SplitSeq(resp, "\n") {
 		key, val, found := strings.Cut(line, ":")
 		if !found {
 			continue

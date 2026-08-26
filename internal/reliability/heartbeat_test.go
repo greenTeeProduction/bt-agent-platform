@@ -245,7 +245,7 @@ func TestNodeHeartbeat_CleanupKeepsAliveNodes(t *testing.T) {
 	hb.Register("node-1", nil)
 
 	// Ping continuously to keep alive through multiple cleanup cycles
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		time.Sleep(100 * time.Millisecond)
 		hb.Ping("node-1")
 	}
@@ -304,11 +304,11 @@ func TestNodeHeartbeat_ConcurrentAccess(t *testing.T) {
 	numNodes := 10
 
 	// Concurrent registration
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		wg.Add(1)
 		go func(_ int) {
 			defer wg.Done()
-			for j := 0; j < numNodes; j++ {
+			for j := range numNodes {
 				nodeID := "node-" + string(rune('0'+j%10))
 				hb.Register(nodeID, nil)
 				hb.Ping(nodeID)
@@ -317,17 +317,15 @@ func TestNodeHeartbeat_ConcurrentAccess(t *testing.T) {
 	}
 
 	// Concurrent reads
-	for i := 0; i < numGoroutines; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for j := 0; j < 100; j++ {
+	for range numGoroutines {
+		wg.Go(func() {
+			for range 100 {
 				hb.IsAlive("node-0")
 				hb.ListAlive()
 				hb.ListAll()
 				hb.Stats()
 			}
-		}()
+		})
 
 	}
 
@@ -344,12 +342,12 @@ func TestNodeHeartbeat_ConcurrentDeregister(_ *testing.T) {
 	hb := NewNodeHeartbeat(5 * time.Second)
 	defer hb.Stop()
 
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		hb.Register("node-"+string(rune('0'+i%10)), nil)
 	}
 
 	var wg sync.WaitGroup
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()

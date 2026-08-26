@@ -551,7 +551,7 @@ func TestClaudeErrorHandler_ConsecutiveEscalateFailedCapsCooldownBypass(t *testi
 	t.Cleanup(func() { _ = os.Remove(lockPath) })
 
 	var sig string
-	for i := 0; i < consecutiveEscalateFailedCap+2; i++ {
+	for i := range consecutiveEscalateFailedCap + 2 {
 		bb := &Blackboard{ChainState: map[string]any{}}
 		if code := runHandler(t, bb); code != -1 {
 			t.Fatalf("iteration %d: must pass failure through; got %d", i, code)

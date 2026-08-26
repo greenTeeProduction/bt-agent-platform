@@ -142,7 +142,7 @@ func cmdBBScopes() {
 	if *asJSON {
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
-		_ = enc.Encode(map[string]interface{}{"scope": kind, "ids": ids})
+		_ = enc.Encode(map[string]any{"scope": kind, "ids": ids})
 		return
 	}
 	if len(ids) == 0 {

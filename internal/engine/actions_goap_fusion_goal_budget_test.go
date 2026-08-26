@@ -84,7 +84,7 @@ func TestPrioritizeGoapGoals_AbandonsExhaustedResearchGoal(t *testing.T) {
 	store := seedGoalBudget(t)
 	goalA := "Fix the flaky frobnicator (files: internal/engine/tree.go)"
 	goalB := "Harden the widget parser (files: internal/engine/chains.go)"
-	for i := 0; i < goapGoalMaxAttempts; i++ {
+	for range goapGoalMaxAttempts {
 		store.RecordFailure(goapResearchGoalKey(goalA), "commit gate: nilerr")
 	}
 	if err := store.Save(); err != nil {

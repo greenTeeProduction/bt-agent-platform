@@ -1,6 +1,7 @@
 package evolution
 
 import (
+	"slices"
 	"testing"
 )
 
@@ -111,7 +112,7 @@ func TestCrisisDetector_Detect_FlatFitnessIsPlateauNotStagnation(t *testing.T) {
 	cd.StagnationLimit = 3
 
 	state := CrisisState{TreeName: "plateau-tree", CurrentFitness: 0.5}
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		if crisis, reason := cd.Detect(state); crisis {
 			t.Fatalf("cycle %d: flat fitness fired a crisis (%s); plateau must be neutral", i, reason)
 		}
@@ -513,10 +514,5 @@ func TestCrisisDetector_ResetPopulation(t *testing.T) {
 
 // Helper
 func containsReason(reasons []string, target string) bool {
-	for _, r := range reasons {
-		if r == target {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(reasons, target)
 }

@@ -129,7 +129,7 @@ func TestBTManagerTreeRecordsRealPathDuringExecution(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				for i := 0; i < 3; i++ {
+				for i := range 3 {
 					if err := store.Save(&evolution.Record{
 						TaskID:    "f" + string(rune('0'+i)),
 						TreeName:  "some_tree",
@@ -161,7 +161,7 @@ func TestBTManagerTreeRecordsRealPathDuringExecution(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				for i := 0; i < 5; i++ {
+				for i := range 5 {
 					if err := store.Save(&evolution.Record{
 						TaskID:    "s" + string(rune('0'+i)),
 						TreeName:  "some_tree",

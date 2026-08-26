@@ -1,10 +1,10 @@
 package evolution
 
 import (
+	"cmp"
 	"fmt"
 	"math"
-	"math/rand"
-	"sort"
+	"slices"
 
 	"github.com/nico/go-bt-evolve/internal/util"
 )
@@ -313,7 +313,7 @@ func (cma *CMAESOptimizer) Initialize(params []TunableParam) {
 
 	// Initialize covariance matrix C = I
 	cma.C = make([][]float64, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		cma.C[i] = make([]float64, n)
 		cma.C[i][i] = 1.0
 	}
@@ -339,13 +339,10 @@ func (cma *CMAESOptimizer) Optimize(
 	n := len(params)
 
 	// CMA-ES hyperparameters
-	lambda := cma.PopulationSize
-	if lambda < 5 {
-		lambda = 5
-	}
+	lambda := max(cma.PopulationSize, 5)
 	mu := lambda / 2 // number of parents
 	weights := make([]float64, mu)
-	for i := 0; i < mu; i++ {
+	for i := range mu {
 		weights[i] = math.Log(float64(mu)+0.5) - math.Log(float64(i)+1)
 	}
 	// Normalize weights
@@ -374,18 +371,18 @@ func (cma *CMAESOptimizer) Optimize(
 	// Expectation of ||N(0,I)|| (chi-squared distribution)
 	chiN := math.Sqrt(float64(n)) * (1.0 - 1.0/(4.0*float64(n)) + 1.0/(21.0*float64(n)*float64(n)))
 
-	for gen := 0; gen < cma.MaxGenerations; gen++ {
+	for gen := range cma.MaxGenerations {
 		cma.GenCount++
 
 		// 1. Sample λ candidates
 		candidates := make([][]float64, lambda)
 		fitnesses := make([]float64, lambda)
-		for k := 0; k < lambda; k++ {
+		for k := range lambda {
 			// Sample from N(mean, sigma²*C)
 			z := sampleStdNormal(n)          // standard normal vector
 			zC := multiplyCholesky(cma.C, z) // sqrt(C) * z
 			candidate := make([]float64, n)
-			for j := 0; j < n; j++ {
+			for j := range n {
 				candidate[j] = cma.Mean[j] + cma.Sigma*zC[j]
 				// Clamp to [0, 1]
 				if candidate[j] < 0 {
@@ -410,8 +407,8 @@ func (cma *CMAESOptimizer) Optimize(
 		for i := range idx {
 			idx[i] = i
 		}
-		sort.Slice(idx, func(i, j int) bool {
-			return fitnesses[idx[i]] > fitnesses[idx[j]]
+		slices.SortFunc(idx, func(a, b int) int {
+			return cmp.Compare(fitnesses[b], fitnesses[a])
 		})
 
 		// 3. Early stop if target reached
@@ -421,35 +418,35 @@ func (cma *CMAESOptimizer) Optimize(
 
 		// 4. Weighted recombination → new mean
 		newMean := make([]float64, n)
-		for j := 0; j < mu; j++ {
-			for k := 0; k < n; k++ {
+		for j := range mu {
+			for k := range n {
 				newMean[k] += weights[j] * candidates[idx[j]][k]
 			}
 		}
 
 		// 5. Update evolution paths
 		meanDiff := make([]float64, n)
-		for j := 0; j < n; j++ {
+		for j := range n {
 			meanDiff[j] = newMean[j] - cma.Mean[j]
 		}
 
 		// p_sigma = (1-cs)*p_sigma + sqrt(cs*(2-cs)*mueff) * C^(-1/2) * meanDiff / sigma
 		invSqrtC := invertCholesky(cma.C)
 		z := make([]float64, n)
-		for i := 0; i < n; i++ {
-			for j := 0; j < n; j++ {
+		for i := range n {
+			for j := range n {
 				z[i] += invSqrtC[i][j] * meanDiff[j]
 			}
 		}
 		csFactor := math.Sqrt(cs * (2 - cs) * mueff)
-		for j := 0; j < n; j++ {
+		for j := range n {
 			cma.PSigma[j] = (1-cs)*cma.PSigma[j] + csFactor*z[j]/cma.Sigma
 		}
 
 		// p_c = (1-cc)*p_c + h_sigma * sqrt(cc*(2-cc)*mueff) * meanDiff / sigma
 		hSigma := 0.0
 		psNorm := 0.0
-		for j := 0; j < n; j++ {
+		for j := range n {
 			psNorm += cma.PSigma[j] * cma.PSigma[j]
 		}
 		psNorm = math.Sqrt(psNorm)
@@ -458,20 +455,20 @@ func (cma *CMAESOptimizer) Optimize(
 		}
 
 		ccFactor := math.Sqrt(cc * (2 - cc) * mueff)
-		for j := 0; j < n; j++ {
+		for j := range n {
 			cma.PC[j] = (1-cc)*cma.PC[j] + hSigma*ccFactor*meanDiff[j]/cma.Sigma
 		}
 
 		// 6. Update covariance matrix
 		deltaH := (1 - hSigma) * cc * (2 - cc)
-		for i := 0; i < n; i++ {
-			for j := 0; j < n; j++ {
+		for i := range n {
+			for j := range n {
 				// Rank-one update
 				cma.C[i][j] = (1-c1-cmu)*cma.C[i][j] + c1*(cma.PC[i]*cma.PC[j]+deltaH*cma.C[i][j])
 				// Rank-mu update: sum over selected parents
-				for k := 0; k < mu; k++ {
+				for k := range mu {
 					yk := make([]float64, n)
-					for l := 0; l < n; l++ {
+					for l := range n {
 						yk[l] = (candidates[idx[k]][l] - cma.Mean[l]) / cma.Sigma
 					}
 					cma.C[i][j] += cmu * weights[k] * yk[i] * yk[j]
@@ -495,7 +492,7 @@ func (cma *CMAESOptimizer) Optimize(
 		cma.Mean = newMean
 
 		// Ensure covariance matrix symmetry
-		for i := 0; i < n; i++ {
+		for i := range n {
 			for j := i + 1; j < n; j++ {
 				avg := (cma.C[i][j] + cma.C[j][i]) / 2.0
 				cma.C[i][j] = avg
@@ -526,8 +523,8 @@ func sampleStdNormal(n int) []float64 {
 	v := make([]float64, n)
 	for i := range v {
 		// Box-Muller transform
-		u1 := rand.Float64()
-		u2 := rand.Float64()
+		u1 := evoFloat64()
+		u2 := evoFloat64()
 		v[i] = math.Sqrt(-2*math.Log(u1)) * math.Cos(2*math.Pi*u2)
 	}
 	return v
@@ -539,7 +536,7 @@ func multiplyCholesky(covMatrix [][]float64, x []float64) []float64 {
 	n := len(x)
 	L := cholesky(covMatrix)
 	result := make([]float64, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		for j := 0; j <= i; j++ {
 			result[i] += L[i][j] * x[j]
 		}
@@ -552,11 +549,11 @@ func multiplyCholesky(covMatrix [][]float64, x []float64) []float64 {
 func cholesky(cov [][]float64) [][]float64 {
 	n := len(cov)
 	L := make([][]float64, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		L[i] = make([]float64, n)
 		for j := 0; j <= i; j++ {
 			s := 0.0
-			for k := 0; k < j; k++ {
+			for k := range j {
 				s += L[i][k] * L[j][k]
 			}
 			if i == j {
@@ -577,10 +574,10 @@ func invertCholesky(cov [][]float64) [][]float64 {
 
 	// Forward substitution to invert L
 	Linv := make([][]float64, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		Linv[i] = make([]float64, n)
 		Linv[i][i] = 1.0 / L[i][i]
-		for j := 0; j < i; j++ {
+		for j := range i {
 			s := 0.0
 			for k := j; k < i; k++ {
 				s += L[i][k] * Linv[k][j]
@@ -593,9 +590,9 @@ func invertCholesky(cov [][]float64) [][]float64 {
 	// But we need cov^(-1/2) = L^(-T), so just transpose L^(-1)
 	// Actually for cov^(-1/2) * x we want L^(-T) * x, so return Linv^T
 	result := make([][]float64, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		result[i] = make([]float64, n)
-		for j := 0; j < n; j++ {
+		for j := range n {
 			result[i][j] = Linv[j][i] // transpose
 		}
 	}

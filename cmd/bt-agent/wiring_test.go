@@ -279,7 +279,7 @@ func TestBTEvolveGeneticRoutesThroughExperienceBank(t *testing.T) {
 	if res == nil || len(res.Content) == 0 {
 		t.Fatal("bt_evolve_genetic returned no content")
 	}
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 		t.Fatalf("bt_evolve_genetic result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
 	}
@@ -310,7 +310,7 @@ func TestBTEvolveGeneticRoutesThroughExperienceBank(t *testing.T) {
 	if !ok || bres == nil || len(bres.Content) == 0 {
 		t.Fatal("bt_evolve_genetic must still run without an ExperienceBank (nil bank degrades to plain Evolve)")
 	}
-	var bout map[string]interface{}
+	var bout map[string]any
 	if err := json.Unmarshal([]byte(bres.Content[0].Text), &bout); err != nil {
 		t.Fatalf("nil-bank bt_evolve_genetic result is not valid JSON: %v", err)
 	}

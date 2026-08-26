@@ -265,7 +265,7 @@ func TestStress_MaxTicksSafetyLimit(t *testing.T) {
 }
 
 // sprintRecover formats a recovered panic value as a string.
-func sprintRecover(r interface{}) string {
+func sprintRecover(r any) string {
 	if r == nil {
 		return "<nil>"
 	}

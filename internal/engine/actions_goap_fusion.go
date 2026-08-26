@@ -8,7 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -685,7 +685,9 @@ func readNewestVaultDocs(dir, label string, match func(string) bool, maxFiles, p
 		}
 		docs = append(docs, vaultDoc{name: e.Name(), mod: info.ModTime()})
 	}
-	sort.Slice(docs, func(i, j int) bool { return docs[i].mod.After(docs[j].mod) })
+	slices.SortFunc(docs, func(a, b vaultDoc) int {
+		return b.mod.Compare(a.mod)
+	})
 	out := make([]string, 0, maxFiles)
 	for _, d := range docs {
 		if len(out) == maxFiles {
@@ -904,7 +906,7 @@ var goapRedPrecheckRunFn = func(cmd string) (string, error) {
 // attempt. The shell runs OUTSIDE the program-store flock — only the
 // bookkeeping takes the lock, with the milestone re-validated under it.
 func precheckGoapStaleMilestones(bb *Blackboard) {
-	for i := 0; i < goapRedPrecheckMaxPerCycle; i++ {
+	for range goapRedPrecheckMaxPerCycle {
 		var programID, cmd string
 		var idx int
 		found := false
@@ -1077,16 +1079,16 @@ func sectionAwareGraphContext(report string) string {
 // that the report file exists on disk.
 func graphReportBuiltCommit(report string) string {
 	const marker = "Built from commit: `"
-	idx := strings.Index(report, marker)
-	if idx < 0 {
+	_, after, ok := strings.Cut(report, marker)
+	if !ok {
 		return ""
 	}
-	rest := report[idx+len(marker):]
-	end := strings.Index(rest, "`")
-	if end < 0 {
+	rest := after
+	before0, _, ok0 := strings.Cut(rest, "`")
+	if !ok0 {
 		return ""
 	}
-	return rest[:end]
+	return before0
 }
 
 // readSectionAwareGraphContext reads goapFusionGraphReport and extracts its
@@ -1195,11 +1197,11 @@ func extractNotebookLMAnswer(out string) string {
 
 func extractJSONStringField(out, field string) string {
 	marker := `"` + field + `"`
-	idx := strings.Index(out, marker)
-	if idx < 0 {
+	_, after, ok := strings.Cut(out, marker)
+	if !ok {
 		return ""
 	}
-	rest := out[idx+len(marker):]
+	rest := after
 	colon := strings.Index(rest, ":")
 	if colon < 0 {
 		return ""
@@ -1227,7 +1229,7 @@ func extractJSONStringField(out, field string) string {
 }
 
 func extractGoapNotebookLMRecommendation(answer string) (goal, gap string) {
-	for _, line := range strings.Split(answer, "\n") {
+	for line := range strings.SplitSeq(answer, "\n") {
 		trimmed := strings.TrimSpace(strings.Trim(line, "-*• 	"))
 		trimmed = strings.TrimSpace(strings.ReplaceAll(trimmed, "**", ""))
 		upper := strings.ToUpper(trimmed)
@@ -1272,17 +1274,17 @@ func goapFusionHasEngineTestBlocker(gaps string) bool {
 }
 
 func goapFusionNotebookLMGoalFromGaps(gaps string) string {
-	for _, line := range strings.Split(gaps, "\n") {
+	for line := range strings.SplitSeq(gaps, "\n") {
 		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "NOTEBOOKLM_GOAL:") {
-			return strings.TrimSpace(strings.TrimPrefix(trimmed, "NOTEBOOKLM_GOAL:"))
+		if after, ok := strings.CutPrefix(trimmed, "NOTEBOOKLM_GOAL:"); ok {
+			return strings.TrimSpace(after)
 		}
 	}
 	return ""
 }
 
 func firstNonEmptyGoapLine(s string) string {
-	for _, line := range strings.Split(s, "\n") {
+	for line := range strings.SplitSeq(s, "\n") {
 		line = strings.TrimSpace(strings.Trim(line, "-*• "))
 		if line != "" && !strings.HasPrefix(line, "{") && !strings.HasPrefix(line, "}") {
 			return line
@@ -1295,7 +1297,7 @@ func firstNonEmptyGoapLine(s string) string {
 // a goap-fusion analysis file for comparison with the current run.
 func extractGoapGoals(text string) string {
 	var lines []string
-	for _, line := range strings.Split(text, "\n") {
+	for line := range strings.SplitSeq(text, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, "[P0]") || strings.HasPrefix(trimmed, "[P1]") || strings.HasPrefix(trimmed, "[P2]") {
 			lines = append(lines, trimmed)

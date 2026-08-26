@@ -137,7 +137,7 @@ func (th *routineThrottle) save(state map[string]*throttleEntry) {
 
 // eventDataString extracts a string field from an event's Data map, tolerating
 // nil maps and non-string values.
-func eventDataString(data map[string]interface{}, key string) string {
+func eventDataString(data map[string]any, key string) string {
 	if data == nil {
 		return ""
 	}

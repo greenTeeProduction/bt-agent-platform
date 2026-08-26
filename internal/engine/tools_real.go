@@ -2,16 +2,18 @@ package engine
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -81,11 +83,7 @@ func buildRealTools(names ...string) []any {
 
 func allRealToolNames() []string {
 	factory := NewRealToolFactory()
-	names := make([]string, 0, len(factory))
-	for name := range factory {
-		names = append(names, name)
-	}
-	sort.Strings(names)
+	names := slices.Sorted(maps.Keys(factory))
 	return names
 }
 
@@ -183,7 +181,7 @@ func newWebSearchTool() *realTool {
 			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 			defer cancel()
 			searchURL := fmt.Sprintf("https://html.duckduckgo.com/html/?q=%s", url.QueryEscape(input))
-			req, err := http.NewRequestWithContext(ctx, "GET", searchURL, nil)
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, searchURL, nil)
 			if err != nil {
 				return fmt.Sprintf("search error: %v", err)
 			}
@@ -446,10 +444,7 @@ var nlmRun = func(timeout time.Duration, args ...string) string {
 	// per-day cache and refuse metered calls over the local daily budget so
 	// the ~50/day plan quota is spent on NEW questions, not repeats.
 	if cached, deny, proceed := nlmPreflight(args); !proceed {
-		if deny != "" {
-			return deny
-		}
-		return cached
+		return cmp.Or(deny, cached)
 	}
 
 	// Determine operation type for metrics
@@ -475,12 +470,9 @@ var nlmRun = func(timeout time.Duration, args ...string) string {
 
 	start := time.Now()
 	var lastOut string
-	for attempt := 0; attempt < maxRetries; attempt++ {
+	for attempt := range maxRetries {
 		if attempt > 0 {
-			delay := baseDelay * time.Duration(1<<(attempt-1))
-			if delay > maxDelay {
-				delay = maxDelay
-			}
+			delay := min(baseDelay*time.Duration(1<<(attempt-1)), maxDelay)
 			time.Sleep(delay)
 		}
 
@@ -736,7 +728,7 @@ func newHTTPGetTool() *realTool {
 		fn: func(input string) string {
 			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 			defer cancel()
-			req, err := http.NewRequestWithContext(ctx, "GET", strings.TrimSpace(input), nil)
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimSpace(input), nil)
 			if err != nil {
 				return fmt.Sprintf("http_get error: %v", err)
 			}

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -188,7 +189,7 @@ func ValidateOutput(output string, outputType ContentType, schema *Schema) error
 			return fmt.Errorf("expected valid JSON output")
 		}
 		if schema != nil {
-			var v interface{}
+			var v any
 			if err := json.Unmarshal([]byte(output), &v); err != nil {
 				return fmt.Errorf("JSON unmarshal: %w", err)
 			}
@@ -225,14 +226,14 @@ func ValidateOutput(output string, outputType ContentType, schema *Schema) error
 }
 
 // validateAgainstSchema performs basic structural validation of a value against a JSON Schema.
-func validateAgainstSchema(v interface{}, s *Schema, path string) error {
+func validateAgainstSchema(v any, s *Schema, path string) error {
 	if s == nil {
 		return nil
 	}
 
 	switch s.Type {
 	case "object":
-		m, ok := v.(map[string]interface{})
+		m, ok := v.(map[string]any)
 		if !ok {
 			return fmt.Errorf("%s: expected object, got %T", path, v)
 		}
@@ -254,7 +255,7 @@ func validateAgainstSchema(v interface{}, s *Schema, path string) error {
 		}
 
 	case "array":
-		arr, ok := v.([]interface{})
+		arr, ok := v.([]any)
 		if !ok {
 			return fmt.Errorf("%s: expected array, got %T", path, v)
 		}
@@ -319,15 +320,10 @@ func validateAgainstSchema(v interface{}, s *Schema, path string) error {
 }
 
 func stringIn(value string, allowed []string) bool {
-	for _, item := range allowed {
-		if value == item {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(allowed, value)
 }
 
-func numberValue(v interface{}) (float64, bool) {
+func numberValue(v any) (float64, bool) {
 	switch n := v.(type) {
 	case float64:
 		return n, true

@@ -97,7 +97,7 @@ func TestErrorHandlerLedger_StampAndGet(t *testing.T) {
 func TestErrorHandlerLedger_EvictsOldestBeyondCap(t *testing.T) {
 	withTempErrorHandlerDir(t)
 	const extra = 4
-	for i := 0; i < errorHandlerLedgerMaxEntries+extra; i++ {
+	for i := range errorHandlerLedgerMaxEntries + extra {
 		errorHandlerLedgerStamp(fmt.Sprintf("sig-%04d", i), "proposed")
 	}
 	ledger := map[string]errorHandlerLedgerEntry{}
@@ -108,7 +108,7 @@ func TestErrorHandlerLedger_EvictsOldestBeyondCap(t *testing.T) {
 	if _, ok := ledger[fmt.Sprintf("sig-%04d", errorHandlerLedgerMaxEntries+extra-1)]; !ok {
 		t.Fatal("newest entry must be retained")
 	}
-	for i := 0; i < extra; i++ {
+	for i := range extra {
 		if _, ok := ledger[fmt.Sprintf("sig-%04d", i)]; ok {
 			t.Fatalf("oldest entry sig-%04d must have been evicted", i)
 		}
@@ -236,12 +236,10 @@ func TestErrorHandlerStore_ConcurrentRecordsCountExactly(t *testing.T) {
 	}
 	const workers = 12
 	var wg sync.WaitGroup
-	for i := 0; i < workers; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range workers {
+		wg.Go(func() {
 			recordErrorHandlerResult("h", "n1", false)
-		}()
+		})
 	}
 	wg.Wait()
 	all := loadErrorHandlerExtensions("h")

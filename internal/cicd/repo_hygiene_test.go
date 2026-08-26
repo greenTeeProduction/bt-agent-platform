@@ -27,7 +27,7 @@ func TestNoCommittedRootBinaries(t *testing.T) {
 	}
 
 	var offenders []string
-	for _, f := range strings.Split(strings.TrimSpace(tracked), "\n") {
+	for f := range strings.SplitSeq(strings.TrimSpace(tracked), "\n") {
 		if f == "" || strings.Contains(f, "/") {
 			continue // root-level files only
 		}

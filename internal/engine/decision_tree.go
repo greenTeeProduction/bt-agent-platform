@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -113,10 +114,8 @@ func childMatchesDecision(child *evolution.SerializableNode, value string) bool 
 	if matches, ok := child.Metadata["matches"]; ok {
 		switch vals := matches.(type) {
 		case []string:
-			for _, v := range vals {
-				if v == value {
-					return true
-				}
+			if slices.Contains(vals, value) {
+				return true
 			}
 		case []any:
 			for _, v := range vals {

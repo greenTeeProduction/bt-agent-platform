@@ -1,7 +1,7 @@
 package engine
 
 import (
-	"sort"
+	"slices"
 	"testing"
 
 	btcore "github.com/rvitorper/go-bt/core"
@@ -12,16 +12,16 @@ func TestRegisteredNames_SortedAndComplete(t *testing.T) {
 	RegisterCondition("test_registered_names_probe_condition", func(*Blackboard) bool { return true })
 
 	actions := RegisteredActionNames()
-	if !sort.StringsAreSorted(actions) {
+	if !slices.IsSorted(actions) {
 		t.Fatal("action names must be sorted")
 	}
 	conditions := RegisteredConditionNames()
-	if !sort.StringsAreSorted(conditions) {
+	if !slices.IsSorted(conditions) {
 		t.Fatal("condition names must be sorted")
 	}
 	contains := func(names []string, want string) bool {
-		i := sort.SearchStrings(names, want)
-		return i < len(names) && names[i] == want
+		_, ok := slices.BinarySearch(names, want)
+		return ok
 	}
 	if !contains(actions, "test_registered_names_probe_action") {
 		t.Fatal("registered action missing from listing")

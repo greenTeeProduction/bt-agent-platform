@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"sort"
+	"slices"
 	"sync"
 	"testing"
 
@@ -48,11 +49,7 @@ func (f *fakeTransport) SendTask(_ context.Context, agentURL, taskText string) (
 func (f *fakeTransport) sentURLs() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	urls := make([]string, 0, len(f.sent))
-	for u := range f.sent {
-		urls = append(urls, u)
-	}
-	sort.Strings(urls)
+	urls := slices.Sorted(maps.Keys(f.sent))
 	return urls
 }
 
@@ -427,7 +424,7 @@ func TestAuctioneer_RunAuction_CircuitBreaksWinnerAfterRepeatedFailures(t *testi
 
 	const attempts = 8
 	callsAfter := make([]int, attempts)
-	for i := 0; i < attempts; i++ {
+	for i := range attempts {
 		if _, err := auc.RunAuction(context.Background(), ann, candidates); err == nil {
 			t.Fatalf("RunAuction call %d unexpectedly succeeded against a permanently failing winner", i)
 		}
@@ -475,7 +472,7 @@ func TestAuctionDelegate_WinnerCircuitBreakerSurvivesAcrossCallsAndRestarts(t *t
 
 	const ticks = 8
 	callsAfter := make([]int, ticks)
-	for i := 0; i < ticks; i++ {
+	for i := range ticks {
 		_, awarded, err := AuctionDelegate("do the work", nil)
 		if err == nil && awarded {
 			t.Fatalf("tick %d: AuctionDelegate unexpectedly succeeded against a permanently failing winner", i)

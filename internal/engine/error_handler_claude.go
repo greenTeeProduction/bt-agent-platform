@@ -7,9 +7,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -462,16 +463,10 @@ func buildErrorHandlerPrompt(handlerName string, failing *evolution.Serializable
 	if len(subtreeStr) > errorHandlerSubtreeLimit {
 		subtreeStr = subtreeStr[:errorHandlerSubtreeLimit] + "\n… (truncated)"
 	}
-	allowed := make([]string, 0, len(errorHandlerAllowedNodeTypes))
-	for t := range errorHandlerAllowedNodeTypes {
-		allowed = append(allowed, t)
-	}
-	sort.Strings(allowed) // deterministic prompt (map iteration order is random)
-	allowedActions := make([]string, 0, len(errorHandlerActionAllowlist))
-	for a := range errorHandlerActionAllowlist {
-		allowedActions = append(allowedActions, a)
-	}
-	sort.Strings(allowedActions) // deterministic prompt (map iteration order is random)
+	allowed := slices.Collect(maps.Keys(errorHandlerAllowedNodeTypes))
+	slices.Sort(allowed) // deterministic prompt (map iteration order is random)
+	allowedActions := slices.Collect(maps.Keys(errorHandlerActionAllowlist))
+	slices.Sort(allowedActions) // deterministic prompt (map iteration order is random)
 	return fmt.Sprintf(`You are the error handler for a Go behavior-tree agent platform. A subtree failed and you may propose ONE recovery node to handle this class of error in future runs.
 
 ## Failure context

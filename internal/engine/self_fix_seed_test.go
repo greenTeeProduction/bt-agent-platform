@@ -286,12 +286,10 @@ func TestSeedCodeFixProgram_SameSigConcurrentDoubleSeed(t *testing.T) {
 
 	const workers = 8
 	var wg sync.WaitGroup
-	for i := 0; i < workers; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range workers {
+		wg.Go(func() {
 			seedCodeFixProgram("sig-same", "Fix Same", "fix file same.go: recurring defect", "self-fix:test:sig-same")
-		}()
+		})
 	}
 	wg.Wait()
 
@@ -367,14 +365,11 @@ func TestSeedCodeFixProgram_ConcurrentDistinctSigs(t *testing.T) {
 
 	const workers = 12
 	var wg sync.WaitGroup
-	for i := 0; i < workers; i++ {
-		i := i
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for i := range workers {
+		wg.Go(func() {
 			sig := fmt.Sprintf("sig%d", i)
 			seedCodeFixProgram(sig, "Fix "+sig, "fix file"+sig+".go: defect", "self-fix:test:"+sig)
-		}()
+		})
 	}
 	wg.Wait()
 
@@ -404,6 +399,7 @@ func withUnsetSelfFixEnv(t *testing.T) {
 		}
 		t.Cleanup(func() {
 			if wasSet {
+				//nolint:usetesting // restoring a captured value from inside Cleanup; t.Setenv cannot be called there
 				_ = os.Setenv(key, old)
 			} else {
 				_ = os.Unsetenv(key)

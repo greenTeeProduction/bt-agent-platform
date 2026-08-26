@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -51,7 +51,7 @@ func ValidateWorkflows(root string) (WorkflowReport, error) {
 	if nightlyErr == nil {
 		report.Workflow = append(report.Workflow, ".github/workflows/nightly.yml")
 	}
-	sort.Strings(report.Workflow)
+	slices.Sort(report.Workflow)
 
 	report.add("ci workflow exists and parses", ciErr == nil, errDetail(ciErr, "ci.yml parsed"))
 	report.add("nightly workflow exists and parses", nightlyErr == nil, errDetail(nightlyErr, "nightly.yml parsed"))
@@ -159,10 +159,10 @@ type workflowJob struct {
 }
 
 type workflowStep struct {
-	Name string      `yaml:"name"`
-	Uses string      `yaml:"uses"`
-	Run  string      `yaml:"run"`
-	With interface{} `yaml:"with"`
+	Name string `yaml:"name"`
+	Uses string `yaml:"uses"`
+	Run  string `yaml:"run"`
+	With any    `yaml:"with"`
 }
 
 func loadWorkflow(path string) (workflow, error) {

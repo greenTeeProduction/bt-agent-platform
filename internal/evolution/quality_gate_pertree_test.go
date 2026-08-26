@@ -10,7 +10,7 @@ func TestQualityGatePerTreeIsolation(t *testing.T) {
 	q.ConsecutiveFails = 3
 
 	// Tree A regresses hard 3 times -> disabled for A only.
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		if got := q.ValidateFor("tree-a", 90, 60); got != GateRollback {
 			t.Fatalf("ValidateFor(tree-a) = %v, want GateRollback", got)
 		}

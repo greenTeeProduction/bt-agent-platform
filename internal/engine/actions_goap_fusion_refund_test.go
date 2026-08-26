@@ -380,7 +380,7 @@ func TestRefundGoapMilestoneAttempt_ConcurrentWritersAllSurvive(t *testing.T) {
 	}
 	const workers = 30
 	ids := make([]string, workers)
-	for i := 0; i < workers; i++ {
+	for i := range workers {
 		p := ps.Add(fmt.Sprintf("Refund race program %d", i), "test", []string{"head milestone"})
 		ps.Programs[i].Milestones[0].Attempts = 1
 		ps.Programs[i].Milestones[0].Status = "pending"
@@ -394,16 +394,13 @@ func TestRefundGoapMilestoneAttempt_ConcurrentWritersAllSurvive(t *testing.T) {
 	t.Cleanup(func() { goapProgramsPath = prev })
 
 	var wg sync.WaitGroup
-	for i := 0; i < workers; i++ {
-		i := i
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for i := range workers {
+		wg.Go(func() {
 			bb := &Blackboard{ChainState: map[string]any{
 				"goap_fusion_program_milestone_charged": ids[i] + ":0",
 			}}
 			refundGoapMilestoneAttemptForInfraFailure(bb)
-		}()
+		})
 	}
 	wg.Wait()
 

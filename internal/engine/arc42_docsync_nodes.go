@@ -23,7 +23,7 @@ var (
 	arc42GitDiffFn     = func(ctx context.Context, workDir string) []string {
 		res := defaultSuperpowersCommandRunner.Run(ctx, workDir, "git", "diff", "--name-only", "HEAD~1..HEAD")
 		var files []string
-		for _, line := range strings.Split(res.Output, "\n") {
+		for line := range strings.SplitSeq(res.Output, "\n") {
 			if line = strings.TrimSpace(line); line != "" {
 				files = append(files, line)
 			}
@@ -47,7 +47,7 @@ func docChangeContextFromBlackboard(bb *Blackboard) docChangeContext {
 		case []string:
 			chg.ChangedFiles = v
 		case string:
-			for _, f := range strings.Split(v, ",") {
+			for f := range strings.SplitSeq(v, ",") {
 				if f = strings.TrimSpace(f); f != "" {
 					chg.ChangedFiles = append(chg.ChangedFiles, f)
 				}
@@ -83,7 +83,6 @@ func registerArc42SyncNode(name string, run func(chg docChangeContext) (bool, st
 
 func init() {
 	for _, sec := range arc42Sections {
-		sec := sec
 		registerArc42SyncNode(fmt.Sprintf("SyncArc42Section%02d", sec.Num), func(chg docChangeContext) (bool, string) {
 			return arc42SectionSyncFn(context.Background(), defaultSuperpowersClaudeRunner, defaultSuperpowersCommandRunner, chg, sec)
 		})

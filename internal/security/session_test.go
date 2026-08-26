@@ -120,7 +120,7 @@ func TestSessionStore_CleanupExpired(t *testing.T) {
 	defer ss.Stop()
 
 	// Create 3 sessions
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if _, err := ss.CreateSession(""); err != nil {
 			t.Fatalf("CreateSession %d failed: %v", i, err)
 		}
@@ -151,7 +151,7 @@ func TestSessionStore_MaxSessions(t *testing.T) {
 	defer ss.Stop()
 
 	// Create up to the limit
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if _, err := ss.CreateSession(""); err != nil {
 			t.Fatalf("CreateSession %d failed before limit: %v", i, err)
 		}
@@ -263,7 +263,7 @@ func TestSessionStore_CookieRoundtrip(t *testing.T) {
 	}
 
 	// Create a request with the cookie
-	req := httptest.NewRequest("GET", "/api/something", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/something", nil)
 	req.AddCookie(c)
 
 	// Validate session from request
@@ -303,7 +303,7 @@ func TestSessionStore_NoCookieInRequest(t *testing.T) {
 	ss := NewSessionStore(SessionStoreConfig{CookieName: "bt_session"})
 	defer ss.Stop()
 
-	req := httptest.NewRequest("GET", "/api/something", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/something", nil)
 	// No cookie set
 
 	_, ok := ss.SessionFromRequest(req)
@@ -351,7 +351,7 @@ func TestSessionStore_ConcurrentAccess(_ *testing.T) {
 	goroutines := 50
 	wg.Add(goroutines)
 
-	for i := 0; i < goroutines; i++ {
+	for range goroutines {
 		go func() {
 			defer wg.Done()
 			// Mix of validate, refresh, and create
@@ -415,7 +415,7 @@ func TestSessionStore_BackgroundCleanup(t *testing.T) {
 	defer ss.Stop()
 
 	// Create sessions
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		_, _ = ss.CreateSession("")
 	}
 
@@ -498,7 +498,7 @@ func TestSessionMiddleware_ValidCookie(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	req := httptest.NewRequest("GET", "/api/protected", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/protected", nil)
 	req.AddCookie(&http.Cookie{Name: "bt_session", Value: token})
 
 	w := httptest.NewRecorder()
@@ -523,7 +523,7 @@ func TestSessionMiddleware_NoCookieOrKey(t *testing.T) {
 		called = true
 	})
 
-	req := httptest.NewRequest("GET", "/api/protected", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/protected", nil)
 	w := httptest.NewRecorder()
 	handler(w, req)
 
@@ -546,7 +546,7 @@ func TestSessionMiddleware_APIKeyFallback(t *testing.T) {
 		called = true
 	})
 
-	req := httptest.NewRequest("GET", "/api/protected", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/protected", nil)
 	req.Header.Set("X-API-Key", "sk-secret")
 
 	w := httptest.NewRecorder()
@@ -571,7 +571,7 @@ func TestSessionMiddleware_InvalidAPIKey(t *testing.T) {
 		called = true
 	})
 
-	req := httptest.NewRequest("GET", "/api/protected", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/protected", nil)
 	req.Header.Set("X-API-Key", "sk-wrong-key")
 
 	w := httptest.NewRecorder()
@@ -597,7 +597,7 @@ func TestSessionMiddleware_NoAPIKeyWhenEmpty(t *testing.T) {
 		called = true
 	})
 
-	req := httptest.NewRequest("GET", "/api/protected", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/protected", nil)
 	w := httptest.NewRecorder()
 	handler(w, req)
 
@@ -626,7 +626,7 @@ func TestSessionMiddleware_ExpiredCookie(t *testing.T) {
 		called = true
 	})
 
-	req := httptest.NewRequest("GET", "/api/protected", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/protected", nil)
 	req.AddCookie(&http.Cookie{Name: "bt_session", Value: token})
 
 	w := httptest.NewRecorder()
@@ -656,7 +656,7 @@ func TestSessionMiddleware_CustomCheckFunc(t *testing.T) {
 	})
 
 	// Test with valid custom key
-	req := httptest.NewRequest("GET", "/api/protected", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/protected", nil)
 	req.Header.Set("X-API-Key", "valid-custom-key")
 	w := httptest.NewRecorder()
 	handler(w, req)
@@ -670,7 +670,7 @@ func TestSessionMiddleware_CustomCheckFunc(t *testing.T) {
 
 	// Test with invalid custom key
 	called = false
-	req2 := httptest.NewRequest("GET", "/api/protected", nil)
+	req2 := httptest.NewRequest(http.MethodGet, "/api/protected", nil)
 	req2.Header.Set("X-API-Key", "wrong-key")
 	w2 := httptest.NewRecorder()
 	handler(w2, req2)
@@ -728,7 +728,7 @@ func TestSessionTokenUniqueness(t *testing.T) {
 	defer ss.Stop()
 
 	tokens := make(map[string]bool)
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		token, err := ss.CreateSession("")
 		if err != nil {
 			t.Fatalf("CreateSession %d failed: %v", i, err)
@@ -758,7 +758,7 @@ func TestSessionStore_AuthorizedHeader(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	req := httptest.NewRequest("GET", "/api/protected", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/protected", nil)
 	w := httptest.NewRecorder()
 	handler(w, req)
 

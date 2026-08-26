@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"math"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/reliability"
@@ -51,7 +53,7 @@ func (ec *EmbeddingClient) GetEmbedding(text string) (Embedding, error) {
 		return nil, fmt.Errorf("ollama embedding: circuit breaker open")
 	}
 
-	payload := map[string]interface{}{
+	payload := map[string]any{
 		"model":  ec.Model,
 		"prompt": text,
 	}
@@ -151,20 +153,19 @@ func (kg *KnowledgeGraph) BuildIndex() error {
 
 	kg.mu.RLock()
 	trees := make(map[string]*TreeMeta, len(kg.Trees))
-	for id, tree := range kg.Trees {
-		trees[id] = tree
-	}
+	maps.Copy(trees, kg.Trees)
 	kg.mu.RUnlock()
 
 	ch := make(chan result, len(trees))
 
 	for id, tree := range trees {
 		reliability.SafeGo(fmt.Sprintf("knowledge.BuildIndex tree %s", id), func() {
-			text := tree.Name + " " + tree.Description
+			var text strings.Builder
+			text.WriteString(tree.Name + " " + tree.Description)
 			for _, cap := range tree.Capabilities {
-				text += " " + cap.Action + " in " + cap.Domain
+				text.WriteString(" " + cap.Action + " in " + cap.Domain)
 			}
-			emb, err := defaultEmbeddingClient.GetEmbedding(text)
+			emb, err := defaultEmbeddingClient.GetEmbedding(text.String())
 			kg.mu.Lock()
 			if err == nil {
 				tree.Embedding = emb
@@ -177,7 +178,7 @@ func (kg *KnowledgeGraph) BuildIndex() error {
 	}
 
 	var firstErr error
-	for i := 0; i < len(trees); i++ {
+	for range len(trees) {
 		r := <-ch
 		if r.err != nil && firstErr == nil {
 			firstErr = r.err

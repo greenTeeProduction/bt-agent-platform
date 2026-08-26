@@ -99,28 +99,28 @@ func TestIntSliceFromInterface_Float64Slice(t *testing.T) {
 }
 
 func TestIntSliceFromInterface_InterfaceSliceFloat64(t *testing.T) {
-	result := intSliceFromInterface([]interface{}{1.5, 2.7, 3.0})
+	result := intSliceFromInterface([]any{1.5, 2.7, 3.0})
 	if len(result) != 3 || result[0] != 1 || result[1] != 2 || result[2] != 3 {
 		t.Errorf("expected [1 2 3], got %v", result)
 	}
 }
 
 func TestIntSliceFromInterface_InterfaceSliceInt(t *testing.T) {
-	result := intSliceFromInterface([]interface{}{1, 2, 3})
+	result := intSliceFromInterface([]any{1, 2, 3})
 	if len(result) != 3 || result[0] != 1 || result[1] != 2 || result[2] != 3 {
 		t.Errorf("expected [1 2 3], got %v", result)
 	}
 }
 
 func TestIntSliceFromInterface_MixedTypes(t *testing.T) {
-	result := intSliceFromInterface([]interface{}{1, "foo", 3.5, true})
+	result := intSliceFromInterface([]any{1, "foo", 3.5, true})
 	if len(result) != 2 || result[0] != 1 || result[1] != 3 {
 		t.Errorf("expected [1 3], got %v", result)
 	}
 }
 
 func TestIntSliceFromInterface_Empty(t *testing.T) {
-	result := intSliceFromInterface([]interface{}{})
+	result := intSliceFromInterface([]any{})
 	if result == nil || len(result) != 0 {
 		t.Errorf("expected empty slice, got %v", result)
 	}
@@ -703,8 +703,8 @@ func TestBuildReactiveParallel_MonitorMode(t *testing.T) {
 		Type: "ReactiveParallel", Name: "parallel",
 		Metadata: map[string]any{
 			"mode":                      "monitor",
-			"monitor_indices":           []interface{}{0.0},
-			"action_indices":            []interface{}{1.0},
+			"monitor_indices":           []any{0.0},
+			"action_indices":            []any{1.0},
 			"cancel_on_monitor_failure": true,
 		},
 		Children: []evolution.SerializableNode{

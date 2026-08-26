@@ -33,7 +33,7 @@ func TestBTBlocksComposeRejectsUnknownStrategyTree(t *testing.T) {
 		t.Fatal("bt_blocks_compose tool must be registered by registerBlockTools")
 	}
 
-	invoke := func(t *testing.T, args string) map[string]interface{} {
+	invoke := func(t *testing.T, args string) map[string]any {
 		t.Helper()
 		res, ok := server.Invoke("bt_blocks_compose", json.RawMessage(args))
 		if !ok {
@@ -42,7 +42,7 @@ func TestBTBlocksComposeRejectsUnknownStrategyTree(t *testing.T) {
 		if res == nil || len(res.Content) == 0 {
 			t.Fatalf("bt_blocks_compose returned no content for args %s", args)
 		}
-		var out map[string]interface{}
+		var out map[string]any
 		if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 			t.Fatalf("bt_blocks_compose result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
 		}
@@ -157,7 +157,7 @@ func TestBTBlocksComposeSaveGatesActivation(t *testing.T) {
 		return server, &live, store, dir
 	}
 
-	invoke := func(t *testing.T, server *engine.Server, args string) map[string]interface{} {
+	invoke := func(t *testing.T, server *engine.Server, args string) map[string]any {
 		t.Helper()
 		res, ok := server.Invoke("bt_blocks_compose", json.RawMessage(args))
 		if !ok {
@@ -166,7 +166,7 @@ func TestBTBlocksComposeSaveGatesActivation(t *testing.T) {
 		if res == nil || len(res.Content) == 0 {
 			t.Fatalf("bt_blocks_compose returned no content for args %s", args)
 		}
-		var out map[string]interface{}
+		var out map[string]any
 		if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 			t.Fatalf("bt_blocks_compose result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
 		}

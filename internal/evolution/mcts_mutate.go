@@ -13,11 +13,12 @@
 package evolution
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"math"
 	"math/rand"
-	"sort"
+	"slices"
 	"sync"
 )
 
@@ -122,7 +123,7 @@ type MCTSMutator struct {
 	ExplorationConst float64     `json:"exploration_constant"` // C, default 1.4
 	MaxDepth         int         `json:"max_depth"`            // search depth limit, default 3
 	FitnessEvaluator FitnessFunc `json:"-"`                    // evaluates tree fitness
-	Verbose          bool        `json:"verbose,omitempty"`    // enable logging
+	Verbose          bool        `json:"verbose,omitzero"`     // enable logging
 
 	// Experience bank warm-start — optional reference to recent successful mutations
 	WarmStartHints []string `json:"warmstart_hints,omitempty"`
@@ -199,7 +200,7 @@ func (m *MCTSMutator) Mutate(parent *SerializableNode, parentFitness float64) (*
 	bestFitness := parentFitness
 
 	// 2. MAIN LOOP: K iterations
-	for i := 0; i < m.Iterations; i++ {
+	for range m.Iterations {
 		// SELECT: traverse using UCB1 until we hit a leaf or an unexpanded node
 		selected := m.selectNode(root, 0)
 
@@ -382,18 +383,14 @@ func (m *MCTSMutator) backpropagate(node *MCTSNode, fitness float64) {
 // buildMutationOps creates the set of mutation operations to try from a given tree.
 // Includes warm-start hints from the experience bank if available.
 func (m *MCTSMutator) buildMutationOps(_ *SerializableNode) []string {
-	ops := make([]string, len(AllMutationOps))
-	copy(ops, AllMutationOps)
+	ops := slices.Clone(AllMutationOps)
 
 	// Prepend warm-start hints if any
 	if len(m.WarmStartHints) > 0 {
 		// Filter hints to only include valid ops
 		for _, hint := range m.WarmStartHints {
-			for _, valid := range AllMutationOps {
-				if hint == valid {
-					ops = append([]string{hint}, ops...)
-					break
-				}
+			if slices.Contains(AllMutationOps, hint) {
+				ops = append([]string{hint}, ops...)
 			}
 		}
 	}
@@ -487,7 +484,7 @@ func (m *MCTSMutator) Candidates(parent *SerializableNode, parentFitness float64
 	best := make(map[string]improvement, len(AllMutationOps))
 	order := make([]string, 0, len(AllMutationOps))
 
-	for i := 0; i < m.Iterations; i++ {
+	for range m.Iterations {
 		selected := m.selectNode(root, 0)
 		leaf := m.expandNode(selected)
 		if leaf == nil {
@@ -553,7 +550,9 @@ func (m *MCTSMutator) Candidates(parent *SerializableNode, parentFitness float64
 				imp.op.Operation, imp.op.Target, imp.gain, m.Iterations),
 		})
 	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].Score > out[j].Score })
+	slices.SortStableFunc(out, func(a, b ScoredMutation) int {
+		return cmp.Compare(b.Score, a.Score)
+	})
 	return out
 }
 
@@ -584,7 +583,9 @@ func MergeScoredMutations(heuristic, mcts []ScoredMutation) []ScoredMutation {
 		}
 	}
 
-	sort.SliceStable(merged, func(i, j int) bool { return merged[i].Score > merged[j].Score })
+	slices.SortStableFunc(merged, func(a, b ScoredMutation) int {
+		return cmp.Compare(b.Score, a.Score)
+	})
 	return merged
 }
 

@@ -5,7 +5,7 @@ import (
 	"os/exec"
 	"path"
 	"regexp"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -92,7 +92,7 @@ func buildGoalDrivenImplementationPlan(task string) string {
 func extractPrioritizedGoals(task string) []string {
 	byPriority := map[string][]string{}
 	var priorities []string
-	for _, line := range strings.Split(task, "\n") {
+	for line := range strings.SplitSeq(task, "\n") {
 		m := goalLineRe.FindStringSubmatch(strings.TrimSpace(line))
 		if m == nil {
 			continue
@@ -102,7 +102,7 @@ func extractPrioritizedGoals(task string) []string {
 		}
 		byPriority[m[1]] = append(byPriority[m[1]], strings.TrimSpace(m[2]))
 	}
-	sort.Strings(priorities)
+	slices.Sort(priorities)
 	var goals []string
 	for _, p := range priorities {
 		goals = append(goals, byPriority[p]...)

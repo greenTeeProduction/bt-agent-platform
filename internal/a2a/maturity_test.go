@@ -161,7 +161,7 @@ func TestA2AServer_HandleHealth_Direct(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		t.Errorf("expected 200, got %d", resp.StatusCode)
 	}
 }
@@ -183,7 +183,7 @@ func TestA2AServer_HandleWellKnown(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 404 {
+	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("expected 404, got %d", resp.StatusCode)
 	}
 }
@@ -210,7 +210,7 @@ func TestA2AServer_HandleAgentEndpoint_EmptyName(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
+	if resp.StatusCode != http.StatusOK {
 		t.Errorf("expected 200 for empty agent name, got %d", resp.StatusCode)
 	}
 }
@@ -230,7 +230,7 @@ func TestA2AServer_HandleAgentEndpoint_UnknownAgent(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != 404 {
+	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("expected 404 for unknown agent, got %d", resp.StatusCode)
 	}
 }

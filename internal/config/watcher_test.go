@@ -623,10 +623,7 @@ const configWatcherLoopPanicSubprocessEnv = "CONFIG_WATCHER_LOOP_PANIC_SUBPROCES
 // afterward.
 func TestConfigWatcherLoop_PanicRecovered(t *testing.T) {
 	if os.Getenv(configWatcherLoopPanicSubprocessEnv) == "1" {
-		dir, err := os.MkdirTemp("", "bt-config-watcher-panic")
-		if err != nil {
-			panic(err)
-		}
+		dir := t.TempDir()
 		path := filepath.Join(dir, "config.json")
 		data, err := json.Marshal(map[string]any{"dashboard_port": 8000})
 		if err != nil {

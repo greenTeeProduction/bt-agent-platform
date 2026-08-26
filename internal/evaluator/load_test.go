@@ -18,7 +18,7 @@ func TestTranspositionTable_Load_TrimOverflowExact(t *testing.T) {
 	tree := evolution.DefaultTree()
 	entries := make(map[string]TranspositionEntry)
 	treeHash := hashTree(tree)
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		key := treeHash + ":" + string(rune('a'+i))
 		entries[key] = TranspositionEntry{Outcome: "success"}
 	}

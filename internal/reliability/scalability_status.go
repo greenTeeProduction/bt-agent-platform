@@ -57,7 +57,7 @@ type ConcurrencyLimiterStats struct {
 // QueueStats captures task queue depth and health.
 type QueueStats struct {
 	Pending int `json:"pending"`
-	MaxLen  int `json:"max_len,omitempty"` // -1 = unbounded
+	MaxLen  int `json:"max_len,omitzero"` // -1 = unbounded
 }
 
 // RouterStats captures agent executor distribution and failure tracking.
@@ -65,7 +65,7 @@ type RouterStats struct {
 	Total     int `json:"total"`
 	Healthy   int `json:"healthy"`
 	Unhealthy int `json:"unhealthy"`
-	Failures  int `json:"failures,omitempty"` // executors with consecutive failures > 0
+	Failures  int `json:"failures,omitzero"` // executors with consecutive failures > 0
 }
 
 // NewScalabilityStatus creates a status snapshot from the given components.

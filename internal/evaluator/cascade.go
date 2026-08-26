@@ -1,8 +1,9 @@
 package evaluator
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
 )
@@ -114,8 +115,8 @@ func (ce *CascadeEvaluator) EvaluatePopulation(individuals []evolution.Individua
 	// ── Tier 2: Bench — top N from Quick tier ──
 	if len(quickPassed) > ce.config.MaxBenchCandidates {
 		// Sort by QuickScore descending, keep top N
-		sort.Slice(quickPassed, func(a, b int) bool {
-			return results[quickPassed[a]].QuickScore > results[quickPassed[b]].QuickScore
+		slices.SortFunc(quickPassed, func(x, y int) int {
+			return cmp.Compare(results[y].QuickScore, results[x].QuickScore)
 		})
 		// Mark excess as rejected
 		for _, idx := range quickPassed[ce.config.MaxBenchCandidates:] {
@@ -143,8 +144,8 @@ func (ce *CascadeEvaluator) EvaluatePopulation(individuals []evolution.Individua
 
 	// ── Tier 3: Full — top N from Bench tier ──
 	if len(benchPassed) > ce.config.MaxFullCandidates {
-		sort.Slice(benchPassed, func(a, b int) bool {
-			return results[benchPassed[a]].BenchScore > results[benchPassed[b]].BenchScore
+		slices.SortFunc(benchPassed, func(x, y int) int {
+			return cmp.Compare(results[y].BenchScore, results[x].BenchScore)
 		})
 		for _, idx := range benchPassed[ce.config.MaxFullCandidates:] {
 			results[idx].Rejected = true
@@ -162,8 +163,8 @@ func (ce *CascadeEvaluator) EvaluatePopulation(individuals []evolution.Individua
 	}
 
 	// Sort by best available score descending
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].BestScore() > results[j].BestScore()
+	slices.SortFunc(results, func(a, b CascadeResult) int {
+		return cmp.Compare(b.BestScore(), a.BestScore())
 	})
 
 	return results

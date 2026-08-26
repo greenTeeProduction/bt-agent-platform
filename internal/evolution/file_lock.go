@@ -28,14 +28,11 @@ func acquireExperienceLock(persistPath string) (func(), error) {
 		f.Close()
 		return nil, fmt.Errorf("flock experience lock %s: %w", lockPath, err)
 	}
-	var once sync.Once
-	release := func() {
-		once.Do(func() {
-			// Best-effort unlock: closing the descriptor releases the
-			// flock regardless, so an unlock error is not actionable.
-			_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
-			_ = f.Close()
-		})
-	}
+	release := sync.OnceFunc(func() {
+		// Best-effort unlock: closing the descriptor releases the
+		// flock regardless, so an unlock error is not actionable.
+		_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+		_ = f.Close()
+	})
 	return release, nil
 }

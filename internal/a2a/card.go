@@ -2,7 +2,7 @@ package a2a
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
@@ -117,7 +117,7 @@ func EligibleBidders(cards map[string]*a2a.AgentCard, ann TaskAnnouncement) []st
 			eligible = append(eligible, name)
 		}
 	}
-	sort.Strings(eligible)
+	slices.Sort(eligible)
 	return eligible
 }
 

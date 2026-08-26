@@ -1,12 +1,13 @@
 package a2a
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -56,8 +57,8 @@ type TaskAnnouncement struct {
 	TaskID        string    `json:"task_id"`
 	Description   string    `json:"description,omitempty"`
 	RequiredTags  []string  `json:"required_tags,omitempty"`
-	MinConfidence float64   `json:"min_confidence,omitempty"`
-	Deadline      time.Time `json:"deadline,omitempty"`
+	MinConfidence float64   `json:"min_confidence,omitzero"`
+	Deadline      time.Time `json:"deadline,omitzero"`
 }
 
 // Kind identifies this message as a task announcement.
@@ -730,7 +731,6 @@ func (a *Auctioneer) CollectBids(ctx context.Context, ann TaskAnnouncement, cand
 	)
 	for name, agentURL := range candidates {
 		wg.Add(1)
-		name, agentURL := name, agentURL
 		reliability.SafeGo(fmt.Sprintf("a2a.CollectBids[%s]", name), func() {
 			defer wg.Done()
 
@@ -769,8 +769,8 @@ func (a *Auctioneer) CollectBids(ctx context.Context, ann TaskAnnouncement, cand
 	}
 	wg.Wait()
 
-	sort.Slice(bids, func(i, j int) bool {
-		return bids[i].BidderName < bids[j].BidderName
+	slices.SortFunc(bids, func(a, b Bid) int {
+		return cmp.Compare(a.BidderName, b.BidderName)
 	})
 	return bids, nil
 }

@@ -12,12 +12,13 @@
 package evolution
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"math"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -199,8 +200,8 @@ func (eb *ExperienceBank) Retrieve(query string, topK int) []ExperienceEntry {
 	}
 
 	// Sort by score descending
-	sort.Slice(candidates, func(i, j int) bool {
-		return candidates[i].score > candidates[j].score
+	slices.SortFunc(candidates, func(a, b scored) int {
+		return cmp.Compare(b.score, a.score)
 	})
 
 	// Return top-K
@@ -208,7 +209,7 @@ func (eb *ExperienceBank) Retrieve(query string, topK int) []ExperienceEntry {
 		topK = len(candidates)
 	}
 	result := make([]ExperienceEntry, topK)
-	for i := 0; i < topK; i++ {
+	for i := range topK {
 		result[i] = candidates[i].entry
 	}
 	return result
@@ -226,8 +227,8 @@ func (eb *ExperienceBank) RetrieveByTreeType(treeType string, topK int) []Experi
 		}
 	}
 
-	sort.Slice(matching, func(i, j int) bool {
-		return matching[i].QualityScore > matching[j].QualityScore
+	slices.SortFunc(matching, func(a, b ExperienceEntry) int {
+		return cmp.Compare(b.QualityScore, a.QualityScore)
 	})
 
 	if topK > len(matching) {
@@ -338,11 +339,11 @@ func (eb *ExperienceBank) persistLocked() error {
 }
 
 // Stats returns a summary of the experience bank.
-func (eb *ExperienceBank) Stats() map[string]interface{} {
+func (eb *ExperienceBank) Stats() map[string]any {
 	eb.mu.RLock()
 	defer eb.mu.RUnlock()
 
-	stats := map[string]interface{}{
+	stats := map[string]any{
 		"total_entries": len(eb.Entries),
 	}
 
@@ -444,17 +445,20 @@ func (eb *ExperienceBank) enforceCapLocked() {
 	for i := range order {
 		order[i] = i
 	}
-	sort.SliceStable(order, func(a, b int) bool {
-		ea, ebEntry := eb.Entries[order[a]], eb.Entries[order[b]]
-		protA := ea.TimesReused >= experienceReuseProtection
-		protB := ebEntry.TimesReused >= experienceReuseProtection
+	slices.SortStableFunc(order, func(a, b int) int {
+		entA, entB := eb.Entries[a], eb.Entries[b]
+		protA := entA.TimesReused >= experienceReuseProtection
+		protB := entB.TimesReused >= experienceReuseProtection
 		if protA != protB {
-			return !protA // unprotected entries are evicted first
+			if protA {
+				return 1
+			}
+			return -1 // unprotected entries are evicted first
 		}
-		if ea.QualityScore != ebEntry.QualityScore {
-			return ea.QualityScore < ebEntry.QualityScore
-		}
-		return ea.CreatedAt.Before(ebEntry.CreatedAt)
+		return cmp.Or(
+			cmp.Compare(entA.QualityScore, entB.QualityScore),
+			entA.CreatedAt.Compare(entB.CreatedAt),
+		)
 	})
 
 	evict := make(map[int]bool, excess)

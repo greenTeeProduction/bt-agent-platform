@@ -47,7 +47,7 @@ func handleBlackboard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+	_ = json.NewEncoder(w).Encode(map[string]any{
 		"scope":    scopeKind,
 		"scope_id": scopeID,
 		"prefix":   prefix,
@@ -92,7 +92,7 @@ func handleBlackboardScopes(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+	_ = json.NewEncoder(w).Encode(map[string]any{
 		"scope": scopeKind,
 		"count": len(ids),
 		"ids":   ids,

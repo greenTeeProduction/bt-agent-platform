@@ -463,7 +463,7 @@ func TestExecuteSprint(t *testing.T) {
 	}
 
 	// Tasks in sprint should be marked completed
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		if wf.Tasks[i].Status != StatusCompleted {
 			t.Errorf("task %s should be completed, got %s", wf.Tasks[i].ID, wf.Tasks[i].Status.String())
 		}
@@ -874,7 +874,7 @@ func TestRecommendationsToTasks_LongTextTruncation(t *testing.T) {
 // ─── sortTasks stability ───
 
 func TestSortTasks_StableOrder(t *testing.T) {
-	// sort.SliceStable preserves order of equal elements
+	// slices.SortStableFunc preserves order of equal elements
 	tasks := []WorkflowTask{
 		{ID: "high-a", Priority: PriorityHigh},
 		{ID: "high-b", Priority: PriorityHigh},
@@ -1154,7 +1154,7 @@ func TestExecuteSprint_ConcurrentWorkflowsShareCompanyState(t *testing.T) {
 	orch2 := &mockOrch{}
 
 	run := func(wf *Workflow, orch *mockOrch) {
-		for i := 0; i < 200; i++ {
+		for range 200 {
 			wf.mu.Lock()
 			wf.Tasks = []WorkflowTask{{ID: "t", SprintTarget: 1, Status: StatusApproved}}
 			wf.mu.Unlock()

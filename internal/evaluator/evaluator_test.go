@@ -218,7 +218,7 @@ func TestTranspositionTable_Eviction(t *testing.T) {
 	tt, _ := NewTranspositionTable(tmpDir, 3) // small max
 
 	tree := evolution.DefaultTree()
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		tt.Store(tree, "task", TranspositionEntry{Outcome: "success"})
 	}
 

@@ -12,7 +12,7 @@ const (
 
 // valAsFloat64 converts various value types to float64 with ok flag.
 // Handles float64, int, int64, bool (1.0/0.0), and string "true"/"1.0".
-func valAsFloat64(v interface{}) (float64, bool) {
+func valAsFloat64(v any) (float64, bool) {
 	switch val := v.(type) {
 	case float64:
 		return val, true

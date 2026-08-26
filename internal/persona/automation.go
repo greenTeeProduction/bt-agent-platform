@@ -1,11 +1,13 @@
 package persona
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -76,7 +78,9 @@ func (s *AutomationStore) All() ([]AutomationRecord, error) {
 	if err != nil {
 		return nil, err
 	}
-	sort.Slice(records, func(i, j int) bool { return records[i].CreatedAt > records[j].CreatedAt })
+	slices.SortFunc(records, func(a, b AutomationRecord) int {
+		return cmp.Compare(b.CreatedAt, a.CreatedAt)
+	})
 	return records, nil
 }
 
@@ -213,11 +217,7 @@ func (s *AutomationStore) saveLocked(records []AutomationRecord) error {
 // representative still map to the same automation proposal.
 func PatternSignature(representative string) string {
 	set := keywordSet(representative)
-	words := make([]string, 0, len(set))
-	for w := range set {
-		words = append(words, w)
-	}
-	sort.Strings(words)
+	words := slices.Sorted(maps.Keys(set))
 	if len(words) > 5 {
 		words = words[:5]
 	}

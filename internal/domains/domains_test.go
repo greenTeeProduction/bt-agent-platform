@@ -5,7 +5,8 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"sort"
+	"maps"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -737,12 +738,8 @@ func TestEdgeMetadataWalkerDetectsBlankFields(t *testing.T) {
 // DescriptionFor, and no description entry may point outside it.
 func describableDomainTrees() map[string]*evolution.SerializableNode {
 	union := map[string]*evolution.SerializableNode{}
-	for name, tree := range AllDomainTrees() {
-		union[name] = tree
-	}
-	for name, tree := range KanbanAndHermesDomainTrees() {
-		union[name] = tree
-	}
+	maps.Copy(union, AllDomainTrees())
+	maps.Copy(union, KanbanAndHermesDomainTrees())
 	return union
 }
 
@@ -1138,9 +1135,7 @@ func TestNonRegistryDomainTreeNodesHaveDescriptions(t *testing.T) {
 	// — so this guard cannot fall behind either set. Both return fresh maps, so
 	// merging into the first is safe.
 	trees := nonRegistrySmokeTestableTrees()
-	for name, tree := range ResolverReachableDomainTrees() {
-		trees[name] = tree
-	}
+	maps.Copy(trees, ResolverReachableDomainTrees())
 
 	for name, tree := range trees {
 		if tree == nil {
@@ -1724,7 +1719,7 @@ func TestExpectedDomainIDsIsSortedAndComplete(t *testing.T) {
 		t.Errorf("ExpectedDomainIDs is missing ids: %v", want)
 	}
 
-	if !sort.StringsAreSorted(ids) {
+	if !slices.IsSorted(ids) {
 		t.Errorf("ExpectedDomainIDs(registry) is not sorted: %v", ids)
 	}
 }
@@ -2158,7 +2153,7 @@ func TestSmokeExecutionFnsMapCoversRegistry(t *testing.T) {
 			missing = append(missing, name)
 		}
 	}
-	sort.Strings(missing)
+	slices.Sort(missing)
 
 	if len(missing) > 0 {
 		t.Errorf("the fns map in %s is missing %d of the %d SmokeTestableDomainTrees() entries, so those trees are silently unexercised by the executable-structure smoke test: %v\n"+
@@ -2298,11 +2293,7 @@ func TestEveryResolverReachableDomainTreeIsCovered(t *testing.T) {
 		t.Fatalf("no bare-ID domains-package branches found in %s — the AST guard stopped matching the real resolver and is silently vacuous", resolverBareIDFile)
 	}
 
-	names := make([]string, 0, len(ids))
-	for id := range ids {
-		names = append(names, id)
-	}
-	sort.Strings(names)
+	names := slices.Sorted(maps.Keys(ids))
 
 	mock := benchmark.DefaultMock()
 	for _, id := range names {
@@ -2457,11 +2448,7 @@ func resolverBareIDLiterals(t *testing.T) []string {
 		return true
 	})
 
-	ids := make([]string, 0, len(seen))
-	for id := range seen {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
+	ids := slices.Sorted(maps.Keys(seen))
 	return ids
 }
 

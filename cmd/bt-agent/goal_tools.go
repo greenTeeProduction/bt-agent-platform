@@ -51,7 +51,7 @@ func registerGoalTools(server *engine.Server, deps *mcpDeps) {
 			if err := store.Add(goal); err != nil {
 				return goalError(err.Error())
 			}
-			data, _ := json.Marshal(map[string]interface{}{
+			data, _ := json.Marshal(map[string]any{
 				"added":     true,
 				"goal":      goal,
 				"grounding": report,
@@ -87,7 +87,7 @@ func registerGoalTools(server *engine.Server, deps *mcpDeps) {
 			if selected := queue.SelectGoal(goap.WorldState{}); selected != nil {
 				next = selected.Name
 			}
-			data, _ := json.Marshal(map[string]interface{}{
+			data, _ := json.Marshal(map[string]any{
 				"user":  params.User,
 				"count": len(goals),
 				"next":  next,
@@ -118,7 +118,7 @@ func registerGoalTools(server *engine.Server, deps *mcpDeps) {
 			if err != nil {
 				return goalError(err.Error())
 			}
-			data, _ := json.Marshal(map[string]interface{}{"removed": removed, "name": params.Name})
+			data, _ := json.Marshal(map[string]any{"removed": removed, "name": params.Name})
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 
@@ -173,7 +173,7 @@ func registerGoalTools(server *engine.Server, deps *mcpDeps) {
 				InitialState: f.InitialState,
 				KnownAction:  func(name string) bool { return engine.GetAction(name) != nil },
 				StyleHints:   personaStyleHints(deps, params.User),
-				Provenance: map[string]interface{}{
+				Provenance: map[string]any{
 					"user":          params.User,
 					"goal_priority": goal.Priority,
 				},
@@ -187,7 +187,7 @@ func registerGoalTools(server *engine.Server, deps *mcpDeps) {
 			for _, s := range plan.Steps {
 				steps = append(steps, s.Name)
 			}
-			result := map[string]interface{}{
+			result := map[string]any{
 				"tree_id":    treeID,
 				"goal":       goal.Name,
 				"plan":       steps,
@@ -261,7 +261,7 @@ func registerGoalTools(server *engine.Server, deps *mcpDeps) {
 			if err := store.Add(goal); err != nil {
 				return goalError(err.Error())
 			}
-			data, _ := json.Marshal(map[string]interface{}{
+			data, _ := json.Marshal(map[string]any{
 				"added":   true,
 				"goal":    goal,
 				"pattern": pattern,

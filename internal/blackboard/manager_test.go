@@ -75,7 +75,7 @@ func TestManager_AppendConcurrent(t *testing.T) {
 
 	const n = 50
 	done := make(chan struct{})
-	for i := 0; i < n; i++ {
+	for range n {
 		go func() {
 			defer func() { done <- struct{}{} }()
 			if _, err := m.Append(scope, "steps/log", "x", "\n", "text"); err != nil {
@@ -83,7 +83,7 @@ func TestManager_AppendConcurrent(t *testing.T) {
 			}
 		}()
 	}
-	for i := 0; i < n; i++ {
+	for range n {
 		<-done
 	}
 

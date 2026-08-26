@@ -37,26 +37,26 @@ var errAnswererUnavailable = errors.New("answerer unavailable")
 // parseGrillQuestions extracts "Q [critical|normal] <branch>: <text>" lines.
 func parseGrillQuestions(out string) []grillQuestion {
 	var qs []grillQuestion
-	for _, line := range strings.Split(out, "\n") {
+	for line := range strings.SplitSeq(out, "\n") {
 		line = strings.TrimSpace(line)
 		if !strings.HasPrefix(line, "Q [") {
 			continue
 		}
 		rest := strings.TrimPrefix(line, "Q [")
-		sevEnd := strings.Index(rest, "]")
-		if sevEnd < 0 {
+		before, after, ok := strings.Cut(rest, "]")
+		if !ok {
 			continue
 		}
-		sev := strings.ToLower(strings.TrimSpace(rest[:sevEnd]))
-		body := strings.TrimSpace(rest[sevEnd+1:])
-		colon := strings.Index(body, ":")
-		if colon < 0 {
+		sev := strings.ToLower(strings.TrimSpace(before))
+		body := strings.TrimSpace(after)
+		before0, after0, ok0 := strings.Cut(body, ":")
+		if !ok0 {
 			continue
 		}
 		qs = append(qs, grillQuestion{
 			Critical: sev == "critical",
-			Branch:   strings.TrimSpace(body[:colon]),
-			Text:     strings.TrimSpace(body[colon+1:]),
+			Branch:   strings.TrimSpace(before0),
+			Text:     strings.TrimSpace(after0),
 		})
 	}
 	return qs

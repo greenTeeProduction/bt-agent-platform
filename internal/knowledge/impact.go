@@ -22,9 +22,10 @@ import (
 	"fmt"
 	"go/parser"
 	"go/token"
+	"maps"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -159,11 +160,7 @@ func BuildImpactGraph(root string) (*ImpactGraph, error) {
 
 	tests := make(map[string][]string, len(edges))
 	for source, set := range edges {
-		list := make([]string, 0, len(set))
-		for test := range set {
-			list = append(list, test)
-		}
-		sort.Strings(list)
+		list := slices.Sorted(maps.Keys(set))
 		tests[source] = list
 	}
 
@@ -176,10 +173,10 @@ func readModulePath(root string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	for _, line := range strings.Split(string(data), "\n") {
+	for line := range strings.SplitSeq(string(data), "\n") {
 		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "module ") {
-			return strings.TrimSpace(strings.TrimPrefix(line, "module ")), nil
+		if after, ok := strings.CutPrefix(line, "module "); ok {
+			return strings.TrimSpace(after), nil
 		}
 	}
 	return "", nil

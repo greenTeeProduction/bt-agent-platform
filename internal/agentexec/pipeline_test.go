@@ -45,7 +45,6 @@ func TestRunPipelineWithID_RecordsAgentMetrics(t *testing.T) {
 
 	var stats *dashboard.AgentStats
 	for _, s := range dashboard.GetAgentMetrics() {
-		s := s
 		if s.Name == agentName {
 			stats = &s
 			break

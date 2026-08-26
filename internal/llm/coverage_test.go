@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -340,8 +339,7 @@ func TestDefaultDeepSeekConfig(t *testing.T) {
 }
 
 func TestDefaultDeepSeekConfig_WithEnvKey(t *testing.T) {
-	os.Setenv("DEEPSEEK_API_KEY", "test-key-12345")
-	defer os.Unsetenv("DEEPSEEK_API_KEY")
+	t.Setenv("DEEPSEEK_API_KEY", "test-key-12345")
 
 	cfg := DefaultDeepSeekConfig()
 	if cfg.APIKey != "test-key-12345" {

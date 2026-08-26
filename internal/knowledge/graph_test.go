@@ -66,7 +66,7 @@ func TestRecordRun_TracksBoundedRecentRunsWindow(t *testing.T) {
 	kg.Register(&TreeMeta{ID: "tree:history", Name: "History", Category: "test"})
 
 	const totalRuns = maxRunHistory + 5
-	for i := 0; i < totalRuns; i++ {
+	for range totalRuns {
 		kg.RecordRun(RunRecord{TreeID: "tree:history", Outcome: "success", Quality: 1.0})
 	}
 
@@ -288,7 +288,7 @@ func TestSelectParents_ColdStartDiscountsLuckyTemplate(t *testing.T) {
 	f.SetSeed(42)
 
 	luckyHits, provenHits := 0, 0
-	for i := 0; i < iters; i++ {
+	for range iters {
 		for _, id := range f.selectParents("cat", "") {
 			switch id {
 			case luckyID:

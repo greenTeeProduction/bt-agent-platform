@@ -3,6 +3,7 @@ package research
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -76,11 +77,11 @@ func TestOpenCorruptFileErrors(t *testing.T) {
 
 func TestExcerptIsBoundedAndRuneSafe(t *testing.T) {
 	s, _ := Open(filepath.Join(t.TempDir(), "knowledge.json"))
-	long := ""
-	for i := 0; i < 200; i++ {
-		long += "Grüße-" // multi-byte runes across the truncation boundary
+	var long strings.Builder
+	for range 200 {
+		long.WriteString("Grüße-") // multi-byte runes across the truncation boundary
 	}
-	s.Record("vault:big.md", "big", long)
+	s.Record("vault:big.md", "big", long.String())
 	for _, e := range s.Entries {
 		if len(e.Excerpt) > excerptLimit+4 {
 			t.Fatalf("excerpt too long: %d bytes", len(e.Excerpt))

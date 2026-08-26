@@ -151,20 +151,17 @@ func DetectArchetype(text string) GoalArchetype {
 
 // llmGoal is the JSON shape requested from the model.
 type llmGoal struct {
-	Name       string                 `json:"name"`
-	Priority   float64                `json:"priority"`
-	Deadline   int                    `json:"deadline"`
-	Conditions map[string]interface{} `json:"conditions"`
+	Name       string         `json:"name"`
+	Priority   float64        `json:"priority"`
+	Deadline   int            `json:"deadline"`
+	Conditions map[string]any `json:"conditions"`
 }
 
 func (f *GoalFactory) fromIntentLLM(userText string) (*Goal, *GroundingReport, error) {
 	feedback := ""
-	attempts := f.MaxRepairAttempts
-	if attempts < 1 {
-		attempts = 1
-	}
+	attempts := max(f.MaxRepairAttempts, 1)
 	var lastErr error
-	for attempt := 0; attempt < attempts; attempt++ {
+	for attempt := range attempts {
 		raw, err := f.LLM.Generate(f.extractionPrompt(userText, feedback))
 		if err != nil {
 			return nil, nil, fmt.Errorf("goalfactory: llm: %w", err)
@@ -237,7 +234,7 @@ func (f *GoalFactory) extractionPrompt(userText, feedback string) string {
 
 // groundConditions keeps only conditions whose keys resolve against the
 // vocabulary, normalizing bool-ish string values on the way.
-func (f *GoalFactory) groundConditions(raw map[string]interface{}, report *GroundingReport) WorldState {
+func (f *GoalFactory) groundConditions(raw map[string]any, report *GroundingReport) WorldState {
 	grounded := make(WorldState, len(raw))
 	for key, value := range raw {
 		canonical, ok := f.Vocab.Canonical(key)
@@ -327,7 +324,7 @@ func extractJSONObject(s string) string {
 // normalizeValue coerces LLM output quirks: "true"/"false" strings become
 // bools, integral floats stay floats (JSON default), everything else passes
 // through.
-func normalizeValue(v interface{}) interface{} {
+func normalizeValue(v any) any {
 	if s, ok := v.(string); ok {
 		switch strings.ToLower(strings.TrimSpace(s)) {
 		case "true", "yes":

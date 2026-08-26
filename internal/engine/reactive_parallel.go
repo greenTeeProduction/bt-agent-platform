@@ -72,7 +72,7 @@ func BuildReactiveParallel(node *evolution.SerializableNode, bb *Blackboard) btc
 			mode = m
 		}
 		if raw, ok := node.Metadata["monitor_indices"]; ok {
-			if indices, ok := raw.([]interface{}); ok {
+			if indices, ok := raw.([]any); ok {
 				for _, idx := range indices {
 					if i, ok := idx.(float64); ok {
 						monitorIndices[int(i)] = true

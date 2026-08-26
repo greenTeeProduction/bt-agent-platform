@@ -16,7 +16,7 @@ type Interaction struct {
 	Task       string `json:"task"`
 	TreeID     string `json:"tree_id,omitempty"`
 	Outcome    string `json:"outcome,omitempty"`
-	DurationMs int64  `json:"duration_ms,omitempty"`
+	DurationMs int64  `json:"duration_ms,omitzero"`
 	// Correction holds explicit user feedback text when the user amended or
 	// re-asked; empty for plain runs.
 	Correction string `json:"correction,omitempty"`

@@ -82,7 +82,7 @@ func TestRunRecordsTerminalChildTicksWithParents(t *testing.T) {
 // the run's memory without limit.
 func TestRecordChildTickBounded(t *testing.T) {
 	bb := &Blackboard{}
-	for i := 0; i < maxChildTicks+200; i++ {
+	for i := range maxChildTicks + 200 {
 		bb.recordChildTick("P", fmt.Sprintf("c%d", i), "success")
 	}
 	if got := len(bb.ChildTicks()); got != maxChildTicks {

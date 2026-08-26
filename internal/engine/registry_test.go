@@ -705,7 +705,7 @@ func TestCondition_HasGoapGoal_NoGoals(t *testing.T) {
 	}
 	bb := &Blackboard{
 		Task:       "build a pipeline",
-		ChainState: map[string]interface{}{},
+		ChainState: map[string]any{},
 	}
 	if fn(bb) {
 		t.Error("should return false when no goap_goals in ChainState")
@@ -719,7 +719,7 @@ func TestCondition_HasGoapGoal_EmptyTask(t *testing.T) {
 	}
 	bb := &Blackboard{
 		Task: "",
-		ChainState: map[string]interface{}{
+		ChainState: map[string]any{
 			"goap_goals": []*goap.Goal{goap.NewGoal("test", 1.0, goap.WorldState{})},
 		},
 	}
@@ -735,7 +735,7 @@ func TestCondition_HasGoapGoal_PureQuestion(t *testing.T) {
 	}
 	bb := &Blackboard{
 		Task: "what is a monad",
-		ChainState: map[string]interface{}{
+		ChainState: map[string]any{
 			"goap_goals": []*goap.Goal{goap.NewGoal("test", 1.0, goap.WorldState{})},
 		},
 	}
@@ -751,7 +751,7 @@ func TestCondition_HasGoapGoal_MultiStepTask(t *testing.T) {
 	}
 	bb := &Blackboard{
 		Task: "first build the API, then deploy it to production",
-		ChainState: map[string]interface{}{
+		ChainState: map[string]any{
 			"goap_goals": []*goap.Goal{goap.NewGoal("task_completed", 1.0, goap.WorldState{"task_status": "completed"})},
 		},
 	}
@@ -771,7 +771,7 @@ func TestCondition_HasGoapGoal_WithActionVerb(t *testing.T) {
 	}
 	bb := &Blackboard{
 		Task: "build a real-time chat application",
-		ChainState: map[string]interface{}{
+		ChainState: map[string]any{
 			"goap_goals": []*goap.Goal{goap.NewGoal("task_completed", 1.0, goap.WorldState{"task_status": "completed"})},
 		},
 	}
@@ -787,7 +787,7 @@ func TestCondition_HasGoapGoal_ConfigureTask(t *testing.T) {
 	}
 	bb := &Blackboard{
 		Task: "configure the Kubernetes cluster",
-		ChainState: map[string]interface{}{
+		ChainState: map[string]any{
 			"goap_goals": []*goap.Goal{goap.NewGoal("task_completed", 1.0, goap.WorldState{"task_status": "completed"})},
 		},
 	}
@@ -814,7 +814,7 @@ func TestCondition_HasMoreGoapSteps_NoIndex(t *testing.T) {
 	}
 	bb := &Blackboard{
 		Task:       "test",
-		ChainState: map[string]interface{}{},
+		ChainState: map[string]any{},
 	}
 	if fn(bb) {
 		t.Error("should return false when goap_step_index is missing")
@@ -828,7 +828,7 @@ func TestCondition_HasMoreGoapSteps_NoSteps(t *testing.T) {
 	}
 	bb := &Blackboard{
 		Task: "test",
-		ChainState: map[string]interface{}{
+		ChainState: map[string]any{
 			"goap_step_index": 0,
 		},
 	}
@@ -844,7 +844,7 @@ func TestCondition_HasMoreGoapSteps_HasRemaining(t *testing.T) {
 	}
 	bb := &Blackboard{
 		Task: "test",
-		ChainState: map[string]interface{}{
+		ChainState: map[string]any{
 			"goap_step_index": 0,
 			"goap_steps":      []string{"step1", "step2", "step3"},
 		},
@@ -861,7 +861,7 @@ func TestCondition_HasMoreGoapSteps_AllDone(t *testing.T) {
 	}
 	bb := &Blackboard{
 		Task: "test",
-		ChainState: map[string]interface{}{
+		ChainState: map[string]any{
 			"goap_step_index": 3,
 			"goap_steps":      []string{"step1", "step2", "step3"},
 		},
@@ -879,7 +879,7 @@ func TestCondition_HasMoreGoapSteps_WrongType(t *testing.T) {
 	// goap_steps is wrong type (int instead of []string)
 	bb := &Blackboard{
 		Task: "test",
-		ChainState: map[string]interface{}{
+		ChainState: map[string]any{
 			"goap_step_index": 0,
 			"goap_steps":      42,
 		},
@@ -896,7 +896,7 @@ func TestCondition_HasMoreGoapSteps_WrongIndexType(t *testing.T) {
 	}
 	bb := &Blackboard{
 		Task: "test",
-		ChainState: map[string]interface{}{
+		ChainState: map[string]any{
 			"goap_step_index": "not_an_int",
 			"goap_steps":      []string{"step1"},
 		},
@@ -942,7 +942,7 @@ func TestAction_SetupGoapTools_Idempotent(t *testing.T) {
 	}
 	bb := &Blackboard{
 		Task: "build a pipeline",
-		ChainState: map[string]interface{}{
+		ChainState: map[string]any{
 			"goap_actions": "already_seeded",
 		},
 	}
@@ -984,7 +984,7 @@ func TestAction_ReflectGoapOutcome_Success(t *testing.T) {
 	bb := &Blackboard{
 		Task:    "build a pipeline",
 		Outcome: "success",
-		ChainState: map[string]interface{}{
+		ChainState: map[string]any{
 			"goap_plan_found": true,
 		},
 	}
@@ -1006,7 +1006,7 @@ func TestAction_ReflectGoapOutcome_NoPlan(t *testing.T) {
 	bb := &Blackboard{
 		Task:       "simple task",
 		Outcome:    "failure",
-		ChainState: map[string]interface{}{},
+		ChainState: map[string]any{},
 	}
 	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
 	result := fn(ctx)
@@ -1066,7 +1066,7 @@ func TestAction_ExecuteGoapStep_NoIndex(t *testing.T) {
 	}
 	bb := &Blackboard{
 		Task:       "test",
-		ChainState: map[string]interface{}{},
+		ChainState: map[string]any{},
 	}
 	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
 	result := fn(ctx)
@@ -1082,7 +1082,7 @@ func TestAction_ExecuteGoapStep_NoSteps(t *testing.T) {
 	}
 	bb := &Blackboard{
 		Task: "test",
-		ChainState: map[string]interface{}{
+		ChainState: map[string]any{
 			"goap_step_index": 0,
 		},
 	}
@@ -1100,7 +1100,7 @@ func TestAction_ExecuteGoapStep_PastEnd(t *testing.T) {
 	}
 	bb := &Blackboard{
 		Task: "test",
-		ChainState: map[string]interface{}{
+		ChainState: map[string]any{
 			"goap_step_index": 5,
 			"goap_steps":      []string{"step1", "step2"},
 		},
@@ -1125,7 +1125,7 @@ func TestAction_PlanGoapActions_NoActions(t *testing.T) {
 	}
 	bb := &Blackboard{
 		Task:       "do something",
-		ChainState: map[string]interface{}{},
+		ChainState: map[string]any{},
 	}
 	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
 	result := fn(ctx)
@@ -1144,7 +1144,7 @@ func TestAction_PlanGoapActions_EmptyActions(t *testing.T) {
 	}
 	bb := &Blackboard{
 		Task: "do something",
-		ChainState: map[string]interface{}{
+		ChainState: map[string]any{
 			"goap_actions": []goap.Action{},
 		},
 	}

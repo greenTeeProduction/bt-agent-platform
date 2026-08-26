@@ -138,7 +138,7 @@ func TestGraphifyComponentsPromptBlockEmptyOnNoHitsOrEmptyTopic(t *testing.T) {
 func TestGraphifyComponentsPromptBlockCapsHits(t *testing.T) {
 	var b strings.Builder
 	b.WriteString("Traversal: BFS depth=2 | Start: ['X'] | 12 nodes found\n\n")
-	for i := 0; i < 12; i++ {
+	for i := range 12 {
 		fmt.Fprintf(&b, "NODE Comp%d() [src=internal/engine/comp%d.go loc=L%d community=1]\n", i, i, i+1)
 	}
 	withGraphifyQueryStub(t, b.String(), nil)
@@ -151,7 +151,7 @@ func TestGraphifyComponentsPromptBlockCapsHits(t *testing.T) {
 func TestGraphifyScopeGoalLineAppendsCappedSuffix(t *testing.T) {
 	var b strings.Builder
 	b.WriteString("Traversal: BFS depth=2 | Start: ['X'] | 5 nodes found\n\n")
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		fmt.Fprintf(&b, "NODE Comp%d() [src=internal/engine/comp%d.go loc=L%d community=1]\n", i, i, i+1)
 	}
 	withGraphifyQueryStub(t, b.String(), nil)
@@ -306,24 +306,19 @@ func TestSeedCodeFixProgram_ConcurrentWithPersistGoapProgramAllSurvive(t *testin
 
 	const workers = 20
 	var wg sync.WaitGroup
-	for i := 0; i < workers; i++ {
-		i := i
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for i := range workers {
+		wg.Go(func() {
 			sig := fmt.Sprintf("cross-sig-%d", i)
 			seedCodeFixProgram(sig, fmt.Sprintf("Cross fix %d", i), fmt.Sprintf("fix cross_%d.go: defect", i), "self-fix:test:"+sig)
-		}()
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		})
+		wg.Go(func() {
 			bb := &Blackboard{ChainState: map[string]any{}}
 			spec := &goapProgramSpec{
 				Title:      fmt.Sprintf("Cross persist %d", i),
 				Milestones: []string{"m1"},
 			}
 			persistGoapProgram(bb, spec, "test")
-		}()
+		})
 	}
 	wg.Wait()
 

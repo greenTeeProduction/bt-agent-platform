@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"os"
@@ -569,10 +570,7 @@ func recordSuperpowersVerification(run *SuperpowersRun, name, cmd string, res Co
 }
 
 func (run *SuperpowersRun) WorktreePathOrRepo() string {
-	if run.WorktreePath != "" {
-		return run.WorktreePath
-	}
-	return run.RepoDir
+	return cmp.Or(run.WorktreePath, run.RepoDir)
 }
 
 func runShellCommand(ctx context.Context, runner CommandRunner, dir, command string) CommandResult {
@@ -638,7 +636,7 @@ func changedFilesDeltaText(before, after string) []string {
 
 func changedFilesFromGitStatus(status string) []string {
 	var files []string
-	for _, line := range strings.Split(status, "\n") {
+	for line := range strings.SplitSeq(status, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || len(line) < 4 {
 			continue

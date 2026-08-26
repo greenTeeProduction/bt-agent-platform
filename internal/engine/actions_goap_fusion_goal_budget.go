@@ -82,8 +82,8 @@ func stripGoapGoalScopeSuffix(s string) string {
 func goapResearchGoalKey(line string) string {
 	t := stripGoapGoalScopeSuffix(stripGoapGoalTransientNotes(line))
 	for _, p := range []string{"[P0]", "[P1]", "[P2]"} {
-		if strings.HasPrefix(t, p) {
-			t = strings.TrimSpace(strings.TrimPrefix(t, p))
+		if after, ok := strings.CutPrefix(t, p); ok {
+			t = strings.TrimSpace(after)
 		}
 	}
 	t = strings.TrimSpace(strings.TrimPrefix(t, "NotebookLM research:"))

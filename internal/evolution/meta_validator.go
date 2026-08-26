@@ -2,7 +2,7 @@ package evolution
 
 import (
 	"math"
-	"sort"
+	"slices"
 )
 
 // MetaValidationDecision is the final acceptance decision produced by the
@@ -34,8 +34,8 @@ type MetaValidationReport struct {
 	Recommendations []string               `json:"recommendations,omitempty"`
 	NodeCount       int                    `json:"node_count"`
 	Depth           int                    `json:"depth"`
-	Composite       float64                `json:"composite,omitempty"`
-	Regression      float64                `json:"regression,omitempty"`
+	Composite       float64                `json:"composite,omitzero"`
+	Regression      float64                `json:"regression,omitzero"`
 }
 
 // MetaValidatorConfig tunes the validation thresholds. Defaults are calibrated
@@ -138,10 +138,8 @@ func (m *MetaValidator) ValidateMutation(baseline, candidate *SerializableNode, 
 }
 
 func (m *MetaValidator) checkRoot(candidate *SerializableNode, report *MetaValidationReport) {
-	for _, typ := range m.config.RequiredRootTypes {
-		if candidate.Type == typ {
-			return
-		}
+	if slices.Contains(m.config.RequiredRootTypes, candidate.Type) {
+		return
 	}
 	report.addIssue("root_type", "critical", "root node must be Sequence or Selector", 0.35)
 }
@@ -243,7 +241,7 @@ func (m *MetaValidator) checkArchetype(candidate *SerializableNode, report *Meta
 	if fits {
 		return
 	}
-	sort.Strings(issues)
+	slices.Sort(issues)
 	for _, issue := range issues {
 		report.addWarning("archetype", "warning", issue, 0.04)
 	}
@@ -275,7 +273,7 @@ func (m *MetaValidator) addRecommendations(candidate *SerializableNode, report *
 	for _, pattern := range patterns {
 		report.Recommendations = append(report.Recommendations, pattern.Name)
 	}
-	sort.Strings(report.Recommendations)
+	slices.Sort(report.Recommendations)
 }
 
 func hasExecutionPathFirst(node *SerializableNode) bool {

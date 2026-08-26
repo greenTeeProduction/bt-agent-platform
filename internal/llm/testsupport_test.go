@@ -13,7 +13,7 @@ func TestTestsDisabled(t *testing.T) {
 	if TestsDisabled() {
 		t.Fatal("expected false when env unset")
 	}
-	os.Setenv(EnvSkipLLMTests, "1")
+	t.Setenv(EnvSkipLLMTests, "1")
 	t.Cleanup(func() { os.Unsetenv(EnvSkipLLMTests) })
 	if !TestsDisabled() {
 		t.Fatal("expected true when BT_SKIP_LLM_TESTS=1")
@@ -27,12 +27,12 @@ func TestIntegrationOptedIn(t *testing.T) {
 	}
 	t.Cleanup(func() { os.Unsetenv(EnvRunLLMTests) })
 	for _, v := range []string{"1", "true", "YES"} {
-		os.Setenv(EnvRunLLMTests, v)
+		t.Setenv(EnvRunLLMTests, v)
 		if !IntegrationOptedIn() {
 			t.Fatalf("expected true when BT_RUN_LLM_TESTS=%q", v)
 		}
 	}
-	os.Setenv(EnvRunLLMTests, "0")
+	t.Setenv(EnvRunLLMTests, "0")
 	if IntegrationOptedIn() {
 		t.Fatal("expected false when BT_RUN_LLM_TESTS=0")
 	}
@@ -65,11 +65,10 @@ func TestOllamaReachable(t *testing.T) {
 }
 
 func TestSkipIfUnavailable(t *testing.T) {
-	os.Setenv(EnvSkipLLMTests, "1")
+	t.Setenv(EnvSkipLLMTests, "1")
 	t.Cleanup(func() {
 		os.Unsetenv(EnvSkipLLMTests)
-		configuredOnce = sync.Once{}
-		configuredVal = false
+		configuredOnce = sync.OnceValue(configured)
 	})
 	SkipIfUnavailable(t)
 	t.Fatal("test should have been skipped")

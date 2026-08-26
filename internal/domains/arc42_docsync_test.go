@@ -13,7 +13,7 @@ func TestArc42DocsyncTreeShape(t *testing.T) {
 	if len(tree.Children) != 13 {
 		t.Fatalf("want 13 children (12 sections + README), got %d", len(tree.Children))
 	}
-	for i := 0; i < 12; i++ {
+	for i := range 12 {
 		want := "SyncArc42Section"
 		if !strings.HasPrefix(tree.Children[i].Name, want) {
 			t.Errorf("child %d = %q, want prefix %q", i, tree.Children[i].Name, want)

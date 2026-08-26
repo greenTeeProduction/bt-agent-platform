@@ -1,6 +1,7 @@
 package dashboard
 
 import (
+	"net/http"
 	"net/http/httptest"
 	"runtime/debug"
 	"strings"
@@ -15,7 +16,7 @@ import (
 func scrapeMetrics(t *testing.T) string {
 	t.Helper()
 	rec := httptest.NewRecorder()
-	req := httptest.NewRequest("GET", "/metrics", nil)
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
 	PrometheusHandler().ServeHTTP(rec, req)
 	return rec.Body.String()
 }

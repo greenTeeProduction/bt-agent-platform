@@ -1,10 +1,11 @@
 package evolution
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -330,16 +331,17 @@ func (o *BTOptimizer) optimizeNode(node *SerializableNode, changes *int) {
 		}
 
 		// Sort: high info gain first, default last
-		sort.SliceStable(children, func(i, j int) bool {
-			if children[i].isDefault != children[j].isDefault {
-				return !children[i].isDefault // non-default first
+		slices.SortStableFunc(children, func(a, b childInfo) int {
+			if a.isDefault != b.isDefault {
+				if a.isDefault {
+					return 1
+				}
+				return -1 // non-default first
 			}
-			if children[i].isDefault {
-				return false
+			if a.isDefault { // both default: keep declaration order
+				return 0
 			}
-			gi := gains[children[i].condition]
-			gj := gains[children[j].condition]
-			return gi > gj
+			return cmp.Compare(gains[b.condition], gains[a.condition])
 		})
 
 		// Reorder if needed
@@ -402,7 +404,7 @@ func (o *BTOptimizer) MergeOverlappingPaths(tree *SerializableNode) int {
 func (o *BTOptimizer) mergeNode(node *SerializableNode, merged *int) {
 	if node.Type == "Selector" && len(node.Children) >= 2 {
 		// Check for overlapping conditions
-		for i := 0; i < len(node.Children)-1; i++ {
+		for i := range len(node.Children) - 1 {
 			ci := extractCondition(&node.Children[i])
 			for j := i + 1; j < len(node.Children); j++ {
 				cj := extractCondition(&node.Children[j])

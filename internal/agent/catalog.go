@@ -1,10 +1,11 @@
 package agent
 
 import (
+	"cmp"
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -20,8 +21,8 @@ type CatalogEntry struct {
 	Category    string    `json:"category"`
 	Tags        []string  `json:"tags"`
 	Installed   bool      `json:"installed"`
-	InstalledAt time.Time `json:"installed_at,omitempty"`
-	Score       float64   `json:"score,omitempty"`
+	InstalledAt time.Time `json:"installed_at,omitzero"`
+	Score       float64   `json:"score,omitzero"`
 }
 
 // Catalog manages the agent marketplace — browsing, searching, installing, sharing.
@@ -53,8 +54,8 @@ func (c *Catalog) ListInstalled() []CatalogEntry {
 		}
 		entries = append(entries, entry)
 	}
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].Name < entries[j].Name
+	slices.SortFunc(entries, func(a, b CatalogEntry) int {
+		return cmp.Compare(a.Name, b.Name)
 	})
 	return entries
 }
@@ -95,8 +96,8 @@ func (c *Catalog) ListTemplates() ([]CatalogEntry, error) {
 			Installed:   c.isInstalled(name),
 		})
 	}
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].Name < result[j].Name
+	slices.SortFunc(result, func(a, b CatalogEntry) int {
+		return cmp.Compare(a.Name, b.Name)
 	})
 	return result, nil
 }
@@ -288,7 +289,7 @@ func (c *Catalog) isInstalled(name string) bool {
 func extractYAMLField(yaml, key string) string {
 	// Simple YAML field extractor — finds "key: value" on a single line
 	prefix := key + ":"
-	for _, line := range strings.Split(yaml, "\n") {
+	for line := range strings.SplitSeq(yaml, "\n") {
 		trimmed := strings.TrimSpace(line)
 		if strings.HasPrefix(trimmed, prefix) {
 			value := strings.TrimSpace(trimmed[len(prefix):])

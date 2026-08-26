@@ -2,12 +2,13 @@
 package dashboard
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -135,8 +136,8 @@ func Collect(treeCount int, categories map[string]int, trees []TreeSnapshot) Met
 func rankTopWinners(trees []TreeSnapshot) []TreeSnapshot {
 	winners := make([]TreeSnapshot, len(trees))
 	copy(winners, trees)
-	sort.SliceStable(winners, func(i, j int) bool {
-		return winners[i].StructuralFitness > winners[j].StructuralFitness
+	slices.SortStableFunc(winners, func(a, b TreeSnapshot) int {
+		return cmp.Compare(b.StructuralFitness, a.StructuralFitness)
 	})
 	return winners
 }
@@ -183,7 +184,7 @@ func collectSystem() SystemMetrics {
 	// Memory via /proc/meminfo
 	if data, err := os.ReadFile("/proc/meminfo"); err == nil {
 		parseMem := func(key string) int {
-			for _, line := range strings.Split(string(data), "\n") {
+			for line := range strings.SplitSeq(string(data), "\n") {
 				if strings.HasPrefix(line, key+":") {
 					parts := strings.Fields(line)
 					if len(parts) >= 2 {
@@ -196,10 +197,7 @@ func collectSystem() SystemMetrics {
 		}
 		total := parseMem("MemTotal") / 1024 // MB → GB
 		avail := parseMem("MemAvailable") / 1024
-		used := total - avail
-		if used < 0 {
-			used = 0
-		}
+		used := max(total-avail, 0)
 		pct := 0
 		if total > 0 {
 			pct = (used * 100) / total

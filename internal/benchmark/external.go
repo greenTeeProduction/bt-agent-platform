@@ -14,19 +14,19 @@ import (
 // BFCLEntry mirrors a Berkeley Function Calling Leaderboard test case.
 // Each entry tests whether the tree routes to the correct tool given a query and available tools.
 type BFCLEntry struct {
-	ID           string                 `json:"id"`
-	Query        string                 `json:"query"`         // user's request
-	Functions    []BFCLFunction         `json:"functions"`     // available tools
-	ExpectedTool string                 `json:"expected_tool"` // which tool should be called
-	ExpectedArgs map[string]interface{} `json:"expected_args"` // expected arguments
-	Category     string                 `json:"category"`      // simple, multiple, parallel, relevance
+	ID           string         `json:"id"`
+	Query        string         `json:"query"`         // user's request
+	Functions    []BFCLFunction `json:"functions"`     // available tools
+	ExpectedTool string         `json:"expected_tool"` // which tool should be called
+	ExpectedArgs map[string]any `json:"expected_args"` // expected arguments
+	Category     string         `json:"category"`      // simple, multiple, parallel, relevance
 }
 
 // BFCLFunction represents a tool definition in BFCL format.
 type BFCLFunction struct {
-	Name        string                 `json:"name"`
-	Description string                 `json:"description"`
-	Parameters  map[string]interface{} `json:"parameters"`
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	Parameters  map[string]any `json:"parameters"`
 }
 
 // BFCLEvalResult is the outcome of evaluating one BFCL entry against a tree.

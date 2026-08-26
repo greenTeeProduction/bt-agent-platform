@@ -161,7 +161,7 @@ func evaluateEventCondition(es EventSource, bb *Blackboard) bool {
 
 // evaluatePredicate evaluates simple predicates against a value.
 // Supports: "<= 0", "> 0", "!= true", "> X", "< X", etc.
-func evaluatePredicate(predicate string, val interface{}) bool {
+func evaluatePredicate(predicate string, val any) bool {
 	// Convert val to float64 for numeric comparisons
 	fv, isNumeric := toFloat(val)
 	switch predicate {
@@ -184,7 +184,7 @@ func evaluatePredicate(predicate string, val interface{}) bool {
 }
 
 // toFloat converts a value to float64 if possible.
-func toFloat(val interface{}) (float64, bool) {
+func toFloat(val any) (float64, bool) {
 	switch v := val.(type) {
 	case float64:
 		return v, true
@@ -209,13 +209,13 @@ func parseEventSources(node *evolution.SerializableNode) []EventSource {
 	// New format: "events" array
 	raw, ok := node.Metadata["events"]
 	if ok {
-		eventList, ok := raw.([]interface{})
+		eventList, ok := raw.([]any)
 		if !ok {
 			return nil
 		}
 		var sources []EventSource
 		for _, item := range eventList {
-			m, ok := item.(map[string]interface{})
+			m, ok := item.(map[string]any)
 			if !ok {
 				continue
 			}

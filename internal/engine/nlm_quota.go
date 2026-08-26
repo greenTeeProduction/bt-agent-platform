@@ -24,6 +24,7 @@ package engine
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -97,11 +98,9 @@ func saveNlmQueryCache(c nlmQueryCache) {
 	// Drop entries from previous Pacific days: answers may go stale as the
 	// notebook grows, and each new day has fresh budget to re-ask.
 	day := nlmPacificDay(time.Now())
-	for k, e := range c.Entries {
-		if e.Day != day {
-			delete(c.Entries, k)
-		}
-	}
+	maps.DeleteFunc(c.Entries, func(_ string, e nlmQueryCacheEntry) bool {
+		return e.Day != day
+	})
 	if err := os.MkdirAll(filepath.Dir(nlmQueryCachePath), 0o755); err != nil {
 		return
 	}

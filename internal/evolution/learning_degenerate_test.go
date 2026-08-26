@@ -19,7 +19,7 @@ import (
 func degeneratePopulation(size int) *Population {
 	pop := &Population{Individuals: make([]Individual, size)}
 	base := DefaultTree()
-	for i := 0; i < size; i++ {
+	for i := range size {
 		pop.Individuals[i] = Individual{Tree: cloneTree(base), Genome: hashTree(base)}
 	}
 	return pop

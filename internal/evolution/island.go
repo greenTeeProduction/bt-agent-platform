@@ -1,11 +1,14 @@
 package evolution
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
+	"strings"
 	"sync"
 )
 
@@ -136,10 +139,7 @@ func (im *IslandModel) Migrate() int {
 	}
 
 	migrated := 0
-	domains := make([]string, 0, len(im.Islands))
-	for d := range im.Islands {
-		domains = append(domains, d)
-	}
+	domains := slices.Collect(maps.Keys(im.Islands))
 
 	for _, srcDomain := range domains {
 		srcPop := im.Islands[srcDomain]
@@ -162,16 +162,14 @@ func (im *IslandModel) Migrate() int {
 		}
 
 		// Sort source by fitness (best first) and target (worst first)
-		srcSorted := make([]Individual, len(srcPop.Individuals))
-		copy(srcSorted, srcPop.Individuals)
-		sort.Slice(srcSorted, func(i, j int) bool {
-			return srcSorted[i].Fitness > srcSorted[j].Fitness
+		srcSorted := slices.Clone(srcPop.Individuals)
+		slices.SortFunc(srcSorted, func(a, b Individual) int {
+			return cmp.Compare(b.Fitness, a.Fitness)
 		})
 
-		tgtSorted := make([]Individual, len(tgtPop.Individuals))
-		copy(tgtSorted, tgtPop.Individuals)
-		sort.Slice(tgtSorted, func(i, j int) bool {
-			return tgtSorted[i].Fitness < tgtSorted[j].Fitness
+		tgtSorted := slices.Clone(tgtPop.Individuals)
+		slices.SortFunc(tgtSorted, func(a, b Individual) int {
+			return cmp.Compare(a.Fitness, b.Fitness)
 		})
 
 		// Migrate top individuals from source to replace worst in target
@@ -293,12 +291,9 @@ func (im *IslandModel) DiversityAcrossIslands() float64 {
 	// Jaccard distance between all pairs
 	totalDist := 0.0
 	pairs := 0
-	domains := make([]string, 0, len(islandGenomes))
-	for d := range islandGenomes {
-		domains = append(domains, d)
-	}
+	domains := slices.Collect(maps.Keys(islandGenomes))
 
-	for i := 0; i < len(domains); i++ {
+	for i := range domains {
 		for j := i + 1; j < len(domains); j++ {
 			gi := islandGenomes[domains[i]]
 			gj := islandGenomes[domains[j]]
@@ -526,8 +521,8 @@ func enforceIslandCap(pop *Population, islandCap int) int {
 	if islandCap <= 0 || len(pop.Individuals) <= islandCap {
 		return 0
 	}
-	sort.Slice(pop.Individuals, func(i, j int) bool {
-		return pop.Individuals[i].Fitness > pop.Individuals[j].Fitness
+	slices.SortFunc(pop.Individuals, func(a, b Individual) int {
+		return cmp.Compare(b.Fitness, a.Fitness)
 	})
 	evicted := len(pop.Individuals) - islandCap
 	pop.Individuals = pop.Individuals[:islandCap]
@@ -537,12 +532,13 @@ func enforceIslandCap(pop *Population, islandCap int) int {
 // Summary returns a human-readable island model summary.
 func (im *IslandModel) Summary() string {
 	stats := im.Stats()
-	s := fmt.Sprintf("IslandModel: %d domains, %d total pop, gen %d, migrations %d\n",
+	var s strings.Builder
+	fmt.Fprintf(&s, "IslandModel: %d domains, %d total pop, gen %d, migrations %d\n",
 		stats.Domains, stats.TotalPop, im.Generation, stats.Migrations)
 	for domain, best := range stats.BestPerDomain {
-		s += fmt.Sprintf("  %s: best=%.1f\n", domain, best)
+		fmt.Fprintf(&s, "  %s: best=%.1f\n", domain, best)
 	}
-	s += fmt.Sprintf("  cross-diversity: %.2f\n", stats.CrossDiversity)
-	s += fmt.Sprintf("  evicted: %d individuals, %d islands\n", stats.EvictedIndividuals, stats.EvictedIslands)
-	return s
+	fmt.Fprintf(&s, "  cross-diversity: %.2f\n", stats.CrossDiversity)
+	fmt.Fprintf(&s, "  evicted: %d individuals, %d islands\n", stats.EvictedIndividuals, stats.EvictedIslands)
+	return s.String()
 }

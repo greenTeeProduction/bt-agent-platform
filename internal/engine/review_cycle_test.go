@@ -70,7 +70,7 @@ func TestReviewCycle_BoundSurvivesRunningChild(t *testing.T) {
 	ctx := newTestBTContext(bb)
 
 	var last int
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		last = cmd.Run(ctx)
 		if last != 0 {
 			break

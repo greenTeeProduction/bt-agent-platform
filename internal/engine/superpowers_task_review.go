@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -67,8 +68,8 @@ Review rules:
 // that was never actually reviewed.
 func parseSuperpowersReviewVerdict(output string) (verdict, feedback string) {
 	lines := strings.Split(output, "\n")
-	for i := len(lines) - 1; i >= 0; i-- {
-		trimmed := strings.TrimSpace(lines[i])
+	for i, line := range slices.Backward(lines) {
+		trimmed := strings.TrimSpace(line)
 		lower := strings.ToLower(trimmed)
 		if !strings.HasPrefix(lower, "verdict:") {
 			continue

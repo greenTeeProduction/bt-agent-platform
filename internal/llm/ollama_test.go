@@ -61,9 +61,9 @@ func TestClient_GenerateCtx_RetryPolicyByFailureKind(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			var attempts int32
+			var attempts atomic.Int32
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				n := atomic.AddInt32(&attempts, 1)
+				n := attempts.Add(1)
 				if tc.retryable && n >= 2 {
 					resp := map[string]any{
 						"model":      "test-model",
@@ -99,14 +99,14 @@ func TestClient_GenerateCtx_RetryPolicyByFailureKind(t *testing.T) {
 				if got != "recovered" {
 					t.Fatalf("got=%q, want %q", got, "recovered")
 				}
-				if n := atomic.LoadInt32(&attempts); n < 2 {
+				if n := attempts.Load(); n < 2 {
 					t.Fatalf("expected at least 2 attempts (initial + retry) for a retryable failure, got %d", n)
 				}
 			} else {
 				if err == nil {
 					t.Fatalf("expected an error for non-retryable failure %q, got nil", tc.errBody)
 				}
-				if n := atomic.LoadInt32(&attempts); n != 1 {
+				if n := attempts.Load(); n != 1 {
 					t.Fatalf("expected exactly 1 attempt (no retry) for non-retryable failure %q, got %d", tc.errBody, n)
 				}
 			}

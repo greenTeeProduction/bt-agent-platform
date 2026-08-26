@@ -50,7 +50,7 @@ type Response struct {
 	Content    string `json:"content"`
 	Error      string `json:"error,omitempty"`
 	DurationMS int64  `json:"duration_ms"`
-	ToolCalls  int    `json:"tool_calls,omitempty"`
+	ToolCalls  int    `json:"tool_calls,omitzero"`
 }
 
 type Analysis struct {
@@ -139,7 +139,6 @@ func RunPanel(ctx context.Context, caller ModelCaller, cfg Config, prompt string
 	responses := make([]Response, len(cfg.AnalysisModels))
 	var wg sync.WaitGroup
 	for i, model := range cfg.AnalysisModels {
-		i, model := i, model
 		wg.Add(1)
 		start := time.Now()
 		reliability.SafeGo(fmt.Sprintf("fusion.RunPanel[%s]", model), func() {
@@ -223,7 +222,7 @@ func RunToolLoop(ctx context.Context, caller ModelCaller, model, system, prompt 
 	for _, t := range tools {
 		toolMap[t.Name()] = t
 	}
-	for i := 0; i < cfg.MaxToolCalls; i++ {
+	for i := range cfg.MaxToolCalls {
 		full := prompt + "\n\nPrevious tool observations:\n" + scratch + "\nRespond with Action/Action Input or Final Answer."
 		out, err := caller.GenerateWithModel(ctx, model, system, full)
 		if err != nil {

@@ -29,7 +29,7 @@ func TestAuditBuffer_PushAndCount(t *testing.T) {
 
 func TestAuditBuffer_RecentOrder(t *testing.T) {
 	ab := NewAuditBuffer(10)
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		ab.Push("event", map[string]string{"idx": string(rune('0' + i))})
 	}
 	recent := ab.Recent(3)
@@ -60,7 +60,7 @@ func TestAuditBuffer_RecentReverseChrono(t *testing.T) {
 
 func TestAuditBuffer_WrapAround(t *testing.T) {
 	ab := NewAuditBuffer(3)
-	for i := 0; i < 7; i++ {
+	for range 7 {
 		ab.Push("event", nil)
 	}
 	if ab.Count() != 7 {

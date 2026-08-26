@@ -1,8 +1,9 @@
 package evolution
 
 import (
+	"cmp"
 	"math"
-	"sort"
+	"slices"
 )
 
 // ─── NSGA-II Multi-Objective Optimization ──────────────────────────────────
@@ -43,8 +44,8 @@ type NSGAIIPopulation struct {
 	Fronts         []NSGAIIFront                        `json:"-"`             // non-dominated fronts
 	CrowdingDist   []float64                            `json:"crowding_dist"` // per-individual crowding distance
 	FitnessMultiFn func(*SerializableNode) MultiFitness `json:"-"`
-	Cap            int                                  `json:"cap,omitempty"` // max individuals for Save/Load (0 = unbounded)
-	Archive        *ParetoFront                         `json:"-"`             // durable cross-run archive of front 0, populated by Load
+	Cap            int                                  `json:"cap,omitzero"` // max individuals for Save/Load (0 = unbounded)
+	Archive        *ParetoFront                         `json:"-"`            // durable cross-run archive of front 0, populated by Load
 	// ExpertKnowledge is an optional, caller-owned learning archive that
 	// Evolve's offspring mutation step observes every genuinely-improving
 	// mutation into via Observe, mirroring the ek plumbing
@@ -167,9 +168,9 @@ func nonDominatedSort(fitnessVecs []MultiFitness) []NSGAIIFront {
 	dominationCount := make([]int, n)
 	dominated := make([][]int, n)
 
-	for i := 0; i < n; i++ {
+	for i := range n {
 		dominated[i] = make([]int, 0, n)
-		for j := 0; j < n; j++ {
+		for j := range n {
 			if i == j {
 				continue
 			}
@@ -184,7 +185,7 @@ func nonDominatedSort(fitnessVecs []MultiFitness) []NSGAIIFront {
 	// Front 0: individuals with dominationCount == 0
 	var fronts []NSGAIIFront
 	currentFront := NSGAIIFront{Indices: make([]int, 0)}
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if dominationCount[i] == 0 {
 			currentFront.Indices = append(currentFront.Indices, i)
 		}
@@ -246,8 +247,8 @@ func crowdingDistances(indices []int, fitnessVecs []MultiFitness, dims []Fitness
 	for _, dim := range dims {
 		// Sort a copy of the front by this dimension, ascending.
 		copy(sorted, indices)
-		sort.Slice(sorted, func(a, b int) bool {
-			return fitnessVecs[sorted[a]].Get(dim) < fitnessVecs[sorted[b]].Get(dim)
+		slices.SortFunc(sorted, func(x, y int) int {
+			return cmp.Compare(fitnessVecs[x].Get(dim), fitnessVecs[y].Get(dim))
 		})
 
 		// Boundary points get infinite distance.
@@ -300,10 +301,8 @@ func (nsga2 *NSGAIIPopulation) crowdedComparison(i, j int) bool {
 // frontRank returns the front index (rank) for individual i.
 func (nsga2 *NSGAIIPopulation) frontRank(i int) int {
 	for rank, front := range nsga2.Fronts {
-		for _, idx := range front.Indices {
-			if idx == i {
-				return rank
-			}
+		if slices.Contains(front.Indices, i) {
+			return rank
 		}
 	}
 	return len(nsga2.Fronts) // dominated by all
@@ -313,9 +312,9 @@ func (nsga2 *NSGAIIPopulation) frontRank(i int) int {
 // Selects n parents from the population using k-tournament.
 func (nsga2 *NSGAIIPopulation) TournamentSelect(k int) []*SerializableNode {
 	parents := make([]*SerializableNode, 2)
-	for j := 0; j < 2; j++ {
+	for j := range 2 {
 		best := -1
-		for t := 0; t < k; t++ {
+		for range k {
 			idx := evoIntn(len(nsga2.Individuals))
 			if best == -1 || nsga2.crowdedComparison(idx, best) {
 				best = idx
@@ -345,7 +344,7 @@ func (nsga2 *NSGAIIPopulation) Evolve(
 	eliteCount := min(max(2, popSize/10), popSize)
 	supervisor := NewLLMSupervisor()
 
-	for gen := 0; gen < generations; gen++ {
+	for range generations {
 		nsga2.Generation++
 
 		nsga2.selfHealGeneration(eliteCount, supervisor, func(mutationRate float64) {
@@ -357,7 +356,7 @@ func (nsga2 *NSGAIIPopulation) Evolve(
 
 			// Create offspring population via crowded tournament selection
 			offspring := make([]Individual, popSize)
-			for i := 0; i < popSize; i++ {
+			for i := range popSize {
 				parents := nsga2.TournamentSelect(3)
 				child := Crossover(parents[0], parents[1])
 				// Mutation
@@ -387,7 +386,7 @@ func (nsga2 *NSGAIIPopulation) Evolve(
 
 			combinedVecs := make([]MultiFitness, 2*popSize)
 			copy(combinedVecs[:popSize], nsga2.FitnessVecs)
-			for i := 0; i < popSize; i++ {
+			for i := range popSize {
 				combinedVecs[popSize+i] = fitnessFn(offspring[i].Tree)
 			}
 
@@ -416,8 +415,8 @@ func (nsga2 *NSGAIIPopulation) Evolve(
 					// Assign crowding distance to this front
 					cd := sorter.assignCrowdingDistance(indices, combinedVecs)
 					// Sort by crowding distance descending
-					sort.Slice(indices, func(a, b int) bool {
-						return cd[indices[a]] > cd[indices[b]]
+					slices.SortFunc(indices, func(x, y int) int {
+						return cmp.Compare(cd[y], cd[x])
 					})
 					for k := 0; k < remaining && k < len(indices); k++ {
 						idx := indices[k]

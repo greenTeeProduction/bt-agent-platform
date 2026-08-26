@@ -1,11 +1,13 @@
 package evolution
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 )
 
 // FeatureDimension defines a behavioral feature axis for MAP-Elites.
@@ -59,10 +61,10 @@ func Bucket(value, bucketSize int) int {
 type MAPElitesGrid struct {
 	Cells       map[string]*Individual `json:"cells"`
 	Dimensions  []FeatureDimension     `json:"dimensions"`
-	EliteSize   int                    `json:"elite_size"`    // max elites to return
-	NodeBucket  int                    `json:"node_bucket"`   // bucket size for node count (default: 10)
-	DepthBucket int                    `json:"depth_bucket"`  // bucket size for depth (default: 2)
-	Cap         int                    `json:"cap,omitempty"` // max occupied cells for Save/Load (0 = unbounded)
+	EliteSize   int                    `json:"elite_size"`   // max elites to return
+	NodeBucket  int                    `json:"node_bucket"`  // bucket size for node count (default: 10)
+	DepthBucket int                    `json:"depth_bucket"` // bucket size for depth (default: 2)
+	Cap         int                    `json:"cap,omitzero"` // max occupied cells for Save/Load (0 = unbounded)
 }
 
 // NewMAPElitesGrid creates an empty MAP-Elites grid.
@@ -127,14 +129,11 @@ func (g *MAPElitesGrid) Elites() []*Individual {
 	}
 
 	// Collect all cell winners
-	elites := make([]*Individual, 0, len(g.Cells))
-	for _, ind := range g.Cells {
-		elites = append(elites, ind)
-	}
+	elites := slices.Collect(maps.Values(g.Cells))
 
 	// Sort by fitness descending
-	sort.Slice(elites, func(i, j int) bool {
-		return elites[i].Fitness > elites[j].Fitness
+	slices.SortFunc(elites, func(a, b *Individual) int {
+		return cmp.Compare(b.Fitness, a.Fitness)
 	})
 
 	// Truncate to EliteSize
@@ -306,7 +305,7 @@ func (mp *MAPElitesPopulation) EvolveMAPElites(generations int, fitnessFn func(*
 	eliteCount := max(2, len(mp.Individuals)/10)
 	supervisor := NewLLMSupervisor()
 
-	for gen := 0; gen < generations; gen++ {
+	for range generations {
 		mp.Generation++
 
 		// Capture the MAP-Elites grid's niche winners before the shared
@@ -420,11 +419,11 @@ func cappedCells(cells map[string]*Individual, limit int) map[string]*Individual
 	for key, ind := range cells {
 		niches = append(niches, niche{key: key, ind: ind})
 	}
-	sort.Slice(niches, func(i, j int) bool {
-		if niches[i].ind.Fitness != niches[j].ind.Fitness {
-			return niches[i].ind.Fitness > niches[j].ind.Fitness
-		}
-		return niches[i].key < niches[j].key
+	slices.SortFunc(niches, func(a, b niche) int {
+		return cmp.Or(
+			cmp.Compare(b.ind.Fitness, a.ind.Fitness),
+			cmp.Compare(a.key, b.key),
+		)
 	})
 	bounded := make(map[string]*Individual, limit)
 	for _, n := range niches[:limit] {

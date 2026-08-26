@@ -13,7 +13,7 @@ import (
 // partially-written file. It centralizes only the write/read mechanics —
 // callers that need cross-process exclusion (e.g. concurrent writers to the
 // same path) must acquire their own lock around the call.
-func SaveJSONAtomic(path string, v interface{}) error {
+func SaveJSONAtomic(path string, v any) error {
 	data, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal %s: %w", path, err)
@@ -34,7 +34,7 @@ func SaveJSONAtomic(path string, v interface{}) error {
 // LoadJSON reads path and unmarshals it into dest. A missing file is a
 // silent cold start: dest is left untouched and nil is returned. Any other
 // read or parse error is returned to the caller.
-func LoadJSON(path string, dest interface{}) error {
+func LoadJSON(path string, dest any) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {

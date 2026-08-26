@@ -27,14 +27,14 @@ const (
 // This enables expressing preconditions, postconditions, side-effect classifications,
 // and validating trees before execution.
 type TypedEdge struct {
-	Type       EdgeType          `json:"type,omitempty"`        // Edge type (default: child)
-	ChildIndex int               `json:"child_index,omitempty"` // Index into Children array (-1 = all)
-	Label      string            `json:"label,omitempty"`       // Human-readable label
-	Condition  string            `json:"condition,omitempty"`   // Optional condition expression
-	Effect     string            `json:"effect,omitempty"`      // Optional effect description
-	Blackboard map[string]string `json:"blackboard,omitempty"`  // Blackboard key mappings
-	Priority   int               `json:"priority,omitempty"`    // Ordering priority (lower = higher)
-	Weight     float64           `json:"weight,omitempty"`      // Utility weight for scoring
+	Type       EdgeType          `json:"type,omitempty"`       // Edge type (default: child)
+	ChildIndex int               `json:"child_index,omitzero"` // Index into Children array (-1 = all)
+	Label      string            `json:"label,omitempty"`      // Human-readable label
+	Condition  string            `json:"condition,omitempty"`  // Optional condition expression
+	Effect     string            `json:"effect,omitempty"`     // Optional effect description
+	Blackboard map[string]string `json:"blackboard,omitempty"` // Blackboard key mappings
+	Priority   int               `json:"priority,omitzero"`    // Ordering priority (lower = higher)
+	Weight     float64           `json:"weight,omitzero"`      // Utility weight for scoring
 }
 
 // NodeValidationInfo contains metadata about a node for validation purposes.

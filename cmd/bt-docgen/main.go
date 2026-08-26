@@ -28,10 +28,11 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -143,7 +144,7 @@ func main() {
 					targetSections = append(targetSections, s)
 				}
 			}
-			sort.Ints(targetSections)
+			slices.Sort(targetSections)
 		}
 	}
 
@@ -238,9 +239,7 @@ func main() {
 
 		// Pass dependency state
 		ws := worldState.ToWorldState()
-		for k, v := range ws {
-			bb.ChainState[k] = v
-		}
+		maps.Copy(bb.ChainState, ws)
 
 		cmd := engine.BuildTree(tree, &bb)
 		result := engine.RunTask(&bb, cmd)
@@ -311,7 +310,7 @@ func parseSections(s string) []int {
 		}
 		result = append(result, n)
 	}
-	sort.Ints(result)
+	slices.Sort(result)
 	return result
 }
 
@@ -323,7 +322,7 @@ func buildSectionMap() map[string]goap.SectionMapping {
 	return m
 }
 
-func setChainState(bb *engine.Blackboard, key string, val interface{}) {
+func setChainState(bb *engine.Blackboard, key string, val any) {
 	if bb.ChainState == nil {
 		bb.ChainState = make(map[string]any)
 	}
@@ -400,12 +399,7 @@ func sectionReady(ws goap.DocPlannerWorldState, sm goap.SectionMapping) bool {
 }
 
 func contains(slice []int, n int) bool {
-	for _, v := range slice {
-		if v == n {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(slice, n)
 }
 
 // fileHash returns the SHA-256 hash of a file (empty string if missing).
@@ -418,7 +412,7 @@ func fileHash(path string) string {
 }
 
 // hashSectionSources computes a combined hash of all source files a section depends on.
-func hashSectionSources(section int, _ interface{}) string {
+func hashSectionSources(section int, _ any) string {
 	files, ok := sectionSourceFiles[section]
 	if !ok {
 		return fmt.Sprintf("section-%d-no-sources", section)

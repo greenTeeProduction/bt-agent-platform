@@ -1,12 +1,13 @@
 package engine
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"math"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 
@@ -157,15 +158,17 @@ func banditUCB1Order(keys []string, stats *banditStats) []int {
 	for i := range order {
 		order[i] = i
 	}
-	sort.SliceStable(order, func(a, b int) bool {
-		i, j := order[a], order[b]
+	slices.SortStableFunc(order, func(i, j int) int {
 		if (counts[i] == 0) != (counts[j] == 0) {
-			return counts[i] == 0 // untried arms sort first
+			if counts[i] == 0 { // untried arms sort first
+				return -1
+			}
+			return 1
 		}
 		if counts[i] == 0 { // both untried: keep declaration order
-			return i < j
+			return cmp.Compare(i, j)
 		}
-		return score(i) > score(j)
+		return cmp.Compare(score(j), score(i))
 	})
 	return order
 }

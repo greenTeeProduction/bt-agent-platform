@@ -14,7 +14,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 )
@@ -213,7 +213,7 @@ Answer with ONLY a JSON object, no prose: {"sections":[5,9],"readme":false}`,
 	if len(sections) == 0 && !parsed.Readme {
 		return nil, false, false
 	}
-	sort.Ints(sections)
+	slices.Sort(sections)
 	return sections, parsed.Readme, true
 }
 

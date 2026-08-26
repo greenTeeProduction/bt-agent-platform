@@ -109,11 +109,11 @@ func TestBTImpactTestsRegistered(t *testing.T) {
 	if !ok || res == nil || len(res.Content) == 0 {
 		t.Fatal("bt_impact_tests returned no content")
 	}
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 		t.Fatalf("result is not valid JSON: %v", err)
 	}
-	tests, _ := out["tests"].([]interface{})
+	tests, _ := out["tests"].([]any)
 	if len(tests) != 1 || tests[0] != "pkg/file_test.go" {
 		t.Errorf("tests = %v, want [pkg/file_test.go]", out["tests"])
 	}

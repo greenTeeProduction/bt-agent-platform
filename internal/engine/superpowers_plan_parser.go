@@ -41,10 +41,10 @@ func ParseSuperpowersPlan(markdown string) ([]SuperpowersTask, error) {
 
 func extractMarkdownField(body, field string) string {
 	prefix := "**" + field + ":**"
-	for _, line := range strings.Split(body, "\n") {
+	for line := range strings.SplitSeq(body, "\n") {
 		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, prefix) {
-			return strings.TrimSpace(strings.TrimPrefix(line, prefix))
+		if after, ok := strings.CutPrefix(line, prefix); ok {
+			return strings.TrimSpace(after)
 		}
 	}
 	return ""
@@ -53,12 +53,12 @@ func extractMarkdownField(body, field string) string {
 func extractBulletValues(body string, prefixes []string) []string {
 	seen := map[string]bool{}
 	var vals []string
-	for _, line := range strings.Split(body, "\n") {
+	for line := range strings.SplitSeq(body, "\n") {
 		line = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "-"))
 		line = strings.TrimSpace(line)
 		for _, prefix := range prefixes {
-			if strings.HasPrefix(line, prefix) {
-				v := strings.TrimSpace(strings.TrimPrefix(line, prefix))
+			if after, ok := strings.CutPrefix(line, prefix); ok {
+				v := strings.TrimSpace(after)
 				v = strings.Trim(v, "`")
 				if v != "" && !seen[v] {
 					seen[v] = true
@@ -72,10 +72,10 @@ func extractBulletValues(body string, prefixes []string) []string {
 
 func extractRunCommands(body string) []string {
 	var cmds []string
-	for _, line := range strings.Split(body, "\n") {
+	for line := range strings.SplitSeq(body, "\n") {
 		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "Run:") {
-			cmd := strings.TrimSpace(strings.TrimPrefix(line, "Run:"))
+		if after, ok := strings.CutPrefix(line, "Run:"); ok {
+			cmd := strings.TrimSpace(after)
 			cmd = strings.Trim(cmd, "`")
 			if cmd != "" {
 				cmds = append(cmds, cmd)

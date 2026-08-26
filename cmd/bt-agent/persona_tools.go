@@ -33,7 +33,7 @@ func registerPersonaTools(server *engine.Server, deps *mcpDeps) {
 				return personaError(err.Error())
 			}
 			ws := deps.personaStore.Workspace(params.User)
-			data, _ := json.Marshal(map[string]interface{}{
+			data, _ := json.Marshal(map[string]any{
 				"profile": profile,
 				"workspace": map[string]string{
 					"root":         ws.Root,
@@ -95,7 +95,7 @@ func registerPersonaTools(server *engine.Server, deps *mcpDeps) {
 			if err != nil {
 				return personaError(err.Error())
 			}
-			data, _ := json.Marshal(map[string]interface{}{"updated": true, "profile": profile})
+			data, _ := json.Marshal(map[string]any{"updated": true, "profile": profile})
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 
@@ -122,7 +122,7 @@ func registerPersonaTools(server *engine.Server, deps *mcpDeps) {
 			if err != nil {
 				return personaError(err.Error())
 			}
-			data, _ := json.Marshal(map[string]interface{}{
+			data, _ := json.Marshal(map[string]any{
 				"user":         params.User,
 				"interactions": interactionCount,
 				"patterns":     patterns,

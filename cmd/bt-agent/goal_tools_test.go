@@ -58,7 +58,7 @@ func TestGoalError(t *testing.T) {
 	if res == nil || len(res.Content) != 1 {
 		t.Fatalf("goalError returned malformed result: %+v", res)
 	}
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 		t.Fatalf("goalError content is not valid JSON: %v", err)
 	}
@@ -179,13 +179,13 @@ func TestBTGoalToolsRegistered(t *testing.T) {
 	}
 }
 
-func invokeGoal(t *testing.T, server *engine.Server, tool string, args string) map[string]interface{} {
+func invokeGoal(t *testing.T, server *engine.Server, tool string, args string) map[string]any {
 	t.Helper()
 	res, ok := server.Invoke(tool, json.RawMessage(args))
 	if !ok || res == nil || len(res.Content) == 0 {
 		t.Fatalf("%s returned no content", tool)
 	}
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 		t.Fatalf("%s result is not valid JSON: %v", tool, err)
 	}
@@ -201,7 +201,7 @@ func TestBTGoalAdd_ExtractsAndPersistsGoal(t *testing.T) {
 	if out["added"] != true {
 		t.Fatalf("expected added=true, got %v", out)
 	}
-	goal, ok := out["goal"].(map[string]interface{})
+	goal, ok := out["goal"].(map[string]any)
 	if !ok || goal["name"] == "" || goal["name"] == nil {
 		t.Fatalf("expected a named goal in the response, got %v", out["goal"])
 	}
@@ -225,7 +225,7 @@ func TestBTGoalAdd_PriorityAndDeadlineOverrides(t *testing.T) {
 	registerGoalTools(server, deps)
 
 	out := invokeGoal(t, server, "bt_goal_add", `{"user":"nico","intent":"automate my daily report","priority":0.9,"deadline":5}`)
-	goal, ok := out["goal"].(map[string]interface{})
+	goal, ok := out["goal"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected a goal object, got %v", out["goal"])
 	}
@@ -284,7 +284,7 @@ func TestBTGoalList_OrdersByPriorityAndReportsNext(t *testing.T) {
 	if out["next"] != "high" {
 		t.Errorf("next = %v, want %q (higher priority goal, unsatisfied by empty state)", out["next"], "high")
 	}
-	goals, ok := out["goals"].([]interface{})
+	goals, ok := out["goals"].([]any)
 	if !ok || len(goals) != 2 {
 		t.Fatalf("expected 2 goals in the list, got %v", out["goals"])
 	}
@@ -302,7 +302,7 @@ func TestBTGoalList_EmptyQueue(t *testing.T) {
 	if out["next"] != "" && out["next"] != nil {
 		t.Errorf("next = %v, want empty for an empty queue", out["next"])
 	}
-	goals, ok := out["goals"].([]interface{})
+	goals, ok := out["goals"].([]any)
 	if !ok || len(goals) != 0 {
 		t.Fatalf("expected an empty (not null) goals array, got %v", out["goals"])
 	}
@@ -350,7 +350,7 @@ func TestBTGoalCompile_HappyPath(t *testing.T) {
 	registerGoalTools(server, deps)
 
 	add := invokeGoal(t, server, "bt_goal_add", `{"user":"nico","intent":"automate my daily report"}`)
-	goal, _ := add["goal"].(map[string]interface{})
+	goal, _ := add["goal"].(map[string]any)
 	name, _ := goal["name"].(string)
 	if name == "" {
 		t.Fatalf("expected a goal name from bt_goal_add, got %v", add)
@@ -367,7 +367,7 @@ func TestBTGoalCompile_HappyPath(t *testing.T) {
 	if out["goal"] != name {
 		t.Errorf("goal = %v, want %q", out["goal"], name)
 	}
-	plan, ok := out["plan"].([]interface{})
+	plan, ok := out["plan"].([]any)
 	if !ok || len(plan) == 0 {
 		t.Errorf("expected a non-empty plan, got %v", out["plan"])
 	}

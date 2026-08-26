@@ -7,10 +7,11 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -83,27 +84,23 @@ var dashPersonaStore *persona.Store
 // creates and loads it on first use (guarded by dashCBStoreOnce) so it is
 // available even to callers that run before or without main()'s startup
 // sequence, such as tests that call newAgentExecutor() directly.
-var dashCBStore *agent.AgentCircuitBreakerStore
-var dashCBStoreOnce sync.Once
 
 // getDashCBStore returns the shared circuit breaker store, initializing it
 // from dashConfig's CB settings (or defaults, if dashConfig hasn't been
 // loaded yet) and restoring persisted state from agent.CircuitBreakersFile()
 // the first time it is called.
-func getDashCBStore() *agent.AgentCircuitBreakerStore {
-	dashCBStoreOnce.Do(func() {
-		var opts agent.CircuitBreakerOptions
-		if dashConfig != nil {
-			opts.Threshold = dashConfig.CBThreshold
-			opts.Cooldown = time.Duration(dashConfig.CBCooldownSecs) * time.Second
-		}
-		dashCBStore = agent.NewAgentCircuitBreakerStore(opts)
-		if err := dashCBStore.Load(agent.CircuitBreakersFile()); err != nil {
-			slog.Warn("dashboard: restore circuit breaker state failed", "path", agent.CircuitBreakersFile(), "err", err)
-		}
-	})
-	return dashCBStore
-}
+var getDashCBStore = sync.OnceValue(func() *agent.AgentCircuitBreakerStore {
+	var opts agent.CircuitBreakerOptions
+	if dashConfig != nil {
+		opts.Threshold = dashConfig.CBThreshold
+		opts.Cooldown = time.Duration(dashConfig.CBCooldownSecs) * time.Second
+	}
+	store := agent.NewAgentCircuitBreakerStore(opts)
+	if err := store.Load(agent.CircuitBreakersFile()); err != nil {
+		slog.Warn("dashboard: restore circuit breaker state failed", "path", agent.CircuitBreakersFile(), "err", err)
+	}
+	return store
+})
 
 // dlq is the dead letter queue for failed agent tasks.
 // Persisted to ~/.go-bt-evolve/dead_letter_queue.json.
@@ -635,7 +632,7 @@ func handleSummary(w http.ResponseWriter, _ *http.Request) {
 	if dashConfig != nil && dashConfig.OllamaModel != "" {
 		model = dashConfig.OllamaModel
 	}
-	_ = encodeJSON(w, map[string]interface{}{
+	_ = encodeJSON(w, map[string]any{
 		"total_trees": len(kg.Trees),
 		"categories":  cats,
 		"mcp_tools":   26,
@@ -663,10 +660,10 @@ func handleMetricsLive(w http.ResponseWriter, _ *http.Request) {
 }
 func handleTrees(w http.ResponseWriter, _ *http.Request) {
 	seen := make(map[string]bool, len(kg.Trees))
-	r2 := make([]map[string]interface{}, 0, 8)
+	r2 := make([]map[string]any, 0, 8)
 	for _, t := range kg.Trees {
 		seen[t.ID] = true
-		entry := map[string]interface{}{
+		entry := map[string]any{
 			"id":                 t.ID,
 			"name":               t.Name,
 			"category":           t.Category,
@@ -678,7 +675,7 @@ func handleTrees(w http.ResponseWriter, _ *http.Request) {
 			"last_outcome":       t.LastOutcome,
 		}
 		if baseID, evolvedIDs, ok := kg.EvolutionLineage(t.ID); ok {
-			entry["lineage"] = map[string]interface{}{
+			entry["lineage"] = map[string]any{
 				"base_id":     baseID,
 				"evolved_ids": evolvedIDs,
 			}
@@ -691,11 +688,7 @@ func handleTrees(w http.ResponseWriter, _ *http.Request) {
 	// dropdown can fetch a single, complete tree list from this endpoint
 	// instead of relying on a hardcoded client-side list.
 	domainTrees := domains.AllDomainTrees()
-	names := make([]string, 0, len(domainTrees))
-	for name := range domainTrees {
-		names = append(names, name)
-	}
-	sort.Strings(names)
+	names := slices.Sorted(maps.Keys(domainTrees))
 	for _, name := range names {
 		id := "domain:" + name
 		if seen[id] || seen[name] {
@@ -707,7 +700,7 @@ func handleTrees(w http.ResponseWriter, _ *http.Request) {
 		// so an unexplained dropdown entry — for any registry tree described
 		// outside the curated map.
 		desc, _ := domains.DescriptionFor(name)
-		r2 = append(r2, map[string]interface{}{
+		r2 = append(r2, map[string]any{
 			"id":          id,
 			"name":        tree.Name,
 			"category":    "domain",
@@ -720,9 +713,9 @@ func handleTrees(w http.ResponseWriter, _ *http.Request) {
 }
 func handleFellows(w http.ResponseWriter, _ *http.Request) {
 	f := thinktank.DefaultFellows()
-	r2 := make([]map[string]interface{}, 0, 8)
+	r2 := make([]map[string]any, 0, 8)
 	for _, x := range f {
-		r2 = append(r2, map[string]interface{}{"name": x.Name, "role": x.Role, "perspective": x.Perspective, "confidence": x.Confidence})
+		r2 = append(r2, map[string]any{"name": x.Name, "role": x.Role, "perspective": x.Perspective, "confidence": x.Confidence})
 	}
 	_ = encodeJSON(w, r2)
 }
@@ -748,9 +741,9 @@ func handleAnalyze(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ff := make([]map[string]interface{}, 0, 8)
+	ff := make([]map[string]any, 0, 8)
 	for _, f := range tt.ResearchFindings {
-		ff = append(ff, map[string]interface{}{
+		ff = append(ff, map[string]any{
 			"fellow": f.FellowName, "role": f.Role,
 			"insights": f.KeyInsights, "confidence": f.ConfidenceScore,
 		})
@@ -783,7 +776,7 @@ func handleAnalyze(w http.ResponseWriter, r *http.Request) {
 		_ = taskStore.Create(task)
 	}
 
-	_ = encodeJSON(w, map[string]interface{}{"topic": topic, "findings": ff})
+	_ = encodeJSON(w, map[string]any{"topic": topic, "findings": ff})
 }
 
 // handleWorkflowRunFullPipeline drives Workflow.RunFullPipeline end-to-end —
@@ -829,7 +822,7 @@ func handleWorkflowRunFullPipeline(w http.ResponseWriter, r *http.Request) {
 		_ = taskStore.Create(task)
 	}
 
-	_ = encodeJSON(w, map[string]interface{}{"topic": topic, "status": wf.Status})
+	_ = encodeJSON(w, map[string]any{"topic": topic, "status": wf.Status})
 }
 
 func handleDefaultCompany(w http.ResponseWriter, _ *http.Request) {
@@ -875,9 +868,9 @@ func handleChat(w http.ResponseWriter, r *http.Request) {
 func handleTasks(w http.ResponseWriter, _ *http.Request) {
 	tasks := taskStore.List()
 	// Convert to []map for frontend compatibility
-	out := make([]map[string]interface{}, len(tasks))
+	out := make([]map[string]any, len(tasks))
 	for i, t := range tasks {
-		out[i] = map[string]interface{}{
+		out[i] = map[string]any{
 			"id": t.ID, "title": t.Title, "description": t.Description,
 			"priority": t.Priority, "role": t.Assignee, "sprint": t.Sprint,
 			"sp": t.StoryPoints, "status": t.Status, "source": t.Source,
@@ -914,7 +907,7 @@ func handleTaskApprove(w http.ResponseWriter, r *http.Request) {
 	taskID := r.URL.Query().Get("id")
 	pendingID, resolvedFrom := pendingHITLBeforeResolve(taskID)
 	if err := taskStore.Approve(taskID, "dashboard"); err != nil {
-		w.WriteHeader(404)
+		w.WriteHeader(http.StatusNotFound)
 		_ = encodeJSON(w, map[string]string{"error": err.Error()})
 		return
 	}
@@ -941,7 +934,7 @@ func handleTaskReject(w http.ResponseWriter, r *http.Request) {
 	}
 	pendingID, resolvedFrom := pendingHITLBeforeResolve(taskID)
 	if err := taskStore.Reject(taskID, "dashboard", reason); err != nil {
-		w.WriteHeader(404)
+		w.WriteHeader(http.StatusNotFound)
 		_ = encodeJSON(w, map[string]string{"error": err.Error()})
 		return
 	}
@@ -979,12 +972,12 @@ func handleWorkflowApprove(w http.ResponseWriter, r *http.Request) {
 	wf := currentWorkflow
 	currentWorkflowMu.RUnlock()
 	if wf == nil {
-		w.WriteHeader(404)
+		w.WriteHeader(http.StatusNotFound)
 		_ = encodeJSON(w, map[string]string{"error": "no active workflow"})
 		return
 	}
 	if task := wf.ApproveTask(taskID, "dashboard"); task == nil {
-		w.WriteHeader(404)
+		w.WriteHeader(http.StatusNotFound)
 		_ = encodeJSON(w, map[string]string{"error": "workflow task not found: " + taskID})
 		return
 	}
@@ -1006,12 +999,12 @@ func handleWorkflowReject(w http.ResponseWriter, r *http.Request) {
 	wf := currentWorkflow
 	currentWorkflowMu.RUnlock()
 	if wf == nil {
-		w.WriteHeader(404)
+		w.WriteHeader(http.StatusNotFound)
 		_ = encodeJSON(w, map[string]string{"error": "no active workflow"})
 		return
 	}
 	if task := wf.RejectTask(taskID, "dashboard", reason); task == nil {
-		w.WriteHeader(404)
+		w.WriteHeader(http.StatusNotFound)
 		_ = encodeJSON(w, map[string]string{"error": "workflow task not found: " + taskID})
 		return
 	}
@@ -1061,7 +1054,7 @@ func handleSprintExecute(w http.ResponseWriter, _ *http.Request) {
 	sprintState.Progress = "dispatching"
 	sprintState.Unlock()
 
-	_ = encodeJSON(w, map[string]interface{}{
+	_ = encodeJSON(w, map[string]any{
 		"status": "sprint_started", "job_id": jobID,
 		"message": fmt.Sprintf("Dispatching %d tasks to BT agents", len(approved)),
 		"count":   len(approved),
@@ -1159,7 +1152,7 @@ func handleSprintStatus(w http.ResponseWriter, _ *http.Request) {
 			completed++
 		}
 	}
-	_ = encodeJSON(w, map[string]interface{}{
+	_ = encodeJSON(w, map[string]any{
 		"running": sprintState.Running, "job_id": sprintState.JobID,
 		"elapsed":         time.Since(sprintState.StartedAt).Seconds(),
 		"tasks_completed": completed, "tasks_total": len(tasks),
@@ -1252,10 +1245,10 @@ func handleTreeStructure(w http.ResponseWriter, r *http.Request) {
 			name = name[idx+1:]
 		}
 		if name == treeID {
-			_ = encodeJSON(w, map[string]interface{}{
+			_ = encodeJSON(w, map[string]any{
 				"id": t.ID, "name": t.Name, "type": "Sequence", "node_type": "Sequence",
 				"node_count": t.NodeCount,
-				"children":   []map[string]interface{}{},
+				"children":   []map[string]any{},
 			})
 			return
 		}
@@ -1365,7 +1358,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	_ = encodeJSON(w, map[string]interface{}{
+	_ = encodeJSON(w, map[string]any{
 		"status":  "authenticated",
 		"message": "Session created. Include the session cookie in subsequent requests.",
 	})
@@ -1413,7 +1406,7 @@ func handleSession(w http.ResponseWriter, r *http.Request) {
 	if cookie, err := r.Cookie("bt_session"); err == nil {
 		if info := sessionStore.SessionInfo(cookie.Value); info != nil {
 			w.Header().Set("Content-Type", "application/json")
-			_ = encodeJSON(w, map[string]interface{}{
+			_ = encodeJSON(w, map[string]any{
 				"status":      "authenticated",
 				"auth_method": "session",
 				"created_at":  info.CreatedAt,
@@ -1429,7 +1422,7 @@ func handleSession(w http.ResponseWriter, r *http.Request) {
 	apiKey := os.Getenv("BT_API_KEY")
 	if apiKey != "" && r.Header.Get("X-API-Key") == apiKey {
 		w.Header().Set("Content-Type", "application/json")
-		_ = encodeJSON(w, map[string]interface{}{
+		_ = encodeJSON(w, map[string]any{
 			"status":      "authenticated",
 			"auth_method": "api_key",
 		})
@@ -1478,7 +1471,7 @@ func handleDLQ(w http.ResponseWriter, r *http.Request) {
 	// the panel lists the current queue, not this process's boot-time view.
 	dlq.Reload()
 	entries := dlq.List()
-	resp := map[string]interface{}{
+	resp := map[string]any{
 		"count":      len(entries),
 		"entries":    entries,
 		"categories": dlq.CategoryCounts(),
@@ -1520,7 +1513,7 @@ func handleDLQReplay(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := map[string]interface{}{
+	resp := map[string]any{
 		"status":  "requeued",
 		"entry":   entry,
 		"pending": dlq.Len(),
@@ -1538,7 +1531,7 @@ func handleDLQPurge(w http.ResponseWriter, r *http.Request) {
 
 	count := dlq.Len()
 	dlq.Purge()
-	resp := map[string]interface{}{
+	resp := map[string]any{
 		"status":  "purged",
 		"removed": count,
 		"pending": 0,
@@ -1756,7 +1749,7 @@ func handleConfig(w http.ResponseWriter, r *http.Request) {
 func handleTaskCreate(w http.ResponseWriter, r *http.Request) {
 	title := r.URL.Query().Get("title")
 	if title == "" {
-		w.WriteHeader(400)
+		w.WriteHeader(http.StatusBadRequest)
 		_ = encodeJSON(w, map[string]string{"error": "missing title parameter"})
 		return
 	}
@@ -1776,11 +1769,11 @@ func handleTaskCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	task.TreeID = dashboard.PickTreeForTask(task)
 	if err := taskStore.Create(task); err != nil {
-		w.WriteHeader(500)
+		w.WriteHeader(http.StatusInternalServerError)
 		_ = encodeJSON(w, map[string]string{"error": err.Error()})
 		return
 	}
-	_ = encodeJSON(w, map[string]interface{}{"status": "created", "id": task.ID})
+	_ = encodeJSON(w, map[string]any{"status": "created", "id": task.ID})
 }
 
 // ─── Agent Handlers ──────────────────────────────────────────────────────
@@ -1960,7 +1953,7 @@ func handleAgentRun(w http.ResponseWriter, r *http.Request) {
 	agentName := r.URL.Query().Get("agent")
 	task := r.URL.Query().Get("task")
 	if agentName == "" {
-		w.WriteHeader(400)
+		w.WriteHeader(http.StatusBadRequest)
 		_ = encodeJSON(w, map[string]string{"error": "missing agent parameter"})
 		return
 	}
@@ -1985,7 +1978,7 @@ func handleAgentRun(w http.ResponseWriter, r *http.Request) {
 		dashConcurrencyLimiter.Acquire()
 	}
 
-	result := make(chan map[string]interface{}, 1)
+	result := make(chan map[string]any, 1)
 	if dashWorkerPool != nil {
 		dashWorkerPool.Submit(func() {
 			defer func() {
@@ -1995,7 +1988,7 @@ func handleAgentRun(w http.ResponseWriter, r *http.Request) {
 			}()
 			executor := newAgentExecutor()
 			res, err := executor.RunTaskResult(agentName, task, treeID)
-			resp := map[string]interface{}{
+			resp := map[string]any{
 				"agent": agentName, "outcome": "failure", "output": "",
 			}
 			if res != nil {
@@ -2019,7 +2012,7 @@ func handleAgentRun(w http.ResponseWriter, r *http.Request) {
 		if dashConcurrencyLimiter != nil {
 			dashConcurrencyLimiter.Release()
 		}
-		resp := map[string]interface{}{
+		resp := map[string]any{
 			"agent": agentName, "outcome": "failure", "output": "",
 		}
 		if res != nil {

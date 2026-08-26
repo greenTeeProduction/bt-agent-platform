@@ -16,10 +16,10 @@ func writeSelectorStats(t *testing.T, counts map[string][2]int) string {
 	t.Helper()
 	so := evolution.NewSelectorOptimizer(evolution.OrderBySuccessRate)
 	for name, sf := range counts {
-		for i := 0; i < sf[0]; i++ {
+		for range sf[0] {
 			so.Record("TriageSel", evolution.NodeExecutionRecord{NodeName: name, Outcome: "success"})
 		}
-		for i := 0; i < sf[1]; i++ {
+		for range sf[1] {
 			so.Record("TriageSel", evolution.NodeExecutionRecord{NodeName: name, Outcome: "failure"})
 		}
 	}
@@ -196,7 +196,7 @@ func writeDTStats(t *testing.T, hitCounts map[string]int) string {
 	t.Helper()
 	da := evolution.NewDTAnalyzer()
 	for name, n := range hitCounts {
-		for i := 0; i < n; i++ {
+		for range n {
 			da.RecordHit("DTRouter", name, name, true)
 		}
 	}

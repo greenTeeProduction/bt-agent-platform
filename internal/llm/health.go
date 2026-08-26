@@ -99,10 +99,10 @@ func (h *HealthState) ConsecutiveFail() int {
 }
 
 // Snapshot returns a copy of the current health state for reporting.
-func (h *HealthState) Snapshot() map[string]interface{} {
+func (h *HealthState) Snapshot() map[string]any {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	return map[string]interface{}{
+	return map[string]any{
 		"status":           h.status.String(),
 		"last_check":       h.lastCheck.Format(time.RFC3339),
 		"latency_ms":       h.latencyMs,

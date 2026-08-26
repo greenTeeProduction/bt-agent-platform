@@ -186,7 +186,7 @@ func TestTranspositionTable_Load_TrimOverflow(t *testing.T) {
 		t.Fatal(err)
 	}
 	tree := evolution.DefaultTree()
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		tt1.Store(tree, "task", TranspositionEntry{Outcome: "success"})
 	}
 	if err := tt1.Save(); err != nil {
@@ -212,7 +212,7 @@ func TestTranspositionTable_Store_Eviction(t *testing.T) {
 
 	tree := evolution.DefaultTree()
 	// Store 4 different (tree,task) pairs — should evict to stay ≤3
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		task := string(rune('a' + i))
 		tt.Store(tree, task, TranspositionEntry{Outcome: "success"})
 	}

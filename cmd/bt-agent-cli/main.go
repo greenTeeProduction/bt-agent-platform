@@ -215,7 +215,7 @@ func cmdRun(reg *agent.Registry) {
 	}
 
 	if *asJSON {
-		out := map[string]interface{}{
+		out := map[string]any{
 			"agent":          name,
 			"tree":           res.TreeID,
 			"outcome":        res.Outcome,

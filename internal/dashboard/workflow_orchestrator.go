@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 	"sync"
 	"time"
@@ -31,13 +32,13 @@ const (
 type Step struct {
 	ID            string   `yaml:"id" json:"id"`
 	Kind          StepKind `yaml:"kind" json:"kind"`
-	Agent         string   `yaml:"agent,omitempty" json:"agent,omitempty"`                   // agent name for agent step
-	Input         string   `yaml:"input,omitempty" json:"input,omitempty"`                   // task input (supports {{.prev.output}})
-	Condition     string   `yaml:"condition,omitempty" json:"condition,omitempty"`           // Go template: "{{.prev.output.status}} == 'degraded'"
-	MaxIterations int      `yaml:"max_iterations,omitempty" json:"max_iterations,omitempty"` // for loop steps
-	Steps         []Step   `yaml:"steps,omitempty" json:"steps,omitempty"`                   // for parallel/subworkflow steps
-	Timeout       string   `yaml:"timeout,omitempty" json:"timeout,omitempty"`               // "30s", "5m"
-	OnFailure     string   `yaml:"on_failure,omitempty" json:"on_failure,omitempty"`         // "skip", "abort", "retry"
+	Agent         string   `yaml:"agent,omitempty" json:"agent,omitempty"`                  // agent name for agent step
+	Input         string   `yaml:"input,omitempty" json:"input,omitempty"`                  // task input (supports {{.prev.output}})
+	Condition     string   `yaml:"condition,omitempty" json:"condition,omitempty"`          // Go template: "{{.prev.output.status}} == 'degraded'"
+	MaxIterations int      `yaml:"max_iterations,omitempty" json:"max_iterations,omitzero"` // for loop steps
+	Steps         []Step   `yaml:"steps,omitempty" json:"steps,omitempty"`                  // for parallel/subworkflow steps
+	Timeout       string   `yaml:"timeout,omitempty" json:"timeout,omitempty"`              // "30s", "5m"
+	OnFailure     string   `yaml:"on_failure,omitempty" json:"on_failure,omitempty"`        // "skip", "abort", "retry"
 }
 
 // Workflow is a named sequence of steps.
@@ -183,9 +184,7 @@ func (s *wfState) cloneForParallel() *wfState {
 		runID:    s.runID,
 		prev:     make(map[string]StepResult, len(s.prev)),
 	}
-	for k, v := range s.prev {
-		cp.prev[k] = v
-	}
+	maps.Copy(cp.prev, s.prev)
 	return cp
 }
 
@@ -353,7 +352,7 @@ func (r *Runner) executeLoop(ctx context.Context, step Step, state *wfState) (St
 		maxIter = 10
 	}
 
-	for i := 0; i < maxIter; i++ {
+	for i := range maxIter {
 		select {
 		case <-ctx.Done():
 			return StepResult{StepID: step.ID, Outcome: "aborted", Duration: time.Since(start)}, ctx.Err()
@@ -445,7 +444,7 @@ func evaluateCondition(cond string, state *wfState) bool {
 		return true
 	}
 	// Check for "X == 'Y'" pattern
-	for i := 0; i < len(expanded)-4; i++ {
+	for i := range len(expanded) - 4 {
 		if expanded[i:i+4] == " == " {
 			left := expanded[:i]
 			right := expanded[i+4:]

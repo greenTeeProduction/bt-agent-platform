@@ -121,7 +121,7 @@ func (c *OpenAICompatClient) GenerateWithModel(ctx context.Context, model, syste
 	var result string
 	policy := reliability.DefaultRetryPolicy()
 	err = policy.ExecuteContext(ctx, func() error {
-		httpReq, reqErr := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/chat/completions", bytes.NewReader(body))
+		httpReq, reqErr := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/chat/completions", bytes.NewReader(body))
 		if reqErr != nil {
 			return fmt.Errorf("create request: %w", reqErr)
 		}

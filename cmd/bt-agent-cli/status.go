@@ -1,11 +1,12 @@
 package main
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/agent"
@@ -89,7 +90,9 @@ func cmdStatus() {
 			for a, n := range byAgent {
 				rows = append(rows, kv{a, n})
 			}
-			sort.Slice(rows, func(i, j int) bool { return rows[i].n > rows[j].n })
+			slices.SortFunc(rows, func(a, b kv) int {
+				return cmp.Compare(b.n, a.n)
+			})
 			for _, r := range rows {
 				fmt.Printf("  %3d %s\n", r.n, r.a)
 			}

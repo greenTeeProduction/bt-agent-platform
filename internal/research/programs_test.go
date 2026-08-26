@@ -80,17 +80,14 @@ func TestSave_ConcurrentWritersDoNotCorruptStore(t *testing.T) {
 	const workers = 30
 	var wg sync.WaitGroup
 	errs := make(chan error, workers)
-	for i := 0; i < workers; i++ {
-		i := i
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for i := range workers {
+		wg.Go(func() {
 			ps := &ProgramStore{path: path}
 			ps.Add(fmt.Sprintf("Program %d", i), "test", []string{"m1"})
 			if err := ps.Save(); err != nil {
 				errs <- err
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	close(errs)
@@ -141,11 +138,8 @@ func TestUpdatePrograms_ConcurrentWritersAllSurvive(t *testing.T) {
 	const workers = 30
 	var wg sync.WaitGroup
 	errs := make(chan error, workers)
-	for i := 0; i < workers; i++ {
-		i := i
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for i := range workers {
+		wg.Go(func() {
 			err := UpdatePrograms(path, func(ps *ProgramStore) error {
 				ps.Add(fmt.Sprintf("Program %d", i), "test", []string{"m1"})
 				return nil
@@ -153,7 +147,7 @@ func TestUpdatePrograms_ConcurrentWritersAllSurvive(t *testing.T) {
 			if err != nil {
 				errs <- err
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	close(errs)
@@ -301,7 +295,7 @@ func TestRecordAttemptAndMaybeBlock(t *testing.T) {
 	}
 
 	// Block m3 too → program has no pending milestone → not Active → reseed.
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		ps.RecordAttemptAndMaybeBlock(p.ID, 2, 3)
 	}
 	if ps.Active() != nil {

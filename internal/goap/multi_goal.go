@@ -1,9 +1,10 @@
 package goap
 
 import (
+	"cmp"
 	"container/heap"
 	"fmt"
-	"sort"
+	"slices"
 	"sync"
 )
 
@@ -46,11 +47,11 @@ func (h goalHeap) Swap(i, j int) {
 	h[i], h[j] = h[j], h[i]
 }
 
-func (h *goalHeap) Push(x interface{}) {
+func (h *goalHeap) Push(x any) {
 	*h = append(*h, x.(*goalEntry))
 }
 
-func (h *goalHeap) Pop() interface{} {
+func (h *goalHeap) Pop() any {
 	old := *h
 	n := len(old)
 	x := old[n-1]
@@ -174,10 +175,15 @@ func (gq *GoalQueue) SelectGoal(state WorldState) *Goal {
 	// is already satisfied.
 	// Strategy: iterate through a sorted copy — this is O(n log n) but
 	// goal queues are typically small (<100 goals).
-	sorted := make([]*goalEntry, len(gq.heap))
-	copy(sorted, gq.heap)
-	sort.Slice(sorted, func(i, j int) bool {
-		return entryLess(sorted[i], sorted[j])
+	sorted := slices.Clone(gq.heap)
+	slices.SortFunc(sorted, func(a, b *goalEntry) int {
+		if entryLess(a, b) {
+			return -1
+		}
+		if entryLess(b, a) {
+			return 1
+		}
+		return 0
 	})
 
 	for _, entry := range sorted {
@@ -201,8 +207,8 @@ func (gq *GoalQueue) SelectAllUnsatisfied(state WorldState) []*Goal {
 		}
 	}
 
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].Priority > result[j].Priority
+	slices.SortFunc(result, func(a, b *Goal) int {
+		return cmp.Compare(b.Priority, a.Priority)
 	})
 	return result
 }
@@ -240,8 +246,8 @@ func (gq *GoalQueue) All() []*Goal {
 		result = append(result, entry.goal)
 	}
 
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].Priority > result[j].Priority
+	slices.SortFunc(result, func(a, b *Goal) int {
+		return cmp.Compare(b.Priority, a.Priority)
 	})
 	return result
 }

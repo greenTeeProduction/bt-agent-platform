@@ -7,7 +7,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
 	"os"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -180,9 +182,7 @@ func (cb *CircuitBreaker) CategoryFailureCounts() map[ErrorCategory]int {
 		return nil
 	}
 	result := make(map[ErrorCategory]int, len(cb.categoryCounts))
-	for k, v := range cb.categoryCounts {
-		result[k] = v
-	}
+	maps.Copy(result, cb.categoryCounts)
 	return result
 }
 
@@ -256,15 +256,15 @@ type DeadLetterEntry struct {
 	// RequeuedAt is stamped by Requeue when a process without a tree runner (the
 	// dashboard) flags this entry for retry. A non-zero value signals bt-agent's
 	// executor to pick the task up on its next scan instead of leaving it dead.
-	RequeuedAt time.Time `json:"requeued_at,omitempty"`
+	RequeuedAt time.Time `json:"requeued_at,omitzero"`
 	// Abandoned is set once an entry's replay Attempts exceed MaxReplayAttempts.
 	// An abandoned entry is retained for inspection but excluded from further
 	// auto-requeue so a poison pill cannot drive an infinite replay loop.
-	Abandoned bool `json:"abandoned,omitempty"`
+	Abandoned bool `json:"abandoned,omitzero"`
 	// LastReplayAt and LastReplayError record the most recent failed replay so
 	// the outcome survives on disk for sibling processes; a successful replay
 	// removes the entry, so a set value always describes a failure.
-	LastReplayAt    time.Time `json:"last_replay_at,omitempty"`
+	LastReplayAt    time.Time `json:"last_replay_at,omitzero"`
 	LastReplayError string    `json:"last_replay_error,omitempty"`
 }
 
@@ -528,15 +528,12 @@ func AcquireFileLock(path string) (func(), error) {
 			_ = f.Close() // locked an orphaned inode; retry on the live path
 			continue
 		}
-		var once sync.Once
-		release := func() {
-			once.Do(func() {
-				// Unlink before close so no waiter still blocked on this
-				// inode can mistake it for the lock guarding the path.
-				_ = os.Remove(lockPath)
-				_ = f.Close() // closing the descriptor releases the flock
-			})
-		}
+		release := sync.OnceFunc(func() {
+			// Unlink before close so no waiter still blocked on this
+			// inode can mistake it for the lock guarding the path.
+			_ = os.Remove(lockPath)
+			_ = f.Close() // closing the descriptor releases the flock
+		})
 		return release, nil
 	}
 }
@@ -656,7 +653,7 @@ func NewWorkerPool(workers int) *WorkerPool {
 		tasks:   make(chan func(), workers*100),
 		quit:    make(chan struct{}),
 	}
-	for i := 0; i < workers; i++ {
+	for range workers {
 		wp.wg.Add(1)
 		go wp.worker()
 	}
@@ -843,10 +840,7 @@ func (ss *SchedulerState) Get(id string) (JobState, bool) {
 func (ss *SchedulerState) List() []JobState {
 	ss.mu.Lock()
 	defer ss.mu.Unlock()
-	result := make([]JobState, 0, len(ss.jobs))
-	for _, s := range ss.jobs {
-		result = append(result, s)
-	}
+	result := slices.Collect(maps.Values(ss.jobs))
 	return result
 }
 
@@ -1169,8 +1163,8 @@ type ExecutorHealthDetail struct {
 	Healthy             bool      `json:"healthy"`
 	CoolingDown         bool      `json:"cooling_down"`
 	ConsecutiveFailures int       `json:"consecutive_failures"`
-	LastFailure         time.Time `json:"last_failure,omitempty"`
-	CoolDownUntil       time.Time `json:"cool_down_until,omitempty"`
+	LastFailure         time.Time `json:"last_failure,omitzero"`
+	CoolDownUntil       time.Time `json:"cool_down_until,omitzero"`
 }
 
 // AgentRouter distributes agent tasks across multiple executors with
@@ -1297,8 +1291,7 @@ func (r *AgentRouter) SetLocal(e AgentExecutor) {
 func (r *AgentRouter) Execute(ctx context.Context, agent, task string) (*AgentResult, error) {
 	// Snapshot router state under lock, then release before Health() calls.
 	r.mu.Lock()
-	executors := make([]AgentExecutor, len(r.executors))
-	copy(executors, r.executors)
+	executors := slices.Clone(r.executors)
 	strategy := r.strategy
 	maxFailover := r.MaxFailover
 
@@ -1470,8 +1463,7 @@ func (r *AgentRouter) String() string {
 func (r *AgentRouter) Executors() []AgentExecutor {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	result := make([]AgentExecutor, len(r.executors))
-	copy(result, r.executors)
+	result := slices.Clone(r.executors)
 	return result
 }
 

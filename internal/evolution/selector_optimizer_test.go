@@ -51,14 +51,14 @@ func TestSelectorOptimizer_GiniImpurity(t *testing.T) {
 	so.MinSamples = 1
 
 	// Child A: all successes → Gini = 0 (perfectly pure)
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		so.Record("Router", NodeExecutionRecord{NodeName: "PureChoice", Outcome: "success"})
 	}
 	// Child B: mixed → Gini > 0
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		so.Record("Router", NodeExecutionRecord{NodeName: "MixedChoice", Outcome: "success"})
 	}
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		so.Record("Router", NodeExecutionRecord{NodeName: "MixedChoice", Outcome: "failure"})
 	}
 
@@ -225,7 +225,7 @@ func TestSelectorOptimizer_ApplyOrdering(t *testing.T) {
 	so.MinSamples = 1
 
 	// FastPath has more successes
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		so.Record("Router", NodeExecutionRecord{NodeName: "FastPath", Outcome: "success"})
 		so.Record("Router", NodeExecutionRecord{NodeName: "SlowPath", Outcome: "failure"})
 	}
@@ -248,10 +248,10 @@ func TestSelectorOptimizer_SaveLoadRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "selector_stats.json")
 
 	so := NewSelectorOptimizer(OrderBySuccessRate)
-	for i := 0; i < 7; i++ {
+	for range 7 {
 		so.Record("Router", NodeExecutionRecord{NodeName: "FastPath", Outcome: "success"})
 	}
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		so.Record("Router", NodeExecutionRecord{NodeName: "FastPath", Outcome: "failure"})
 	}
 	so.Record("Router", NodeExecutionRecord{NodeName: "SlowPath", Outcome: "running"})
@@ -295,20 +295,18 @@ func TestSelectorOptimizer_ConcurrentMergeSumsCounts(t *testing.T) {
 	const perWriter = 5
 
 	var wg sync.WaitGroup
-	for w := 0; w < writers; w++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range writers {
+		wg.Go(func() {
 			// Each writer is a fresh optimizer contributing only its own
 			// records; Save's flock+merge must sum them, not overwrite.
 			so := NewSelectorOptimizer(OrderBySuccessRate)
-			for i := 0; i < perWriter; i++ {
+			for range perWriter {
 				so.Record("Router", NodeExecutionRecord{NodeName: "FastPath", Outcome: "success"})
 			}
 			if err := so.SaveSelectorStats(path); err != nil {
 				t.Errorf("concurrent SaveSelectorStats: %v", err)
 			}
-		}()
+		})
 	}
 	wg.Wait()
 
@@ -334,7 +332,7 @@ func TestSelectorOptimizer_RepeatedSaveIsIdempotent(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "selector_stats.json")
 
 	so := NewSelectorOptimizer(OrderBySuccessRate)
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		so.Record("Router", NodeExecutionRecord{NodeName: "FastPath", Outcome: "success"})
 	}
 	if err := so.SaveSelectorStats(path); err != nil {

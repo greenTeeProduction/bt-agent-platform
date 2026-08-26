@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"maps"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	btcore "github.com/rvitorper/go-bt/core"
@@ -63,9 +64,7 @@ func snapshotState(bb *Blackboard) map[string]bool {
 	snap := make(map[string]bool)
 	if bb.ChainState != nil {
 		if ws, ok := bb.ChainState["world_state"].(map[string]bool); ok {
-			for k, v := range ws {
-				snap[k] = v
-			}
+			maps.Copy(snap, ws)
 		}
 	}
 	return snap
@@ -77,9 +76,7 @@ func restoreState(bb *Blackboard, snap map[string]bool) {
 		bb.ChainState = make(map[string]any)
 	}
 	ws := make(map[string]bool, len(snap))
-	for k, v := range snap {
-		ws[k] = v
-	}
+	maps.Copy(ws, snap)
 	bb.ChainState["world_state"] = ws
 }
 
@@ -89,9 +86,7 @@ func extractWorldState(bb *Blackboard) map[string]bool {
 	state := make(map[string]bool)
 	if bb.ChainState != nil {
 		if ws, ok := bb.ChainState["world_state"].(map[string]bool); ok {
-			for k, v := range ws {
-				state[k] = v
-			}
+			maps.Copy(state, ws)
 		}
 	}
 	return state

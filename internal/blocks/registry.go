@@ -1,11 +1,13 @@
 package blocks
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 
@@ -95,7 +97,9 @@ func (r *Registry) List() []Block {
 			Version:     b.Version,
 		})
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	slices.SortFunc(out, func(a, b Block) int {
+		return cmp.Compare(a.ID, b.ID)
+	})
 	return out
 }
 
@@ -103,11 +107,7 @@ func (r *Registry) List() []Block {
 func (r *Registry) IDs() []string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	ids := make([]string, 0, len(r.blocks))
-	for id := range r.blocks {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
+	ids := slices.Sorted(maps.Keys(r.blocks))
 	return ids
 }
 
@@ -188,9 +188,7 @@ func cloneTree(t *evolution.SerializableNode) *evolution.SerializableNode {
 	}
 	if t.Metadata != nil {
 		c.Metadata = make(map[string]any)
-		for k, v := range t.Metadata {
-			c.Metadata[k] = v
-		}
+		maps.Copy(c.Metadata, t.Metadata)
 	}
 	if t.Edges != nil {
 		c.Edges = make([]evolution.TypedEdge, len(t.Edges))

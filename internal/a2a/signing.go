@@ -28,26 +28,17 @@ func signingKeyFile() string {
 	return filepath.Join(agent.HomeDir(), "a2a_signing.key")
 }
 
-var (
-	signingKeyOnce  sync.Once
-	signingKeyBytes []byte
-)
-
 // signingKey returns the process-wide HMAC key used by SignAgentCard /
 // VerifyAgentCard: the A2A_SIGNING_KEY env override when set, otherwise a
 // key persisted at signingKeyFile(), generated on first use. Either way,
 // producing a valid signature requires this key — unlike the pre-fix bare
 // SHA-256 hash, which anyone could reproduce with no secret at all.
-func signingKey() []byte {
-	signingKeyOnce.Do(func() {
-		if v := os.Getenv(signingKeyEnv); v != "" {
-			signingKeyBytes = []byte(v)
-			return
-		}
-		signingKeyBytes = loadOrCreateSigningKey(signingKeyFile())
-	})
-	return signingKeyBytes
-}
+var signingKey = sync.OnceValue(func() []byte {
+	if v := os.Getenv(signingKeyEnv); v != "" {
+		return []byte(v)
+	}
+	return loadOrCreateSigningKey(signingKeyFile())
+})
 
 // loadOrCreateSigningKey reads a previously generated key from path, or
 // generates and persists a fresh random 32-byte key when none exists yet.

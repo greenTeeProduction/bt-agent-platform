@@ -1,13 +1,15 @@
 package gardener
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"math"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/agent"
@@ -302,10 +304,7 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 			} else if rate >= 1 {
 				rate = 0.99
 			}
-			maxMutations = int(math.Ceil(float64(g.cfg.MaxMutations) / (1 - rate)))
-			if maxMutations < 1 {
-				maxMutations = 1
-			}
+			maxMutations = max(int(math.Ceil(float64(g.cfg.MaxMutations)/(1-rate))), 1)
 			crisisIntervened = true
 			crisisReason = reason
 			slog.Info("gardener/v2: crisis intervention — boosting mutation budget",
@@ -1055,8 +1054,7 @@ func biasCandidatesWithExperience(bank *evolution.ExperienceBank, tree *evolutio
 		return candidates
 	}
 
-	biased := make([]evaluator.MutationCandidate, len(candidates))
-	copy(biased, candidates)
+	biased := slices.Clone(candidates)
 	reused := make(map[string]bool)
 	for i := range biased {
 		h, ok := best[opTarget{biased[i].Op.Operation, biased[i].Op.Target}]
@@ -1070,14 +1068,11 @@ func biasCandidatesWithExperience(bank *evolution.ExperienceBank, tree *evolutio
 		return candidates
 	}
 
-	sort.SliceStable(biased, func(i, j int) bool {
-		return biased[i].Score > biased[j].Score
+	slices.SortStableFunc(biased, func(a, b evaluator.MutationCandidate) int {
+		return cmp.Compare(b.Score, a.Score)
 	})
 
-	reusedIDs := make([]string, 0, len(reused))
-	for id := range reused {
-		reusedIDs = append(reusedIDs, id)
-	}
+	reusedIDs := slices.Collect(maps.Keys(reused))
 	if err := bank.MarkReused(reusedIDs); err != nil {
 		slog.Warn("gardener/v2: marking experience entries reused failed", "error", err)
 	}
@@ -1291,12 +1286,11 @@ func (g *Gardener) RunCycleV2(cfg EvolveV2Config) ([]CycleMetrics, error) {
 
 	entries := g.cfg.Registry.List()
 	ranks := g.treePriorityRanks()
-	sort.SliceStable(entries, func(i, j int) bool {
-		ri, rj := treePriorityRank(ranks, entries[i].Name), treePriorityRank(ranks, entries[j].Name)
-		if ri != rj {
-			return ri < rj
-		}
-		return entries[i].Name < entries[j].Name
+	slices.SortStableFunc(entries, func(a, b TreeEntry) int {
+		return cmp.Or(
+			cmp.Compare(treePriorityRank(ranks, a.Name), treePriorityRank(ranks, b.Name)),
+			cmp.Compare(a.Name, b.Name),
+		)
 	})
 
 	// ── Island-model population exploration ──

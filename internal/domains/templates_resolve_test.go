@@ -22,7 +22,7 @@ func findRepoTemplatesDir(t *testing.T) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for i := 0; i < 8; i++ {
+	for range 8 {
 		candidate := filepath.Join(dir, "agents", "templates")
 		if st, err := os.Stat(candidate); err == nil && st.IsDir() {
 			return candidate

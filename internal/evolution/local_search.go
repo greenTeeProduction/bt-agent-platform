@@ -1,9 +1,10 @@
 package evolution
 
 import (
+	"cmp"
 	"math"
 	"math/rand"
-	"sort"
+	"slices"
 )
 
 // ─── Memetic Local Search ────────────────────────────────────────────────
@@ -181,7 +182,7 @@ func (ls *LocalSearcher) hillClimb(
 		return current, 0
 	}
 
-	for iter := 0; iter < ls.MaxIterations; iter++ {
+	for range ls.MaxIterations {
 		bestParam := -1
 		bestValue := 0.0
 		bestFitness := currentFitness
@@ -227,7 +228,7 @@ func (ls *LocalSearcher) simulatedAnnealing(
 	bestFitness := currentFitness
 	temp := ls.Temperature
 
-	for iter := 0; iter < ls.MaxIterations; iter++ {
+	for range ls.MaxIterations {
 		// Generate a neighbor by mutation
 		candidate := cloneTree(current)
 		ops := randomMutation(candidate)
@@ -281,7 +282,7 @@ func (ls *LocalSearcher) tabuSearch(
 	// Tabu list is a FIFO of genome hashes
 	tabuList := make([]tabuEntry, 0, ls.TabuTenure)
 
-	for iter := 0; iter < ls.MaxIterations; iter++ {
+	for range ls.MaxIterations {
 		// Generate multiple candidate neighbors
 		type candidate struct {
 			tree    *SerializableNode
@@ -290,7 +291,7 @@ func (ls *LocalSearcher) tabuSearch(
 		}
 		candidates := make([]candidate, 0, 5)
 
-		for k := 0; k < 5; k++ {
+		for range 5 {
 			cand := cloneTree(current)
 			ops := randomMutation(cand)
 			ApplyMutations(cand, ops)
@@ -387,20 +388,17 @@ func (p *Population) MemeticEvolve(
 	}
 	supervisor := NewLLMSupervisor()
 
-	for gen := 0; gen < generations; gen++ {
+	for range generations {
 		p.Generation++
 
 		// Sort by fitness descending
-		sort.Slice(p.Individuals, func(i, j int) bool {
-			return p.Individuals[i].Fitness > p.Individuals[j].Fitness
+		slices.SortFunc(p.Individuals, func(a, b Individual) int {
+			return cmp.Compare(b.Fitness, a.Fitness)
 		})
 
 		// --- MEMETIC: Local search on top N individuals ---
-		refineCount := refineTopN
-		if refineCount > eliteCount {
-			refineCount = eliteCount
-		}
-		for i := 0; i < refineCount; i++ {
+		refineCount := min(refineTopN, eliteCount)
+		for i := range refineCount {
 			refined, delta := searcher.Search(p.Individuals[i].Tree, fitnessFn)
 			if delta > 0 {
 				p.Individuals[i].Tree = refined
@@ -596,7 +594,7 @@ func setFloatMeta(node *SerializableNode, key string, val float64) {
 	node.Metadata[key] = val
 }
 
-func toFloat64(v interface{}) (float64, bool) {
+func toFloat64(v any) (float64, bool) {
 	switch val := v.(type) {
 	case float64:
 		return val, true

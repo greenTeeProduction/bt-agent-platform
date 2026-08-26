@@ -84,7 +84,7 @@ func TestGoapFusionStateHashes_HistoryCappedOnDisk(t *testing.T) {
 	// entry per tick forever.
 	const ticks = 500
 	var last *Blackboard
-	for i := 0; i < ticks; i++ {
+	for i := range ticks {
 		bb := &Blackboard{
 			BB: blackboard.NewHandle(mgr, "run", "", "goap-loop"),
 			ChainState: map[string]any{
@@ -133,7 +133,7 @@ func TestPublishGoapFusionStateHash_ResultReflectsDurableDepth(t *testing.T) {
 	// durable cap, so no truncation confounds the reported depth.
 	n := goapFusionCircuitHistoryWindow + 2
 	var last *Blackboard
-	for i := 0; i < n; i++ {
+	for i := range n {
 		bb := &Blackboard{
 			BB: blackboard.NewHandle(mgr, "run", "", "goap-loop"),
 			ChainState: map[string]any{
@@ -192,7 +192,7 @@ func TestPublishGoapFusionStateHash_IdleDoesNotAccumulate(t *testing.T) {
 	// Blackboard sharing the durable agent-scope store, exactly as RunOnce builds.
 	const idleTicks = goapFusionCircuitHistoryWindow + 2
 	var last *Blackboard
-	for i := 0; i < idleTicks; i++ {
+	for i := range idleTicks {
 		bb := &Blackboard{
 			BB: blackboard.NewHandle(mgr, "run", "", "goap-loop"),
 			ChainState: map[string]any{
@@ -225,7 +225,7 @@ func TestPublishGoapFusionStateHash_ActiveWorkStillAccumulates(t *testing.T) {
 	mgr := blackboard.NewManager(nil)
 
 	var last *Blackboard
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		bb := &Blackboard{
 			BB: blackboard.NewHandle(mgr, "run", "", "goap-loop"),
 			ChainState: map[string]any{

@@ -388,7 +388,7 @@ func TestRunPanel_CircuitBreakerOpensAfterConsecutiveFailures(t *testing.T) {
 	cfg.AnalysisModels = []string{"a"}
 
 	const attempts = 6
-	for i := 0; i < attempts; i++ {
+	for i := range attempts {
 		if _, err := RunPanel(context.Background(), caller, cfg, "prompt", nil); err == nil {
 			t.Fatalf("attempt %d: expected RunPanel to fail while all models fail", i)
 		}

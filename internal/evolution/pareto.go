@@ -1,11 +1,12 @@
 package evolution
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -123,12 +124,7 @@ func ParetoAccepts(candidate MultiFitness, baselines []MultiFitness) bool {
 	if len(fronts) == 0 {
 		return true
 	}
-	for _, idx := range fronts[0].Indices {
-		if idx == candidateIdx {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(fronts[0].Indices, candidateIdx)
 }
 
 // String returns a compact representation.
@@ -137,7 +133,7 @@ func (mf MultiFitness) String() string {
 	for dim, score := range mf.Scores {
 		parts = append(parts, fmt.Sprintf("%s=%.1f", dim, score))
 	}
-	sort.Strings(parts)
+	slices.Sort(parts)
 	return "{" + strings.Join(parts, " ") + "}"
 }
 
@@ -145,7 +141,7 @@ func (mf MultiFitness) String() string {
 type ParetoFront struct {
 	Individuals []*MultiIndividual `json:"individuals"`
 	Dimensions  []FitnessDimension `json:"dimensions"`
-	Cap         int                `json:"cap,omitempty"` // max individuals for Save/Load (0 = unbounded)
+	Cap         int                `json:"cap,omitzero"` // max individuals for Save/Load (0 = unbounded)
 }
 
 // MultiIndividual extends Individual with multi-objective fitness.
@@ -219,13 +215,12 @@ func cappedIndividuals(individuals []*MultiIndividual, limit int) []*MultiIndivi
 	if limit <= 0 || len(individuals) <= limit {
 		return individuals
 	}
-	sorted := make([]*MultiIndividual, len(individuals))
-	copy(sorted, individuals)
-	sort.Slice(sorted, func(i, j int) bool {
-		if sorted[i].Fitness != sorted[j].Fitness {
-			return sorted[i].Fitness > sorted[j].Fitness
-		}
-		return sorted[i].Genome < sorted[j].Genome
+	sorted := slices.Clone(individuals)
+	slices.SortFunc(sorted, func(a, b *MultiIndividual) int {
+		return cmp.Or(
+			cmp.Compare(b.Fitness, a.Fitness),
+			cmp.Compare(a.Genome, b.Genome),
+		)
 	})
 	return sorted[:limit]
 }
@@ -300,10 +295,8 @@ func (pf *ParetoFront) Load(path string) error {
 
 // Best returns all Pareto-optimal individuals sorted by composite score.
 func (pf *ParetoFront) Best(n int) []*MultiIndividual {
-	sort.Slice(pf.Individuals, func(i, j int) bool {
-		ci := pf.Individuals[i].FitnessVec.CompositeScore(nil)
-		cj := pf.Individuals[j].FitnessVec.CompositeScore(nil)
-		return ci > cj
+	slices.SortFunc(pf.Individuals, func(a, b *MultiIndividual) int {
+		return cmp.Compare(b.FitnessVec.CompositeScore(nil), a.FitnessVec.CompositeScore(nil))
 	})
 	if n > 0 && n < len(pf.Individuals) {
 		return pf.Individuals[:n]
@@ -417,13 +410,13 @@ func (pp *ParetoPopulation) EvolvePareto(generations int, fitnessFn func(*Serial
 	eliteCount := min(max(2, len(pp.Individuals)/10), len(pp.Individuals))
 	supervisor := NewLLMSupervisor()
 
-	for gen := 0; gen < generations; gen++ {
+	for range generations {
 		pp.Generation++
 
 		pp.selfHealGeneration(eliteCount, supervisor, func(mutationRate float64) {
 			// Sort by composite score
-			sort.Slice(pp.Individuals, func(i, j int) bool {
-				return pp.Individuals[i].Fitness > pp.Individuals[j].Fitness
+			slices.SortFunc(pp.Individuals, func(a, b Individual) int {
+				return cmp.Compare(b.Fitness, a.Fitness)
 			})
 
 			newPop := make([]Individual, len(pp.Individuals))

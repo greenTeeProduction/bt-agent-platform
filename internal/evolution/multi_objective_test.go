@@ -3,7 +3,7 @@ package evolution
 import (
 	"math"
 	"path/filepath"
-	"sort"
+	"slices"
 	"testing"
 )
 
@@ -231,7 +231,7 @@ func TestNSGAIIPopulation_Evolve_ResurrectsExtinctSpecialist(t *testing.T) {
 		Generation:  500,
 		Specialists: registry,
 	}
-	for i := 0; i < size; i++ {
+	for i := range size {
 		// Identical, non-specialist genomes → Diversity() == 1/size == 0.1
 		// (< 0.2 threshold) trips diversity_collapse, and the goap niche is
 		// absent → the archetype qualifies as extinct.
@@ -437,9 +437,8 @@ func tradeoffVecs() []MultiFitness {
 func frontIndexSets(fronts []NSGAIIFront) [][]int {
 	out := make([][]int, len(fronts))
 	for i, f := range fronts {
-		idx := make([]int, len(f.Indices))
-		copy(idx, f.Indices)
-		sort.Ints(idx)
+		idx := slices.Clone(f.Indices)
+		slices.Sort(idx)
 		out[i] = idx
 	}
 	return out

@@ -479,7 +479,7 @@ func TestResponseCapture_WriteHeader(t *testing.T) {
 	w := httptest.NewRecorder()
 	rc := &responseCapture{ResponseWriter: w}
 
-	rc.WriteHeader(404)
+	rc.WriteHeader(http.StatusNotFound)
 	if rc.Status() != 404 {
 		t.Errorf("expected status 404, got %d", rc.Status())
 	}
@@ -489,8 +489,8 @@ func TestResponseCapture_WriteHeaderIdempotent(t *testing.T) {
 	w := httptest.NewRecorder()
 	rc := &responseCapture{ResponseWriter: w}
 
-	rc.WriteHeader(200)
-	rc.WriteHeader(500) // should be ignored
+	rc.WriteHeader(http.StatusOK)
+	rc.WriteHeader(http.StatusInternalServerError) // should be ignored
 	if rc.Status() != 200 {
 		t.Errorf("expected status 200 (first write wins), got %d", rc.Status())
 	}
@@ -524,14 +524,14 @@ func TestResponseValidator_Passes(t *testing.T) {
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(200)
+		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
 	})
 
 	validator := ResponseValidator(routes, &ResponseValidatorConfig{Logger: logger})
 	wrapped := validator(handler)
 
-	req := httptest.NewRequest("GET", "/api/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/test", nil)
 	rec := httptest.NewRecorder()
 	wrapped.ServeHTTP(rec, req)
 
@@ -554,7 +554,7 @@ func TestResponseValidator_NonAPIPath(t *testing.T) {
 	validator := ResponseValidator(routes, &ResponseValidatorConfig{Logger: logger})
 	wrapped := validator(handler)
 
-	req := httptest.NewRequest("GET", "/static/file.txt", nil)
+	req := httptest.NewRequest(http.MethodGet, "/static/file.txt", nil)
 	rec := httptest.NewRecorder()
 	wrapped.ServeHTTP(rec, req)
 
@@ -587,7 +587,7 @@ func TestResponseValidator_SkipPath(t *testing.T) {
 	})
 	wrapped := validator(handler)
 
-	req := httptest.NewRequest("GET", "/api/skip", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/skip", nil)
 	rec := httptest.NewRecorder()
 	wrapped.ServeHTTP(rec, req)
 
@@ -607,7 +607,7 @@ func TestResponseValidator_UnknownRoute(t *testing.T) {
 	validator := ResponseValidator(routes, &ResponseValidatorConfig{Logger: logger})
 	wrapped := validator(handler)
 
-	req := httptest.NewRequest("GET", "/api/unknown", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/unknown", nil)
 	rec := httptest.NewRecorder()
 	wrapped.ServeHTTP(rec, req)
 
@@ -634,7 +634,7 @@ func TestResponseValidator_NilConfig(t *testing.T) {
 	validator := ResponseValidator(routes, nil)
 	wrapped := validator(handler)
 
-	req := httptest.NewRequest("GET", "/api/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/test", nil)
 	rec := httptest.NewRecorder()
 	wrapped.ServeHTTP(rec, req)
 
@@ -662,7 +662,7 @@ func TestResponseValidator_NonJSONResponse(t *testing.T) {
 	validator := ResponseValidator(routes, &ResponseValidatorConfig{Logger: logger})
 	wrapped := validator(handler)
 
-	req := httptest.NewRequest("GET", "/api/alerts/rules", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/alerts/rules", nil)
 	rec := httptest.NewRecorder()
 	wrapped.ServeHTTP(rec, req)
 
@@ -698,7 +698,7 @@ func TestResponseValidator_DriftLogging(t *testing.T) {
 	validator := ResponseValidator(routes, &ResponseValidatorConfig{Logger: logger})
 	wrapped := validator(handler)
 
-	req := httptest.NewRequest("GET", "/api/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/test", nil)
 	rec := httptest.NewRecorder()
 	wrapped.ServeHTTP(rec, req)
 

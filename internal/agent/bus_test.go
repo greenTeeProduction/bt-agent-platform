@@ -74,7 +74,7 @@ func TestAgentBus_AllSubscribersReceiveAll(t *testing.T) {
 	bus.Publish(AgentEvent{Type: "type_b", Source: "s2", Message: "m2"})
 
 	received := 0
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		select {
 		case <-ch:
 			received++
@@ -174,7 +174,7 @@ func TestAgentBus_HistoryRingBuffer(t *testing.T) {
 	GlobalAgentBus = nil
 	bus := InitAgentBus(3) // max 3
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		bus.Publish(AgentEvent{Type: "evt", Source: "s1", Message: string(rune('A' + i))})
 	}
 
@@ -312,7 +312,7 @@ func TestAgentBus_DropOnFullChannel(t *testing.T) {
 
 	// Channel buffer is 16; send 20 events quickly
 	ch := bus.Subscribe("test")
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		bus.Publish(AgentEvent{Type: "test", Source: "s1", Message: string(rune('A' + i))})
 	}
 
@@ -408,13 +408,13 @@ func TestAgentBus_ConcurrentPublish(t *testing.T) {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		for i := 0; i < 50; i++ {
+		for range 50 {
 			bus.Publish(AgentEvent{Type: "concurrent", Source: "t1"})
 		}
 	}()
 	go func() {
 		defer wg.Done()
-		for i := 0; i < 50; i++ {
+		for range 50 {
 			bus.Publish(AgentEvent{Type: "concurrent", Source: "t2"})
 		}
 	}()
@@ -456,7 +456,7 @@ func TestAgentBus_HistoryNegativeLimit(t *testing.T) {
 func TestAgentBus_HistoryExceedsMax(t *testing.T) {
 	GlobalAgentBus = nil
 	bus := InitAgentBus(5)
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		bus.Publish(AgentEvent{Type: "t"})
 	}
 	// Requesting more than max should return all available

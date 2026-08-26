@@ -91,7 +91,7 @@ func ValidateResponse(route *Route, statusCode int, body []byte) []SchemaViolati
 	}
 
 	// Parse the body as JSON
-	var v interface{}
+	var v any
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	decoder.UseNumber()
 	if err := decoder.Decode(&v); err != nil {
@@ -125,14 +125,14 @@ func findResponse(route *Route, statusCode int) *RouteResponse {
 // collectViolations builds a list of SchemaViolation by comparing a JSON value
 // against a Schema. This is a non-strict validator — it reports warnings but
 // does not fail on missing required fields (only reports them as drift).
-func collectViolations(v interface{}, s *Schema, path string, violations *[]SchemaViolation) {
+func collectViolations(v any, s *Schema, path string, violations *[]SchemaViolation) {
 	if s == nil {
 		return
 	}
 
 	switch s.Type {
 	case "object":
-		m, ok := v.(map[string]interface{})
+		m, ok := v.(map[string]any)
 		if !ok {
 			*violations = append(*violations, SchemaViolation{
 				Field:   pathOrRoot(path),
@@ -159,7 +159,7 @@ func collectViolations(v interface{}, s *Schema, path string, violations *[]Sche
 		}
 
 	case "array":
-		arr, ok := v.([]interface{})
+		arr, ok := v.([]any)
 		if !ok {
 			*violations = append(*violations, SchemaViolation{
 				Field:   pathOrRoot(path),

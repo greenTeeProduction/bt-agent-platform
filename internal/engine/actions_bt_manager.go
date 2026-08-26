@@ -3,8 +3,9 @@
 package engine
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -311,10 +312,7 @@ func targetNameForRecord(r evolution.Record) string {
 			return inferred
 		}
 	}
-	if name != "" {
-		return name
-	}
-	return "unknown"
+	return cmp.Or(name, "unknown")
 }
 
 func inferAgentName(s string) string {
@@ -369,10 +367,9 @@ func successRate(records []evolution.Record) float64 {
 
 func consecutiveFailures(records []evolution.Record) int {
 	// Sort by timestamp descending
-	sorted := make([]evolution.Record, len(records))
-	copy(sorted, records)
-	sort.Slice(sorted, func(i, j int) bool {
-		return sorted[i].Timestamp > sorted[j].Timestamp
+	sorted := slices.Clone(records)
+	slices.SortFunc(sorted, func(a, b evolution.Record) int {
+		return cmp.Compare(b.Timestamp, a.Timestamp)
 	})
 
 	count := 0

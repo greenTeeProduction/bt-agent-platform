@@ -4,6 +4,7 @@ package engine
 
 import (
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
 
@@ -23,11 +24,11 @@ const (
 type MutationOp struct {
 	Kind       string                      `json:"kind"`                  // "add" | "remove"
 	ParentPath string                      `json:"parent_path,omitempty"` // add: index path of parent ("" = root, "0.2" = root.Children[0].Children[2])
-	Index      int                         `json:"index,omitempty"`       // add: insertion position; -1 = append
+	Index      int                         `json:"index,omitzero"`        // add: insertion position; -1 = append
 	Path       string                      `json:"path,omitempty"`        // remove: index path of the node to remove
 	ExpectName string                      `json:"expect_name,omitempty"` // optional: resolved node's Name must match
 	Subtree    *evolution.SerializableNode `json:"subtree,omitempty"`     // add: subtree to graft
-	Persist    bool                        `json:"persist,omitempty"`     // snapshot resulting tree to the store
+	Persist    bool                        `json:"persist,omitzero"`      // snapshot resulting tree to the store
 	Origin     string                      `json:"origin,omitempty"`
 }
 
@@ -42,18 +43,14 @@ func cloneNode(n *evolution.SerializableNode) *evolution.SerializableNode {
 	cp := *n
 	if n.Metadata != nil {
 		cp.Metadata = make(map[string]any, len(n.Metadata))
-		for k, v := range n.Metadata {
-			cp.Metadata[k] = v
-		}
+		maps.Copy(cp.Metadata, n.Metadata)
 	}
 	if n.Edges != nil {
 		cp.Edges = append([]evolution.TypedEdge(nil), n.Edges...)
 		for i := range cp.Edges {
 			if cp.Edges[i].Blackboard != nil {
 				bb := make(map[string]string, len(cp.Edges[i].Blackboard))
-				for k, v := range cp.Edges[i].Blackboard {
-					bb[k] = v
-				}
+				maps.Copy(bb, cp.Edges[i].Blackboard)
 				cp.Edges[i].Blackboard = bb
 			}
 		}

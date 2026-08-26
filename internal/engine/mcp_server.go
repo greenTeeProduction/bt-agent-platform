@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -32,18 +33,18 @@ import (
 // Message is a JSON-RPC 2.0 message.
 type Message struct {
 	JSONRPC string          `json:"jsonrpc"`
-	ID      interface{}     `json:"id,omitempty"`
+	ID      any             `json:"id,omitempty"`
 	Method  string          `json:"method,omitempty"`
 	Params  json.RawMessage `json:"params,omitempty"`
-	Result  interface{}     `json:"result,omitempty"`
+	Result  any             `json:"result,omitempty"`
 	Error   *RPCError       `json:"error,omitempty"`
 }
 
 // RPCError is a JSON-RPC 2.0 error object.
 type RPCError struct {
-	Code    int         `json:"code"`
-	Message string      `json:"message"`
-	Data    interface{} `json:"data,omitempty"`
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+	Data    any    `json:"data,omitempty"`
 }
 
 // ToolDef is an MCP tool definition (tools/list response).
@@ -196,8 +197,7 @@ func (s *Server) Run() error {
 		}
 
 		// Copy line data — scanner.Bytes() is only valid until next Scan().
-		data := make([]byte, len(line))
-		copy(data, line)
+		data := slices.Clone(line)
 
 		// Fast-path: handle initialize/list/notifications synchronously.
 		// These never block and must complete before tools/call can work.
@@ -219,7 +219,7 @@ func (s *Server) Run() error {
 			select {
 			case sem <- struct{}{}:
 				wg.Add(1)
-				go func(d []byte, id interface{}, tool string) {
+				go func(d []byte, id any, tool string) {
 					defer wg.Done()
 					defer func() { <-sem }()
 					// A panicking tool handler must not take down the daemon:
@@ -289,7 +289,7 @@ func (s *Server) SetMaxMessageSize(size int) {
 
 // sanitizeArg recursively sanitizes JSON values by stripping null bytes,
 // ANSI escape sequences, and control characters from strings.
-func sanitizeArg(v interface{}) interface{} {
+func sanitizeArg(v any) any {
 	switch val := v.(type) {
 	case string:
 		s := strings.ReplaceAll(val, "\x00", "")
@@ -309,14 +309,14 @@ func sanitizeArg(v interface{}) interface{} {
 			s = s[:start] + s[end:]
 		}
 		return strings.TrimSpace(s)
-	case map[string]interface{}:
-		out := make(map[string]interface{})
+	case map[string]any:
+		out := make(map[string]any)
 		for k, v2 := range val {
 			out[k] = sanitizeArg(v2)
 		}
 		return out
-	case []interface{}:
-		out := make([]interface{}, len(val))
+	case []any:
+		out := make([]any, len(val))
 		for i, item := range val {
 			out[i] = sanitizeArg(item)
 		}
@@ -335,20 +335,20 @@ func (s *Server) handleMessage(data []byte) {
 
 	switch msg.Method {
 	case "initialize":
-		result := map[string]interface{}{
+		result := map[string]any{
 			"protocolVersion": "2024-11-05",
 			"serverInfo": map[string]string{
 				"name":    s.name,
 				"version": "0.1.0",
 			},
-			"capabilities": map[string]interface{}{
+			"capabilities": map[string]any{
 				"tools": map[string]bool{},
 			},
 		}
 		s.writeResult(msg.ID, result)
 
 	case "tools/list":
-		s.writeResult(msg.ID, map[string]interface{}{
+		s.writeResult(msg.ID, map[string]any{
 			"tools": s.tools,
 		})
 
@@ -404,7 +404,7 @@ func (s *Server) handleMessage(data []byte) {
 
 		// ── Security: sanitize arguments ──
 		if s.sanitizeArgs {
-			var rawArgs interface{}
+			var rawArgs any
 			if err := json.Unmarshal(params.Arguments, &rawArgs); err == nil {
 				cleaned := sanitizeArg(rawArgs)
 				if data, err := json.Marshal(cleaned); err == nil {
@@ -459,7 +459,7 @@ func (s *Server) handleMessage(data []byte) {
 	}
 }
 
-func (s *Server) writeResult(id interface{}, result interface{}) {
+func (s *Server) writeResult(id any, result any) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	msg := Message{
@@ -471,7 +471,7 @@ func (s *Server) writeResult(id interface{}, result interface{}) {
 	fmt.Fprintf(s.out, "%s\n", data)
 }
 
-func (s *Server) writeError(id interface{}, code int, message string) {
+func (s *Server) writeError(id any, code int, message string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	msg := Message{

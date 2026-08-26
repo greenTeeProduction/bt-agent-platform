@@ -52,7 +52,7 @@ func (s *evaluatorServer) handleEvaluate(args json.RawMessage) *engine.ToolResul
 	records, _ := s.refStore.LoadAll()
 	fitness := evaluator.EvaluateTree(tree, records)
 
-	result := map[string]interface{}{
+	result := map[string]any{
 		"success_rate":    fmt.Sprintf("%.1f%%", fitness.SuccessRate*100),
 		"avg_duration_ms": fitness.AvgDurationMs,
 		"node_count":      fitness.NodeCount,
@@ -90,7 +90,7 @@ func (s *evaluatorServer) handleOrderMutations(args json.RawMessage) *engine.Too
 		})
 	}
 
-	result := map[string]interface{}{
+	result := map[string]any{
 		"candidates": items,
 		"total":      len(items),
 	}
@@ -119,7 +119,7 @@ func (s *evaluatorServer) handleDeepen(args json.RawMessage) *engine.ToolResult 
 		engine.Info("tt auto-save failed", "error", err)
 	}
 
-	out := map[string]interface{}{
+	out := map[string]any{
 		"depth":            result.Depth,
 		"base_composite":   fmt.Sprintf("%.1f", result.BaseFitness.Composite),
 		"candidates_total": len(result.Candidates),
@@ -142,7 +142,7 @@ func (s *evaluatorServer) handleDeepen(args json.RawMessage) *engine.ToolResult 
 
 // handleTTStats implements ev_tt_stats: transposition table statistics.
 func (s *evaluatorServer) handleTTStats(args json.RawMessage) *engine.ToolResult {
-	stats := map[string]interface{}{
+	stats := map[string]any{
 		"entries":  s.tt.Stats(),
 		"max_size": 1000,
 		"path":     s.tt.Path(),

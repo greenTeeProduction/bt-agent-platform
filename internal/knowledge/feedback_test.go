@@ -159,7 +159,7 @@ func TestRecordRun_UpdatesRunCount(t *testing.T) {
 		Fitness:  50.0,
 	})
 
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		kg.RecordRun(RunRecord{
 			TreeID:  "tree:multi",
 			Task:    "run ",

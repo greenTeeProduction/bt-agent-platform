@@ -569,7 +569,7 @@ func TestActiveProgramMilestoneNeverRoutesToAnalysisOnUnchangedGoals(t *testing.
 	// Run twice with an IDENTICAL gap set: milestone 2 produces the same goal
 	// queue both times. Without the guard, the second run would set
 	// goals_unchanged=true and route to analysis, never implementing it.
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		bb := &Blackboard{Task: "improve", ChainState: map[string]any{
 			"goap_fusion_improvement_gaps": "",
 		}}
@@ -602,18 +602,15 @@ func TestPersistGoapProgram_ConcurrentCallersAllSurvive(t *testing.T) {
 
 	const workers = 30
 	var wg sync.WaitGroup
-	for i := 0; i < workers; i++ {
-		i := i
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for i := range workers {
+		wg.Go(func() {
 			bb := &Blackboard{ChainState: map[string]any{}}
 			spec := &goapProgramSpec{
 				Title:      fmt.Sprintf("Concurrent program %d", i),
 				Milestones: []string{"m1"},
 			}
 			persistGoapProgram(bb, spec, "test")
-		}()
+		})
 	}
 	wg.Wait()
 
@@ -639,7 +636,7 @@ func TestCompleteGoapProgramMilestone_ConcurrentCallersAllSurvive(t *testing.T) 
 	const workers = 30
 	ids := make([]string, workers)
 	anchors := make([]string, workers)
-	for i := 0; i < workers; i++ {
+	for i := range workers {
 		anchor := fmt.Sprintf("internal/engine/complete_race_%d.go", i)
 		anchors[i] = anchor
 		p := ps.Add(fmt.Sprintf("Complete race program %d", i), "test", []string{"Wire work in " + anchor})
@@ -650,17 +647,14 @@ func TestCompleteGoapProgramMilestone_ConcurrentCallersAllSurvive(t *testing.T) 
 	}
 
 	var wg sync.WaitGroup
-	for i := 0; i < workers; i++ {
-		i := i
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for i := range workers {
+		wg.Go(func() {
 			bb := &Blackboard{ChainState: map[string]any{
 				"goap_fusion_program_milestone": ids[i] + ":0",
 			}}
 			run := &SuperpowersRun{ID: fmt.Sprintf("run-%d", i), ChangedFiles: []string{anchors[i]}}
 			completeGoapProgramMilestone(bb, run)
-		}()
+		})
 	}
 	wg.Wait()
 

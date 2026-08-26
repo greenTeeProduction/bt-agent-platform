@@ -62,7 +62,7 @@ func seedRecurringTask(t *testing.T, deps *mcpDeps, user, task string) {
 		t.Fatalf("interaction log: %v", err)
 	}
 	now := time.Now().Unix()
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if err := log.Append(persona.Interaction{
 			Task:      task,
 			Outcome:   "success",
@@ -264,7 +264,7 @@ func TestBTAutomationProposeRegistered(t *testing.T) {
 	if !ok || res == nil || len(res.Content) == 0 {
 		t.Fatal("bt_automation_propose returned no content")
 	}
-	var out map[string]interface{}
+	var out map[string]any
 	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 		t.Fatalf("result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
 	}

@@ -77,10 +77,10 @@ func TestPruneDeadPaths(t *testing.T) {
 
 	// Tree with a Selector that has paths below threshold
 	// Record hits: PathA has lots, PathB has few
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		o.Analyzer.RecordHit("MainSelector", "PathA", "IsCodeReview", true)
 	}
-	for i := 0; i < 1; i++ {
+	for range 1 {
 		o.Analyzer.RecordHit("MainSelector", "PathB", "IsBuildTask", true)
 	}
 
@@ -110,10 +110,10 @@ func TestPruneDeadPaths(t *testing.T) {
 
 	// Edge case: default/ExecutionPath should NOT be pruned even if below threshold
 	o2 := NewBTOptimizer()
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		o2.Analyzer.RecordHit("MS2", "PathA", "c1", true)
 	}
-	for i := 0; i < 1; i++ {
+	for range 1 {
 		o2.Analyzer.RecordHit("MS2", "ExecutionPath", "c2", true)
 	}
 
@@ -152,10 +152,10 @@ func TestPruneDeadPaths(t *testing.T) {
 
 	// Edge case: TotalTasks <= 10 (not enough data to prune)
 	o4 := NewBTOptimizer()
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		o4.Analyzer.RecordHit("MS3", "A", "c1", true)
 	}
-	for i := 0; i < 1; i++ {
+	for range 1 {
 		o4.Analyzer.RecordHit("MS3", "B", "c2", true)
 	}
 

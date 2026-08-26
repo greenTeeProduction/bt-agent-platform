@@ -1630,7 +1630,7 @@ func TestRecoverGoapFusionPendingPatches_AbandonmentIsDurable(t *testing.T) {
 
 	// Pre-record the full attempt budget so the very first scan discovers
 	// exhaustion.
-	for i := 0; i < pendingPatchRecoveryMaxAttempts; i++ {
+	for range pendingPatchRecoveryMaxAttempts {
 		run.Verification = append(run.Verification, VerificationCheck{
 			Name: "pending-patch-recovery", Command: "recovery attempt", Passed: false,
 		})

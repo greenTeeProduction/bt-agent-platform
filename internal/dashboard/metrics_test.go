@@ -82,7 +82,7 @@ func TestLoadGardenerMetricsParsesAggregateDocument(t *testing.T) {
 	// field fed from total_crisis_interventions. Checked structurally so the
 	// package still compiles pre-implementation and the run reports every
 	// missing behavior at once.
-	if _, ok := reflect.TypeOf(GardenerMetrics{}).FieldByName("CrisisInterventions"); !ok {
+	if _, ok := reflect.TypeFor[GardenerMetrics]().FieldByName("CrisisInterventions"); !ok {
 		t.Error("GardenerMetrics has no CrisisInterventions field; total_crisis_interventions is dropped")
 	}
 	serialized, err := json.Marshal(gm)
@@ -232,7 +232,7 @@ func TestLoadGardenerMetricsParsesRollbacks(t *testing.T) {
 		t.Fatal("loadGardenerMetrics() = nil for a valid aggregate document, dashboard drops all gardener data")
 	}
 
-	if _, ok := reflect.TypeOf(GardenerMetrics{}).FieldByName("Rollbacks"); !ok {
+	if _, ok := reflect.TypeFor[GardenerMetrics]().FieldByName("Rollbacks"); !ok {
 		t.Error("GardenerMetrics has no Rollbacks field; total_rollbacks is dropped")
 	}
 

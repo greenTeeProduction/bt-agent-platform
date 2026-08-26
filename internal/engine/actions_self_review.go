@@ -28,7 +28,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -69,7 +69,7 @@ type selfReviewState struct {
 	// finding real defects looked inert everywhere an operator would look.
 	LastReport     string    `json:"last_report,omitempty"`
 	LastOutcome    string    `json:"last_outcome,omitempty"`
-	LastReviewedAt time.Time `json:"last_reviewed_at,omitempty"`
+	LastReviewedAt time.Time `json:"last_reviewed_at,omitzero"`
 }
 
 // selfReviewReEmitWindow bounds how long a finished review may stand in for a
@@ -241,12 +241,12 @@ func scanSelfReviewCommits(repoDir, lastSHA string) (commitLog, diff, head, rang
 // no git calls.
 func oldestCommitHash(oneline string) string {
 	lines := strings.Split(strings.TrimSpace(oneline), "\n")
-	for i := len(lines) - 1; i >= 0; i-- {
-		l := strings.TrimSpace(lines[i])
+	for _, line := range slices.Backward(lines) {
+		l := strings.TrimSpace(line)
 		if l == "" {
 			continue
 		}
-		hash := strings.SplitN(l, " ", 2)[0]
+		hash, _, _ := strings.Cut(l, " ")
 		if hash != "" {
 			return hash
 		}
@@ -341,7 +341,7 @@ func canonicalSelfReviewSig(f selfReviewFinding) string {
 			files = append(files, file)
 		}
 	}
-	sort.Strings(files)
+	slices.Sort(files)
 	sum := sha256.Sum256([]byte(strings.Join(files, "\n") + "\x00" + normalizeSelfReviewTitle(f.Title)))
 	return hex.EncodeToString(sum[:])[:16]
 }

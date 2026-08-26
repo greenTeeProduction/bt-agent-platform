@@ -48,9 +48,9 @@ func TestOpenAICompat_GenerateWithModel_SendsChatCompletion(t *testing.T) {
 // validation error and the transient 503 failed on the first attempt with zero
 // retries — exactly the case the retry wrapper was added to handle.
 func TestOpenAICompat_NonJSONServerError_IsRetried(t *testing.T) {
-	var attempts int32
+	var attempts atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		n := atomic.AddInt32(&attempts, 1)
+		n := attempts.Add(1)
 		if n >= 2 {
 			_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"recovered"}}]}`))
 			return
@@ -69,7 +69,7 @@ func TestOpenAICompat_NonJSONServerError_IsRetried(t *testing.T) {
 	if got != "recovered" {
 		t.Fatalf("got=%q, want %q", got, "recovered")
 	}
-	if n := atomic.LoadInt32(&attempts); n < 2 {
+	if n := attempts.Load(); n < 2 {
 		t.Fatalf("expected at least 2 attempts (initial 503 + retry) for a non-JSON 5xx, got %d", n)
 	}
 }
@@ -81,9 +81,9 @@ func TestOpenAICompat_NonJSONServerError_IsRetried(t *testing.T) {
 // same client — only infrastructure failures (5xx/network/timeout/rate-limit)
 // should open the breaker.
 func TestOpenAICompat_ClientErrorsDoNotTripBreaker(t *testing.T) {
-	var serves int32
+	var serves atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if atomic.AddInt32(&serves, 1) <= 5 {
+		if serves.Add(1) <= 5 {
 			w.WriteHeader(http.StatusBadRequest)
 			_, _ = w.Write([]byte(`{"error":{"message":"invalid request"}}`))
 			return
@@ -95,7 +95,7 @@ func TestOpenAICompat_ClientErrorsDoNotTripBreaker(t *testing.T) {
 	client := NewOpenAICompatClient(OpenAICompatConfig{BaseURL: server.URL, Model: "default", Timeout: 5 * time.Second})
 	// The breaker threshold is 3; five 400s would open it if 400s counted as
 	// breaker failures.
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		if _, err := client.GenerateWithModel(context.Background(), "m", "sys", "bad"); err == nil {
 			t.Fatalf("call %d: expected a 400 error", i)
 		}
@@ -164,21 +164,21 @@ func TestOpenAICompat_NonRetryableProbeErrorDoesNotWedgeBreaker(t *testing.T) {
 // TestOpenAICompat_OpenBreakerRejectsWithoutRequest verifies an open breaker
 // fails fast without hitting the backend.
 func TestOpenAICompat_OpenBreakerRejectsWithoutRequest(t *testing.T) {
-	var serves int32
+	var serves atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		atomic.AddInt32(&serves, 1)
+		serves.Add(1)
 	}))
 	defer server.Close()
 
 	client := NewOpenAICompatClient(OpenAICompatConfig{BaseURL: server.URL, Model: "default", Timeout: time.Second})
-	for i := 0; i < 3; i++ { // threshold is 3
+	for range 3 { // threshold is 3
 		client.breaker.RecordFailure()
 	}
 	_, err := client.GenerateWithModel(context.Background(), "m", "sys", "p")
 	if err == nil || !strings.Contains(err.Error(), "circuit breaker open") {
 		t.Fatalf("expected a circuit-breaker-open error, got: %v", err)
 	}
-	if n := atomic.LoadInt32(&serves); n != 0 {
+	if n := serves.Load(); n != 0 {
 		t.Fatalf("open breaker must not reach the backend, saw %d requests", n)
 	}
 }
@@ -245,9 +245,9 @@ func TestOpenAICompat_GenerateWithModel_RetryPolicyByStatusCode(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			var attempts int32
+			var attempts atomic.Int32
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				n := atomic.AddInt32(&attempts, 1)
+				n := attempts.Add(1)
 				if tc.retryable && n >= 2 {
 					_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"recovered"}}]}`))
 					return
@@ -267,14 +267,14 @@ func TestOpenAICompat_GenerateWithModel_RetryPolicyByStatusCode(t *testing.T) {
 				if got != "recovered" {
 					t.Fatalf("got=%q, want %q", got, "recovered")
 				}
-				if n := atomic.LoadInt32(&attempts); n < 2 {
+				if n := attempts.Load(); n < 2 {
 					t.Fatalf("expected at least 2 attempts (initial %d + retry) for a retryable status, got %d", tc.status, n)
 				}
 			} else {
 				if err == nil {
 					t.Fatalf("expected an error for non-retryable status %d, got nil", tc.status)
 				}
-				if n := atomic.LoadInt32(&attempts); n != 1 {
+				if n := attempts.Load(); n != 1 {
 					t.Fatalf("expected exactly 1 attempt (no retry) for non-retryable status %d, got %d", tc.status, n)
 				}
 				if got := reliability.ClassifyError(err); got != tc.wantCat {

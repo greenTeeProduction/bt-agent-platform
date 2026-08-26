@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 )
@@ -146,7 +146,7 @@ func CleanupOldLogs(filePath string, maxBackups int) error {
 		}
 	}
 
-	sort.Strings(backups)
+	slices.Sort(backups)
 
 	// Remove backups beyond maxBackups
 	for i := maxBackups; i < len(backups); i++ {

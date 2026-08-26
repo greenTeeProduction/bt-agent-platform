@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/nico/go-bt-evolve/internal/goap"
@@ -19,7 +20,7 @@ func registerGoapNodes() {
 		b := ctx.Blackboard
 		cs := b.ChainState
 		if cs == nil {
-			cs = make(map[string]interface{})
+			cs = make(map[string]any)
 			b.ChainState = cs
 		}
 
@@ -132,7 +133,7 @@ func registerGoapNodes() {
 		b := ctx.Blackboard
 		cs := b.ChainState
 		if cs == nil {
-			cs = make(map[string]interface{})
+			cs = make(map[string]any)
 			b.ChainState = cs
 		}
 
@@ -149,17 +150,17 @@ func registerGoapNodes() {
 		switch v := actionsRaw.(type) {
 		case []goap.Action:
 			plannerActions = v
-		case []interface{}:
+		case []any:
 			for _, a := range v {
-				if m, ok := a.(map[string]interface{}); ok {
+				if m, ok := a.(map[string]any); ok {
 					action := goap.Action{
 						Name: stringField(m, "name"),
 						Cost: floatField(m, "cost", 1.0),
 					}
-					if pre, ok := m["preconditions"].(map[string]interface{}); ok {
+					if pre, ok := m["preconditions"].(map[string]any); ok {
 						action.Preconditions = goap.WorldState(worldStateFromMap(pre))
 					}
-					if eff, ok := m["effects"].(map[string]interface{}); ok {
+					if eff, ok := m["effects"].(map[string]any); ok {
 						action.Effects = goap.WorldState(worldStateFromMap(eff))
 					}
 					plannerActions = append(plannerActions, action)
@@ -290,9 +291,7 @@ func registerGoapNodes() {
 				if !ok {
 					ws = make(goap.WorldState)
 				}
-				for k, v := range p.Steps[idx].Effects {
-					ws[k] = v
-				}
+				maps.Copy(ws, p.Steps[idx].Effects)
 				cs["goap_world_state"] = ws
 			}
 		}
@@ -355,7 +354,7 @@ type GoapStepResult struct {
 const goapPriorResultCap = 600
 
 // getStepResults safely extracts accumulated step results from chain state.
-func getStepResults(cs map[string]interface{}) []GoapStepResult {
+func getStepResults(cs map[string]any) []GoapStepResult {
 	if cs == nil {
 		return nil
 	}
@@ -380,7 +379,7 @@ func planStepsToStrings(plan *goap.Plan) []string {
 }
 
 // getStringSlice safely gets a string slice from chain state.
-func getStringSlice(cs map[string]interface{}, key string) []string {
+func getStringSlice(cs map[string]any, key string) []string {
 	if raw, ok := cs[key]; ok {
 		if s, ok := raw.([]string); ok {
 			return s
@@ -391,7 +390,7 @@ func getStringSlice(cs map[string]interface{}, key string) []string {
 
 // buildGoapStepPrompt creates an LLM prompt for executing a GOAP step,
 // including prior step results as context for multi-step reasoning.
-func buildGoapStepPrompt(task, stepName string, cs map[string]interface{}) string {
+func buildGoapStepPrompt(task, stepName string, cs map[string]any) string {
 	var b strings.Builder
 	b.WriteString("You are executing a GOAP (Goal-Oriented Action Planning) step.\n")
 	b.WriteString("Task: " + task + "\n")
@@ -414,11 +413,11 @@ func buildGoapStepPrompt(task, stepName string, cs map[string]interface{}) strin
 	return b.String()
 }
 
-func worldStateFromMap(m map[string]interface{}) map[string]interface{} {
+func worldStateFromMap(m map[string]any) map[string]any {
 	return m
 }
 
-func stringField(m map[string]interface{}, key string) string {
+func stringField(m map[string]any, key string) string {
 	if v, ok := m[key]; ok {
 		if s, ok := v.(string); ok {
 			return s
@@ -427,7 +426,7 @@ func stringField(m map[string]interface{}, key string) string {
 	return ""
 }
 
-func floatField(m map[string]interface{}, key string, def float64) float64 {
+func floatField(m map[string]any, key string, def float64) float64 {
 	if v, ok := m[key]; ok {
 		switch n := v.(type) {
 		case float64:

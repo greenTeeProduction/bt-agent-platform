@@ -17,11 +17,12 @@
 package benchmark
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"log/slog"
 	"math"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -34,13 +35,13 @@ import (
 // TaskCase is a single benchmark task with expected routing.
 type TaskCase struct {
 	Task            string   `json:"task"`
-	ExpectedPath    string   `json:"expected_path"`               // which strategy path should handle this
-	PossiblePaths   []string `json:"possible_paths,omitempty"`    // multiple acceptable paths for ambiguous tasks
-	MinResultLen    int      `json:"min_result_len"`              // minimum output length expected
-	ShouldSucceed   bool     `json:"should_succeed"`              // expected outcome
-	ShouldReject    bool     `json:"should_reject"`               // PreGate should reject this
-	MinQualityScore float64  `json:"min_quality_score,omitempty"` // minimum quality score expected
-	Difficulty      string   `json:"difficulty,omitempty"`        // easy | medium | hard | adversarial
+	ExpectedPath    string   `json:"expected_path"`              // which strategy path should handle this
+	PossiblePaths   []string `json:"possible_paths,omitempty"`   // multiple acceptable paths for ambiguous tasks
+	MinResultLen    int      `json:"min_result_len"`             // minimum output length expected
+	ShouldSucceed   bool     `json:"should_succeed"`             // expected outcome
+	ShouldReject    bool     `json:"should_reject"`              // PreGate should reject this
+	MinQualityScore float64  `json:"min_quality_score,omitzero"` // minimum quality score expected
+	Difficulty      string   `json:"difficulty,omitempty"`       // easy | medium | hard | adversarial
 }
 
 // Suite is a collection of benchmark tasks for a specific domain.
@@ -325,10 +326,7 @@ func fishersExact(s1, f1, s2, f2 int) float64 {
 	if c := n1 + s2 - N; c > minA {
 		minA = c
 	}
-	maxA := n1
-	if s1+s2 < maxA {
-		maxA = s1 + s2
-	}
+	maxA := min(s1+s2, n1)
 
 	pObs := hypergeometricProb(a, b, c, d)
 	pValue := 0.0
@@ -381,9 +379,9 @@ func BootstrapCI(successes, total int) (lower, upper float64) {
 	const iterations = 1000
 	samples := make([]float64, iterations)
 
-	for i := 0; i < iterations; i++ {
+	for i := range iterations {
 		bootSuccesses := 0
-		for j := 0; j < total; j++ {
+		for j := range total {
 			if math.Float64frombits(math.Float64bits(float64(j))%100000) < rate*100000 {
 				bootSuccesses++
 			}
@@ -402,7 +400,7 @@ func BootstrapCI(successes, total int) (lower, upper float64) {
 	}
 
 	// Sort and take 2.5th and 97.5th percentiles
-	sort.Slice(samples, func(i, j int) bool { return samples[i] < samples[j] })
+	slices.Sort(samples)
 	lower = samples[25]  // 2.5th percentile
 	upper = samples[975] // 97.5th percentile
 	return
@@ -1482,7 +1480,7 @@ func SuiteForTreeNamed(treeName string) (Suite, bool) {
 
 // SortResults sorts results by task name for consistent comparison.
 func SortResults(results []Result) {
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].Task < results[j].Task
+	slices.SortFunc(results, func(a, b Result) int {
+		return cmp.Compare(a.Task, b.Task)
 	})
 }

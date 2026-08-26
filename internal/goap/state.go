@@ -14,13 +14,14 @@ package goap
 
 import (
 	"fmt"
-	"sort"
+	"maps"
+	"slices"
 	"strings"
 )
 
 // WorldState is a key-value representation of the agent's world.
 // Keys are strings, values can be any comparable type.
-type WorldState map[string]interface{}
+type WorldState map[string]any
 
 // Goal represents a desired world state. Only the specified keys must match;
 // other keys in the world state are ignored during goal satisfaction checks.
@@ -34,11 +35,11 @@ type Goal struct {
 // Action is an operator that transforms the world state.
 // It has preconditions (must be true to execute) and effects (what changes).
 type Action struct {
-	Name          string                 `json:"name"`
-	Cost          float64                `json:"cost"`               // execution cost (1.0 default)
-	Preconditions WorldState             `json:"preconditions"`      // must all match
-	Effects       WorldState             `json:"effects"`            // state changes after execution
-	Metadata      map[string]interface{} `json:"metadata,omitempty"` // arbitrary data
+	Name          string         `json:"name"`
+	Cost          float64        `json:"cost"`               // execution cost (1.0 default)
+	Preconditions WorldState     `json:"preconditions"`      // must all match
+	Effects       WorldState     `json:"effects"`            // state changes after execution
+	Metadata      map[string]any `json:"metadata,omitempty"` // arbitrary data
 }
 
 // Plan is an ordered sequence of actions to achieve a goal.
@@ -64,9 +65,7 @@ func (p *Plan) String() string {
 // Clone creates a deep copy of a WorldState.
 func (ws WorldState) Clone() WorldState {
 	clone := make(WorldState, len(ws))
-	for k, v := range ws {
-		clone[k] = v
-	}
+	maps.Copy(clone, ws)
 	return clone
 }
 
@@ -90,9 +89,7 @@ func (ws WorldState) MeetsPreconditions(pre WorldState) bool {
 // Returns a clone with effects applied (original is not modified).
 func (ws WorldState) Apply(effects WorldState) WorldState {
 	result := ws.Clone()
-	for k, v := range effects {
-		result[k] = v
-	}
+	maps.Copy(result, effects)
 	return result
 }
 
@@ -111,11 +108,7 @@ func (ws WorldState) Equals(other WorldState) bool {
 
 // String returns a sorted representation of the world state.
 func (ws WorldState) String() string {
-	keys := make([]string, 0, len(ws))
-	for k := range ws {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
+	keys := slices.Sorted(maps.Keys(ws))
 	var sb strings.Builder
 	sb.WriteString("{")
 	for i, k := range keys {

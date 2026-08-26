@@ -72,10 +72,7 @@ func promptFromNode(node *evolution.SerializableNode) string {
 			return p
 		}
 	}
-	if node.Description != "" {
-		return node.Description
-	}
-	return ""
+	return node.Description
 }
 
 func hitlPhase(node *evolution.SerializableNode) string {

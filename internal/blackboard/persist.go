@@ -3,9 +3,10 @@ package blackboard
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -121,9 +122,7 @@ func (s *scopedStore) snapshot() map[string]Entry {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := make(map[string]Entry, len(s.entries))
-	for k, e := range s.entries {
-		out[k] = e
-	}
+	maps.Copy(out, s.entries)
 	return out
 }
 
@@ -150,6 +149,6 @@ func (m *Manager) ListPersistedScopeIDs(kind ScopeKind) ([]string, error) {
 		}
 		out = append(out, strings.TrimSuffix(e.Name(), ".json"))
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out, nil
 }

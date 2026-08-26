@@ -10,7 +10,7 @@ func makeTestTree(name string, depth, childrenPerLevel int) *SerializableNode {
 	if depth <= 0 {
 		return root
 	}
-	for i := 0; i < childrenPerLevel; i++ {
+	for range childrenPerLevel {
 		child := &SerializableNode{Type: "Action", Name: name + "_leaf"}
 		root.Children = append(root.Children, *child)
 	}
@@ -121,7 +121,7 @@ func TestMAPElitesGrid_InsertAndRetrieve(t *testing.T) {
 func TestMAPElitesGrid_Elites(t *testing.T) {
 	grid := NewMAPElitesGrid(3) // only keep top 3
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		tree := makeTestTree("t"+strconv.Itoa(i), i+1, 2)
 		ind := &Individual{Tree: tree, Fitness: float64((i + 1) * 20), Genome: hashTree(tree)}
 		desc := Descriptor(tree, "test")
@@ -344,7 +344,7 @@ func TestMAPElitesPopulation_EvolveMAPElites_ResurrectsExtinctSpecialist(t *test
 	const size = 10
 	const domain = "godev"
 	individuals := make([]Individual, size)
-	for i := 0; i < size; i++ {
+	for i := range size {
 		// Identical, non-specialist genomes → Population.Diversity() ==
 		// 1/size == 0.1 (< 0.2 threshold) trips diversity_collapse under the
 		// shared envelope, while the single shared behavioral descriptor
@@ -400,7 +400,7 @@ func TestMAPElitesPopulation_EvolveMAPElites_ResurrectsExtinctSpecialist(t *test
 // it in a predictable MAP-Elites niche.
 func eliteSeedChain(depth int) *SerializableNode {
 	node := SerializableNode{Type: "Action", Name: "Leaf"}
-	for i := 0; i < depth; i++ {
+	for range depth {
 		node = SerializableNode{Type: "Sequence", Name: "Seq", Children: []SerializableNode{node}}
 	}
 	return &node

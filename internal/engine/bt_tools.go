@@ -279,7 +279,7 @@ func validateShellCommand(input string) string {
 		return "empty command"
 	}
 
-	for _, tok := range strings.Fields(trimmed) {
+	for tok := range strings.FieldsSeq(trimmed) {
 		if tok == ">" || tok == ">>" {
 			return "redirect operators are blocked for safety"
 		}
@@ -340,7 +340,7 @@ func splitPipeline(cmd string) []string {
 	inSingle := false
 	inDouble := false
 
-	for i := 0; i < len(cmd); i++ {
+	for i := range len(cmd) {
 		ch := cmd[i]
 		if ch == '\'' && !inDouble {
 			inSingle = !inSingle

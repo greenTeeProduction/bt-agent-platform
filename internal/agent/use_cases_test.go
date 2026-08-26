@@ -37,7 +37,7 @@ func TestUseCase_FullAgentLifecycle(t *testing.T) {
 	}
 
 	// 4. Record runs
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		_ = hist.Record(RunRecord{AgentName: "lifecycle", Outcome: "success", Duration: "1s", Quality: 0.9})
 	}
 	_ = hist.Record(RunRecord{AgentName: "lifecycle", Outcome: "failure", Duration: "2s", Quality: 0.3})

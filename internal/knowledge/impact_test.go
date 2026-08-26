@@ -3,6 +3,7 @@ package knowledge
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 )
 
@@ -58,12 +59,7 @@ func writeImpactFixture(t *testing.T) string {
 }
 
 func containsStr(haystack []string, needle string) bool {
-	for _, s := range haystack {
-		if s == needle {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(haystack, needle)
 }
 
 func TestBuildImpactGraph_ProximityEdge(t *testing.T) {

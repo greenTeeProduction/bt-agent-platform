@@ -58,13 +58,13 @@ type CompanyState struct {
 	MarketingStaff int `json:"marketing_staff"`
 
 	// Strategy
-	CurrentSprint int                    `json:"current_sprint"`
-	SprintGoal    string                 `json:"sprint_goal"`
-	QuarterGoals  []string               `json:"quarter_goals"`
-	Risks         []string               `json:"risks"`
-	Opportunities []string               `json:"opportunities"`
-	Decisions     []Decision             `json:"decisions"`
-	Metrics       map[string]interface{} `json:"custom_metrics"`
+	CurrentSprint int            `json:"current_sprint"`
+	SprintGoal    string         `json:"sprint_goal"`
+	QuarterGoals  []string       `json:"quarter_goals"`
+	Risks         []string       `json:"risks"`
+	Opportunities []string       `json:"opportunities"`
+	Decisions     []Decision     `json:"decisions"`
+	Metrics       map[string]any `json:"custom_metrics"`
 }
 
 // Lock acquires the CompanyState's mutex, serializing concurrent access from
@@ -145,7 +145,7 @@ func NewDefaultCompany() *CompanyState {
 		Risks:         []string{"competitor launched similar product", "key engineer considering offer"},
 		Opportunities: []string{"enterprise procurement pipeline", "OpenAI plugin marketplace"},
 
-		Metrics: map[string]interface{}{
+		Metrics: map[string]any{
 			"daily_active_users": 340,
 			"activation_rate":    0.45,
 			"nps_score":          42,

@@ -85,7 +85,7 @@ func registerArc42Nodes() {
 			setChainState(bb, "go_version", "unknown")
 			return 1
 		}
-		for _, line := range strings.Split(string(data), "\n") {
+		for line := range strings.SplitSeq(string(data), "\n") {
 			if strings.HasPrefix(strings.TrimSpace(line), "go ") {
 				setChainState(bb, "go_version", strings.TrimSpace(line))
 				break
@@ -107,7 +107,7 @@ func registerArc42Nodes() {
 		var parts []string
 		if cpu, _ := os.ReadFile("/proc/cpuinfo"); cpu != nil {
 			model := "unknown"
-			for _, line := range strings.Split(string(cpu), "\n") {
+			for line := range strings.SplitSeq(string(cpu), "\n") {
 				if strings.Contains(line, "model name") || strings.Contains(line, "Model") {
 					model = strings.TrimSpace(strings.SplitN(line, ":", 2)[1])
 				}
@@ -115,7 +115,7 @@ func registerArc42Nodes() {
 			parts = append(parts, fmt.Sprintf("CPU: %s (%d cores)", model, countCPUCores(string(cpu))))
 		}
 		if mem, _ := os.ReadFile("/proc/meminfo"); mem != nil {
-			for _, line := range strings.Split(string(mem), "\n") {
+			for line := range strings.SplitSeq(string(mem), "\n") {
 				if strings.HasPrefix(line, "MemTotal:") {
 					parts = append(parts, fmt.Sprintf("Memory: %s", strings.TrimSpace(line)))
 					break
@@ -201,10 +201,7 @@ func registerArc42Nodes() {
 			return 1
 		}
 		lines := strings.Split(string(data), "\n")
-		end := 150
-		if len(lines) < end {
-			end = len(lines)
-		}
+		end := min(len(lines), 150)
 		bb.CachedResult = strings.Join(lines[:end], "\n")
 		return 1
 	})
@@ -328,7 +325,7 @@ func registerArc42Nodes() {
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-func setChainState(bb *Blackboard, key string, val interface{}) {
+func setChainState(bb *Blackboard, key string, val any) {
 	if bb.ChainState == nil {
 		bb.ChainState = make(map[string]any)
 	}
@@ -354,7 +351,7 @@ func sectionFileExists(filename string) bool {
 
 func countCPUCores(cpuinfo string) int {
 	count := 0
-	for _, line := range strings.Split(cpuinfo, "\n") {
+	for line := range strings.SplitSeq(cpuinfo, "\n") {
 		if strings.HasPrefix(strings.TrimSpace(line), "processor") {
 			count++
 		}

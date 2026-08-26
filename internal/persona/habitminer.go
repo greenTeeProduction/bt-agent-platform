@@ -1,8 +1,10 @@
 package persona
 
 import (
+	"cmp"
+	"maps"
 	"math"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 )
@@ -128,11 +130,11 @@ func (m *HabitMiner) Mine(interactions []Interaction, now time.Time) []Recurring
 		patterns = append(patterns, p)
 	}
 
-	sort.Slice(patterns, func(i, j int) bool {
-		if patterns[i].Count != patterns[j].Count {
-			return patterns[i].Count > patterns[j].Count
-		}
-		return patterns[i].LastSeen > patterns[j].LastSeen
+	slices.SortFunc(patterns, func(a, b RecurringPattern) int {
+		return cmp.Or(
+			cmp.Compare(b.Count, a.Count),
+			cmp.Compare(b.LastSeen, a.LastSeen),
+		)
 	})
 	return patterns
 }
@@ -167,7 +169,7 @@ func (m *HabitMiner) similarityFn(recent []Interaction) func(i, j int) float64 {
 // keywordSet tokenizes a task into its significant lowercase words.
 func keywordSet(task string) map[string]bool {
 	set := make(map[string]bool)
-	for _, w := range strings.Fields(strings.ToLower(task)) {
+	for w := range strings.FieldsSeq(strings.ToLower(task)) {
 		w = strings.Trim(w, ",.!?;:\"'()[]{}")
 		if len(w) > 3 && !stopwords[w] {
 			set[w] = true
@@ -216,15 +218,12 @@ func cosine(a, b []float64) float64 {
 }
 
 func sortedByCount(counts map[string]int) []string {
-	ids := make([]string, 0, len(counts))
-	for id := range counts {
-		ids = append(ids, id)
-	}
-	sort.Slice(ids, func(i, j int) bool {
-		if counts[ids[i]] != counts[ids[j]] {
-			return counts[ids[i]] > counts[ids[j]]
-		}
-		return ids[i] < ids[j]
+	ids := slices.Collect(maps.Keys(counts))
+	slices.SortFunc(ids, func(a, b string) int {
+		return cmp.Or(
+			cmp.Compare(counts[b], counts[a]),
+			cmp.Compare(a, b),
+		)
 	})
 	return ids
 }

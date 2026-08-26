@@ -2,6 +2,7 @@ package goap
 
 import (
 	"fmt"
+	"maps"
 	"sync"
 	"time"
 )
@@ -86,14 +87,14 @@ func (a *Agent) AddGoal(goal *Goal) {
 }
 
 // SetState sets a world state variable.
-func (a *Agent) SetState(key string, value interface{}) {
+func (a *Agent) SetState(key string, value any) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.WorldState[key] = value
 }
 
 // GetState reads a world state variable.
-func (a *Agent) GetState(key string) (interface{}, bool) {
+func (a *Agent) GetState(key string) (any, bool) {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	v, ok := a.WorldState[key]
@@ -230,9 +231,7 @@ func (a *Agent) executePlan(plan *Plan, startTime time.Time) *AgentRun {
 
 			// Update agent's world state
 			a.mu.Lock()
-			for k, v := range action.Effects {
-				a.WorldState[k] = v
-			}
+			maps.Copy(a.WorldState, action.Effects)
 			a.mu.Unlock()
 		}
 
