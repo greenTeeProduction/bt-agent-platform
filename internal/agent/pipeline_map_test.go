@@ -8,12 +8,12 @@ import (
 func TestRemoveAgentJobs(t *testing.T) {
 	dir := t.TempDir()
 	origHome := os.Getenv("BT_AGENT_HOME")
-	os.Setenv("BT_AGENT_HOME", dir)
+	t.Setenv("BT_AGENT_HOME", dir)
 	t.Cleanup(func() {
 		if origHome == "" {
 			os.Unsetenv("BT_AGENT_HOME")
 		} else {
-			os.Setenv("BT_AGENT_HOME", origHome)
+			t.Setenv("BT_AGENT_HOME", origHome)
 		}
 	})
 

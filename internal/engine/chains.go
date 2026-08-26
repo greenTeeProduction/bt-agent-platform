@@ -825,7 +825,7 @@ func execRefine(cfg ChainConfig, bb *Blackboard) int {
 
 	rounds := 0
 	stopReason := "max_refinements_reached"
-	for i := 0; i < maxRefinements; i++ {
+	for range maxRefinements {
 		critiquePrompt := fmt.Sprintf(`Critique this answer against the task. List concrete, specific weaknesses — missing detail, inaccuracies, poor structure. If the answer is already complete and accurate with nothing material to add, reply with exactly: NO_FURTHER_IMPROVEMENT
 
 TASK:
@@ -1099,7 +1099,7 @@ func execAgent(cfg ChainConfig, bb *Blackboard) int {
 	// inspect the full subtask-result history across nodes.
 	var toolTrace []map[string]any
 
-	for i := 0; i < maxIter; i++ {
+	for i := range maxIter {
 		iterations = i + 1
 		// Context management: a long-running agent accumulates a large scratchpad,
 		// and the whole scratchpad is re-sent every iteration. Left unbounded this

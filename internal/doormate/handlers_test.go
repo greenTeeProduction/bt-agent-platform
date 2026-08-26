@@ -21,7 +21,7 @@ func TestHandleIntent(t *testing.T) {
 	handler := NewHandler(store, agent)
 
 	reqBody, _ := json.Marshal(map[string]string{"input": "lock security"})
-	req := httptest.NewRequest("POST", "/api/doormate/intent", bytes.NewReader(reqBody))
+	req := httptest.NewRequest(http.MethodPost, "/api/doormate/intent", bytes.NewReader(reqBody))
 	rr := httptest.NewRecorder()
 
 	handler.HandleIntent(rr, req)
@@ -106,7 +106,7 @@ func TestHandleBookmark(t *testing.T) {
 
 	// Test bookmarking (toggling to true)
 	reqBody, _ := json.Marshal(map[string]string{"page_id": page.ID})
-	req := httptest.NewRequest("POST", "/api/doormate/bookmark", bytes.NewReader(reqBody))
+	req := httptest.NewRequest(http.MethodPost, "/api/doormate/bookmark", bytes.NewReader(reqBody))
 	rr := httptest.NewRecorder()
 
 	handler.HandleBookmark(rr, req)
@@ -156,7 +156,7 @@ func TestHandleBookmark(t *testing.T) {
 
 	// Test unbookmarking (toggling to false)
 	reqBody2, _ := json.Marshal(map[string]string{"page_id": page.ID})
-	req2 := httptest.NewRequest("POST", "/api/doormate/bookmark", bytes.NewReader(reqBody2))
+	req2 := httptest.NewRequest(http.MethodPost, "/api/doormate/bookmark", bytes.NewReader(reqBody2))
 	rr2 := httptest.NewRecorder()
 
 	handler.HandleBookmark(rr2, req2)
@@ -212,7 +212,7 @@ func TestHandleRate(t *testing.T) {
 
 	// Test rating
 	reqBody, _ := json.Marshal(map[string]any{"page_id": page.ID, "rating": 5})
-	req := httptest.NewRequest("POST", "/api/doormate/rate", bytes.NewReader(reqBody))
+	req := httptest.NewRequest(http.MethodPost, "/api/doormate/rate", bytes.NewReader(reqBody))
 	rr := httptest.NewRecorder()
 
 	handler.HandleRate(rr, req)
@@ -261,7 +261,7 @@ func TestHandleProfile(t *testing.T) {
 	handler := NewHandler(store, agent)
 
 	// Test GET profile (loads user profile preferences)
-	req := httptest.NewRequest("GET", "/api/doormate/profile", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/doormate/profile", nil)
 	rr := httptest.NewRecorder()
 
 	handler.HandleProfile(rr, req)
@@ -284,7 +284,7 @@ func TestHandleProfile(t *testing.T) {
 		"tags":  prefTags,
 		"style": "minimal",
 	})
-	req2 := httptest.NewRequest("POST", "/api/doormate/profile", bytes.NewReader(reqBody))
+	req2 := httptest.NewRequest(http.MethodPost, "/api/doormate/profile", bytes.NewReader(reqBody))
 	rr2 := httptest.NewRecorder()
 
 	handler.HandleProfile(rr2, req2)

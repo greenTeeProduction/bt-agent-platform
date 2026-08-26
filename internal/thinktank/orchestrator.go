@@ -536,7 +536,7 @@ func findNextSection(text string) int {
 
 	for _, label := range common {
 		ll := strings.ToLower(label)
-		for i := 0; i < len(lower); i++ {
+		for i := range len(lower) {
 			if strings.HasPrefix(lower[i:], ll) {
 				if i == 0 || lower[i-1] == '\n' || lower[i-1] == '.' || lower[i-1] == '!' {
 					if i < best {

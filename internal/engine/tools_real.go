@@ -181,7 +181,7 @@ func newWebSearchTool() *realTool {
 			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 			defer cancel()
 			searchURL := fmt.Sprintf("https://html.duckduckgo.com/html/?q=%s", url.QueryEscape(input))
-			req, err := http.NewRequestWithContext(ctx, "GET", searchURL, nil)
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, searchURL, nil)
 			if err != nil {
 				return fmt.Sprintf("search error: %v", err)
 			}
@@ -728,7 +728,7 @@ func newHTTPGetTool() *realTool {
 		fn: func(input string) string {
 			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 			defer cancel()
-			req, err := http.NewRequestWithContext(ctx, "GET", strings.TrimSpace(input), nil)
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimSpace(input), nil)
 			if err != nil {
 				return fmt.Sprintf("http_get error: %v", err)
 			}

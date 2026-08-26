@@ -319,7 +319,7 @@ func parseLabelKey(key string) map[string]string {
 func splitOn(s string, sep byte) []string {
 	var parts []string
 	start := 0
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		if s[i] == sep {
 			parts = append(parts, s[start:i])
 			start = i + 1
@@ -330,7 +330,7 @@ func splitOn(s string, sep byte) []string {
 }
 
 func indexOf(s string, c byte) int {
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		if s[i] == c {
 			return i
 		}

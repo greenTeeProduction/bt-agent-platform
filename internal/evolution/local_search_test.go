@@ -155,7 +155,7 @@ func TestLocalSearcher_RefineGated_RejectsNonImprovement(t *testing.T) {
 	gate := NewQualityGate(t.TempDir())
 
 	ls := NewLocalSearcher(HillClimbSearch)
-	for i := 0; i < gate.ConsecutiveFails*2; i++ {
+	for i := range gate.ConsecutiveFails * 2 {
 		res := ls.RefineGated(tree, 42.0, flat, gate, "refine_tree")
 		if res.Accepted {
 			t.Fatalf("attempt %d: RefineGated accepted a refinement that did not beat baseFitness: %+v", i, res)
@@ -253,7 +253,7 @@ func TestQualityGate_Probe_DoesNotRecordFailures(t *testing.T) {
 		t.Errorf("Probe(50, 10) = %v, want %v (regression beyond MaxRegressionRate)", got, GateRollback)
 	}
 
-	for i := 0; i < q.ConsecutiveFails*2; i++ {
+	for range q.ConsecutiveFails * 2 {
 		q.Probe(50, 10)
 	}
 	if got := q.FailCount(); got != 0 {

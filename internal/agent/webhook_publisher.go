@@ -275,7 +275,7 @@ func (p *WebhookPublisher) postSigned(subscription string, body []byte) (int, er
 	url := fmt.Sprintf("%s/webhooks/%s", p.baseURL, subscription)
 	sig := computeHMAC(body, secret)
 
-	req, reqErr := http.NewRequest("POST", url, bytes.NewReader(body))
+	req, reqErr := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
 	if reqErr != nil {
 		return 0, reliability.NewCategorizedError(reliability.ErrCatValidation, reqErr)
 	}

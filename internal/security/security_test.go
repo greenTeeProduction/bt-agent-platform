@@ -54,7 +54,7 @@ func TestRateLimitMiddleware(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -70,7 +70,7 @@ func TestRateLimitMiddleware_Denied(t *testing.T) {
 	}))
 
 	// First request: burst=0 gives 0-1 = -1 tokens, denied
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.RemoteAddr = "10.0.0.1:1234"
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -79,7 +79,7 @@ func TestRateLimitMiddleware_Denied(t *testing.T) {
 		// With zero rate and burst, even first request may be denied
 		// But if the first somehow gets through, second MUST be denied
 		rec2 := httptest.NewRecorder()
-		req2 := httptest.NewRequest("GET", "/test", nil)
+		req2 := httptest.NewRequest(http.MethodGet, "/test", nil)
 		req2.RemoteAddr = "10.0.0.1:1234"
 		handler.ServeHTTP(rec2, req2)
 		if rec2.Code != http.StatusTooManyRequests {
@@ -123,7 +123,7 @@ func TestSanitizeMiddleware(t *testing.T) {
 	}))
 
 	// Test with clean request
-	req := httptest.NewRequest("POST", "/test?q=hello+world", strings.NewReader("test"))
+	req := httptest.NewRequest(http.MethodPost, "/test?q=hello+world", strings.NewReader("test"))
 	req.Header.Set("Content-Type", "text/plain")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -138,7 +138,7 @@ func TestSanitizeMiddleware_BodyTooLarge(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	req := httptest.NewRequest("POST", "/test", strings.NewReader("this is way too long for 10 bytes"))
+	req := httptest.NewRequest(http.MethodPost, "/test", strings.NewReader("this is way too long for 10 bytes"))
 	req.ContentLength = 100
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -154,7 +154,7 @@ func TestSecurityHeadersMiddleware(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -200,7 +200,7 @@ func TestSecurityHeadersMiddleware_HSTS(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -226,7 +226,7 @@ func TestSecurityHeadersMiddleware_CustomConfig(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -249,7 +249,7 @@ func TestCrossOriginMiddleware(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -269,7 +269,7 @@ func TestCrossOriginMiddleware_Preflight(t *testing.T) {
 		t.Error("handler should not be called for OPTIONS preflight")
 	}))
 
-	req := httptest.NewRequest("OPTIONS", "/test", nil)
+	req := httptest.NewRequest(http.MethodOptions, "/test", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -286,7 +286,7 @@ func TestRequestTimeoutMiddleware(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -301,7 +301,7 @@ func TestRequestTimeoutMiddleware_Timeout(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -315,7 +315,7 @@ func TestRequestTimeoutMiddleware_PanicRecovered(t *testing.T) {
 		panic("boom: downstream handler panicked")
 	}))
 
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	rec := httptest.NewRecorder()
 
 	// A panicking handler must not crash the process; the middleware should
@@ -467,7 +467,7 @@ func TestIPFilterMiddleware_Allowed(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.RemoteAddr = "127.0.0.1:12345"
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -483,7 +483,7 @@ func TestIPFilterMiddleware_Denied(t *testing.T) {
 		t.Error("handler should not be called for denied IP")
 	}))
 
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.RemoteAddr = "192.168.1.1:12345"
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -504,7 +504,7 @@ func TestIPFilterMiddleware_CustomExtractor(t *testing.T) {
 	}))
 
 	// Block listed IP via custom header
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.Header.Set("X-Real-IP", "10.0.0.99")
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -514,7 +514,7 @@ func TestIPFilterMiddleware_CustomExtractor(t *testing.T) {
 	}
 
 	// Allowed IP via custom header
-	req2 := httptest.NewRequest("GET", "/test", nil)
+	req2 := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req2.Header.Set("X-Real-IP", "192.168.1.1")
 	rec2 := httptest.NewRecorder()
 	handler.ServeHTTP(rec2, req2)
@@ -555,7 +555,7 @@ func TestAuditMiddleware(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -570,7 +570,7 @@ func TestAuditMiddleware_SlowResponse(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -617,7 +617,7 @@ func TestRequestIDMiddleware_GeneratesID(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -644,7 +644,7 @@ func TestRequestIDMiddleware_ReusesIncomingID(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req.Header.Set("X-Request-ID", existingID)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
@@ -676,7 +676,7 @@ func TestRequestIDMiddleware_UniquePerRequest(t *testing.T) {
 	}))
 
 	for range 100 {
-		req := httptest.NewRequest("GET", "/test", nil)
+		req := httptest.NewRequest(http.MethodGet, "/test", nil)
 		rec := httptest.NewRecorder()
 		handler.ServeHTTP(rec, req)
 	}
@@ -746,7 +746,7 @@ func TestCSRFMiddleware_SetsCookieOnFirstSafeRequest(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -784,7 +784,7 @@ func TestCSRFMiddleware_ReusesExistingCookie(t *testing.T) {
 	}))
 
 	// First request sets cookie
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -796,7 +796,7 @@ func TestCSRFMiddleware_ReusesExistingCookie(t *testing.T) {
 	csrfCookie := cookies[0]
 
 	// Second request with the cookie should NOT set a new one
-	req2 := httptest.NewRequest("GET", "/test", nil)
+	req2 := httptest.NewRequest(http.MethodGet, "/test", nil)
 	req2.AddCookie(csrfCookie)
 	rec2 := httptest.NewRecorder()
 	handler.ServeHTTP(rec2, req2)
@@ -815,7 +815,7 @@ func TestCSRFMiddleware_ValidPOSTPasses(t *testing.T) {
 	}))
 
 	// First GET to get a token
-	getReq := httptest.NewRequest("GET", "/test", nil)
+	getReq := httptest.NewRequest(http.MethodGet, "/test", nil)
 	getRec := httptest.NewRecorder()
 	handler.ServeHTTP(getRec, getReq)
 
@@ -830,7 +830,7 @@ func TestCSRFMiddleware_ValidPOSTPasses(t *testing.T) {
 	}
 
 	// POST with matching cookie + header
-	postReq := httptest.NewRequest("POST", "/test", nil)
+	postReq := httptest.NewRequest(http.MethodPost, "/test", nil)
 	postReq.AddCookie(&http.Cookie{Name: "_csrf_token", Value: token})
 	postReq.Header.Set("X-CSRF-Token", token)
 	postRec := httptest.NewRecorder()
@@ -859,7 +859,7 @@ func TestCSRFMiddleware_InvalidPOSTRejected(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			req := httptest.NewRequest("POST", "/test", nil)
+			req := httptest.NewRequest(http.MethodPost, "/test", nil)
 			if tt.cookieToken != "" {
 				req.AddCookie(&http.Cookie{Name: "_csrf_token", Value: tt.cookieToken})
 			}
@@ -901,7 +901,7 @@ func TestCSRFMiddleware_CustomTokenGenerator(t *testing.T) {
 	}))
 
 	// First GET should set the custom token
-	req := httptest.NewRequest("GET", "/test", nil)
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
@@ -916,7 +916,7 @@ func TestCSRFMiddleware_CustomTokenGenerator(t *testing.T) {
 	}
 
 	// POST with custom token should work
-	postReq := httptest.NewRequest("POST", "/test", nil)
+	postReq := httptest.NewRequest(http.MethodPost, "/test", nil)
 	postReq.AddCookie(&http.Cookie{Name: "_csrf_token", Value: customToken})
 	postReq.Header.Set("X-CSRF-Token", customToken)
 	postRec := httptest.NewRecorder()

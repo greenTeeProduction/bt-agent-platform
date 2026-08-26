@@ -733,14 +733,14 @@ func TestSelectorOptimizer_MCTSAffinity(t *testing.T) {
 	}
 
 	// Half the Selectors reach MinSamples → half the tree still has no signal.
-	for i := 0; i < so.MinSamples+2; i++ {
+	for range so.MinSamples + 2 {
 		so.Record("SelHot", NodeExecutionRecord{NodeName: "HotA", Outcome: "success"})
 	}
 	if got := so.MCTSAffinity(tree); math.Abs(got-0.5) > 1e-9 {
 		t.Errorf("one of two Selectors informed: expected affinity 0.5, got %.2f", got)
 	}
 
-	for i := 0; i < so.MinSamples+2; i++ {
+	for range so.MinSamples + 2 {
 		so.Record("SelCold", NodeExecutionRecord{NodeName: "ColdA", Outcome: "failure"})
 	}
 	if got := so.MCTSAffinity(tree); got != 0.0 {
@@ -769,7 +769,7 @@ func TestSelectStructuralStrategy(t *testing.T) {
 		Tags:     []string{"specialist:go"},
 	}, tree, 1)
 	so := NewSelectorOptimizer(OrderBySuccessRate)
-	for i := 0; i < so.MinSamples+2; i++ {
+	for range so.MinSamples + 2 {
 		so.Record("SelHot", NodeExecutionRecord{NodeName: "HotA", Outcome: "success"})
 		so.Record("SelCold", NodeExecutionRecord{NodeName: "ColdA", Outcome: "success"})
 	}

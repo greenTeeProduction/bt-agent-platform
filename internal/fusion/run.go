@@ -222,7 +222,7 @@ func RunToolLoop(ctx context.Context, caller ModelCaller, model, system, prompt 
 	for _, t := range tools {
 		toolMap[t.Name()] = t
 	}
-	for i := 0; i < cfg.MaxToolCalls; i++ {
+	for i := range cfg.MaxToolCalls {
 		full := prompt + "\n\nPrevious tool observations:\n" + scratch + "\nRespond with Action/Action Input or Final Answer."
 		out, err := caller.GenerateWithModel(ctx, model, system, full)
 		if err != nil {

@@ -907,7 +907,7 @@ func handleTaskApprove(w http.ResponseWriter, r *http.Request) {
 	taskID := r.URL.Query().Get("id")
 	pendingID, resolvedFrom := pendingHITLBeforeResolve(taskID)
 	if err := taskStore.Approve(taskID, "dashboard"); err != nil {
-		w.WriteHeader(404)
+		w.WriteHeader(http.StatusNotFound)
 		_ = encodeJSON(w, map[string]string{"error": err.Error()})
 		return
 	}
@@ -934,7 +934,7 @@ func handleTaskReject(w http.ResponseWriter, r *http.Request) {
 	}
 	pendingID, resolvedFrom := pendingHITLBeforeResolve(taskID)
 	if err := taskStore.Reject(taskID, "dashboard", reason); err != nil {
-		w.WriteHeader(404)
+		w.WriteHeader(http.StatusNotFound)
 		_ = encodeJSON(w, map[string]string{"error": err.Error()})
 		return
 	}
@@ -972,12 +972,12 @@ func handleWorkflowApprove(w http.ResponseWriter, r *http.Request) {
 	wf := currentWorkflow
 	currentWorkflowMu.RUnlock()
 	if wf == nil {
-		w.WriteHeader(404)
+		w.WriteHeader(http.StatusNotFound)
 		_ = encodeJSON(w, map[string]string{"error": "no active workflow"})
 		return
 	}
 	if task := wf.ApproveTask(taskID, "dashboard"); task == nil {
-		w.WriteHeader(404)
+		w.WriteHeader(http.StatusNotFound)
 		_ = encodeJSON(w, map[string]string{"error": "workflow task not found: " + taskID})
 		return
 	}
@@ -999,12 +999,12 @@ func handleWorkflowReject(w http.ResponseWriter, r *http.Request) {
 	wf := currentWorkflow
 	currentWorkflowMu.RUnlock()
 	if wf == nil {
-		w.WriteHeader(404)
+		w.WriteHeader(http.StatusNotFound)
 		_ = encodeJSON(w, map[string]string{"error": "no active workflow"})
 		return
 	}
 	if task := wf.RejectTask(taskID, "dashboard", reason); task == nil {
-		w.WriteHeader(404)
+		w.WriteHeader(http.StatusNotFound)
 		_ = encodeJSON(w, map[string]string{"error": "workflow task not found: " + taskID})
 		return
 	}
@@ -1749,7 +1749,7 @@ func handleConfig(w http.ResponseWriter, r *http.Request) {
 func handleTaskCreate(w http.ResponseWriter, r *http.Request) {
 	title := r.URL.Query().Get("title")
 	if title == "" {
-		w.WriteHeader(400)
+		w.WriteHeader(http.StatusBadRequest)
 		_ = encodeJSON(w, map[string]string{"error": "missing title parameter"})
 		return
 	}
@@ -1769,7 +1769,7 @@ func handleTaskCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	task.TreeID = dashboard.PickTreeForTask(task)
 	if err := taskStore.Create(task); err != nil {
-		w.WriteHeader(500)
+		w.WriteHeader(http.StatusInternalServerError)
 		_ = encodeJSON(w, map[string]string{"error": err.Error()})
 		return
 	}
@@ -1953,7 +1953,7 @@ func handleAgentRun(w http.ResponseWriter, r *http.Request) {
 	agentName := r.URL.Query().Get("agent")
 	task := r.URL.Query().Get("task")
 	if agentName == "" {
-		w.WriteHeader(400)
+		w.WriteHeader(http.StatusBadRequest)
 		_ = encodeJSON(w, map[string]string{"error": "missing agent parameter"})
 		return
 	}

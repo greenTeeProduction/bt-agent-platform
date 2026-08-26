@@ -372,7 +372,7 @@ func (cma *CMAESOptimizer) Optimize(
 	// Expectation of ||N(0,I)|| (chi-squared distribution)
 	chiN := math.Sqrt(float64(n)) * (1.0 - 1.0/(4.0*float64(n)) + 1.0/(21.0*float64(n)*float64(n)))
 
-	for gen := 0; gen < cma.MaxGenerations; gen++ {
+	for gen := range cma.MaxGenerations {
 		cma.GenCount++
 
 		// 1. Sample λ candidates
@@ -554,7 +554,7 @@ func cholesky(cov [][]float64) [][]float64 {
 		L[i] = make([]float64, n)
 		for j := 0; j <= i; j++ {
 			s := 0.0
-			for k := 0; k < j; k++ {
+			for k := range j {
 				s += L[i][k] * L[j][k]
 			}
 			if i == j {

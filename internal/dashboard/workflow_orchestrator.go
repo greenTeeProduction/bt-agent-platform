@@ -352,7 +352,7 @@ func (r *Runner) executeLoop(ctx context.Context, step Step, state *wfState) (St
 		maxIter = 10
 	}
 
-	for i := 0; i < maxIter; i++ {
+	for i := range maxIter {
 		select {
 		case <-ctx.Done():
 			return StepResult{StepID: step.ID, Outcome: "aborted", Duration: time.Since(start)}, ctx.Err()
@@ -444,7 +444,7 @@ func evaluateCondition(cond string, state *wfState) bool {
 		return true
 	}
 	// Check for "X == 'Y'" pattern
-	for i := 0; i < len(expanded)-4; i++ {
+	for i := range len(expanded) - 4 {
 		if expanded[i:i+4] == " == " {
 			left := expanded[:i]
 			right := expanded[i+4:]

@@ -224,7 +224,7 @@ func (h *History) loadAll() error {
 func splitLines(s string) []string {
 	var lines []string
 	start := 0
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		if s[i] == '\n' {
 			lines = append(lines, s[start:i])
 			start = i + 1

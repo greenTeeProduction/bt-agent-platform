@@ -404,7 +404,7 @@ func (o *BTOptimizer) MergeOverlappingPaths(tree *SerializableNode) int {
 func (o *BTOptimizer) mergeNode(node *SerializableNode, merged *int) {
 	if node.Type == "Selector" && len(node.Children) >= 2 {
 		// Check for overlapping conditions
-		for i := 0; i < len(node.Children)-1; i++ {
+		for i := range len(node.Children) - 1 {
 			ci := extractCondition(&node.Children[i])
 			for j := i + 1; j < len(node.Children); j++ {
 				cj := extractCondition(&node.Children[j])

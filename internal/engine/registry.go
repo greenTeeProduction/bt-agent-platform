@@ -826,7 +826,7 @@ func containsAnyLower(s string, keywords ...string) bool {
 	for _, kw := range keywords {
 		for i := 0; i <= len(s)-len(kw); i++ {
 			match := true
-			for j := 0; j < len(kw); j++ {
+			for j := range len(kw) {
 				c := s[i+j]
 				kc := kw[j]
 				if c >= 'A' && c <= 'Z' {

@@ -399,6 +399,7 @@ func withUnsetSelfFixEnv(t *testing.T) {
 		}
 		t.Cleanup(func() {
 			if wasSet {
+				//nolint:usetesting // restoring a captured value from inside Cleanup; t.Setenv cannot be called there
 				_ = os.Setenv(key, old)
 			} else {
 				_ = os.Unsetenv(key)

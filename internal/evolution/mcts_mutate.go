@@ -200,7 +200,7 @@ func (m *MCTSMutator) Mutate(parent *SerializableNode, parentFitness float64) (*
 	bestFitness := parentFitness
 
 	// 2. MAIN LOOP: K iterations
-	for i := 0; i < m.Iterations; i++ {
+	for range m.Iterations {
 		// SELECT: traverse using UCB1 until we hit a leaf or an unexpanded node
 		selected := m.selectNode(root, 0)
 
@@ -484,7 +484,7 @@ func (m *MCTSMutator) Candidates(parent *SerializableNode, parentFitness float64
 	best := make(map[string]improvement, len(AllMutationOps))
 	order := make([]string, 0, len(AllMutationOps))
 
-	for i := 0; i < m.Iterations; i++ {
+	for range m.Iterations {
 		selected := m.selectNode(root, 0)
 		leaf := m.expandNode(selected)
 		if leaf == nil {

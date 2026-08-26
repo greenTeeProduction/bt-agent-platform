@@ -47,8 +47,7 @@ func TestEnvBool_DefaultValue(t *testing.T) {
 }
 
 func TestEnvBool_UnknownValue(t *testing.T) {
-	os.Setenv("_TEST_ENVBOOL_UNKNOWN", "banana")
-	defer os.Unsetenv("_TEST_ENVBOOL_UNKNOWN")
+	t.Setenv("_TEST_ENVBOOL_UNKNOWN", "banana")
 
 	if got := envBool("_TEST_ENVBOOL_UNKNOWN", true); got != true {
 		t.Errorf("envBool('banana') with default=true = %v, want true", got)
@@ -59,8 +58,7 @@ func TestEnvBool_UnknownValue(t *testing.T) {
 }
 
 func TestEnvBool_MixedCase(t *testing.T) {
-	os.Setenv("_TEST_ENVBOOL_MIXED", "True")
-	defer os.Unsetenv("_TEST_ENVBOOL_MIXED")
+	t.Setenv("_TEST_ENVBOOL_MIXED", "True")
 
 	if got := envBool("_TEST_ENVBOOL_MIXED", false); got != true {
 		t.Errorf("envBool('True') = %v, want true", got)

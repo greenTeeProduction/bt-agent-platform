@@ -182,7 +182,7 @@ func (ls *LocalSearcher) hillClimb(
 		return current, 0
 	}
 
-	for iter := 0; iter < ls.MaxIterations; iter++ {
+	for range ls.MaxIterations {
 		bestParam := -1
 		bestValue := 0.0
 		bestFitness := currentFitness
@@ -228,7 +228,7 @@ func (ls *LocalSearcher) simulatedAnnealing(
 	bestFitness := currentFitness
 	temp := ls.Temperature
 
-	for iter := 0; iter < ls.MaxIterations; iter++ {
+	for range ls.MaxIterations {
 		// Generate a neighbor by mutation
 		candidate := cloneTree(current)
 		ops := randomMutation(candidate)
@@ -282,7 +282,7 @@ func (ls *LocalSearcher) tabuSearch(
 	// Tabu list is a FIFO of genome hashes
 	tabuList := make([]tabuEntry, 0, ls.TabuTenure)
 
-	for iter := 0; iter < ls.MaxIterations; iter++ {
+	for range ls.MaxIterations {
 		// Generate multiple candidate neighbors
 		type candidate struct {
 			tree    *SerializableNode

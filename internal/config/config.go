@@ -1397,7 +1397,7 @@ func (c *Config) ollamaReachable() bool {
 		return false
 	}
 	resp.Body.Close()
-	return resp.StatusCode == 200
+	return resp.StatusCode == http.StatusOK
 }
 
 // ollamaChecker is a package-level function that can be overridden in tests
@@ -1415,7 +1415,7 @@ func (c *Config) deepseekReachable() bool {
 	}
 	client := &http.Client{Timeout: 5 * time.Second}
 	url := strings.TrimRight(c.DeepSeekHost, "/") + "/models"
-	req, err := http.NewRequest("GET", url, nil)
+	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return false
 	}

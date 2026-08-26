@@ -1809,7 +1809,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 					im.AddIsland(name, newProductionPopulation(population, seeds[name]))
 				}
 			} else {
-				for i := 0; i < params.Islands; i++ {
+				for i := range params.Islands {
 					name := fmt.Sprintf("island_%d", i)
 					seeded = append(seeded, name)
 					im.AddIsland(name, newProductionPopulation(population, baseTree))
@@ -1887,7 +1887,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			}
 			im.ExpertKnowledge = ek
 			var bestTrees map[string]*evolution.SerializableNode
-			for g := 0; g < params.Generations; g++ {
+			for range params.Generations {
 				bestTrees = im.EvolveAll(structuralFitnessFn)
 			}
 			stats := im.Stats()

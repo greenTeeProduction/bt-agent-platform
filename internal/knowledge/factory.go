@@ -422,7 +422,7 @@ func (f *Factory) buildFromArchetype(arch evolution.TreeArchetype) *evolution.Se
 		agentCount = 2
 	}
 
-	for i := 0; i < agentCount; i++ {
+	for i := range agentCount {
 		path := evolution.SerializableNode{
 			Type: "Sequence",
 			Name: fmt.Sprintf("AgentPath_%d", i+1),

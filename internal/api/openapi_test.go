@@ -768,7 +768,7 @@ func TestDashboardRoutes_SwaggerRoute(t *testing.T) {
 	// Should have an HTML content type response
 	found200 := false
 	for _, r := range swaggerRoute.Responses {
-		if r.StatusCode == 200 {
+		if r.StatusCode == http.StatusOK {
 			found200 = true
 			if r.ContentType != "text/html" {
 				t.Errorf("expected ContentType text/html for 200 response, got %q", r.ContentType)
@@ -1060,13 +1060,13 @@ func TestOpenAPIGenerator_NonDeprecatedRoute_NoHeaders(t *testing.T) {
 
 func TestDeprecatedHandler_WithSunset(t *testing.T) {
 	handler := func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(200)
+		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"ok":true}`))
 	}
 	wrapped := DeprecatedHandler(http.HandlerFunc(handler), "2027-01-01")
 
 	// Use httptest
-	req, _ := http.NewRequest("GET", "/api/old", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/old", nil)
 	rec := httptest.NewRecorder()
 	wrapped.ServeHTTP(rec, req)
 
@@ -1086,12 +1086,12 @@ func TestDeprecatedHandler_WithSunset(t *testing.T) {
 
 func TestDeprecatedHandler_WithoutSunset(t *testing.T) {
 	handler := func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(200)
+		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`ok`))
 	}
 	wrapped := DeprecatedHandler(http.HandlerFunc(handler), "")
 
-	req, _ := http.NewRequest("GET", "/api/old", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/old", nil)
 	rec := httptest.NewRecorder()
 	wrapped.ServeHTTP(rec, req)
 
@@ -1105,12 +1105,12 @@ func TestDeprecatedHandler_WithoutSunset(t *testing.T) {
 
 func TestDeprecatedHandlerFunc_WithSunset(t *testing.T) {
 	handler := func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(200)
+		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`ok`))
 	}
 	wrapped := DeprecatedHandlerFunc(handler, "2026-12-31")
 
-	req, _ := http.NewRequest("GET", "/api/old", nil)
+	req, _ := http.NewRequest(http.MethodGet, "/api/old", nil)
 	rec := httptest.NewRecorder()
 	wrapped(rec, req)
 

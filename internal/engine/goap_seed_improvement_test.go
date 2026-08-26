@@ -201,15 +201,15 @@ func TestSeedNextProgram_DeterministicCoverageFallback(t *testing.T) {
 	if p == nil || p.Source != "auto-seed:coverage" {
 		t.Fatalf("fallback must persist a coverage program: %+v", p)
 	}
-	joined := ""
+	var joined strings.Builder
 	for _, m := range p.Milestones {
-		joined += m.Goal + "\n"
+		joined.WriteString(m.Goal + "\n")
 	}
-	if strings.Contains(joined, "claimed.go") {
-		t.Fatalf("fallback must skip files already claimed by earlier programs:\n%s", joined)
+	if strings.Contains(joined.String(), "claimed.go") {
+		t.Fatalf("fallback must skip files already claimed by earlier programs:\n%s", joined.String())
 	}
-	if !strings.Contains(joined, "naked_one.go") || !strings.Contains(joined, "naked_two.go") {
-		t.Fatalf("fallback milestones must target the untested files:\n%s", joined)
+	if !strings.Contains(joined.String(), "naked_one.go") || !strings.Contains(joined.String(), "naked_two.go") {
+		t.Fatalf("fallback milestones must target the untested files:\n%s", joined.String())
 	}
 	if !strings.Contains(bb.Result, "PROGRAM-CONTINUE") {
 		t.Fatalf("fallback seed must carry the continue marker: %s", bb.Result)

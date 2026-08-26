@@ -209,7 +209,7 @@ func (eb *ExperienceBank) Retrieve(query string, topK int) []ExperienceEntry {
 		topK = len(candidates)
 	}
 	result := make([]ExperienceEntry, topK)
-	for i := 0; i < topK; i++ {
+	for i := range topK {
 		result[i] = candidates[i].entry
 	}
 	return result

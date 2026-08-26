@@ -273,7 +273,7 @@ func TestWebhookPublisher_HandleEventHTTP4xx(_ *testing.T) {
 func TestWebhookPublisher_HandleEventSuccess(t *testing.T) {
 	// Create a test server that returns 200
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
+		if r.Method != http.MethodPost {
 			t.Errorf("expected POST, got %s", r.Method)
 		}
 		if r.Header.Get("Content-Type") != "application/json" {

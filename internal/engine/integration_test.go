@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
@@ -186,11 +187,11 @@ func TestIntegration_EdgeCases(t *testing.T) {
 
 	// Very long task
 	t.Run("very_long_task", func(t *testing.T) {
-		longTask := ""
+		var longTask strings.Builder
 		for range 100 {
-			longTask += "This is a very long task description to test input handling. "
+			longTask.WriteString("This is a very long task description to test input handling. ")
 		}
-		bb := &Blackboard{Task: longTask, LLM: &MockLLM{}}
+		bb := &Blackboard{Task: longTask.String(), LLM: &MockLLM{}}
 		bt := BuildTree(evolution.DefaultTree(), bb)
 		outcome := RunTask(bb, bt)
 		if outcome == "" {

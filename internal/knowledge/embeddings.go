@@ -178,7 +178,7 @@ func (kg *KnowledgeGraph) BuildIndex() error {
 	}
 
 	var firstErr error
-	for i := 0; i < len(trees); i++ {
+	for range len(trees) {
 		r := <-ch
 		if r.err != nil && firstErr == nil {
 			firstErr = r.err
