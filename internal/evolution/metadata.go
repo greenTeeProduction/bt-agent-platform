@@ -1,8 +1,9 @@
 package evolution
 
-import "slices"
-
-import "time"
+import (
+	"slices"
+	"time"
+)
 
 // EvolutionMetadata stores lineage, fitness, and mutation history for a tree.
 type EvolutionMetadata struct {

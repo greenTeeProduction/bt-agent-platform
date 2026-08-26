@@ -319,7 +319,7 @@ func TestGrillDesignArtifactAction_HappyPathBothAnswered(t *testing.T) {
 // questions must be answered via exactly two NotebookLM calls (5 then 2),
 // and answers must map back to the correct original question indices.
 func TestResolveGrillQuestions_MultiBatchSevenQuestionsSplitsFiveAndTwo(t *testing.T) {
-	var qs []grillQuestion
+	qs := make([]grillQuestion, 0, 7)
 	for i := range 7 {
 		qs = append(qs, grillQuestion{Branch: fmt.Sprintf("D%d", i), Text: fmt.Sprintf("question %d?", i)})
 	}

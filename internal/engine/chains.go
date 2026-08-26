@@ -440,11 +440,11 @@ func execToolCall(cfg ChainConfig, bb *Blackboard) int {
 	toolDesc.WriteString("Available tools:\n")
 	if cfg.Tools != nil {
 		for _, t := range cfg.Tools {
-			toolDesc.WriteString(fmt.Sprintf("- %s\n", t))
+			fmt.Fprintf(&toolDesc, "- %s\n", t)
 		}
 	} else if bb.ChainTools != nil {
 		for _, t := range bb.ChainTools {
-			toolDesc.WriteString(fmt.Sprintf("- %v\n", t))
+			fmt.Fprintf(&toolDesc, "- %v\n", t)
 		}
 	}
 
@@ -711,9 +711,9 @@ func execMapReduce(cfg ChainConfig, bb *Blackboard) int {
 	// drifted off its subtask) instead of combining anonymous, unlabeled blobs —
 	// symmetric with the failed-subtask list below, which already names its parts.
 	var reducePrompt strings.Builder
-	reducePrompt.WriteString(fmt.Sprintf("Combine these subtask results into a unified answer for the original task:\nTask: %s\n\nResults:\n", task))
+	fmt.Fprintf(&reducePrompt, "Combine these subtask results into a unified answer for the original task:\nTask: %s\n\nResults:\n", task)
 	for i, r := range results {
-		reducePrompt.WriteString(fmt.Sprintf("%d. Subtask: %s\n   Result: %s\n", i+1, r.task, r.result))
+		fmt.Fprintf(&reducePrompt, "%d. Subtask: %s\n   Result: %s\n", i+1, r.task, r.result)
 	}
 	if failed > 0 {
 		// Name the specific subtasks that are missing rather than only their count.
@@ -722,9 +722,9 @@ func execMapReduce(cfg ChainConfig, bb *Blackboard) int {
 		// (and resist fabricating the missing piece) instead of vaguely noting that
 		// "N parts" are absent. Mirrors execAgent's incompleteInvestigationNote, which
 		// names why an investigation was cut short.
-		reducePrompt.WriteString(fmt.Sprintf("\nNote: %d subtask(s) could not be completed and are MISSING from the results above:\n", failed))
+		fmt.Fprintf(&reducePrompt, "\nNote: %d subtask(s) could not be completed and are MISSING from the results above:\n", failed)
 		for _, ft := range failedSubtasks {
-			reducePrompt.WriteString(fmt.Sprintf("  - %s\n", ft))
+			fmt.Fprintf(&reducePrompt, "  - %s\n", ft)
 		}
 		reducePrompt.WriteString("Produce the best answer from the available results. Explicitly flag each missing subtask above as unresolved — do not fabricate a result for it.\n")
 	}

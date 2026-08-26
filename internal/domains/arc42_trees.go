@@ -289,11 +289,6 @@ func section12Glossary() *evolution.SerializableNode {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────
 
-//go:fix inline
-func tree(root evolution.SerializableNode) *evolution.SerializableNode {
-	return new(root)
-}
-
 func chain(desc, prompt string, maxTokens int) evolution.SerializableNode {
 	return evolution.SerializableNode{
 		Type:        "ChainAction",

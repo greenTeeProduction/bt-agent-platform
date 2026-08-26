@@ -229,18 +229,18 @@ type PriorSolution struct {
 // Incorporates AlphaEvolve-style context: prior solutions, evaluator breakdown, research hints.
 func BuildMutationPrompt(ctx EvolutionContext) string {
 	var prompt strings.Builder
-	prompt.WriteString(fmt.Sprintf(`## Behavior Tree Evolution — Mutation Request
+	fmt.Fprintf(&prompt, `## Behavior Tree Evolution — Mutation Request
 
 ### Current Tree (fitness: %.1f, domain: %s)
 %s
 
-`, ctx.CurrentFitness, ctx.Domain, ctx.CurrentTree))
+`, ctx.CurrentFitness, ctx.Domain, ctx.CurrentTree)
 
 	// Evaluator breakdown
 	if len(ctx.EvaluatorBreakdown) > 0 {
 		prompt.WriteString("### Evaluator Breakdown\n")
 		for metric, score := range ctx.EvaluatorBreakdown {
-			prompt.WriteString(fmt.Sprintf("- **%s**: %.1f/100\n", metric, score))
+			fmt.Fprintf(&prompt, "- **%s**: %.1f/100\n", metric, score)
 		}
 		prompt.WriteString("\n")
 	}
@@ -249,8 +249,8 @@ func BuildMutationPrompt(ctx EvolutionContext) string {
 	if len(ctx.PriorSolutions) > 0 {
 		prompt.WriteString("### Top Prior Solutions\n")
 		for i, sol := range ctx.PriorSolutions {
-			prompt.WriteString(fmt.Sprintf("%d. (fitness: %.1f, gen %d) — %s\n",
-				i+1, sol.Fitness, sol.Generation, sol.Description))
+			fmt.Fprintf(&prompt, "%d. (fitness: %.1f, gen %d) — %s\n",
+				i+1, sol.Fitness, sol.Generation, sol.Description)
 		}
 		prompt.WriteString("\n")
 	}
@@ -259,7 +259,7 @@ func BuildMutationPrompt(ctx EvolutionContext) string {
 	if len(ctx.ResearchHints) > 0 {
 		prompt.WriteString("### Research Context\n")
 		for _, hint := range ctx.ResearchHints {
-			prompt.WriteString(fmt.Sprintf("- %s\n", hint))
+			fmt.Fprintf(&prompt, "- %s\n", hint)
 		}
 		prompt.WriteString("\n")
 	}
@@ -268,7 +268,7 @@ func BuildMutationPrompt(ctx EvolutionContext) string {
 	if len(ctx.MutationHistory) > 0 {
 		prompt.WriteString("### Recent Mutations\n")
 		for _, m := range ctx.MutationHistory {
-			prompt.WriteString(fmt.Sprintf("- %s\n", m))
+			fmt.Fprintf(&prompt, "- %s\n", m)
 		}
 		prompt.WriteString("\n")
 	}

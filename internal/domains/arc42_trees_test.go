@@ -161,20 +161,6 @@ func TestArc42TreesChainHelperBuildsChainActionNode(t *testing.T) {
 	}
 }
 
-// TestArc42TreesTreeHelperWrapsRoot pins tree()'s behavior: it takes a
-// SerializableNode by value and returns a pointer to an equal copy, letting
-// each sectionN function build its root inline as a value.
-func TestArc42TreesTreeHelperWrapsRoot(t *testing.T) {
-	root := seq("Root", "root description", cond("C1", "d1"))
-	got := new(root)
-	if got == nil {
-		t.Fatal("tree() returned nil")
-	}
-	if !reflect.DeepEqual(*got, root) {
-		t.Errorf("*tree(root) = %+v, want %+v", *got, root)
-	}
-}
-
 // arc42SectionKey is a guard against the key format silently changing (e.g.
 // "arc42:sectionN" vs "arc42:section-N"), since bt-agent's switch_tree and the
 // A2A resolver depend on the exact "domain:arc42:sectionN" ID shape.

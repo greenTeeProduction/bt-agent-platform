@@ -213,14 +213,14 @@ func TestValidateSchema_EmptyType(t *testing.T) {
 // ─── validateAgainstSchema coverage ──────────────────────────────────────────
 
 func TestValidateAgainstSchema_Number(t *testing.T) {
-	s := &Schema{Type: "number", Minimum: floatPtr(0), Maximum: floatPtr(100)}
+	s := &Schema{Type: "number", Minimum: new(0.0), Maximum: new(100.0)}
 	if err := validateAgainstSchema(50.0, s, ""); err != nil {
 		t.Errorf("expected no error, got %v", err)
 	}
 }
 
 func TestValidateAgainstSchema_Number_OutOfRange(t *testing.T) {
-	s := &Schema{Type: "number", Minimum: floatPtr(0), Maximum: floatPtr(100)}
+	s := &Schema{Type: "number", Minimum: new(0.0), Maximum: new(100.0)}
 	if err := validateAgainstSchema(150.0, s, ""); err == nil {
 		t.Error("expected error for out of range number")
 	}

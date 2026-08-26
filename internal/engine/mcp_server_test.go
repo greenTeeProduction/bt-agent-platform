@@ -193,7 +193,7 @@ func TestServer_Run_MixedToolConcurrentCallsDoNotRaceOnSharedBlackboard(t *testi
 	// touches the shared Blackboard, which would fail this test for an
 	// unrelated reason.
 	const n = 5
-	var lines []string
+	lines := make([]string, 0, n)
 	want := make(map[int]string, n)
 	for i := range n {
 		id := i + 1

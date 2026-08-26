@@ -11,7 +11,7 @@ import (
 // absence must leave the historical formula untouched.
 
 func satisfactionRecords(positive, negative, plain int) []evolution.Record {
-	var records []evolution.Record
+	records := make([]evolution.Record, 0, positive+negative+plain)
 	for range positive {
 		records = append(records, evolution.Record{
 			Outcome: evolution.Success, DurationMs: 1000,

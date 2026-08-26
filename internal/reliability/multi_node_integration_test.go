@@ -37,7 +37,7 @@ func TestMultiNodeExecutionPipeline(t *testing.T) {
 	// Each implements:
 	//   GET  /api/health          -> {"status":"ok"} (200)
 	//   POST /api/agents/execute -> AgentResult (200)
-	var servers []*httptest.Server
+	servers := make([]*httptest.Server, 0, 3)
 	for i := range 3 {
 		idx := i
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

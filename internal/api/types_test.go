@@ -113,11 +113,11 @@ func TestValidateOutput(t *testing.T) {
 		{"schema string pattern rejected", `{"id":"bad id"}`, ContentTypeJSON,
 			&Schema{Type: "object", Properties: map[string]*Schema{"id": {Type: "string", Pattern: `^[a-z]+-[0-9]+$`}}}, true},
 		{"schema number bounds valid", `{"score":0.75}`, ContentTypeJSON,
-			&Schema{Type: "object", Properties: map[string]*Schema{"score": {Type: "number", Minimum: floatPtr(0), Maximum: floatPtr(1)}}}, false},
+			&Schema{Type: "object", Properties: map[string]*Schema{"score": {Type: "number", Minimum: new(0.0), Maximum: new(1.0)}}}, false},
 		{"schema number minimum rejected", `{"score":-0.1}`, ContentTypeJSON,
-			&Schema{Type: "object", Properties: map[string]*Schema{"score": {Type: "number", Minimum: floatPtr(0)}}}, true},
+			&Schema{Type: "object", Properties: map[string]*Schema{"score": {Type: "number", Minimum: new(0.0)}}}, true},
 		{"schema number maximum rejected", `{"score":1.1}`, ContentTypeJSON,
-			&Schema{Type: "object", Properties: map[string]*Schema{"score": {Type: "number", Maximum: floatPtr(1)}}}, true},
+			&Schema{Type: "object", Properties: map[string]*Schema{"score": {Type: "number", Maximum: new(1.0)}}}, true},
 		{"schema integer rejects decimal", `{"count":1.5}`, ContentTypeJSON,
 			&Schema{Type: "object", Properties: map[string]*Schema{"count": {Type: "integer"}}}, true},
 		{"schema numeric enum rejected", `{"priority":4}`, ContentTypeJSON,
@@ -157,6 +157,3 @@ func TestSchemaValidation(t *testing.T) {
 		})
 	}
 }
-
-//go:fix inline
-func floatPtr(f float64) *float64 { return new(f) }

@@ -1,8 +1,10 @@
 package benchmark
 
-import "slices"
+import (
+	"slices"
 
-import "github.com/nico/go-bt-evolve/internal/engine"
+	"github.com/nico/go-bt-evolve/internal/engine"
+)
 
 // pathMatches reports whether actual matches the path a TaskCase declared it
 // expects. A task with no ExpectedPath/PossiblePaths declared (e.g. the
