@@ -188,9 +188,9 @@ func TestGetEmbedding_5xxIsRetriedThenSucceeds(t *testing.T) {
 	t.Cleanup(func() { embeddingBreaker = origCB })
 	embeddingBreaker = reliability.NewCircuitBreaker("ollama-embeddings", 3, time.Minute)
 
-	var n int32
+	var n atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if atomic.AddInt32(&n, 1) == 1 {
+		if n.Add(1) == 1 {
 			w.WriteHeader(http.StatusInternalServerError)
 			_, _ = w.Write([]byte("<html>backend restarting</html>"))
 			return
@@ -207,8 +207,8 @@ func TestGetEmbedding_5xxIsRetriedThenSucceeds(t *testing.T) {
 	if len(emb) != 3 {
 		t.Fatalf("got %d-dim embedding, want 3", len(emb))
 	}
-	if atomic.LoadInt32(&n) < 2 {
-		t.Fatalf("expected at least 2 attempts, got %d", n)
+	if n.Load() < 2 {
+		t.Fatalf("expected at least 2 attempts, got %d", n.Load())
 	}
 }
 
