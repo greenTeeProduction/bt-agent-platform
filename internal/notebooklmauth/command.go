@@ -18,12 +18,14 @@ var helper string
 // Command runs the installed CLI with browser fallback and credential writes
 // disabled. Authentication restoration is exclusively owned by Ensure.
 func Command(ctx context.Context, args ...string) *exec.Cmd {
-	return helperCommand(ctx, pythonPath, "cli", args...)
+	return helperCommand(ctx, "cli", args...)
 }
 
-func helperCommand(ctx context.Context, python, mode string, args ...string) *exec.Cmd {
+func helperCommand(ctx context.Context, mode string, args ...string) *exec.Cmd {
 	argv := append([]string{"-B", "-c", helper, mode}, args...)
-	cmd := exec.CommandContext(ctx, python, argv...)
+	// The executable is pinned and -c receives only the build-time embedded helper.
+	// User arguments follow the script as argv data; no shell or dynamic code is used.
+	cmd := exec.CommandContext(ctx, pythonPath, argv...) // #nosec G204 -- trusted embedded adapter; argv is not interpreted as code.
 	cmd.WaitDelay = time.Second
 	return cmd
 }

@@ -91,13 +91,19 @@ func fixture(t *testing.T, config map[string]any) (policy, string, *atomic.Int32
 	}))
 	t.Cleanup(server.Close)
 	interpreter := filepath.Join(dir, "python")
+	fixtureCommand := func(ctx context.Context, mode string, args ...string) *exec.Cmd {
+		cmd := helperCommand(ctx, mode, args...)
+		cmd.Path = interpreter
+		cmd.Args[0] = interpreter
+		return cmd
+	}
 	p := policy{stateDir: filepath.Join(dir, "policy"), cdpURL: server.URL}
 	p.run = func(ctx context.Context, args ...string) (string, error) {
-		out, err := helperCommand(ctx, interpreter, "cli", args...).CombinedOutput()
+		out, err := fixtureCommand(ctx, "cli", args...).CombinedOutput()
 		return string(out), err
 	}
 	p.restore = func(ctx context.Context, endpoint string) Result {
-		return restoreWithPython(ctx, endpoint, interpreter)
+		return restoreWithCommand(ctx, endpoint, fixtureCommand)
 	}
 	return p, dir, requests
 }

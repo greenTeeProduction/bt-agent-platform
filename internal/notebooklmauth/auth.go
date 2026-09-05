@@ -130,7 +130,12 @@ func (p policy) ensure(ctx context.Context) Result {
 	}
 	statePath := filepath.Join(p.stateDir, "cooldown.json")
 	var previous Result
-	b, err := os.ReadFile(statePath)
+	root, err := os.OpenRoot(p.stateDir)
+	if err != nil {
+		return stateError()
+	}
+	defer root.Close()
+	b, err := root.ReadFile("cooldown.json")
 	if err == nil {
 		if json.Unmarshal(b, &previous) != nil || previous.RetryAfter.IsZero() {
 			return stateError()

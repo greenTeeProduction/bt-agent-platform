@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os/exec"
 	"strings"
 	"time"
 )
@@ -20,10 +21,10 @@ type cdpPage struct {
 // existingBrowserRestore selects an existing target and never creates, navigates,
 // closes or launches browser pages. A closed/changed target fails safely.
 func existingBrowserRestore(ctx context.Context, endpoint string) Result {
-	return restoreWithPython(ctx, endpoint, pythonPath)
+	return restoreWithCommand(ctx, endpoint, helperCommand)
 }
 
-func restoreWithPython(ctx context.Context, endpoint, python string) Result {
+func restoreWithCommand(ctx context.Context, endpoint string, command func(context.Context, string, ...string) *exec.Cmd) Result {
 	ctx, cancel := context.WithTimeout(ctx, 45*time.Second)
 	defer cancel()
 
@@ -73,7 +74,7 @@ func restoreWithPython(ctx context.Context, endpoint, python string) Result {
 		if err != nil {
 			return Result{Status: "auth_error", Detail: "cannot encode existing target"}
 		}
-		cmd := helperCommand(ctx, python, "restore")
+		cmd := command(ctx, "restore")
 		cmd.Stdin = bytes.NewReader(payload)
 		out, err := cmd.Output() // Never expose dependency stderr or credential data.
 		if err == nil && strings.TrimSpace(string(out)) == "restored" {
