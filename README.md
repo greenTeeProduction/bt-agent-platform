@@ -2,7 +2,7 @@
 
 **Behavior-tree-driven AI agent framework** — 41 trees, 7 categories, 3 MCP servers, continuous self-evolution.
 
-[![Go](https://img.shields.io/badge/Go-1.26.3-00ADD8?logo=go)](go.mod)
+[![Go](https://img.shields.io/badge/Go-1.26.5-00ADD8?logo=go)](go.mod)
 [![Platform](https://img.shields.io/badge/platform-Linux%20ARM64-009639?logo=linux)](https://github.com/greenTeeProduction/bt-agent-platform)
 [![Tests](https://img.shields.io/badge/tests-71%2B%20files-brightgreen)](#)
 [![Coverage](https://img.shields.io/badge/coverage-78%25-yellow)](#)
@@ -20,7 +20,7 @@ Agent YAML → Registry → Scheduler → resolveTree() → BuildTree() → RunT
 ## Quickstart
 
 ```bash
-# Prerequisites: Go 1.26+, Ollama (optional for LLM agents)
+# Prerequisites: Go 1.26.5+, Ollama (optional for LLM agents)
 git clone https://github.com/greenTeeProduction/bt-agent-platform.git
 cd bt-agent-platform
 

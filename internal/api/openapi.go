@@ -669,11 +669,11 @@ func DashboardRoutes() []Route {
 			Description("Returns the raw Prometheus alert rules YAML file for direct scraping by Prometheus or other monitoring tools.").
 			Tags("System").
 			OperationID("getAlertRules").
-			ContentResponse(200, "text/yaml", "Prometheus alert rules YAML").Build(),
+			ContentResponse(200, "text/yaml", "Prometheus alert rules YAML").WithAuth().Build(),
 
 		NewRoute("/api/security/audit", GET).
 			Summary("Security audit log").
-			Description("Returns recent security audit events from the in-memory buffer. Shows authentication failures, rate limit violations, and tool execution events across MCP servers and the dashboard. Public monitoring endpoint — no auth required.").
+			Description("Returns recent security audit events from the in-memory buffer. Shows authentication failures, rate limit violations, and tool execution events across MCP servers and the dashboard. Requires an authenticated API key or dashboard session.").
 			Tags("Security").
 			OperationID("getSecurityAudit").
 			JSONResponse(200, "Security audit events", ObjectSchema(map[string]*Schema{
@@ -687,7 +687,7 @@ func DashboardRoutes() []Route {
 					"timestamp": StringSchema("ISO 8601 event timestamp"),
 					"attrs":     ObjectSchema(map[string]*Schema{}, "Event-specific attributes"),
 				}, "List of recent audit events"), "events"),
-			}, "capacity", "total_events", "captured_events", "buffer_enabled", "event_counts", "events")).Build(),
+			}, "capacity", "total_events", "captured_events", "buffer_enabled", "event_counts", "events")).WithAuth().Build(),
 
 		NewRoute("/api/openapi.json", GET).
 			Summary("OpenAPI specification").
@@ -737,7 +737,7 @@ func DashboardRoutes() []Route {
 
 		NewRoute("/api/config", GET).
 			Summary("Runtime configuration").
-			Description("Returns the effective runtime configuration with secret fields (API keys, TLS paths) redacted. Public monitoring endpoint — no auth required.").
+			Description("Returns the effective runtime configuration with secret fields (API keys, TLS paths) redacted. Requires an authenticated API key or dashboard session.").
 			Tags("System").
 			OperationID("getConfig").
 			JSONResponse(200, "Sanitized runtime configuration", ObjectSchema(map[string]*Schema{
@@ -759,7 +759,7 @@ func DashboardRoutes() []Route {
 				"gardener_cycle_interval": IntSchema("Gardener cycle interval in seconds"),
 				"gardener_mutations_per":  IntSchema("Mutations applied per cycle"),
 				"max_body_size":           IntSchema("Max request body size in bytes"),
-			}, "dashboard_port", "llm_provider", "ollama_model")).Build(),
+			}, "dashboard_port", "llm_provider", "ollama_model")).WithAuth().Build(),
 
 		// Platform overview
 		NewRoute("/api/summary", GET).
@@ -873,7 +873,7 @@ func DashboardRoutes() []Route {
 			Description("Runs a think tank analysis on the given topic using the 5-fellow Hegelian dialectic pipeline.").
 			Tags("Thinktank").
 			OperationID("postThinktankAnalyze").
-			QueryParam("topic", "Analysis topic (e.g., 'AI safety frameworks')", true, StringSchema("Topic")).
+			RequestBody(ObjectSchema(map[string]*Schema{"topic": StringSchema("Topic")})).
 			JSONResponse(200, "Analysis results", ObjectSchema(map[string]*Schema{
 				"topic": StringSchema("Analysis topic"),
 				"findings": ArraySchema(ObjectSchema(map[string]*Schema{
@@ -922,7 +922,7 @@ func DashboardRoutes() []Route {
 			Description("Approves a task by ID, marking it ready for sprint execution.").
 			Tags("Tasks").
 			OperationID("postTasksApprove").
-			QueryParam("id", "Task identifier", true, StringSchema("Task ID")).
+			RequestBody(ObjectSchema(map[string]*Schema{"id": StringSchema("Task ID")})).
 			JSONResponse(200, "Approval confirmation", ObjectSchema(map[string]*Schema{
 				"status": StringSchema("'approved' on success"),
 				"id":     StringSchema("Task identifier"),
@@ -934,7 +934,7 @@ func DashboardRoutes() []Route {
 			Description("Rejects a task by ID.").
 			Tags("Tasks").
 			OperationID("postTasksReject").
-			QueryParam("id", "Task identifier", true, StringSchema("Task ID")).
+			RequestBody(ObjectSchema(map[string]*Schema{"id": StringSchema("Task ID")})).
 			JSONResponse(200, "Rejection confirmation", ObjectSchema(map[string]*Schema{
 				"status": StringSchema("'rejected' on success"),
 				"id":     StringSchema("Task identifier"),
@@ -975,8 +975,7 @@ func DashboardRoutes() []Route {
 			Description("Sends a message to a tab-specific AI agent and returns the reply.").
 			Tags("Chat").
 			OperationID("postChat").
-			QueryParam("msg", "User message", true, StringSchema("Message text")).
-			QueryParam("tab", "Chat tab (overview/thinktank/company/tasks/trees/mindmap/evolution)", false, StringSchema("Tab identifier")).
+			RequestBody(ObjectSchema(map[string]*Schema{"msg": StringSchema("Message text"), "tab": StringSchema("Tab identifier")})).
 			JSONResponse(200, "Chat response", ObjectSchema(map[string]*Schema{
 				"reply": StringSchema("Agent response"),
 				"tab":   StringSchema("Tab identifier echo"),
@@ -1185,14 +1184,12 @@ func DashboardRoutes() []Route {
 				"cb_status":    StringSchema("Circuit breaker status: open/closed/half_open/unknown"),
 			}), "List of agents")).WithAuth().Build(),
 
-		NewRoute("/api/agents/run", GET).
+		NewRoute("/api/agents/run", POST).
 			Summary("Run an agent").
 			Description("Runs a registered agent with a given task and returns the outcome.").
 			Tags("Agents").
-			OperationID("getAgentsRun").
-			QueryParam("agent", "Agent name", true, StringSchema("Agent name")).
-			QueryParam("task", "Task text (defaults to the agent's default task)", false, StringSchema("Task text")).
-			QueryParam("tree", "Optional tree ID override", false, StringSchema("Tree ID")).
+			OperationID("postAgentsRun").
+			RequestBody(ObjectSchema(map[string]*Schema{"agent": StringSchema("Agent name"), "task": StringSchema("Task text"), "tree": StringSchema("Tree ID")})).
 			JSONResponse(200, "Agent run result", ObjectSchema(map[string]*Schema{
 				"agent":      StringSchema("Agent name"),
 				"outcome":    StringSchema("Run outcome"),
@@ -1242,15 +1239,12 @@ func DashboardRoutes() []Route {
 			ErrorResponse(405, "Method not allowed — POST only").WithAuth().Build(),
 
 		// Tasks
-		NewRoute("/api/tasks/create", GET).
+		NewRoute("/api/tasks/create", POST).
 			Summary("Create a task").
-			Description("Creates a new task via query params (GET — avoids CSRF on API endpoints).").
+			Description("Creates a new task from a POST JSON object.").
 			Tags("Tasks").
-			OperationID("getTasksCreate").
-			QueryParam("title", "Task title (required)", true, StringSchema("Task title")).
-			QueryParam("desc", "Task description", false, StringSchema("Task description")).
-			QueryParam("priority", "Priority (defaults to 'medium')", false, StringSchema("Priority")).
-			QueryParam("assignee", "Assignee role (defaults to 'bt-implementer')", false, StringSchema("Assignee")).
+			OperationID("postTasksCreate").
+			RequestBody(ObjectSchema(map[string]*Schema{"title": StringSchema("Task title"), "desc": StringSchema("Task description"), "priority": StringSchema("Priority"), "assignee": StringSchema("Assignee")})).
 			JSONResponse(200, "Creation confirmation", ObjectSchema(map[string]*Schema{
 				"status": StringSchema("'created' on success"),
 				"id":     StringSchema("Task identifier"),
@@ -1281,7 +1275,7 @@ func DashboardRoutes() []Route {
 			Description("Approves a WorkflowTask on the current Workflow by ID, mirroring the approval onto the task store so the sprint runner sees it.").
 			Tags("Workflow").
 			OperationID("postWorkflowApprove").
-			QueryParam("id", "Workflow task identifier", true, StringSchema("Task ID")).
+			RequestBody(ObjectSchema(map[string]*Schema{"id": StringSchema("Task ID")})).
 			JSONResponse(200, "Approval confirmation", ObjectSchema(map[string]*Schema{
 				"status": StringSchema("'approved' on success"),
 				"id":     StringSchema("Workflow task identifier"),
@@ -1293,8 +1287,7 @@ func DashboardRoutes() []Route {
 			Description("Rejects a WorkflowTask on the current Workflow by ID, mirroring the rejection onto the task store.").
 			Tags("Workflow").
 			OperationID("postWorkflowReject").
-			QueryParam("id", "Workflow task identifier", true, StringSchema("Task ID")).
-			QueryParam("reason", "Rejection reason (defaults to a generic message)", false, StringSchema("Reason")).
+			RequestBody(ObjectSchema(map[string]*Schema{"id": StringSchema("Task ID"), "reason": StringSchema("Reason")})).
 			JSONResponse(200, "Rejection confirmation", ObjectSchema(map[string]*Schema{
 				"status": StringSchema("'rejected' on success"),
 				"id":     StringSchema("Workflow task identifier"),
@@ -1306,7 +1299,7 @@ func DashboardRoutes() []Route {
 			Description("Drives Workflow.RunFullPipeline end-to-end: thinktank analysis, task derivation, and company sprint execution. Stores the resulting Workflow as the current workflow and persists its tasks into the task store.").
 			Tags("Workflow").
 			OperationID("postWorkflowRunFullPipeline").
-			QueryParam("topic", "Analysis topic (e.g., 'AI safety frameworks')", true, StringSchema("Topic")).
+			RequestBody(ObjectSchema(map[string]*Schema{"topic": StringSchema("Topic")})).
 			JSONResponse(200, "Pipeline result", ObjectSchema(map[string]*Schema{
 				"topic":  StringSchema("Analysis topic"),
 				"status": StringSchema("Final Workflow status ('completed' or 'failed')"),

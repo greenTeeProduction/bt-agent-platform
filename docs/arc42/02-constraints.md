@@ -9,7 +9,7 @@ Decisions](09-decisions.md). Negotiability is noted per row in *Imposed by*.
 
 | Constraint | Imposed by | Consequence |
 |---|---|---|
-| Go 1.26.3 | `go.mod` toolchain directive (non-negotiable for builds) | Every build and CI environment must provide this toolchain; language features are capped at 1.26 |
+| Go 1.26.5 | `go.mod` toolchain directive (non-negotiable for builds) | Every build and CI environment must provide this toolchain; language features are capped at 1.26 |
 | Platform: Linux ARM64 (Jetson) | Hardware — 12-core NVIDIA Jetson, 61GB RAM, 57GB eMMC + 1.8TB NVMe (non-negotiable) | No x86-specific optimizations allowed; local LLM sizing is bounded by the available RAM |
 | MCP transport: stdio only | Hermes gateway, which spawns MCP servers as child processes (recorded in ADR-002; non-negotiable while the gateway is the host) | All MCP servers speak JSON-RPC 2.0 over stdin/stdout; no HTTP/SSE transport |
 | LLM: Ollama qwen3.6:35b primary | Near-zero-cost budget plus Jetson-local inference; 2-3 min per call (negotiable via paid APIs) | Timeouts, scheduling, and caching must absorb minute-scale LLM calls; DeepSeek v4-flash (5-10s) is the escalation path |

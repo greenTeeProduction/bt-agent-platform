@@ -105,18 +105,19 @@ func (bb *Blackboard) ChildTicks() []ChildTick {
 
 // Blackboard is the shared state passed through the behavior tree.
 type Blackboard struct {
-	Task         string
-	Complexity   string
-	Plan         string
-	Result       string
-	Outcome      string
-	DurationMs   int64
-	KgResults    string
-	CachedResult string
-	FailureCount int
-	Reflections  *evolution.Store
-	TreeStore    *evolution.TreeStore
-	LLM          llm.LLM
+	parallelStates map[*parallelCommand]*parallelState
+	Task           string
+	Complexity     string
+	Plan           string
+	Result         string
+	Outcome        string
+	DurationMs     int64
+	KgResults      string
+	CachedResult   string
+	FailureCount   int
+	Reflections    *evolution.Store
+	TreeStore      *evolution.TreeStore
+	LLM            llm.LLM
 
 	// Langchain integration — chain primitives accessible from BT nodes.
 	// Use interface{} to avoid circular imports; chain runners cast to concrete types.
@@ -572,7 +573,7 @@ func RunTask(bb *Blackboard, tree btcore.Command[Blackboard]) string {
 	if len(taskName) > 50 {
 		taskName = taskName[:50]
 	}
-	_, span := tracing.StartSpan(context.Background(), "RunTask:"+taskName)
+	_, span := tracing.StartSpan(chainContext(bb), "RunTask:"+taskName)
 	defer span.End()
 	span.SetAttribute("task", util.Truncate(bb.Task, 80))
 
@@ -588,8 +589,16 @@ func RunTask(bb *Blackboard, tree btcore.Command[Blackboard]) string {
 	if bb.TreeTimeoutMs > 0 {
 		treeTimeout = time.Duration(bb.TreeTimeoutMs) * time.Millisecond
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), treeTimeout)
+	ctx, cancel := context.WithTimeout(chainContext(bb), treeTimeout)
 	defer cancel()
+	previousContext := bb.TraceContext
+	bb.TraceContext = ctx
+	defer func() { bb.TraceContext = previousContext }()
+	if ctx.Err() != nil {
+		bb.Outcome = string(evolution.Failure)
+		bb.Result = ctx.Err().Error()
+		return bb.Result
+	}
 	btCtx := btcore.NewBTContext(ctx, bb)
 
 	if bb.liveRun != nil {
@@ -607,6 +616,16 @@ func RunTask(bb *Blackboard, tree btcore.Command[Blackboard]) string {
 	// boundary — a quiescent point — and keep ticking the rebuilt tree.
 	const maxTicks = 1000
 	for tick := 1; code == 0 && bb.Outcome != "pending_approval" && tick < maxTicks; tick++ {
+		// Running means waiting for future progress. Pace ticks so async producers
+		// (mutations, timers, cancellation) can run before the bounded tick budget.
+		select {
+		case <-ctx.Done():
+			code = -1
+		case <-time.After(time.Millisecond):
+		}
+		if code == -1 {
+			break
+		}
 		if bb.liveRun != nil {
 			tree = bb.liveRun.applyPending(btCtx, bb, tree)
 		}

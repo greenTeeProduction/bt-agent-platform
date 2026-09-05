@@ -3,11 +3,13 @@
 package security
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"maps"
 	"net"
@@ -77,6 +79,9 @@ func (rl *RateLimiter) Allow(key string) bool {
 	b, ok := rl.buckets[key]
 	now := time.Now()
 	if !ok {
+		if len(rl.buckets) >= 10000 {
+			return false
+		}
 		rl.buckets[key] = &tokenBucket{tokens: float64(rl.burst) - 1, lastTime: now}
 		return true
 	}
@@ -99,7 +104,16 @@ func (rl *RateLimiter) Allow(key string) bool {
 // extractKey extracts the client key from the request (default: RemoteAddr).
 func RateLimitMiddleware(rl *RateLimiter, extractKey func(*http.Request) string) func(http.Handler) http.Handler {
 	if extractKey == nil {
-		extractKey = func(r *http.Request) string { return r.RemoteAddr }
+		extractKey = func(r *http.Request) string {
+			host, _, err := net.SplitHostPort(r.RemoteAddr)
+			if err != nil {
+				host = r.RemoteAddr
+			}
+			if ip := net.ParseIP(host); ip != nil {
+				return ip.String()
+			}
+			return host
+		}
 	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -140,6 +154,17 @@ func SanitizeMiddleware(maxBodySize int64) func(http.Handler) http.Handler {
 					"message": "Request body exceeds maximum size.",
 				})
 				return
+			}
+
+			// Read through the actual stream limit, including unknown/chunked lengths,
+			// before any decoder or handler can allocate from unbounded input.
+			if r.Body != nil {
+				body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBodySize))
+				if err != nil {
+					http.Error(w, "request body exceeds limit or cannot be read", http.StatusRequestEntityTooLarge)
+					return
+				}
+				r.Body = io.NopCloser(bytes.NewReader(body))
 			}
 
 			// Sanitize query parameters (strip null bytes and control chars)
@@ -288,7 +313,7 @@ func CrossOriginMiddleware(origins, methods string) func(http.Handler) http.Hand
 			h := w.Header()
 			h.Set("Access-Control-Allow-Origin", origins)
 			h.Set("Access-Control-Allow-Methods", methods)
-			h.Set("Access-Control-Allow-Headers", "Content-Type, X-API-Key, Authorization")
+			h.Set("Access-Control-Allow-Headers", "Content-Type, X-API-Key, Authorization, X-CSRF-Token, Idempotency-Key")
 			h.Set("Access-Control-Max-Age", "86400")
 
 			// Handle preflight

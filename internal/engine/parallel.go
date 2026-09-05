@@ -3,7 +3,6 @@ package engine
 import (
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	btcore "github.com/rvitorper/go-bt/core"
-	btleaf "github.com/rvitorper/go-bt/leaf"
 )
 
 // BuildParallel runs all children concurrently (sequential tick model).
@@ -22,7 +21,5 @@ func BuildParallel(node *evolution.SerializableNode, bb *Blackboard) btcore.Comm
 	for i := range node.Children {
 		children[i] = buildNode(&node.Children[i], bb, node.Name)
 	}
-	return btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int {
-		return runReactiveParallel(children, mode, nil, nil, true, ctx)
-	})
+	return &parallelCommand{children: children, mode: mode, cancelOnMonitor: true}
 }

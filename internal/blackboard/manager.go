@@ -2,11 +2,15 @@ package blackboard
 
 import (
 	"fmt"
+	"strings"
 	"sync"
+
+	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
 // Manager stores entries partitioned by scope.
 type Manager struct {
+	operations sync.Mutex
 	mu         sync.RWMutex
 	stores     map[string]*scopedStore
 	limits     map[ScopeKind]Limits
@@ -53,13 +57,27 @@ func (m *Manager) storeFor(scope Scope) (*scopedStore, error) {
 	if s, ok := m.stores[id]; ok {
 		return s, nil
 	}
+	// A bound also covers orphaned runs and diagnostic reads of unknown IDs.
+	if scope.Kind == ScopeRun {
+		count := 0
+		for key := range m.stores {
+			if strings.HasPrefix(key, string(ScopeRun)+":") {
+				count++
+			}
+		}
+		if count >= 1024 {
+			return nil, fmt.Errorf("run scope limit reached")
+		}
+	}
 	lim, ok := m.limits[scope.Kind]
 	if !ok {
 		lim = Limits{MaxEntries: 200, MaxTotalBytes: 10 * 1024 * 1024, Evict: true}
 	}
 	s := newScopedStore(lim)
 	if m.persistDir != "" && isPersistentScope(scope.Kind) {
-		_ = loadScopeFile(m.persistFile(scope), s)
+		if err := m.loadScope(scope, s); err != nil {
+			return nil, err
+		}
 	}
 	m.stores[id] = s
 	return s, nil
@@ -67,10 +85,11 @@ func (m *Manager) storeFor(scope Scope) (*scopedStore, error) {
 
 // Get returns an entry from a scope.
 func (m *Manager) Get(scope Scope, key string) (Entry, error) {
-	s, err := m.storeFor(scope)
+	s, release, err := m.beginScope(scope)
 	if err != nil {
 		return Entry{}, err
 	}
+	defer release()
 	e, ok := s.get(key)
 	if !ok {
 		return Entry{}, fmt.Errorf("key %q not found in %s", key, scope.Kind)
@@ -80,10 +99,11 @@ func (m *Manager) Get(scope Scope, key string) (Entry, error) {
 
 // Set writes an entry to a scope.
 func (m *Manager) Set(scope Scope, key, value, summary, contentType string) error {
-	s, err := m.storeFor(scope)
+	s, release, err := m.beginScope(scope)
 	if err != nil {
 		return err
 	}
+	defer release()
 	if err := s.set(key, Entry{
 		Key:         key,
 		Value:       value,
@@ -101,10 +121,11 @@ func (m *Manager) Set(scope Scope, key, value, summary, contentType string) erro
 // across nodes without a separate read-modify-write that could race on a shared
 // scope.
 func (m *Manager) Append(scope Scope, key, value, sep, contentType string) (Entry, error) {
-	s, err := m.storeFor(scope)
+	s, release, err := m.beginScope(scope)
 	if err != nil {
 		return Entry{}, err
 	}
+	defer release()
 	e, err := s.appendVal(key, value, sep, contentType)
 	if err != nil {
 		return Entry{}, err
@@ -117,10 +138,11 @@ func (m *Manager) Append(scope Scope, key, value, sep, contentType string) (Entr
 
 // Delete removes a key from a scope.
 func (m *Manager) Delete(scope Scope, key string) error {
-	s, err := m.storeFor(scope)
+	s, release, err := m.beginScope(scope)
 	if err != nil {
 		return err
 	}
+	defer release()
 	if err := s.delete(key); err != nil {
 		return err
 	}
@@ -129,10 +151,11 @@ func (m *Manager) Delete(scope Scope, key string) error {
 
 // List returns entries in a scope with an optional key prefix.
 func (m *Manager) List(scope Scope, prefix string, limit int) ([]Entry, error) {
-	s, err := m.storeFor(scope)
+	s, release, err := m.beginScope(scope)
 	if err != nil {
 		return nil, err
 	}
+	defer release()
 	return s.list(prefix, limit), nil
 }
 
@@ -143,9 +166,44 @@ func (m *Manager) List(scope Scope, prefix string, limit int) ([]Entry, error) {
 // is what nodes need for error recovery and context management across a long
 // multi-step run.
 func (m *Manager) ListRecent(scope Scope, prefix string, limit int) ([]Entry, error) {
-	s, err := m.storeFor(scope)
+	s, release, err := m.beginScope(scope)
 	if err != nil {
 		return nil, err
 	}
+	defer release()
 	return s.listRecent(prefix, limit), nil
+}
+
+// Serialize snapshot and persistence with mutation. A file lock additionally
+// makes reload/modify/save authoritative across independent managers/processes.
+func (m *Manager) beginScope(scope Scope) (*scopedStore, func(), error) {
+	m.operations.Lock()
+	release := func() { m.operations.Unlock() }
+	path := m.persistFile(scope)
+	if path != "" {
+		unlock, err := reliability.AcquireFileLock(path)
+		if err != nil {
+			release()
+			return nil, nil, err
+		}
+		release = func() { unlock(); m.operations.Unlock() }
+	}
+	s, err := m.storeFor(scope)
+	if err == nil && path != "" {
+		err = m.loadScope(scope, s)
+	}
+	if err != nil {
+		release()
+		return nil, nil, err
+	}
+	return s, release, nil
+}
+
+// ReleaseRun drops ephemeral data after the run's final consumers finish.
+func (m *Manager) ReleaseRun(runID string) {
+	m.operations.Lock()
+	defer m.operations.Unlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.stores, string(ScopeRun)+":"+runID)
 }

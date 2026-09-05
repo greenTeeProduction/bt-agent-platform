@@ -30,7 +30,7 @@ This document describes how to catch **high/critical** security findings and **l
 - **golangci-lint build** — install via `make tools-install` (`GOTOOLCHAIN=go1.26.3`); CI uses `golangci-lint-action@v9` with pre-built v2.12.2 binaries (Go 1.26+).
 - **Lint scope** — CI uses `only-new-issues: true` on PRs/pushes so existing baseline findings do not block merges; new code must pass `golangci-lint run --new-from-rev origin/master` locally.
 
-- **Go** — CI uses `actions/setup-go` with `go-version-file: go.mod` (currently **1.26.3**). golangci-lint must run with the same toolchain as `go build`; older runners (e.g. 1.23/1.24) fail typecheck with `package requires newer Go version go1.26`.
+- **Go** — CI uses `actions/setup-go` with `go-version-file: go.mod` (currently **1.26.5**). golangci-lint must run with the same toolchain as `go build`; older runners (e.g. 1.23/1.24) fail typecheck with `package requires newer Go version go1.26`.
 
 Pinned in `scripts/dev-tools.sh` / `make tools-install`:
 

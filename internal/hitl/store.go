@@ -4,11 +4,14 @@ package hitl
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
 	"sync"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/reliability"
 
 	"github.com/nico/go-bt-evolve/internal/util"
 )
@@ -87,6 +90,7 @@ func (s *Store) load() error {
 	if err := json.Unmarshal(data, &list); err != nil {
 		return err
 	}
+	s.records = make(map[string]*Request, len(list))
 	for _, r := range list {
 		if r != nil && r.ID != "" {
 			s.records[r.ID] = r
@@ -106,7 +110,7 @@ func (s *Store) save() error {
 	list := make([]*Request, 0, len(s.records))
 	var terminal []*Request
 	for _, r := range s.records {
-		if r.Status == StatusPending {
+		if r.Status == StatusPending || r.Status == StatusEscalated {
 			list = append(list, r)
 			continue
 		}
@@ -137,23 +141,33 @@ func (s *Store) Create(req *Request) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	release, err := s.reloadLocked()
+	if err != nil {
+		return err
+	}
+	defer release()
 	req.UpdatedAt = time.Now()
 	if req.CreatedAt.IsZero() {
 		req.CreatedAt = req.UpdatedAt
 	}
-	s.records[req.ID] = req
+	s.records[req.ID] = cloneRequest(req)
 	return s.save()
 }
 
 // Get returns a request by ID.
 func (s *Store) Get(id string) (*Request, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	release, err := s.reloadLocked()
+	if err != nil {
+		return nil, false
+	}
+	defer release()
 	r, ok := s.records[id]
 	if !ok {
 		return nil, false
 	}
-	cp := *r
+	cp := *cloneRequest(r)
 	return &cp, true
 }
 
@@ -161,6 +175,11 @@ func (s *Store) Get(id string) (*Request, bool) {
 func (s *Store) ListPending() []*Request {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	release, err := s.reloadLocked()
+	if err != nil {
+		return nil
+	}
+	defer release()
 	now := time.Now()
 	out := make([]*Request, 0, len(s.records))
 	for _, r := range s.records {
@@ -172,7 +191,7 @@ func (s *Store) ListPending() []*Request {
 			r.UpdatedAt = now
 			continue
 		}
-		cp := *r
+		cp := *cloneRequest(r)
 		out = append(out, &cp)
 	}
 	_ = s.save()
@@ -181,11 +200,16 @@ func (s *Store) ListPending() []*Request {
 
 // ListAll returns all requests newest first.
 func (s *Store) ListAll() []*Request {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	release, err := s.reloadLocked()
+	if err != nil {
+		return nil
+	}
+	defer release()
 	out := make([]*Request, 0, len(s.records))
 	for _, r := range s.records {
-		cp := *r
+		cp := *cloneRequest(r)
 		out = append(out, &cp)
 	}
 	return out
@@ -195,6 +219,11 @@ func (s *Store) ListAll() []*Request {
 func (s *Store) Approve(id, reviewer, comment string) (*Request, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	release, err := s.reloadLocked()
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	r, ok := s.records[id]
 	if !ok {
 		return nil, fmt.Errorf("hitl: request %q not found", id)
@@ -211,7 +240,7 @@ func (s *Store) Approve(id, reviewer, comment string) (*Request, error) {
 	if err := s.save(); err != nil {
 		return nil, err
 	}
-	cp := *r
+	cp := *cloneRequest(r)
 	return &cp, nil
 }
 
@@ -219,6 +248,11 @@ func (s *Store) Approve(id, reviewer, comment string) (*Request, error) {
 func (s *Store) Reject(id, reviewer, reason string) (*Request, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	release, err := s.reloadLocked()
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	r, ok := s.records[id]
 	if !ok {
 		return nil, fmt.Errorf("hitl: request %q not found", id)
@@ -235,7 +269,7 @@ func (s *Store) Reject(id, reviewer, reason string) (*Request, error) {
 	if err := s.save(); err != nil {
 		return nil, err
 	}
-	cp := *r
+	cp := *cloneRequest(r)
 	return &cp, nil
 }
 
@@ -243,6 +277,11 @@ func (s *Store) Reject(id, reviewer, reason string) (*Request, error) {
 func (s *Store) RefreshStatus(id string) (Status, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	release, err := s.reloadLocked()
+	if err != nil {
+		return "", err
+	}
+	defer release()
 	r, ok := s.records[id]
 	if !ok {
 		return "", fmt.Errorf("hitl: request %q not found", id)
@@ -250,7 +289,36 @@ func (s *Store) RefreshStatus(id string) (Status, error) {
 	if r.Status == StatusPending && !r.ExpiresAt.IsZero() && time.Now().After(r.ExpiresAt) {
 		r.Status = StatusExpired
 		r.UpdatedAt = time.Now()
-		_ = s.save()
+		if err := s.save(); err != nil {
+			return "", err
+		}
 	}
 	return r.Status, nil
+}
+
+// Caller holds mu. The file lock covers the authoritative reload and every
+// subsequent read/modify/save, so independently opened daemon stores agree.
+func (s *Store) reloadLocked() (func(), error) {
+	release, err := reliability.AcquireFileLock(s.path)
+	if err != nil {
+		return nil, err
+	}
+	if err = s.load(); err != nil {
+		release()
+		return nil, err
+	}
+	return release, nil
+}
+func cloneRequest(r *Request) *Request {
+	cp := *r
+	cp.Context = maps.Clone(r.Context)
+	if r.ApprovedAt != nil {
+		v := *r.ApprovedAt
+		cp.ApprovedAt = &v
+	}
+	if r.RejectedAt != nil {
+		v := *r.RejectedAt
+		cp.RejectedAt = &v
+	}
+	return &cp
 }

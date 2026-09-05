@@ -573,9 +573,7 @@ func TestDeadLetterQueue_EmptyErrorNoCategory(t *testing.T) {
 }
 
 func TestDeadLetterQueue_PersistenceRoundtrip(t *testing.T) {
-	path := "/tmp/test-dlq-category.json"
-	os.Remove(path)
-	defer os.Remove(path)
+	path := t.TempDir() + "/dlq.json"
 
 	dlq1 := NewDeadLetterQueue(path)
 	dlq1.Push(DeadLetterEntry{ID: "1", Error: "connection refused"})

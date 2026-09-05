@@ -262,13 +262,8 @@ func (rc *responseCapture) Write(b []byte) (int, error) {
 		return len(b), nil
 	}
 
-	// Advisory mode: capture JSON bodies, pass through immediately
-	if rc.body.Len() == 0 && len(b) > 0 {
-		first := b[0]
-		if first == '{' || first == '[' {
-			rc.body.Write(b)
-		}
-	}
+	// Capture every write; JSON tokens may span writes or start with whitespace.
+	rc.body.Write(b)
 	return rc.ResponseWriter.Write(b)
 }
 
@@ -390,6 +385,9 @@ func ResponseValidator(routes []Route, config *ResponseValidatorConfig) func(htt
 							Violations: violations,
 						}
 						errBody, _ := json.Marshal(enforceResp)
+						for _, header := range []string{"Content-Encoding", "Content-Length", "ETag", "Content-MD5", "Digest", "Content-Range"} {
+							w.Header().Del(header)
+						}
 						w.Header().Set("Content-Type", "application/json")
 						w.WriteHeader(http.StatusInternalServerError)
 						_, _ = w.Write(errBody)

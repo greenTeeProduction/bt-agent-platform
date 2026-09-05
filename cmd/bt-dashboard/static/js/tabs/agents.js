@@ -129,7 +129,7 @@ async function runAgent(name) {
   });
   if (btn) { btn.textContent = '⏳ Running...'; btn.disabled = true; }
   try {
-    const resp = await apiFetch('/agents/run?agent=' + encodeURIComponent(name) + '&task=' + encodeURIComponent(taskText));
+    const resp = await apiPost('/agents/run', {agent: name, task: taskText});
     if (btn) { btn.textContent = '▶ Run'; btn.disabled = false; }
     const outcome = resp.outcome || 'unknown';
     if (typeof toast === 'function') {

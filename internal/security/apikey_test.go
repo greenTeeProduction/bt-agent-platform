@@ -419,7 +419,7 @@ func TestKeyRotationScheduler_RotateNow(t *testing.T) {
 	kr := NewKeyRing()
 
 	// Create a key that expires very soon
-	oldKey, err := kr.GenerateKey("auto-rotate-label", 50*time.Millisecond)
+	oldKey, err := kr.GenerateKey("auto-rotate-label", time.Minute)
 	if err != nil {
 		t.Fatalf("GenerateKey failed: %v", err)
 	}
@@ -429,16 +429,15 @@ func TestKeyRotationScheduler_RotateNow(t *testing.T) {
 		t.Fatalf("expected 1 key, got %d", initialCount)
 	}
 
-	// Wait for it to be past its original expiry
-	time.Sleep(60 * time.Millisecond)
+	// Rotate while the original key is still live; expired keys are never revived.
 
-	krs := NewKeyRotationScheduler(kr, 1*time.Hour, 1*time.Second, "auto-rotated", nil)
+	krs := NewKeyRotationScheduler(kr, 1*time.Hour, 2*time.Minute, "auto-rotated", nil)
 	rotated := krs.RotateNow()
 	if rotated != 1 {
 		t.Errorf("expected 1 key rotated, got %d", rotated)
 	}
 
-	// Old key should STILL validate — rotation grants a 1s grace period
+	// Old key remains valid only until its original deadline.
 	if !kr.Validate(oldKey) {
 		t.Error("expected old key to validate during rotation grace period")
 	}
@@ -448,8 +447,10 @@ func TestKeyRotationScheduler_RotateNow(t *testing.T) {
 		t.Errorf("expected 2 keys after rotation (old with grace + new), got %d", kr.Count())
 	}
 
-	// After grace period, old key should fail
-	time.Sleep(1100 * time.Millisecond)
+	// Explicitly expire the old key; rotation must not revive it.
+	if err := kr.ExpireKey(KeyHash(oldKey), -time.Second); err != nil {
+		t.Fatal(err)
+	}
 	if kr.Validate(oldKey) {
 		t.Error("expected old key to be expired after grace period")
 	}
@@ -484,12 +485,10 @@ func TestKeyRotationScheduler_StartStop(t *testing.T) {
 func TestKeyRotationScheduler_Callback(t *testing.T) {
 	kr := NewKeyRing()
 
-	oldKey, err := kr.GenerateKey("callback-key", 50*time.Millisecond)
+	oldKey, err := kr.GenerateKey("callback-key", time.Minute)
 	if err != nil {
 		t.Fatalf("GenerateKey failed: %v", err)
 	}
-
-	time.Sleep(60 * time.Millisecond)
 
 	var (
 		cbHash    string
@@ -503,7 +502,7 @@ func TestKeyRotationScheduler_Callback(t *testing.T) {
 		cbInvoked = true
 	}
 
-	krs := NewKeyRotationScheduler(kr, 1*time.Hour, 1*time.Second, "callback-rotated", onRotate)
+	krs := NewKeyRotationScheduler(kr, 1*time.Hour, 2*time.Minute, "callback-rotated", onRotate)
 	rotated := krs.RotateNow()
 	if rotated != 1 {
 		t.Fatalf("expected 1 rotation, got %d", rotated)
@@ -572,12 +571,10 @@ func TestKeyRotationScheduler_MultipleExpiring(t *testing.T) {
 
 	// Create 3 keys that expire soon
 	for range 3 {
-		_, _ = kr.GenerateKey("multi-key", 50*time.Millisecond)
+		_, _ = kr.GenerateKey("multi-key", time.Minute)
 	}
 
-	time.Sleep(60 * time.Millisecond)
-
-	krs := NewKeyRotationScheduler(kr, 1*time.Hour, 1*time.Second, "multi-rotated", nil)
+	krs := NewKeyRotationScheduler(kr, 1*time.Hour, 2*time.Minute, "multi-rotated", nil)
 	rotated := krs.RotateNow()
 	if rotated != 3 {
 		t.Errorf("expected 3 rotations, got %d", rotated)
@@ -601,11 +598,10 @@ func TestKeyRotationScheduler_StartStopSafe(_ *testing.T) {
 func TestKeyRotationScheduler_StartSurvivesOnRotatePanic(t *testing.T) {
 	kr := NewKeyRing()
 
-	_, err := kr.GenerateKey("panic-key", 10*time.Millisecond)
+	_, err := kr.GenerateKey("panic-key", time.Minute)
 	if err != nil {
 		t.Fatalf("GenerateKey failed: %v", err)
 	}
-	time.Sleep(20 * time.Millisecond)
 
 	var mu sync.Mutex
 	calls := 0
@@ -635,11 +631,10 @@ func TestKeyRotationScheduler_StartSurvivesOnRotatePanic(t *testing.T) {
 	// crashing the test process. As a further liveness check, generate a
 	// fresh expiring key and confirm a subsequent RotateNow still works —
 	// i.e. the scheduler's internal state wasn't corrupted by the panic.
-	_, err = kr.GenerateKey("post-panic-key", 10*time.Millisecond)
+	_, err = kr.GenerateKey("post-panic-key", time.Minute)
 	if err != nil {
 		t.Fatalf("GenerateKey failed: %v", err)
 	}
-	time.Sleep(20 * time.Millisecond)
 
 	rotated := krs.RotateNow()
 	if rotated == 0 {

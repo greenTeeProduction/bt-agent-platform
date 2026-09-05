@@ -241,8 +241,8 @@ func TestArc42Action_SetupDocTools(t *testing.T) {
 func TestArc42Action_ValidateSection_TooShort(t *testing.T) {
 	bb := &Blackboard{Result: "short"}
 	status := callArc42Action(t, "ValidateSection", bb)
-	if status != 0 {
-		t.Errorf("expected 0 (fail) for short section, got %d", status)
+	if status != -1 {
+		t.Errorf("expected -1 (Failure) for short section, got %d", status)
 	}
 	if bb.Outcome == "" {
 		t.Error("Outcome should be set on validation failure")
@@ -285,8 +285,8 @@ func TestArc42Action_ValidateSection_Pass(t *testing.T) {
 func TestArc42Action_SaveSection_MissingFilename(t *testing.T) {
 	bb := &Blackboard{ChainState: map[string]any{}}
 	status := callArc42Action(t, "SaveSection", bb)
-	if status != 0 {
-		t.Errorf("expected 0 (fail) for missing filename, got %d", status)
+	if status != -1 {
+		t.Errorf("expected -1 (Failure) for missing filename, got %d", status)
 	}
 	if bb.Outcome != "save_failed: no filename in chain state" {
 		t.Errorf("expected save_failed, got %q", bb.Outcome)
@@ -296,8 +296,8 @@ func TestArc42Action_SaveSection_MissingFilename(t *testing.T) {
 func TestArc42Action_SaveSection_WrongType(t *testing.T) {
 	bb := &Blackboard{ChainState: map[string]any{"arc42_section_file": 42}}
 	status := callArc42Action(t, "SaveSection", bb)
-	if status != 0 {
-		t.Errorf("expected 0 (fail) for wrong type, got %d", status)
+	if status != -1 {
+		t.Errorf("expected -1 (Failure) for wrong type, got %d", status)
 	}
 	if bb.Outcome != "save_failed: no filename in chain state" {
 		t.Errorf("expected save_failed, got %q", bb.Outcome)
@@ -307,8 +307,8 @@ func TestArc42Action_SaveSection_WrongType(t *testing.T) {
 func TestArc42Action_SaveSection_EmptyFilename(t *testing.T) {
 	bb := &Blackboard{ChainState: map[string]any{"arc42_section_file": ""}}
 	status := callArc42Action(t, "SaveSection", bb)
-	if status != 0 {
-		t.Errorf("expected 0 (fail) for empty filename, got %d", status)
+	if status != -1 {
+		t.Errorf("expected -1 (Failure) for empty filename, got %d", status)
 	}
 }
 

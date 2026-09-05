@@ -550,11 +550,11 @@ func TestHandleTaskApproveReject_EscalatedVsPending(t *testing.T) {
 			var rr *httptest.ResponseRecorder
 			switch tc.action {
 			case "approve":
-				httpReq := httptest.NewRequest(http.MethodPost, "/api/task/approve?id="+taskID, nil)
+				httpReq := newMutationTestRequest("/api/tasks/approve?id=" + taskID)
 				rr = httptest.NewRecorder()
 				handleTaskApprove(rr, httpReq)
 			case "reject":
-				httpReq := httptest.NewRequest(http.MethodPost, "/api/task/reject?id="+taskID, nil)
+				httpReq := newMutationTestRequest("/api/tasks/reject?id=" + taskID)
 				rr = httptest.NewRecorder()
 				handleTaskReject(rr, httpReq)
 			default:
@@ -674,7 +674,7 @@ func TestHandleAnalyze_UsesWorkflowForTaskDerivation(t *testing.T) {
 	taskStore = dashboard.NewTaskStore(filepath.Join(dir, "tasks.json"))
 	sharedLLM = engine.NewMockLLM()
 
-	httpReq := httptest.NewRequest(http.MethodGet, "/api/thinktank/analyze?topic=Should+we+ship+feature+X", nil)
+	httpReq := newMutationTestRequest("/api/thinktank/analyze?topic=Should+we+ship+feature+X")
 	rr := httptest.NewRecorder()
 	handleAnalyze(rr, httpReq)
 
@@ -811,7 +811,7 @@ func TestHandleWorkflowApprovalEndpoints(t *testing.T) {
 	}
 
 	// /api/workflow/approve must call Workflow.ApproveTask on the retained Workflow.
-	approveReq := httptest.NewRequest(http.MethodPost, "/api/workflow/approve?id=task-a", nil)
+	approveReq := newMutationTestRequest("/api/workflow/approve?id=task-a")
 	approveRR := httptest.NewRecorder()
 	handleWorkflowApprove(approveRR, approveReq)
 	if approveRR.Code != http.StatusOK {
@@ -826,7 +826,7 @@ func TestHandleWorkflowApprovalEndpoints(t *testing.T) {
 	}
 
 	// /api/workflow/reject must call Workflow.RejectTask on the retained Workflow.
-	rejectReq := httptest.NewRequest(http.MethodPost, "/api/workflow/reject?id=task-b&reason=not+now", nil)
+	rejectReq := newMutationTestRequest("/api/workflow/reject?id=task-b&reason=not+now")
 	rejectRR := httptest.NewRecorder()
 	handleWorkflowReject(rejectRR, rejectReq)
 	if rejectRR.Code != http.StatusOK {
@@ -893,7 +893,7 @@ func TestHandleWorkflowRunFullPipeline_PersistsWorkflowAndTasks(t *testing.T) {
 	taskStore = dashboard.NewTaskStore(filepath.Join(dir, "tasks.json"))
 	sharedLLM = engine.NewMockLLM()
 
-	httpReq := httptest.NewRequest(http.MethodPost, "/api/workflow/run-full-pipeline?topic=Should+we+ship+feature+X", nil)
+	httpReq := newMutationTestRequest("/api/workflow/run-full-pipeline?topic=Should+we+ship+feature+X")
 	rr := httptest.NewRecorder()
 	handleWorkflowRunFullPipeline(rr, httpReq)
 
@@ -1040,7 +1040,7 @@ func TestHandleWorkflowApproveReject_UpdatesTaskStore(t *testing.T) {
 	}
 
 	// Approve task-a through the workflow surface.
-	approveReq := httptest.NewRequest(http.MethodPost, "/api/workflow/approve?id=task-a", nil)
+	approveReq := newMutationTestRequest("/api/workflow/approve?id=task-a")
 	approveRR := httptest.NewRecorder()
 	handleWorkflowApprove(approveRR, approveReq)
 	if approveRR.Code != http.StatusOK {
@@ -1062,7 +1062,7 @@ func TestHandleWorkflowApproveReject_UpdatesTaskStore(t *testing.T) {
 	}
 
 	// Reject task-b through the workflow surface.
-	rejectReq := httptest.NewRequest(http.MethodPost, "/api/workflow/reject?id=task-b&reason=not+now", nil)
+	rejectReq := newMutationTestRequest("/api/workflow/reject?id=task-b&reason=not+now")
 	rejectRR := httptest.NewRecorder()
 	handleWorkflowReject(rejectRR, rejectReq)
 	if rejectRR.Code != http.StatusOK {
@@ -1163,7 +1163,7 @@ func TestHandleSprintExecute_UpdatesCurrentWorkflow(t *testing.T) {
 		t.Fatalf("approve task-a: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodPost, "/api/sprint/execute", nil)
+	req := newMutationTestRequest("/api/sprint/execute")
 	rr := httptest.NewRecorder()
 	handleSprintExecute(rr, req)
 	if rr.Code != http.StatusOK {
@@ -1255,7 +1255,7 @@ func TestHandleAnalyze_TaskIDsUniqueAcrossAnalyses(t *testing.T) {
 	taskStore = dashboard.NewTaskStore(filepath.Join(dir, "tasks.json"))
 	sharedLLM = engine.NewMockLLM()
 
-	httpReq := httptest.NewRequest(http.MethodGet, "/api/thinktank/analyze?topic=Should+we+ship+feature+X", nil)
+	httpReq := newMutationTestRequest("/api/thinktank/analyze?topic=Should+we+ship+feature+X")
 	rr := httptest.NewRecorder()
 	handleAnalyze(rr, httpReq)
 	if rr.Code != http.StatusOK {
@@ -1567,7 +1567,7 @@ func TestHandleAgentRun_CircuitBreakerOpenReturns503(t *testing.T) {
 		},
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/agents/run?agent="+agentName+"&task=run+the+thing", nil)
+	req := newMutationTestRequest("/api/agents/run?agent=" + agentName + "&task=run+the+thing")
 	rr := httptest.NewRecorder()
 	handleAgentRun(rr, req)
 

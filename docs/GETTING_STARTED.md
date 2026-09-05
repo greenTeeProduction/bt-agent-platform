@@ -5,7 +5,7 @@ The Go BT Platform is a behavior-tree-driven agent framework with 40+ trees, MCP
 ## Quickstart (5 minutes)
 
 ### 1. Prerequisites
-- Go 1.23+
+- Go 1.26.5+
 - Ollama (optional, for LLM-powered agents)
 
 ### 2. Install

@@ -161,7 +161,7 @@ func ProbeDashboard(ctx context.Context, baseURL, apiKey string, client *http.Cl
 	}
 
 	// ── Content-Type enforcement: POST without JSON Content-Type should be rejected ──
-	postNoTypeReq, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/api/tasks/approve?id=security-probe", strings.NewReader(`{"probe":true}`))
+	postNoTypeReq, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/api/tasks/approve", strings.NewReader(`{"id":"security-probe"}`))
 	if err != nil {
 		return finishProbe(report, start), err
 	}
@@ -179,7 +179,7 @@ func ProbeDashboard(ctx context.Context, baseURL, apiKey string, client *http.Cl
 	}
 
 	// ── Input sanitization: POST with null bytes or control characters should be scrubbed or rejected ──
-	sanitizeReq, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/api/tasks/approve?id=sanitize-probe", strings.NewReader("{\"probe\":\"test\x00null\"}"))
+	sanitizeReq, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/api/tasks/approve", strings.NewReader("{\"id\":\"sanitize-probe\",\"probe\":\"test\x00null\"}"))
 	if err == nil {
 		sanitizeReq.Header.Set("Content-Type", "application/json")
 		if apiKey != "" {
@@ -226,14 +226,12 @@ func ProbeDashboard(ctx context.Context, baseURL, apiKey string, client *http.Cl
 	}
 
 	// ── CSRF protection: POST with JSON Content-Type but without CSRF token should be rejected ──
-	csrfReq, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/api/tasks/approve?id=csrf-probe", strings.NewReader(`{"probe":true}`))
+	csrfReq, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/api/tasks/approve", strings.NewReader(`{"id":"csrf-probe"}`))
 	if err != nil {
 		return finishProbe(report, start), err
 	}
 	csrfReq.Header.Set("Content-Type", "application/json")
-	if apiKey != "" {
-		csrfReq.Header.Set("X-API-Key", apiKey)
-	}
+	// Exercise browser CSRF enforcement without key authentication, which is exempt.
 	csrfResp, err := client.Do(csrfReq)
 	if err != nil {
 		report.Checks = append(report.Checks, ProbeCheck{Name: "csrf_protection", Status: ProbeError, Expected: "POST without CSRF token is rejected", Actual: err.Error()})

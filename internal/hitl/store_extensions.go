@@ -30,6 +30,11 @@ func (s *Store) FindPendingByTaskID(taskID string) (*Request, bool) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	release, err := s.reloadLocked()
+	if err != nil {
+		return nil, false
+	}
+	defer release()
 	now := time.Now()
 	var best *Request
 	for _, r := range s.records {
@@ -56,7 +61,7 @@ func (s *Store) FindPendingByTaskID(taskID string) (*Request, bool) {
 	if best == nil {
 		return nil, false
 	}
-	cp := *best
+	cp := *cloneRequest(best)
 	return &cp, true
 }
 
@@ -123,6 +128,11 @@ func (s *Store) RejectByTaskID(taskID, reviewer, reason string) (*Request, error
 func (s *Store) Escalate(id, reviewer, reason string) (*Request, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	release, err := s.reloadLocked()
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	r, ok := s.records[id]
 	if !ok {
 		return nil, fmt.Errorf("hitl: request %q not found", id)
@@ -135,18 +145,23 @@ func (s *Store) Escalate(id, reviewer, reason string) (*Request, error) {
 	if err := s.save(); err != nil {
 		return nil, err
 	}
-	cp := *r
+	cp := *cloneRequest(r)
 	return &cp, nil
 }
 
 // ListEscalated returns escalated requests.
 func (s *Store) ListEscalated() []*Request {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	release, err := s.reloadLocked()
+	if err != nil {
+		return nil
+	}
+	defer release()
 	var out []*Request
 	for _, r := range s.records {
 		if r.Status == StatusEscalated {
-			cp := *r
+			cp := *cloneRequest(r)
 			out = append(out, &cp)
 		}
 	}

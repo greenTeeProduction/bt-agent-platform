@@ -20,7 +20,7 @@ async function sendChat() {
   input.value = '';
   addChatMsg('Thinking...', 'thinking');
   try {
-    const r = await apiFetch('/chat?msg=' + encodeURIComponent(msg) + '&tab=' + state.activeTab);
+    const r = await apiPost('/chat', {msg, tab: state.activeTab});
     const msgs = document.getElementById('chat-messages');
     // Remove thinking message
     msgs.lastElementChild.remove();

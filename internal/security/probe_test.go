@@ -193,7 +193,7 @@ func TestProbeDashboard_CSRFProtection(t *testing.T) {
 	})
 	mux.HandleFunc("/api/tasks/approve", func(w http.ResponseWriter, r *http.Request) {
 		// Simulate CSRF enforcement: POST with Content-Type but without CSRF token → 403
-		if r.Method == http.MethodPost && r.Header.Get("Content-Type") == "application/json" && r.Header.Get("X-CSRF-Token") == "" {
+		if r.Method == http.MethodPost && r.Header.Get("Content-Type") == "application/json" && r.Header.Get("X-CSRF-Token") == "" && r.Header.Get("X-API-Key") != "probe-key" {
 			w.WriteHeader(http.StatusForbidden)
 			return
 		}
@@ -219,7 +219,7 @@ func TestProbeDashboard_CSRFProtection(t *testing.T) {
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
-	report, err := ProbeDashboard(context.Background(), server.URL, "", server.Client())
+	report, err := ProbeDashboard(context.Background(), server.URL, "probe-key", server.Client())
 	if err != nil {
 		t.Fatalf("ProbeDashboard returned error: %v", err)
 	}

@@ -33,7 +33,7 @@ async function runThinkTank() {
   const res = document.getElementById('tt-results');
   res.innerHTML = '<div class="loading">Running 5-fellow analysis... (2-3 minutes)</div>';
   try {
-    const r = await apiFetch('/thinktank/analyze?topic=' + encodeURIComponent(topic));
+    const r = await apiPost('/thinktank/analyze', {topic});
     res.innerHTML = '<div class="section-title">Results</div>' + r.findings.map(f => `
       <div class="task-card">
         <div class="task-header">

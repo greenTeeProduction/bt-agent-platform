@@ -1516,6 +1516,14 @@ func executeAgentTool(name, input string, bb *Blackboard) string {
 
 	for _, t := range bb.ChainTools {
 		if n, ok := t.(named); ok && strings.EqualFold(n.Name(), name) {
+			if c, ok := t.(interface {
+				CallContext(context.Context, string) string
+			}); ok {
+				return c.CallContext(chainContext(bb), input)
+			}
+			if err := chainContext(bb).Err(); err != nil {
+				return fmt.Sprintf("tool cancelled: %v", err)
+			}
 			if c, ok := t.(callable); ok {
 				return c.Call(input)
 			}

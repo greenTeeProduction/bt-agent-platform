@@ -10,11 +10,11 @@ import (
 
 func TestReviewCycle_ReRunsChildUntilApprovedWithinBound(t *testing.T) {
 	childRuns, reviews := 0, 0
-	RegisterAction("TestRCChild", func(_ *btcore.BTContext[Blackboard]) int {
+	registerReviewAction(t, "TestRCChild", func(_ *btcore.BTContext[Blackboard]) int {
 		childRuns++
 		return 1
 	})
-	RegisterAction("TestRCReviewer", func(ctx *btcore.BTContext[Blackboard]) int {
+	registerReviewAction(t, "TestRCReviewer", func(ctx *btcore.BTContext[Blackboard]) int {
 		reviews++
 		if reviews < 2 {
 			ctx.Blackboard.ChainState["review_verdict"] = "needs_work"
@@ -47,7 +47,7 @@ func TestReviewCycle_ReRunsChildUntilApprovedWithinBound(t *testing.T) {
 // letting the reviewer run more than max_iterations times before exhaustion.
 func TestReviewCycle_BoundSurvivesRunningChild(t *testing.T) {
 	childCallsThisIter := 0
-	RegisterAction("TestRCPersistChild", func(_ *btcore.BTContext[Blackboard]) int {
+	registerReviewAction(t, "TestRCPersistChild", func(_ *btcore.BTContext[Blackboard]) int {
 		childCallsThisIter++
 		if childCallsThisIter%2 == 1 {
 			return 0 // RUNNING on the first call of each iteration
@@ -55,7 +55,7 @@ func TestReviewCycle_BoundSurvivesRunningChild(t *testing.T) {
 		return 1 // SUCCESS on the second call
 	})
 	reviews := 0
-	RegisterAction("TestRCPersistReviewer", func(ctx *btcore.BTContext[Blackboard]) int {
+	registerReviewAction(t, "TestRCPersistReviewer", func(ctx *btcore.BTContext[Blackboard]) int {
 		reviews++
 		ctx.Blackboard.ChainState["review_verdict"] = "needs_work"
 		ctx.Blackboard.ChainState["review_feedback"] = "still not good enough"
@@ -98,8 +98,8 @@ func TestReviewCycle_BoundSurvivesRunningChild(t *testing.T) {
 }
 
 func TestReviewCycle_FailsAfterMaxIterations(t *testing.T) {
-	RegisterAction("TestRCChildB", func(_ *btcore.BTContext[Blackboard]) int { return 1 })
-	RegisterAction("TestRCReviewerB", func(ctx *btcore.BTContext[Blackboard]) int {
+	registerReviewAction(t, "TestRCChildB", func(_ *btcore.BTContext[Blackboard]) int { return 1 })
+	registerReviewAction(t, "TestRCReviewerB", func(ctx *btcore.BTContext[Blackboard]) int {
 		ctx.Blackboard.ChainState["review_verdict"] = "needs_work"
 		return 1
 	})

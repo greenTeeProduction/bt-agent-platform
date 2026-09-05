@@ -528,10 +528,21 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 		improved = newFitness.Composite > baseFitness.Composite
 	}
 
+	// ── Learned Selector ordering (milestone 4) — apply real-telemetry child
+	// ordering to the evolved tree just before it is persisted. Flag-gated and
+	// seeded from the durable stats; fallback/AlwaysSucceed children stay last
+	// so Selector short-circuit semantics are preserved. A reorder is itself a
+	// persistable change, so it forces a save even when no mutation applied.
+	reordered := g.applyLearnedSelectorOrdering(tree, entry.Name, cfg)
+	// ── DT-optimizer ordering (Q2 Evolvability milestone 3) — the
+	// entropy/Gini-based sibling of the Selector-ordering pass above, applied
+	// to the same tree just before persistence.
+	reordered += g.applyDTOptimizerOrdering(tree, entry.Name, cfg)
+
 	// A reseed changes the persisted tree on its own, so it must clear the
 	// validation gate even when no structural mutation applied on top of it —
 	// and so does a local-search refinement.
-	if applied > 0 || eliteReseed || localSearchDelta > 0 {
+	if applied > 0 || eliteReseed || localSearchDelta > 0 || reordered > 0 {
 		// ── Validation gate — prevent persisting evolved trees that fail
 		// quality thresholds. A rejection skips this tree only.
 		gateErr := ValidationGate(entry.Name, entry.Name, g.cfg.ValidationGate)
@@ -549,19 +560,10 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 			// cycle refined nothing — clearing the delta keeps the reported
 			// metrics honest and stops it from forcing the save below.
 			localSearchDelta = 0
+			reordered = 0
 		}
 	}
 
-	// ── Learned Selector ordering (milestone 4) — apply real-telemetry child
-	// ordering to the evolved tree just before it is persisted. Flag-gated and
-	// seeded from the durable stats; fallback/AlwaysSucceed children stay last
-	// so Selector short-circuit semantics are preserved. A reorder is itself a
-	// persistable change, so it forces a save even when no mutation applied.
-	reordered := g.applyLearnedSelectorOrdering(tree, entry.Name, cfg)
-	// ── DT-optimizer ordering (Q2 Evolvability milestone 3) — the
-	// entropy/Gini-based sibling of the Selector-ordering pass above, applied
-	// to the same tree just before persistence.
-	reordered += g.applyDTOptimizerOrdering(tree, entry.Name, cfg)
 	saveFailed := false
 	// A refinement — or a diversity-crisis reseed — is itself a persistable
 	// change, like the Selector/DT reordering passes: it must force a save even

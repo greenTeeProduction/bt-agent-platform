@@ -636,6 +636,9 @@ func (dlq *DeadLetterQueue) load() {
 
 // WorkerPool manages a fixed pool of goroutines for task execution.
 type WorkerPool struct {
+	admission sync.RWMutex
+	closed    bool
+	shutdown  sync.Once
 	workers   int
 	tasks     chan func()
 	wg        sync.WaitGroup
@@ -648,6 +651,7 @@ type WorkerPool struct {
 
 // NewWorkerPool creates a worker pool with N workers.
 func NewWorkerPool(workers int) *WorkerPool {
+	workers = max(1, workers)
 	wp := &WorkerPool{
 		workers: workers,
 		tasks:   make(chan func(), workers*100),
@@ -662,45 +666,38 @@ func NewWorkerPool(workers int) *WorkerPool {
 
 func (wp *WorkerPool) worker() {
 	defer wp.wg.Done()
-	for {
-		select {
-		case task, ok := <-wp.tasks:
-			if !ok {
-				return
-			}
-			wp.mu.Lock()
-			wp.active++
-			wp.mu.Unlock()
-			// Recover from task panics so the worker stays alive.
-			func() {
-				defer func() {
-					if r := recover(); r != nil {
-						slog.Error("workerpool: task panicked (worker recovered)", "panic", r)
-					}
-				}()
-				task()
+	for task := range wp.tasks {
+		wp.mu.Lock()
+		wp.active++
+		wp.mu.Unlock()
+		// Recover from task panics so the worker stays alive.
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					slog.Error("workerpool: task panicked (worker recovered)", "panic", r)
+				}
 			}()
-			wp.mu.Lock()
-			wp.active--
-			wp.completed++
-			wp.mu.Unlock()
-		case <-wp.quit:
-			return
-		}
+			task()
+		}()
+		wp.mu.Lock()
+		wp.active--
+		wp.completed++
+		wp.mu.Unlock()
 	}
 }
 
 // Submit queues a task for execution. Returns false if the pool is closed.
 func (wp *WorkerPool) Submit(task func()) bool {
+	wp.admission.RLock()
+	defer wp.admission.RUnlock()
+	if wp.closed || task == nil {
+		return false
+	}
+	wp.tasks <- task
 	wp.mu.Lock()
 	wp.total++
 	wp.mu.Unlock()
-	select {
-	case wp.tasks <- task:
-		return true
-	case <-wp.quit:
-		return false
-	}
+	return true
 }
 
 // Stats returns worker pool statistics.
@@ -710,10 +707,16 @@ func (wp *WorkerPool) Stats() (active int, queued int, total uint64, completed u
 	return wp.active, len(wp.tasks), wp.total, wp.completed
 }
 
-// Shutdown gracefully stops the worker pool, waiting for active tasks.
+// Shutdown stops admission and drains every accepted task, including queued
+// work. Tasks must eventually return; this method can be called concurrently.
 func (wp *WorkerPool) Shutdown() {
-	close(wp.quit)
-	close(wp.tasks)
+	wp.shutdown.Do(func() {
+		wp.admission.Lock()
+		wp.closed = true
+		close(wp.quit)
+		close(wp.tasks)
+		wp.admission.Unlock()
+	})
 	wp.wg.Wait()
 }
 

@@ -15,6 +15,8 @@ import (
 // not be empty" — blocking the run's commit. Env-override tests must own
 // their environment completely.
 func TestMain(m *testing.M) {
+	ollamaChecker = func(string) bool { return true }
+	deepseekChecker = func(string) bool { return true }
 	for _, kv := range os.Environ() {
 		if name, _, ok := strings.Cut(kv, "="); ok && strings.HasPrefix(name, "BT_") {
 			os.Unsetenv(name)

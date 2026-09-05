@@ -8,7 +8,7 @@
 
 ### Toolchain
 
-- **Go 1.26.3** (see `go.mod`). Cloud VMs usually have `go` at `/usr/bin/go`.
+- **Go 1.26.5** (see `go.mod`). Cloud VMs usually have `go` at `/usr/bin/go`.
 - The **Makefile** hardcodes `GO := /usr/local/go/bin/go`. If `make` fails with “go not found”, symlink system Go (one-time on the VM):
 
   ```bash

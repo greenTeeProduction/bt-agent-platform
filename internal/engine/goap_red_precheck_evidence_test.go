@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/research"
@@ -248,6 +249,18 @@ func TestGoapFusionRepoFileState_TriState(t *testing.T) {
 // the test that catches a wrong command choice (`git cat-file -e` exits 128 for
 // an absent path, so "missing" would be unreachable) or a git upgrade.
 func TestGoapFusionRepoFileState_AgainstRealGit(t *testing.T) {
+	// A hook may export repository/index/config overrides. Remove them for the
+	// entire fixture, including the production read-only probe it exercises.
+	for _, kv := range os.Environ() {
+		key, _, _ := strings.Cut(kv, "=")
+		if strings.HasPrefix(key, "GIT_") {
+			t.Setenv(key, "")
+			if err := os.Unsetenv(key); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not on PATH")
 	}

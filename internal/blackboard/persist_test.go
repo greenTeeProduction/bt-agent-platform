@@ -17,7 +17,7 @@ func TestManager_PersistenceSessionScope(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	path := filepath.Join(dir, "session", "pipe_abc.json")
+	path := m1.persistFile(scope)
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("expected persist file: %v", err)
 	}

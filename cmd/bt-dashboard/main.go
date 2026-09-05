@@ -5,10 +5,12 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"maps"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -437,33 +439,7 @@ func main() {
 	}
 
 	// Security headers — enable HSTS when TLS is active
-	secCfg := security.DefaultSecurityHeaders()
-	if tlsEnabled {
-		secCfg.EnableHSTS = true
-	}
-
-	// Middleware stack: security headers → request ID → tracing → cors → csrf → content_type → sanitize → rate limit → metrics → compression → response validation
-	var handler http.Handler = mux
-	handler = security.SecurityHeadersMiddleware(secCfg)(handler)
-	handler = security.RequestIDMiddleware(handler) // correlation IDs for audit trail
-	handler = tracingMiddleware(handler)            // distributed tracing spans per request
-	handler = security.CrossOriginMiddleware(corsOrigin, "GET, POST, PUT, DELETE, OPTIONS")(handler)
-	handler = security.CSRFMiddleware(nil)(handler)                   // CSRF protection for state-changing requests
-	handler = security.JSONContentTypeMiddleware(handler)             // enforce application/json Content-Type on mutating requests
-	handler = security.SanitizeMiddleware(1 << 20)(handler)           // 1MB body limit + input cleaning
-	handler = security.RateLimitMiddleware(rateLimiter, nil)(handler) // token bucket rate limiting
-	handler = dashboard.MetricsMiddleware(handler)                    // Prometheus metrics collection
-	handler = api.CompressionMiddleware(handler)                      // gzip response compression (70-90% size reduction for JSON/HTML)
-	handler = api.ResponseValidator(api.DashboardRoutes(), &api.ResponseValidatorConfig{
-		Logger: slog.Default(),
-		SkipPaths: map[string]bool{
-			"/api/health":  true, // constant response — no schema drift risk
-			"/api/metrics": true, // Prometheus text format, not JSON
-			"/api/swagger": true, // HTML page, not JSON
-		},
-		Enforce: dashConfig.APIEnforceResponseValidation, // controlled by BT_API_ENFORCE_RESPONSE_VALIDATION env var or config file
-	})(handler)
-	handler = inFlightMiddleware(handler) // tracks dashAnyInFlight for the deploy-drift watcher above
+	handler := dashboardMiddleware(mux, apiKey, tlsEnabled, corsOrigin, dashConfig.APIEnforceResponseValidation, rateLimiter)
 
 	// Security: enforce TLS. When cert+key are configured via env vars,
 	// serve HTTPS with HSTS enabled. Plain HTTP otherwise (dev mode).
@@ -472,15 +448,16 @@ func main() {
 		slog.Error("Dashboard listener configuration invalid", "error", err)
 		os.Exit(1)
 	}
+	server := security.NewHTTPServer(addr, handler)
 	if tlsEnabled {
 		slog.Info("BT Studio Dashboard ready (TLS)", "addr", addr)
-		if err := http.ListenAndServeTLS(addr, tlsCert, tlsKey, handler); err != nil {
+		if err := server.ListenAndServeTLS(tlsCert, tlsKey); err != nil {
 			slog.Error("Dashboard server failed", "error", err)
 			os.Exit(1)
 		}
 	} else {
 		slog.Warn("BT Studio Dashboard ready (HTTP — set BT_TLS_CERT+BT_TLS_KEY for TLS)", "addr", addr)
-		if err := http.ListenAndServe(addr, handler); err != nil {
+		if err := server.ListenAndServe(); err != nil {
 			slog.Error("Dashboard server failed", "error", err)
 			os.Exit(1)
 		}
@@ -660,7 +637,12 @@ func handleFellows(w http.ResponseWriter, _ *http.Request) {
 	_ = encodeJSON(w, r2)
 }
 func handleAnalyze(w http.ResponseWriter, r *http.Request) {
-	topic := r.URL.Query().Get("topic")
+	params, ok := decodeMutation(w, r)
+	if !ok {
+		return
+	}
+
+	topic := params.Get("topic")
 	c := sharedLLM
 	if c == nil {
 		_ = encodeJSON(w, map[string]string{"error": "Ollama unavailable"})
@@ -725,7 +707,12 @@ func handleAnalyze(w http.ResponseWriter, r *http.Request) {
 // This gives RunFullPipeline (internal/dashboard/workflow_engine.go), which
 // previously had zero production callers, its first one.
 func handleWorkflowRunFullPipeline(w http.ResponseWriter, r *http.Request) {
-	topic := r.URL.Query().Get("topic")
+	params, ok := decodeMutation(w, r)
+	if !ok {
+		return
+	}
+
+	topic := params.Get("topic")
 	c := sharedLLM
 	if c == nil {
 		_ = encodeJSON(w, map[string]string{"error": "Ollama unavailable"})
@@ -772,8 +759,13 @@ func handleDefaultCompany(w http.ResponseWriter, _ *http.Request) {
 }
 
 func handleChat(w http.ResponseWriter, r *http.Request) {
-	msg := r.URL.Query().Get("msg")
-	tab := r.URL.Query().Get("tab")
+	params, ok := decodeMutation(w, r)
+	if !ok {
+		return
+	}
+
+	msg := params.Get("msg")
+	tab := params.Get("tab")
 	if msg == "" {
 		msg = "Hello"
 	}
@@ -844,7 +836,12 @@ func pendingHITLBeforeResolve(taskID string) (id, resolvedFrom string) {
 }
 
 func handleTaskApprove(w http.ResponseWriter, r *http.Request) {
-	taskID := r.URL.Query().Get("id")
+	params, ok := decodeMutation(w, r)
+	if !ok {
+		return
+	}
+
+	taskID := params.Get("id")
 	pendingID, resolvedFrom := pendingHITLBeforeResolve(taskID)
 	if err := taskStore.Approve(taskID, "dashboard"); err != nil {
 		w.WriteHeader(http.StatusNotFound)
@@ -867,8 +864,13 @@ func handleTaskApprove(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleTaskReject(w http.ResponseWriter, r *http.Request) {
-	taskID := r.URL.Query().Get("id")
-	reason := r.URL.Query().Get("reason")
+	params, ok := decodeMutation(w, r)
+	if !ok {
+		return
+	}
+
+	taskID := params.Get("id")
+	reason := params.Get("reason")
 	if reason == "" {
 		reason = "task rejected via dashboard"
 	}
@@ -907,7 +909,12 @@ func handleWorkflowPending(w http.ResponseWriter, _ *http.Request) {
 }
 
 func handleWorkflowApprove(w http.ResponseWriter, r *http.Request) {
-	taskID := r.URL.Query().Get("id")
+	params, ok := decodeMutation(w, r)
+	if !ok {
+		return
+	}
+
+	taskID := params.Get("id")
 	currentWorkflowMu.RLock()
 	wf := currentWorkflow
 	currentWorkflowMu.RUnlock()
@@ -930,8 +937,13 @@ func handleWorkflowApprove(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleWorkflowReject(w http.ResponseWriter, r *http.Request) {
-	taskID := r.URL.Query().Get("id")
-	reason := r.URL.Query().Get("reason")
+	params, ok := decodeMutation(w, r)
+	if !ok {
+		return
+	}
+
+	taskID := params.Get("id")
+	reason := params.Get("reason")
 	if reason == "" {
 		reason = "task rejected via dashboard"
 	}
@@ -974,18 +986,47 @@ func syncWorkflowTaskStatus(taskID string, status dashboard.WorkflowTaskStatus) 
 	wf.SetTaskStatus(strings.TrimPrefix(taskID, prefix), status)
 }
 
-func handleSprintExecute(w http.ResponseWriter, _ *http.Request) {
+func handleSprintExecute(w http.ResponseWriter, r *http.Request) {
+	if _, ok := decodeMutation(w, r); !ok {
+		return
+	}
+	sprintState.Lock()
+	key := r.Header.Get("Idempotency-Key")
+	if job, ok := sprintIdempotency[key]; key != "" && ok {
+		sprintState.Unlock()
+		_ = encodeJSON(w, map[string]any{"status": "sprint_started", "job_id": job})
+		return
+	}
+	if sprintState.Running {
+		job := sprintState.JobID
+		sprintState.Unlock()
+		_ = encodeJSON(w, map[string]any{"status": "sprint_started", "job_id": job})
+		return
+	}
 	// Approved() returns tasks ordered by priority then sprint, so the
 	// sequential dispatch loop below already runs critical/high-priority
 	// tasks before lower-priority ones regardless of creation order.
-	approved := taskStore.Approved()
+	approved, claimErr := taskStore.ClaimApproved()
+	if claimErr != nil {
+		sprintState.Unlock()
+		http.Error(w, claimErr.Error(), http.StatusInternalServerError)
+		return
+	}
 	if len(approved) == 0 {
+		sprintState.Unlock()
 		_ = encodeJSON(w, map[string]string{"status": "no_approved_tasks"})
 		return
 	}
 
 	jobID := fmt.Sprintf("sprint-%d", time.Now().UnixNano())
-	sprintState.Lock()
+	if key != "" {
+		if len(sprintIdempotency) >= 1000 {
+			delete(sprintIdempotency, sprintIdempotencyOrder[0])
+			sprintIdempotencyOrder = sprintIdempotencyOrder[1:]
+		}
+		sprintIdempotency[key] = jobID
+		sprintIdempotencyOrder = append(sprintIdempotencyOrder, key)
+	}
 	sprintState.Running = true
 	sprintState.JobID = jobID
 	sprintState.StartedAt = time.Now()
@@ -1021,7 +1062,7 @@ func handleSprintExecute(w http.ResponseWriter, _ *http.Request) {
 			sprintState.Unlock()
 
 			// Mark as in_progress
-			_ = taskStore.UpdateStatus(task.ID, "in_progress")
+			// Already durably claimed under sprint admission before launch.
 			syncWorkflowTaskStatus(task.ID, dashboard.StatusInProgress)
 
 			// Pick tree if not set
@@ -1267,7 +1308,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if body.Password != apiKey {
+	if !security.MatchAPIKey(body.Password, apiKey) {
 		loginThrottle.RecordFailure(r.RemoteAddr)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusUnauthorized)
@@ -1360,7 +1401,7 @@ func handleSession(w http.ResponseWriter, r *http.Request) {
 
 	// Check for API key header
 	apiKey := dashboardAPIKey()
-	if apiKey != "" && r.Header.Get("X-API-Key") == apiKey {
+	if apiKey != "" && security.MatchAPIKey(r.Header.Get("X-API-Key"), apiKey) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = encodeJSON(w, map[string]any{
 			"status":      "authenticated",
@@ -1489,8 +1530,8 @@ func handleOpenAPI(w http.ResponseWriter, _ *http.Request) {
 		"Dashboard REST API for the Go Behavior Tree Platform. "+
 			"Manages behavior trees, thinktank analysis, company simulation, "+
 			"task pipelines, sprint execution, and dashboard chat. "+
-			"All /api/* endpoints except /api/health, /api/metrics, /api/alerts, /api/alerts/rules, "+
-			"and /api/openapi.json require an X-API-Key header when BT_API_KEY is configured.",
+			"Privileged endpoints require a valid configured X-API-Key or dashboard session. "+
+			"Consult each operation's security requirements; cookie-authenticated mutations also require a CSRF token.",
 	)
 	gen.AddServer("http://localhost:9800", "Local development server")
 	gen.AddServer("http://100.123.73.66:9800", "Tailscale production server")
@@ -1685,9 +1726,14 @@ func handleConfig(w http.ResponseWriter, r *http.Request) {
 	_ = encodeJSON(w, sanitized)
 }
 
-// handleTaskCreate creates a new task via query params (GET — avoids CSRF on API endpoints).
+// handleTaskCreate creates a task from a POST JSON body.
 func handleTaskCreate(w http.ResponseWriter, r *http.Request) {
-	title := r.URL.Query().Get("title")
+	params, ok := decodeMutation(w, r)
+	if !ok {
+		return
+	}
+
+	title := params.Get("title")
 	if title == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = encodeJSON(w, map[string]string{"error": "missing title parameter"})
@@ -1696,9 +1742,9 @@ func handleTaskCreate(w http.ResponseWriter, r *http.Request) {
 	task := dashboard.Task{
 		ID:          fmt.Sprintf("task-%d", time.Now().UnixNano()),
 		Title:       title,
-		Description: r.URL.Query().Get("desc"),
-		Priority:    r.URL.Query().Get("priority"),
-		Assignee:    r.URL.Query().Get("assignee"),
+		Description: params.Get("desc"),
+		Priority:    params.Get("priority"),
+		Assignee:    params.Get("assignee"),
 		Source:      "manual",
 	}
 	if task.Priority == "" {
@@ -1890,8 +1936,13 @@ func handleAgentsList(w http.ResponseWriter, _ *http.Request) {
 
 // handleAgentRun runs an agent with a given task.
 func handleAgentRun(w http.ResponseWriter, r *http.Request) {
-	agentName := r.URL.Query().Get("agent")
-	task := r.URL.Query().Get("task")
+	params, ok := decodeMutation(w, r)
+	if !ok {
+		return
+	}
+
+	agentName := params.Get("agent")
+	task := params.Get("task")
 	if agentName == "" {
 		w.WriteHeader(http.StatusBadRequest)
 		_ = encodeJSON(w, map[string]string{"error": "missing agent parameter"})
@@ -1901,7 +1952,7 @@ func handleAgentRun(w http.ResponseWriter, r *http.Request) {
 		task = dashboard.DefaultAgentTask(agentName)
 	}
 
-	treeID := r.URL.Query().Get("tree")
+	treeID := params.Get("tree")
 
 	// Reject before submitting to the worker pool if the agent's circuit
 	// breaker is open, mirroring the job-skip gate in
@@ -2079,14 +2130,15 @@ func handleAgentDelete(w http.ResponseWriter, r *http.Request) {
 // dashboardMux registers the dashboard routes without starting runtime services.
 func dashboardMux(apiKey string) *http.ServeMux {
 	mux := http.NewServeMux()
+	sessionAuth := dashboardSessionAuth(apiKey)
 	mux.HandleFunc("/", serveDashboard)
 	mux.HandleFunc("/static/", serveStatic)
 	mux.HandleFunc("/api/health", handleHealth)
 	mux.HandleFunc("/api/metrics", dashboard.PrometheusHandler().ServeHTTP)
 	mux.HandleFunc("/api/alerts", handleAlerts)
-	mux.HandleFunc("/api/alerts/rules", handleAlertRules)
-	mux.HandleFunc("/api/security/audit", handleSecurityAudit)
-	mux.HandleFunc("/api/config", handleConfig)
+	mux.HandleFunc("/api/alerts/rules", sessionAuth(handleAlertRules))
+	mux.HandleFunc("/api/security/audit", sessionAuth(handleSecurityAudit))
+	mux.HandleFunc("/api/config", sessionAuth(handleConfig))
 	mux.HandleFunc("/api/openapi.json", handleOpenAPI)
 	mux.HandleFunc("/api/swagger", handleSwagger)
 	mux.HandleFunc("/api/scalability", handleScalability)
@@ -2096,7 +2148,6 @@ func dashboardMux(apiKey string) *http.ServeMux {
 	// Session-aware auth: checks session cookie first, falls back to API key header.
 	// This preserves backward compatibility with existing X-API-Key header workflows
 	// while adding cookie-based browser sessions via /api/login.
-	sessionAuth := dashboardSessionAuth(apiKey)
 
 	mux.HandleFunc("/api/summary", sessionAuth(handleSummary))
 	mux.HandleFunc("/api/metrics/live", sessionAuth(handleMetricsLive))
@@ -2154,4 +2205,79 @@ func dashboardAPIKey() string {
 		return dashConfig.APIKey
 	}
 	return ""
+}
+
+func dashboardCSRFMiddleware(apiKey string, next http.Handler) http.Handler {
+	csrf := security.CSRFMiddleware(nil)(next)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if security.MatchAPIKey(r.Header.Get("X-API-Key"), apiKey) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		csrf.ServeHTTP(w, r)
+	})
+}
+
+// Protected by sprintState; bounded recent job IDs make client retries stable.
+var sprintIdempotency = map[string]string{}
+var sprintIdempotencyOrder []string
+
+func decodeMutation(w http.ResponseWriter, r *http.Request) (url.Values, bool) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Allow", http.MethodPost)
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return nil, false
+	}
+	var body map[string]string
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+	if err := dec.Decode(&body); err != nil {
+		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		return nil, false
+	}
+	if body == nil {
+		http.Error(w, "JSON object required", http.StatusBadRequest)
+		return nil, false
+	}
+	var extra any
+	if err := dec.Decode(&extra); err != io.EOF {
+		http.Error(w, "single JSON object required", http.StatusBadRequest)
+		return nil, false
+	}
+	values := url.Values{}
+	for k, v := range body {
+		values.Set(k, v)
+	}
+	return values, true
+}
+
+func dashboardMiddleware(next http.Handler, apiKey string, tlsEnabled bool, corsOrigin string, enforce bool, rl *security.RateLimiter) http.Handler {
+	secCfg := security.DefaultSecurityHeaders()
+	if tlsEnabled {
+		secCfg.EnableHSTS = true
+	}
+
+	// Middleware stack: security headers → request ID → tracing → cors → csrf → content_type → sanitize → rate limit → metrics → compression → response validation
+	handler := next
+	handler = security.SecurityHeadersMiddleware(secCfg)(handler)
+	handler = security.RequestIDMiddleware(handler) // correlation IDs for audit trail
+	handler = tracingMiddleware(handler)            // distributed tracing spans per request
+	handler = security.CrossOriginMiddleware(corsOrigin, "GET, POST, PUT, DELETE, OPTIONS")(handler)
+	handler = dashboardCSRFMiddleware(apiKey, handler)       // CSRF protection for state-changing requests
+	handler = security.JSONContentTypeMiddleware(handler)    // enforce application/json Content-Type on mutating requests
+	handler = security.SanitizeMiddleware(1 << 20)(handler)  // 1MB body limit + input cleaning
+	handler = security.RateLimitMiddleware(rl, nil)(handler) // token bucket rate limiting
+	handler = dashboard.MetricsMiddleware(handler)           // Prometheus metrics collection
+	handler = api.ResponseValidator(api.DashboardRoutes(), &api.ResponseValidatorConfig{
+		Logger: slog.Default(),
+		SkipPaths: map[string]bool{
+			"/api/health":  true, // constant response — no schema drift risk
+			"/api/metrics": true, // Prometheus text format, not JSON
+			"/api/swagger": true, // HTML page, not JSON
+		},
+		Enforce: enforce, // controlled by BT_API_ENFORCE_RESPONSE_VALIDATION env var or config file
+	})(handler)
+	handler = api.CompressionMiddleware(handler) // encode only after JSON validation
+	handler = inFlightMiddleware(handler)        // tracks dashAnyInFlight for the deploy-drift watcher above
+
+	return handler
 }

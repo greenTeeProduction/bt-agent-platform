@@ -38,6 +38,7 @@ type APIKeyInfo struct {
 
 // apiKey is the internal representation including the hash.
 type apiKey struct {
+	Rotated   bool      `json:"rotated,omitempty"`
 	Hash      string    `json:"hash"` // SHA-256 hex of the raw key
 	Label     string    `json:"label"`
 	CreatedAt time.Time `json:"created_at"`
@@ -118,26 +119,14 @@ func (kr *KeyRing) AddKey(keyStr, label string, ttl time.Duration) string {
 func (kr *KeyRing) Validate(keyStr string) bool {
 	hash := sha256Hex(keyStr)
 
-	kr.mu.RLock()
-	entry, ok := kr.keys[hash]
-	kr.mu.RUnlock()
-
-	if !ok {
-		return false
-	}
-
-	// Check expiry
-	if !entry.ExpiresAt.IsZero() && time.Now().After(entry.ExpiresAt) {
-		return false
-	}
-
-	// Update usage stats (non-blocking write)
 	kr.mu.Lock()
-	if e, ok := kr.keys[hash]; ok {
-		e.LastUsed = time.Now()
-		e.UseCount++
+	defer kr.mu.Unlock()
+	entry, ok := kr.keys[hash]
+	if !ok || (!entry.ExpiresAt.IsZero() && !time.Now().Before(entry.ExpiresAt)) {
+		return false
 	}
-	kr.mu.Unlock()
+	entry.LastUsed = time.Now()
+	entry.UseCount++
 
 	return true
 }
@@ -168,25 +157,11 @@ func (kr *KeyRing) RevokeKeyByValue(keyStr string) error {
 // gracePeriod is how long the old key remains valid after rotation.
 //
 // Returns the new raw key value and its hash.
-func (kr *KeyRing) RotateKey(oldKeyStr, label string, gracePeriod time.Duration) (newKey string, _ error) {
-	// Generate the new key first
-	newKey, err := kr.GenerateKey(label, 0) // new key gets its own TTL later
-	if err != nil {
-		return "", err
+func (kr *KeyRing) RotateKey(oldKeyStr, label string, gracePeriod time.Duration) (string, error) {
+	if oldKeyStr == "" {
+		return kr.GenerateKey(label, 24*time.Hour)
 	}
-
-	// Expire the old key after grace period
-	if oldKeyStr != "" {
-		oldHash := sha256Hex(oldKeyStr)
-
-		kr.mu.Lock()
-		if entry, ok := kr.keys[oldHash]; ok {
-			entry.ExpiresAt = time.Now().Add(gracePeriod)
-		}
-		kr.mu.Unlock()
-	}
-
-	return newKey, nil
+	return kr.replaceKey(sha256Hex(oldKeyStr), label, 24*time.Hour, &gracePeriod)
 }
 
 // ListKeys returns public information about all keys (labels, timestamps, usage).
@@ -249,7 +224,10 @@ func (kr *KeyRing) ExpireKey(hash string, gracePeriod time.Duration) error {
 	if !ok {
 		return fmt.Errorf("key hash %q not found", hash)
 	}
-	entry.ExpiresAt = time.Now().Add(gracePeriod)
+	deadline := time.Now().Add(gracePeriod)
+	if entry.ExpiresAt.IsZero() || deadline.Before(entry.ExpiresAt) {
+		entry.ExpiresAt = deadline
+	}
 	return nil
 }
 
@@ -262,7 +240,7 @@ func (kr *KeyRing) ExpiringKeys(window time.Duration) []string {
 	threshold := time.Now().Add(window)
 	var hashes []string
 	for hash, entry := range kr.keys {
-		if !entry.ExpiresAt.IsZero() && entry.ExpiresAt.Before(threshold) {
+		if !entry.Rotated && !entry.ExpiresAt.IsZero() && entry.ExpiresAt.After(time.Now()) && entry.ExpiresAt.Before(threshold) {
 			hashes = append(hashes, hash)
 		}
 	}
@@ -337,11 +315,10 @@ func (krs *KeyRotationScheduler) rotate() int {
 	hashes := krs.keyRing.ExpiringKeys(krs.rotateWindow)
 	rotated := 0
 	for _, oldHash := range hashes {
-		newKey, err := krs.keyRing.GenerateKey(krs.label, 0)
+		newKey, err := krs.keyRing.rotateExpiring(oldHash, krs.label, krs.rotateWindow)
 		if err != nil {
 			continue
 		}
-		_ = krs.keyRing.ExpireKey(oldHash, krs.rotateWindow)
 		if krs.onRotate != nil {
 			_ = reliability.Recover("key-rotation-onRotate", func() {
 				krs.onRotate(oldHash, newKey)
@@ -349,7 +326,39 @@ func (krs *KeyRotationScheduler) rotate() int {
 		}
 		rotated++
 	}
+	krs.keyRing.CleanupExpired()
 	return rotated
+}
+
+// rotateExpiring atomically claims a live key once; its existing deadline is
+// retained. Replacements live at least a day and longer than the rotation window.
+func (kr *KeyRing) rotateExpiring(hash, label string, window time.Duration) (string, error) {
+	return kr.replaceKey(hash, label, max(24*time.Hour, 2*window), nil)
+}
+
+func (kr *KeyRing) replaceKey(hash, label string, ttl time.Duration, grace *time.Duration) (string, error) {
+	kr.mu.Lock()
+	defer kr.mu.Unlock()
+	now := time.Now()
+	old, ok := kr.keys[hash]
+	if !ok || old.Rotated || (old.ExpiresAt.IsZero() && grace == nil) || (!old.ExpiresAt.IsZero() && !old.ExpiresAt.After(now)) {
+		return "", fmt.Errorf("key no longer eligible")
+	}
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return "", err
+	}
+	key := "sk-" + hex.EncodeToString(raw)
+	newHash := sha256Hex(key)
+	kr.keys[newHash] = &apiKey{Hash: newHash, Label: label, CreatedAt: now, ExpiresAt: now.Add(ttl)}
+	if grace != nil {
+		deadline := now.Add(*grace)
+		if old.ExpiresAt.IsZero() || deadline.Before(old.ExpiresAt) {
+			old.ExpiresAt = deadline
+		}
+	}
+	old.Rotated = true
+	return key, nil
 }
 
 func sha256Hex(s string) string {
