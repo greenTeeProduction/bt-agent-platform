@@ -74,6 +74,8 @@ func (w *gzipResponseWriter) WriteHeader(code int) {
 		w.ResponseWriter.WriteHeader(code)
 		return
 	}
+	w.Header().Set("Content-Encoding", "gzip")
+	w.Header().Del("Content-Length")
 	w.ResponseWriter.WriteHeader(code)
 }
 
@@ -89,6 +91,10 @@ func (w *gzipResponseWriter) Write(b []byte) (int, error) {
 		contentType := w.ResponseWriter.Header().Get("Content-Type")
 		w.compressible = !hasCustomEncoding && isCompressibleContentType(contentType)
 		w.started = true
+		if w.compressible {
+			w.Header().Set("Content-Encoding", "gzip")
+			w.Header().Del("Content-Length")
+		}
 
 		if !w.compressible {
 			if ct == "gzip" || ct == "" {

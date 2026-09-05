@@ -17,20 +17,30 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/notebooklmauth"
 )
 
 // realTool is a tool implementation that actually executes commands,
 // reads/writes files, or makes HTTP calls. It satisfies the
 // Name() + Call(string) string interface expected by executeAgentTool.
 type realTool struct {
-	name string
-	desc string
-	fn   func(input string) string
+	name  string
+	desc  string
+	fn    func(input string) string
+	fnCtx func(context.Context, string) string
 }
 
-func (t *realTool) Name() string        { return t.name }
-func (t *realTool) Description() string { return t.desc }
-func (t *realTool) Call(input string) string {
+func (t *realTool) Name() string             { return t.name }
+func (t *realTool) Description() string      { return t.desc }
+func (t *realTool) Call(input string) string { return t.CallContext(context.Background(), input) }
+func (t *realTool) CallContext(ctx context.Context, input string) string {
+	if err := ctx.Err(); err != nil {
+		return fmt.Sprintf("tool cancelled: %v", err)
+	}
+	if t.fnCtx != nil {
+		return t.fnCtx(ctx, input)
+	}
 	return t.fn(input)
 }
 
@@ -92,10 +102,11 @@ func newShellExecTool() *realTool {
 	return &realTool{
 		name: "shell_exec",
 		desc: "Execute a shell command and return its output. Use for: running scripts, checking processes, testing, building, system commands. Input: the full bash command to run.",
-		fn: func(input string) string {
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		fnCtx: func(parent context.Context, input string) string {
+			ctx, cancel := context.WithTimeout(parent, 30*time.Second)
 			defer cancel()
 			cmd := exec.CommandContext(ctx, "bash", "-c", input)
+			bindToolCommandCancellation(cmd)
 			var stdout, stderr bytes.Buffer
 			cmd.Stdout = &stdout
 			cmd.Stderr = &stderr
@@ -126,7 +137,7 @@ func newFileReadTool() *realTool {
 	return &realTool{
 		name: "file_read",
 		desc: "Read the contents of a file. Input: file path (absolute or relative). Returns file contents (trimmed to 16KB).",
-		fn: func(input string) string {
+		fnCtx: func(parent context.Context, input string) string {
 			input = strings.TrimSpace(input)
 			data, err := os.ReadFile(input)
 			if err != nil {
@@ -151,7 +162,7 @@ func newFileWriteTool() *realTool {
 	return &realTool{
 		name: "file_write",
 		desc: "Write content to a file. Input format: 'FILEPATH\\nCONTENT' (first line is path, rest is content). Creates parent directories. The path must be a plain file path without spaces or shell metacharacters.",
-		fn: func(input string) string {
+		fnCtx: func(parent context.Context, input string) string {
 			parts := strings.SplitN(input, "\n", 2)
 			if len(parts) < 2 {
 				return "error: input must be 'FILEPATH\\nCONTENT'"
@@ -177,8 +188,8 @@ func newWebSearchTool() *realTool {
 	return &realTool{
 		name: "web_search",
 		desc: "Search the web for information. Input: search query string. Returns top results with titles and URLs.",
-		fn: func(input string) string {
-			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		fnCtx: func(parent context.Context, input string) string {
+			ctx, cancel := context.WithTimeout(parent, 15*time.Second)
 			defer cancel()
 			searchURL := fmt.Sprintf("https://html.duckduckgo.com/html/?q=%s", url.QueryEscape(input))
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, searchURL, nil)
@@ -271,8 +282,8 @@ func newGoBuildTool() *realTool {
 	return &realTool{
 		name: "go_build",
 		desc: "Run 'go build ./...' in the Go project directory. Returns build output or errors.",
-		fn: func(input string) string {
-			ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+		fnCtx: func(parent context.Context, input string) string {
+			ctx, cancel := context.WithTimeout(parent, 120*time.Second)
 			defer cancel()
 			args := strings.Fields(input)
 			if len(args) == 0 {
@@ -298,8 +309,8 @@ func newGoTestTool() *realTool {
 	return &realTool{
 		name: "go_test",
 		desc: "Run 'go test ./...' with verbose output in the Go project directory.",
-		fn: func(input string) string {
-			ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
+		fnCtx: func(parent context.Context, input string) string {
+			ctx, cancel := context.WithTimeout(parent, 300*time.Second)
 			defer cancel()
 			args := strings.Fields(input)
 			if len(args) == 0 {
@@ -307,6 +318,7 @@ func newGoTestTool() *realTool {
 			}
 			cmd := exec.CommandContext(ctx, "go", append([]string{"test"}, args...)...)
 			cmd.Dir = goModuleRoot()
+			bindToolCommandCancellation(cmd)
 			out, err := cmd.CombinedOutput()
 			result := strings.TrimSpace(string(out))
 			if result == "" {
@@ -329,8 +341,8 @@ func newGoVetTool() *realTool {
 	return &realTool{
 		name: "go_vet",
 		desc: "Run 'go vet ./...' for static analysis in the Go project directory.",
-		fn: func(_ string) string {
-			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		fnCtx: func(parent context.Context, _ string) string {
+			ctx, cancel := context.WithTimeout(parent, 60*time.Second)
 			defer cancel()
 			cmd := exec.CommandContext(ctx, "go", "vet", "./...")
 			cmd.Dir = goModuleRoot()
@@ -352,8 +364,8 @@ func newGraphifyTool() *realTool {
 	return &realTool{
 		name: "graphify",
 		desc: "Query or update the code knowledge graph. Input format: 'update' to rebuild, 'query <question>' to search, 'path <A> <B>' for relationships, 'explain <concept>' for details.",
-		fn: func(input string) string {
-			ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+		fnCtx: func(parent context.Context, input string) string {
+			ctx, cancel := context.WithTimeout(parent, 120*time.Second)
 			defer cancel()
 			input = strings.TrimSpace(input)
 			parts := strings.SplitN(input, " ", 2)
@@ -390,6 +402,7 @@ func newGraphifyTool() *realTool {
 			}
 			cmd := exec.CommandContext(ctx, bin, args...)
 			cmd.Dir = goModuleRoot()
+			bindToolCommandCancellation(cmd)
 			out, err := cmd.CombinedOutput()
 			result := strings.TrimSpace(string(out))
 			if len(result) > 8192 {
@@ -408,12 +421,15 @@ func newGraphifyTool() *realTool {
 // Go functions instead of formatting shell commands (which the LLM may fabricate).
 // Each tool execs the real nlm binary and returns its JSON output.
 
-const nlmBin = "/home/nico/.local/bin/nlm"
+const nlmBin = notebooklmauth.CLIPath
 const defaultNotebook = "463ca402-e972-470b-889c-b735e37c6746"
 
 // nlmRun runs an nlm command with the given arguments, with retry and circuit breaker.
-// A var so tests can fake nlm output (same seam pattern as nlmAuthRun).
+// A var so tests can fake nlm output (same seam pattern as nlmAuthEnsure).
 var nlmRun = func(timeout time.Duration, args ...string) string {
+	return nlmRunContext(context.Background(), timeout, args...)
+}
+var nlmRunContext = func(parent context.Context, timeout time.Duration, args ...string) string {
 	const maxRetries = 3
 	const baseDelay = 2 * time.Second
 	const maxDelay = 30 * time.Second
@@ -473,12 +489,17 @@ var nlmRun = func(timeout time.Duration, args ...string) string {
 	for attempt := range maxRetries {
 		if attempt > 0 {
 			delay := min(baseDelay*time.Duration(1<<(attempt-1)), maxDelay)
-			time.Sleep(delay)
+			select {
+			case <-parent.Done():
+				return fmt.Sprintf("nlm cancelled: %v", parent.Err())
+			case <-time.After(delay):
+			}
 		}
 
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
-		cmd := exec.CommandContext(ctx, nlmBin, args...)
+		ctx, cancel := context.WithTimeout(parent, timeout)
+		cmd := notebooklmauth.Command(ctx, args...)
 		cmd.Env = append(os.Environ(), "PATH="+os.Getenv("PATH")+":/home/nico/.local/bin")
+		bindToolCommandCancellation(cmd)
 		var stdout, stderr bytes.Buffer
 		cmd.Stdout = &stdout
 		cmd.Stderr = &stderr
@@ -571,8 +592,8 @@ func newNotebookLMServerInfoTool() *realTool {
 	return &realTool{
 		name: "notebooklm_server_info",
 		desc: "Check NotebookLM authentication status and server version. Takes no input. Returns auth status and version info.",
-		fn: func(input string) string {
-			return nlmRun(30*time.Second, "login", "--check")
+		fnCtx: func(parent context.Context, input string) string {
+			return nlmRunContext(parent, 30*time.Second, "login", "--check")
 		},
 	}
 }
@@ -582,8 +603,8 @@ func newNotebookLMListTool() *realTool {
 	return &realTool{
 		name: "notebooklm_list",
 		desc: "List all NotebookLM notebooks. Takes no input. Returns JSON array of notebooks with id, title, source_count.",
-		fn: func(input string) string {
-			return nlmRun(30*time.Second, "notebook", "list", "--json")
+		fnCtx: func(parent context.Context, input string) string {
+			return nlmRunContext(parent, 30*time.Second, "notebook", "list", "--json")
 		},
 	}
 }
@@ -594,12 +615,12 @@ func newNotebookLMGetTool() *realTool {
 	return &realTool{
 		name: "notebooklm_notebook_get",
 		desc: "Get notebook details: id, title, source_count, and source list. Input: notebook UUID (or empty for default BT Platform Research notebook 463ca402-e972-470b-889c-b735e37c6746). Returns JSON.",
-		fn: func(input string) string {
+		fnCtx: func(parent context.Context, input string) string {
 			id := strings.TrimSpace(input)
 			if id == "" {
 				id = defaultNotebook
 			}
-			return nlmRun(30*time.Second, "notebook", "get", id, "--json")
+			return nlmRunContext(parent, 30*time.Second, "notebook", "get", id, "--json")
 		},
 	}
 }
@@ -610,7 +631,7 @@ func newNotebookLMResearchStartTool() *realTool {
 	return &realTool{
 		name: "notebooklm_research_start",
 		desc: `Start NotebookLM web evolution. Input: "notebook_id|query|mode|source" (e.g. "463ca402-...|latest AI research|fast|web"). Mode: fast (~30s) or deep (~5min). Source: web or drive. Returns task_id.`,
-		fn: func(input string) string {
+		fnCtx: func(parent context.Context, input string) string {
 			parts := strings.SplitN(strings.TrimSpace(input), "|", 4)
 			nbID := defaultNotebook
 			query := input
@@ -628,7 +649,7 @@ func newNotebookLMResearchStartTool() *realTool {
 			if len(parts) >= 4 && parts[3] != "" {
 				source = parts[3]
 			}
-			return nlmRun(30*time.Second,
+			return nlmRunContext(parent, 30*time.Second,
 				"research", "start", query,
 				"--notebook-id", nbID,
 				"--mode", mode,
@@ -644,7 +665,7 @@ func newNotebookLMResearchStatusTool() *realTool {
 	return &realTool{
 		name: "notebooklm_research_status",
 		desc: "Poll research progress. Input: \"notebook_id|task_id\" (or just task_id). Returns status and discovered sources when complete. Use --max-wait 300.",
-		fn: func(input string) string {
+		fnCtx: func(parent context.Context, input string) string {
 			parts := strings.SplitN(strings.TrimSpace(input), "|", 2)
 			nbID := defaultNotebook
 			taskID := input
@@ -652,7 +673,7 @@ func newNotebookLMResearchStatusTool() *realTool {
 				nbID = parts[0]
 				taskID = parts[1]
 			}
-			return nlmRun(360*time.Second,
+			return nlmRunContext(parent, 360*time.Second,
 				"research", "status", nbID,
 				"--task-id", taskID,
 				"--compact",
@@ -668,7 +689,7 @@ func newNotebookLMResearchImportTool() *realTool {
 	return &realTool{
 		name: "notebooklm_research_import",
 		desc: `Import discovered sources into notebook. Input: "notebook_id|task_id|cited_only" (cited_only: true/false). Import ALL if cited_only=false. Returns imported count and source IDs.`,
-		fn: func(input string) string {
+		fnCtx: func(parent context.Context, input string) string {
 			parts := strings.SplitN(strings.TrimSpace(input), "|", 3)
 			if len(parts) < 2 {
 				return `{"error": "input must be notebook_id|task_id[|cited_only]"}`
@@ -680,7 +701,7 @@ func newNotebookLMResearchImportTool() *realTool {
 			if citedOnly {
 				args = append(args, "--cited-only")
 			}
-			return nlmRun(300*time.Second, args...)
+			return nlmRunContext(parent, 300*time.Second, args...)
 		},
 	}
 }
@@ -691,7 +712,7 @@ func newNotebookLMQueryTool() *realTool {
 	return &realTool{
 		name: "notebooklm_notebook_query",
 		desc: `Ask AI about notebook sources with citations. Input: "notebook_id|question" (or just question for default notebook). Returns citation-backed answer.`,
-		fn: func(input string) string {
+		fnCtx: func(parent context.Context, input string) string {
 			parts := strings.SplitN(strings.TrimSpace(input), "|", 2)
 			nbID := defaultNotebook
 			question := input
@@ -699,7 +720,7 @@ func newNotebookLMQueryTool() *realTool {
 				nbID = parts[0]
 				question = parts[1]
 			}
-			return nlmRun(180*time.Second,
+			return nlmRunContext(parent, 180*time.Second,
 				"notebook", "query", nbID,
 				question,
 			)
@@ -707,13 +728,13 @@ func newNotebookLMQueryTool() *realTool {
 	}
 }
 
-// newNotebookLMAuthRefreshTool wraps `nlm login`.
+// newNotebookLMAuthRefreshTool shares the daemon/cron background-safe auth policy.
 func newNotebookLMAuthRefreshTool() *realTool {
 	return &realTool{
 		name: "notebooklm_refresh_auth",
-		desc: "Refresh NotebookLM authentication. Call this when server_info shows auth is stale/expired. Takes no input.",
-		fn: func(input string) string {
-			return nlmRun(120*time.Second, "login")
+		desc: "Check saved NotebookLM authentication using the shared cooldown policy. Restores expired auth from an existing browser page; never launches login. Takes no input.",
+		fnCtx: func(parent context.Context, input string) string {
+			return nlmAuthEnsure(parent).String()
 		},
 	}
 }
@@ -725,8 +746,8 @@ func newHTTPGetTool() *realTool {
 	return &realTool{
 		name: "http_get",
 		desc: "Make an HTTP GET request and return response body (truncated to 8KB). Input: URL to fetch.",
-		fn: func(input string) string {
-			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		fnCtx: func(parent context.Context, input string) string {
+			ctx, cancel := context.WithTimeout(parent, 15*time.Second)
 			defer cancel()
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimSpace(input), nil)
 			if err != nil {
@@ -756,13 +777,14 @@ func newCalculatorTool() *realTool {
 	return &realTool{
 		name: "calculator",
 		desc: "Perform mathematical calculations. Input: arithmetic expression (e.g., '2+3*4', 'sqrt(16)'). Supports +-*/^ and basic functions.",
-		fn: func(input string) string {
+		fnCtx: func(parent context.Context, input string) string {
 			input = strings.TrimSpace(input)
 			// Use bc for calculation
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			ctx, cancel := context.WithTimeout(parent, 5*time.Second)
 			defer cancel()
 			cmd := exec.CommandContext(ctx, "bash", "-c",
 				fmt.Sprintf("echo 'scale=6; %s' | bc -l 2>&1", input))
+			bindToolCommandCancellation(cmd)
 			out, err := cmd.CombinedOutput()
 			if err != nil {
 				return fmt.Sprintf("calculator error: %v (%s)", err, strings.TrimSpace(string(out)))

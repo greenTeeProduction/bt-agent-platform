@@ -8,15 +8,6 @@ import (
 	"time"
 )
 
-func init() {
-	// CI sets BT_SKIP_LLM_TESTS=1 without Ollama; treat hosts as reachable so
-	// unrelated CheckRuntime tests are not failed by connectivity warnings.
-	if os.Getenv("BT_SKIP_LLM_TESTS") == "1" {
-		ollamaChecker = func(string) bool { return true }
-		deepseekChecker = func(string) bool { return true }
-	}
-}
-
 func TestLoad_Defaults(t *testing.T) {
 	// Unset any env vars that might interfere
 	os.Unsetenv("BT_DASHBOARD_PORT")
@@ -1227,8 +1218,12 @@ func TestCheckRuntime_TLSFilesExist(t *testing.T) {
 	tmp := t.TempDir()
 	certPath := filepath.Join(tmp, "cert.pem")
 	keyPath := filepath.Join(tmp, "key.pem")
-	_ = os.WriteFile(certPath, []byte("fake-cert"), 0644)
-	_ = os.WriteFile(keyPath, []byte("fake-key"), 0644)
+	if err := os.WriteFile(certPath, []byte("fake-cert"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keyPath, []byte("fake-key"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	c := newDefaultConfig()
 	c.TLSCert = certPath
@@ -1256,7 +1251,9 @@ func TestCheckRuntime_DirExists(t *testing.T) {
 func TestCheckRuntime_DirIsFile(t *testing.T) {
 	tmp := t.TempDir()
 	filePath := filepath.Join(tmp, "notadir.txt")
-	_ = os.WriteFile(filePath, []byte("data"), 0644)
+	if err := os.WriteFile(filePath, []byte("data"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	c := newDefaultConfig()
 	c.ReflectionsDir = filePath
@@ -1500,7 +1497,9 @@ func TestCheckRuntime_MultipleIssues(t *testing.T) {
 	c.TLSCert = filepath.Join(tmp, "missing.pem")
 	c.TLSKey = filepath.Join(tmp, "also-missing.pem")
 	c.ReflectionsDir = filepath.Join(tmp, "notadir.txt")
-	_ = os.WriteFile(c.ReflectionsDir, []byte("data"), 0644)
+	if err := os.WriteFile(c.ReflectionsDir, []byte("data"), 0644); err != nil {
+		t.Fatal(err)
+	}
 	c.AgentDefsDir = "/nonexistent/parent/subdir"
 	c.ConfigFile = filepath.Join(tmp, "nosuch.json")
 
@@ -1517,7 +1516,9 @@ func TestCheckRuntime_CreatedDir_Valid(t *testing.T) {
 	// A newly-created temp dir should be valid.
 	tmp := t.TempDir()
 	subdir := filepath.Join(tmp, "subdir")
-	_ = os.Mkdir(subdir, 0755)
+	if err := os.Mkdir(subdir, 0755); err != nil {
+		t.Fatal(err)
+	}
 
 	c := newDefaultConfig()
 	c.ReflectionsDir = subdir
@@ -1532,8 +1533,12 @@ func TestCheckRuntime_TLSBothFilesOk(t *testing.T) {
 	tmp := t.TempDir()
 	certPath := filepath.Join(tmp, "cert.pem")
 	keyPath := filepath.Join(tmp, "key.pem")
-	_ = os.WriteFile(certPath, []byte("cert"), 0644)
-	_ = os.WriteFile(keyPath, []byte("key"), 0644)
+	if err := os.WriteFile(certPath, []byte("cert"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keyPath, []byte("key"), 0644); err != nil {
+		t.Fatal(err)
+	}
 
 	c := newDefaultConfig()
 	c.TLSCert = certPath

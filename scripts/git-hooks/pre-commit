@@ -129,9 +129,13 @@ else
     fi
 fi
 
+# Git hook repository overrides must not escape into subprocess test fixtures.
+TEST_ENV=(env)
+while IFS= read -r key; do TEST_ENV+=(-u "$key"); done < <(compgen -e | grep '^GIT_' || true)
+
 # 7. Fast tests (no race — CI runs full -race; gardener skipped — known timeout)
 echo "→ go test -short..."
-if ! $GO test -short -count=1 -timeout 120s $($GO list ./... | grep -v gardener) 2>&1; then
+if ! "${TEST_ENV[@]}" $GO test -short -count=1 -timeout 120s $($GO list ./... | grep -v gardener) 2>&1; then
     echo "✗ Tests failed. Fix before committing."
     exit 1
 fi

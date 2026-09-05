@@ -1,6 +1,7 @@
 package blackboard
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -22,6 +23,8 @@ func (m *Manager) EnablePersistence(baseDir string) error {
 	if baseDir == "" {
 		return fmt.Errorf("blackboard persist dir required")
 	}
+	m.operations.Lock()
+	defer m.operations.Unlock()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if err := os.MkdirAll(filepath.Join(baseDir, "session"), 0o755); err != nil {
@@ -43,7 +46,7 @@ func (m *Manager) persistFile(scope Scope) string {
 		return ""
 	}
 	sub := string(scope.Kind)
-	return filepath.Join(m.persistDir, sub, safeFilename(scope.ID)+".json")
+	return filepath.Join(m.persistDir, sub, "v2."+base64.RawURLEncoding.EncodeToString([]byte(scope.ID))+".json")
 }
 
 func loadScopeFile(path string, s *scopedStore) error {
@@ -57,9 +60,6 @@ func loadScopeFile(path string, s *scopedStore) error {
 	var file scopeFile
 	if err := json.Unmarshal(data, &file); err != nil {
 		return err
-	}
-	if len(file.Entries) == 0 {
-		return nil
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -95,8 +95,17 @@ func (m *Manager) persistScope(scope Scope, s *scopedStore) error {
 	if err != nil {
 		return err
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	f, err := os.CreateTemp(filepath.Dir(path), ".scope-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	defer os.Remove(tmp)
+	if _, err = f.Write(data); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
 		return err
 	}
 	return os.Rename(tmp, path)
@@ -147,8 +156,32 @@ func (m *Manager) ListPersistedScopeIDs(kind ScopeKind) ([]string, error) {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
 			continue
 		}
-		out = append(out, strings.TrimSuffix(e.Name(), ".json"))
+		id := strings.TrimSuffix(e.Name(), ".json")
+		if encoded, ok := strings.CutPrefix(id, "v2."); ok {
+			decoded, err := base64.RawURLEncoding.DecodeString(encoded)
+			if err != nil {
+				return nil, err
+			}
+			id = string(decoded)
+		}
+		out = append(out, id)
 	}
 	slices.Sort(out)
-	return out, nil
+	return slices.Compact(out), nil
+}
+
+// Legacy filenames can be attributed safely only to IDs the old encoder left
+// unchanged. Ambiguous lossy IDs must never silently inherit another scope.
+func (m *Manager) loadScope(scope Scope, s *scopedStore) error {
+	path := m.persistFile(scope)
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		legacy := filepath.Join(m.persistDir, string(scope.Kind), safeFilename(scope.ID)+".json")
+		if _, legacyErr := os.Stat(legacy); legacyErr == nil {
+			if safeFilename(scope.ID) != scope.ID || strings.Contains(scope.ID, "_") {
+				return fmt.Errorf("legacy scope %q is ambiguous; explicit migration required", scope.ID)
+			}
+			return loadScopeFile(legacy, s)
+		}
+	}
+	return loadScopeFile(path, s)
 }

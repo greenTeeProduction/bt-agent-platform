@@ -14,6 +14,7 @@
 | [`agent`](#package-agent) | 1,400+ | 77% | Agent definitions (YAML), registry, scheduler, history, catalog |
 | [`reliability`](#package-reliability) | 2,000+ | 87% | Circuit breaker, backoff, DLQ, worker pool, queues, executor |
 | [`mcp`](#package-mcp) | 500+ | 88% | JSON-RPC 2.0 stdio MCP server, concurrent dispatch |
+| [`notebooklmauth`](#package-notebooklmauth) | — | — | Existing-session NotebookLM recovery, no-launch CLI adapter, cross-process cooldown |
 | [`security`](#package-security) | 580+ | 92% | Rate limiter, sanitization, IP filter, audit, request IDs |
 | [`config`](#package-config) | 540+ | 94% | Env-based config, JSON file support, hot-reload watcher |
 | [`metrics`](#package-metrics) | 200+ | 92% | Prometheus Counter/Gauge/Histogram, middleware |
@@ -555,6 +556,12 @@ func (cw *ConfigWatcher) Stop()
 ```
 
 ---
+
+## Package: notebooklmauth
+
+`github.com/nico/go-bt-evolve/internal/notebooklmauth`
+
+Shared unattended NotebookLM authentication policy. `Ensure(ctx)` checks saved authentication, classifies network failures separately, coordinates cross-process cooldown, and restores only from an existing recognized Chromium CDP page. Candidate credentials are validated before saving; background GUI login and tab creation are forbidden. `Command(ctx, args...)` runs the guarded installed CLI adapter. The `bt-notebooklm-auth` binary exposes the same policy to cron. See `internal/notebooklmauth/README.md` for deployment settings and the pinned CLI dependency.
 
 ## Package: security
 

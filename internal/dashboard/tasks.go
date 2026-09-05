@@ -118,6 +118,11 @@ func (s *TaskStore) Get(id string) (Task, bool) {
 func (s *TaskStore) Create(task Task) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	for _, existing := range s.Tasks {
+		if existing.ID == task.ID {
+			return fmt.Errorf("task %s already exists", task.ID)
+		}
+	}
 	task.CreatedAt = time.Now().Format(time.RFC3339)
 	if task.Status == "" {
 		task.Status = "pending"
@@ -126,7 +131,11 @@ func (s *TaskStore) Create(task Task) error {
 		task.Sprint = 1
 	}
 	s.Tasks = append(s.Tasks, task)
-	return s.saveLocked()
+	if err := s.saveLocked(); err != nil {
+		s.Tasks = s.Tasks[:len(s.Tasks)-1]
+		return err
+	}
+	return nil
 }
 
 func (s *TaskStore) UpdateStatus(id, status string) error {
@@ -150,6 +159,12 @@ func (s *TaskStore) Approve(id, approver string) error {
 	defer s.mu.Unlock()
 	for i := range s.Tasks {
 		if s.Tasks[i].ID == id {
+			switch s.Tasks[i].Status {
+			case "approved":
+				return nil
+			case "in_progress", "completed":
+				return fmt.Errorf("task %s is already %s", id, s.Tasks[i].Status)
+			}
 			now := time.Now()
 			s.Tasks[i].Status = "approved"
 			s.Tasks[i].Approval = Approval{
@@ -254,4 +269,29 @@ func (s *TaskStore) Approved() []Task {
 		)
 	})
 	return out
+}
+
+// ClaimApproved atomically persists admission before any task can execute.
+// Failed persistence restores the prior state and returns no claimed tasks.
+func (s *TaskStore) ClaimApproved() ([]Task, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	before := slices.Clone(s.Tasks)
+	var out []Task
+	for i := range s.Tasks {
+		if s.Tasks[i].Status == "approved" {
+			out = append(out, s.Tasks[i])
+			s.Tasks[i].Status = "in_progress"
+		}
+	}
+	if len(out) > 0 {
+		if err := s.saveLocked(); err != nil {
+			s.Tasks = before
+			return nil, err
+		}
+	}
+	slices.SortStableFunc(out, func(a, b Task) int {
+		return cmp.Or(cmp.Compare(priorityRank(a.Priority), priorityRank(b.Priority)), cmp.Compare(a.Sprint, b.Sprint))
+	})
+	return out, nil
 }

@@ -15,6 +15,7 @@ package security
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
 	"net/http"
@@ -334,7 +335,7 @@ func (ss *SessionStore) SessionMiddleware(apiKey string, checkAPIKey func(key st
 						next(w, r)
 						return
 					}
-				} else if provided == apiKey {
+				} else if MatchAPIKey(provided, apiKey) {
 					next(w, r)
 					return
 				}
@@ -345,4 +346,14 @@ func (ss *SessionStore) SessionMiddleware(apiKey string, checkAPIKey func(key st
 			fmt.Fprintf(w, `{"error":"unauthorized: valid session cookie or X-API-Key header required"}`)
 		}
 	}
+}
+
+// MatchAPIKey rejects an unconfigured key and compares API-key bytes without
+// data-dependent comparisons. As with crypto/subtle, unequal lengths fail early;
+// this helper verifies a shared API key and does not store password hashes.
+func MatchAPIKey(provided, expected string) bool {
+	if expected == "" {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(provided), []byte(expected)) == 1
 }

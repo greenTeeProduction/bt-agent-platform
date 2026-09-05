@@ -270,8 +270,14 @@ func TestBuildTree_UnknownType(t *testing.T) {
 // ─── Blackboard ───
 
 func TestBlackboard_AllFields(t *testing.T) {
-	store, _ := evolution.NewTreeStore("/tmp/test-trees")
-	refStore, _ := evolution.NewStore("/tmp/test-reflections")
+	store, err := evolution.NewTreeStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	refStore, err := evolution.NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
 	bb := &Blackboard{
 		Task: "task", Complexity: "medium", Plan: "plan", Result: "result",
 		Outcome: "success", KgResults: "kg", CachedResult: "cached",
@@ -291,8 +297,13 @@ func TestBlackboard_AllFields(t *testing.T) {
 
 func TestTree_SerializeRoundtrip(t *testing.T) {
 	original := evolution.DefaultTree()
-	store, _ := evolution.NewTreeStore("/tmp/test-trees")
-	_ = store.Save(original)
+	store, err := evolution.NewTreeStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Save(original); err != nil {
+		t.Fatal(err)
+	}
 	loaded, err := store.Load()
 	if err != nil || loaded == nil || loaded.Name != original.Name {
 		t.Error("serialize roundtrip failed")

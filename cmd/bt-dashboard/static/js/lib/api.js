@@ -33,6 +33,7 @@ async function apiFetch(path, opts = {}, retries = 2) {
   
   // Auto-inject CSRF token for state-changing requests
   const method = (opts.method || 'GET').toUpperCase();
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(method) && !opts.headers?.['Idempotency-Key']) retries = 0;
   if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
     opts.headers = opts.headers || {};
     const csrfToken = getCookie('_csrf_token');
@@ -73,3 +74,10 @@ function sleep(ms) {
 /* Expose globally */
 window.apiFetch = apiFetch;
 window.apiFetchRaw = apiFetchRaw;
+
+async function apiPost(path, body = {}) {
+  const headers = {'Content-Type': 'application/json'};
+  if (path === '/sprint/execute') headers['Idempotency-Key'] = crypto.randomUUID();
+  return apiFetch(path, {method: 'POST', headers, body: JSON.stringify(body)});
+}
+window.apiPost = apiPost;

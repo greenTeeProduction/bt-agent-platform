@@ -440,8 +440,8 @@ func TestResponseCapture_Write(t *testing.T) {
 	if rc.Status() != 200 {
 		t.Errorf("default status should be 200, got %d", rc.Status())
 	}
-	if rc.body.Len() != 0 {
-		t.Errorf("non-JSON body should not be captured, got %d bytes", rc.body.Len())
+	if rc.body.String() != "hello" {
+		t.Errorf("complete body should be captured, got %q", rc.body.String())
 	}
 }
 
@@ -459,7 +459,7 @@ func TestResponseCapture_CapturesJSON(t *testing.T) {
 	}
 }
 
-func TestResponseCapture_OnlyFirstJSONChunk(t *testing.T) {
+func TestResponseCapture_CompleteJSONChunks(t *testing.T) {
 	w := httptest.NewRecorder()
 	rc := &responseCapture{ResponseWriter: w}
 
@@ -467,8 +467,8 @@ func TestResponseCapture_OnlyFirstJSONChunk(t *testing.T) {
 	_, _ = rc.Write([]byte(`{"key":`))
 	_, _ = rc.Write([]byte(`"value"}`))
 
-	if rc.body.String() != `{"key":` {
-		t.Errorf("only first chunk captured: got %q", rc.body.String())
+	if rc.body.String() != `{"key":"value"}` {
+		t.Errorf("complete JSON should be captured: got %q", rc.body.String())
 	}
 	if w.Body.String() != `{"key":"value"}` {
 		t.Errorf("full body should pass through: got %q", w.Body.String())

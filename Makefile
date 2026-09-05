@@ -6,7 +6,7 @@ GOFMT := /usr/local/go/bin/gofmt
 CHECK := ./scripts/check.sh
 
 # Build all binaries
-BINARIES := bt-agent bt-evaluator bt-langagent bt-dashboard bt-gardener bt-agent-cli bt-security-probe bt-ci-doctor bt-tree-integration benchcmp bt-scalability-probe
+BINARIES := bt-agent bt-notebooklm-auth bt-evaluator bt-langagent bt-dashboard bt-gardener bt-agent-cli bt-security-probe bt-ci-doctor bt-tree-integration benchcmp bt-scalability-probe
 BIN_DIR := bin
 
 all: build

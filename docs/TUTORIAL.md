@@ -1,7 +1,7 @@
 # Go BT Platform — Interactive Tutorial
 
 > **Estimated time:** 30-45 minutes
-> **Prerequisites:** Go 1.23+, git, a terminal
+> **Prerequisites:** Go 1.26.5+, git, a terminal
 
 This hands-on tutorial walks you through building, running, and extending the Go
 Behavior Tree platform. By the end, you'll have:
@@ -35,7 +35,7 @@ cd go-bt-evolve
 go version
 ```
 
-**Expected:** `go version go1.23.x linux/arm64` (or amd64). 1.23+ required.
+**Expected:** `go version go1.26.5 linux/arm64` (or amd64). 1.26.5+ required.
 
 ### 1.3 Download dependencies
 
@@ -503,7 +503,7 @@ go test -short -count=1 -timeout 30s ./internal/engine/
 ### "Failed to build"
 ```bash
 # Verify Go version
-go version  # must be 1.23+
+go version  # must be 1.26.5+
 
 # Clean and rebuild
 go clean -cache

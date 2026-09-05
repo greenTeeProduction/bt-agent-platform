@@ -174,8 +174,9 @@ func (e *BTAgentExecutor) Execute(ctx context.Context, execCtx *a2asrv.ExecutorC
 		// Execute
 		engine.Info("A2A executing agent", "agent", agentName, "tree_name", tree.Name, "tree_type", tree.Type)
 		bb := &engine.Blackboard{
-			Task: taskText,
-			LLM:  e.LLM,
+			Task:         taskText,
+			TraceContext: ctx,
+			LLM:          e.LLM,
 		}
 		bt := engine.BuildTree(tree, bb)
 		startTime := time.Now()
@@ -438,7 +439,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/agents/", s.handleAgentEndpoint)
 	mux.HandleFunc("/health", s.handleHealth)
 
-	return mux
+	return security.SanitizeMiddleware(1 << 20)(mux)
 }
 
 // Start begins listening on the configured port.
@@ -447,10 +448,7 @@ func (s *Server) Start() error {
 	if err != nil {
 		return err
 	}
-	s.httpSrv = &http.Server{
-		Addr:    addr,
-		Handler: s.Handler(),
-	}
+	s.httpSrv = security.NewHTTPServer(addr, s.Handler())
 
 	slog.Info("a2a: starting A2A server", "addr", addr)
 	return s.httpSrv.ListenAndServe()
@@ -460,13 +458,10 @@ func (s *Server) Start() error {
 func (s *Server) handleGlobalAgentCard(w http.ResponseWriter, _ *http.Request) {
 	card := &a2a.AgentCard{
 		Name:               "BT Agent Platform",
-		Description:        "Go behavior tree agent platform — 41+ trees across 7 domains",
+		Description:        "Agent directory; discover agents at /agents/ and use each agent card for its authenticated RPC endpoint.",
 		Version:            "1.0.0",
 		DefaultInputModes:  []string{"text/plain", "application/json"},
 		DefaultOutputModes: []string{"text/plain", "application/json", "text/markdown"},
-		SupportedInterfaces: []*a2a.AgentInterface{
-			a2a.NewAgentInterface(s.BaseURL, a2a.TransportProtocolJSONRPC),
-		},
 	}
 
 	for _, c := range s.cardCacheSnapshot() {

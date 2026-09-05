@@ -109,6 +109,7 @@ func (r *Registry) Create(def Definition) (*Instance, error) {
 	}
 
 	now := time.Now()
+	def = cloneDefinition(def)
 	def.CreatedAt = now
 	def.UpdatedAt = now
 	if def.Version == "" {
@@ -127,7 +128,7 @@ func (r *Registry) Create(def Definition) (*Instance, error) {
 	}
 
 	r.instances[def.Name] = inst
-	return inst, nil
+	return cloneInstance(inst), nil
 }
 
 // Get returns an agent instance by name.
@@ -139,7 +140,7 @@ func (r *Registry) Get(name string) (*Instance, error) {
 	if !ok {
 		return nil, fmt.Errorf("agent %q not found", name)
 	}
-	return inst, nil
+	return cloneInstance(inst), nil
 }
 
 // List returns all agent instances.
@@ -147,7 +148,10 @@ func (r *Registry) List() []*Instance {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	result := slices.Collect(maps.Values(r.instances))
+	result := make([]*Instance, 0, len(r.instances))
+	for _, inst := range r.instances {
+		result = append(result, cloneInstance(inst))
+	}
 	return result
 }
 
@@ -287,4 +291,23 @@ func (r *Registry) loadAll() error {
 		}
 	}
 	return nil
+}
+
+func cloneDefinition(d Definition) Definition {
+	d.Inputs = slices.Clone(d.Inputs)
+	d.Outputs = slices.Clone(d.Outputs)
+	d.Metadata = maps.Clone(d.Metadata)
+	if d.Quality != nil {
+		q := *d.Quality
+		q.RequiredSections = slices.Clone(q.RequiredSections)
+		q.RequiredKeywords = slices.Clone(q.RequiredKeywords)
+		q.BlockedPatterns = slices.Clone(q.BlockedPatterns)
+		d.Quality = &q
+	}
+	return d
+}
+func cloneInstance(inst *Instance) *Instance {
+	cp := *inst
+	cp.Definition = cloneDefinition(inst.Definition)
+	return &cp
 }

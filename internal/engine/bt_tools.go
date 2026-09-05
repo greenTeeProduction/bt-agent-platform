@@ -11,19 +11,28 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 	"time"
 )
 
 // Tool represents a callable tool with name, description, and implementation.
 type Tool struct {
-	name string
-	desc string
-	call func(string) string
+	name    string
+	desc    string
+	call    func(string) string
+	callCtx func(context.Context, string) string
 }
 
-func (t Tool) Name() string        { return t.name }
-func (t Tool) Description() string { return t.desc }
-func (t Tool) Call(input string) string {
+func (t Tool) Name() string             { return t.name }
+func (t Tool) Description() string      { return t.desc }
+func (t Tool) Call(input string) string { return t.CallContext(context.Background(), input) }
+func (t Tool) CallContext(ctx context.Context, input string) string {
+	if err := ctx.Err(); err != nil {
+		return fmt.Sprintf("tool cancelled: %v", err)
+	}
+	if t.callCtx != nil {
+		return t.callCtx(ctx, input)
+	}
 	if t.call != nil {
 		return t.call(input)
 	}
@@ -36,11 +45,12 @@ func ShellExec() Tool {
 	return Tool{
 		name: "shell_exec",
 		desc: "Execute a shell command and return its stdout/stderr. Use for: checking processes (ps), disk (df), memory (free), files (ls), network (ss), system inspection.",
-		call: func(input string) string {
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		callCtx: func(parent context.Context, input string) string {
+			ctx, cancel := context.WithTimeout(parent, 30*time.Second)
 			defer cancel()
 
 			cmd := exec.CommandContext(ctx, "bash", "-c", input)
+			bindToolCommandCancellation(cmd)
 			var stdout, stderr bytes.Buffer
 			cmd.Stdout = &stdout
 			cmd.Stderr = &stderr
@@ -73,9 +83,13 @@ func HTTPGet() Tool {
 	return Tool{
 		name: "http_get",
 		desc: "Make an HTTP GET request to a URL and return the response body. Use for: health checks, API calls, fetching data from local services.",
-		call: func(input string) string {
+		callCtx: func(parent context.Context, input string) string {
 			client := &http.Client{Timeout: 15 * time.Second}
-			resp, err := client.Get(strings.TrimSpace(input))
+			req, err := http.NewRequestWithContext(parent, http.MethodGet, strings.TrimSpace(input), nil)
+			if err != nil {
+				return fmt.Sprintf("HTTP GET failed: %v", err)
+			}
+			resp, err := client.Do(req)
 			if err != nil {
 				return fmt.Sprintf("HTTP GET failed: %v", err)
 			}
@@ -96,12 +110,13 @@ func ProcessCheck() Tool {
 	return Tool{
 		name: "process_check",
 		desc: "Check if a process is running and return its PID, CPU%, memory. Input: process name or pattern (e.g., 'bt-agent', 'python').",
-		call: func(input string) string {
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		callCtx: func(parent context.Context, input string) string {
+			ctx, cancel := context.WithTimeout(parent, 5*time.Second)
 			defer cancel()
 
 			cmd := exec.CommandContext(ctx, "bash", "-c",
 				fmt.Sprintf("ps aux | grep -v grep | grep -i '%s' || echo 'NOT RUNNING'", input))
+			bindToolCommandCancellation(cmd)
 			out, err := cmd.Output()
 			if err != nil {
 				return fmt.Sprintf("process check failed: %v", err)
@@ -121,8 +136,8 @@ func DiskUsage() Tool {
 	return Tool{
 		name: "disk_usage",
 		desc: "Check disk usage and free space. Input: mount point (e.g., '/', '/mnt/ssd') or 'all' for all mounts.",
-		call: func(input string) string {
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		callCtx: func(parent context.Context, input string) string {
+			ctx, cancel := context.WithTimeout(parent, 5*time.Second)
 			defer cancel()
 
 			args := []string{"-h"}
@@ -131,6 +146,7 @@ func DiskUsage() Tool {
 				args = append(args, input)
 			}
 			cmd := exec.CommandContext(ctx, "df", args...)
+			bindToolCommandCancellation(cmd)
 			out, err := cmd.Output()
 			if err != nil {
 				return fmt.Sprintf("disk check failed: %v", err)
@@ -146,11 +162,12 @@ func MemoryUsage() Tool {
 	return Tool{
 		name: "memory_usage",
 		desc: "Check memory usage and free RAM. Returns total, used, free, available memory and swap.",
-		call: func(_ string) string {
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		callCtx: func(parent context.Context, _ string) string {
+			ctx, cancel := context.WithTimeout(parent, 5*time.Second)
 			defer cancel()
 
 			cmd := exec.CommandContext(ctx, "free", "-h")
+			bindToolCommandCancellation(cmd)
 			out, err := cmd.Output()
 			if err != nil {
 				return fmt.Sprintf("memory check failed: %v", err)
@@ -166,7 +183,7 @@ func FileRead() Tool {
 	return Tool{
 		name: "file_read",
 		desc: "Read a text file and return its contents (limited to 32KB). Input: absolute file path.",
-		call: func(input string) string {
+		callCtx: func(parent context.Context, input string) string {
 			data, err := os.ReadFile(strings.TrimSpace(input))
 			if err != nil {
 				return fmt.Sprintf("file read failed: %v", err)
@@ -217,14 +234,15 @@ func SandboxedShell() Tool {
 	return Tool{
 		name: "shell_exec",
 		desc: "Execute whitelisted shell commands (ps, df, free, ls, ss, curl, grep, wc, head, tail, cat, echo, date, uptime, find, sort, du, pgrep, pidof, stat, test, git log/status/diff, go build/test/vet) and return output. Destructive commands blocked.",
-		call: func(input string) string {
+		callCtx: func(parent context.Context, input string) string {
 			if err := validateShellCommand(input); err != "" {
 				return fmt.Sprintf("BLOCKED: %s", err)
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			ctx, cancel := context.WithTimeout(parent, 30*time.Second)
 			defer cancel()
 
 			cmd := exec.CommandContext(ctx, "bash", "-c", input)
+			bindToolCommandCancellation(cmd)
 			var stdout, stderr bytes.Buffer
 			cmd.Stdout = &stdout
 			cmd.Stderr = &stderr
@@ -367,4 +385,12 @@ func splitPipeline(cmd string) []string {
 		segments = append(segments, current.String())
 	}
 	return segments
+}
+
+// Cancel the shell's process group so descendants cannot keep executing after
+// a losing parallel branch is joined. Bound pipe cleanup as a final backstop.
+func bindToolCommandCancellation(cmd *exec.Cmd) {
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+	cmd.WaitDelay = 100 * time.Millisecond
 }

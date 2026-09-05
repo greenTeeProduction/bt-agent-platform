@@ -225,8 +225,7 @@ function showTaskDetail(id) {
 async function approveTask(id, btn) {
   if (btn) { btn.disabled = true; btn.textContent = '...'; }
   try {
-    const r = await fetch(API + '/tasks/approve?id=' + id);
-    const d = await r.json();
+    const d = await apiPost('/tasks/approve', {id});
     if (d.status === 'approved') {
       if (btn) { btn.textContent = '✓ Approved'; btn.className = 'btn btn-ghost btn-sm'; btn.disabled = false; }
       refreshTasks();
@@ -241,8 +240,7 @@ async function approveTask(id, btn) {
 async function rejectTask(id, btn) {
   if (btn) { btn.disabled = true; btn.textContent = '...'; }
   try {
-    const r = await fetch(API + '/tasks/reject?id=' + id);
-    const d = await r.json();
+    const d = await apiPost('/tasks/reject', {id});
     if (d.status === 'rejected') {
       if (btn) { btn.textContent = '✗ Rejected'; btn.className = 'btn btn-ghost btn-sm'; btn.disabled = false; }
       refreshTasks();
@@ -257,8 +255,7 @@ async function rejectTask(id, btn) {
 async function executeSprint() {
   toast('Sprint started — running...');
   try {
-    const r = await fetch(API + '/sprint/execute');
-    const d = await r.json();
+    const d = await apiPost('/sprint/execute');
     if (d.status === 'sprint_started') {
       toast('Sprint executing — polling for completion');
       pollSprintStatus(0);

@@ -251,7 +251,7 @@ func registerArc42Nodes() {
 		bb := ctx.Blackboard
 		if len(bb.Result) < 100 {
 			bb.Outcome = fmt.Sprintf("validation_failed: section too short (%d chars)", len(bb.Result))
-			return 0 // fail
+			return -1 // fail
 		}
 		if strings.Contains(bb.Result, "<insert") || strings.Contains(bb.Result, "TODO") {
 			bb.Outcome = "validation_warning: contains placeholder text"
@@ -266,14 +266,14 @@ func registerArc42Nodes() {
 		filename, ok := bb.ChainState["arc42_section_file"].(string)
 		if !ok || filename == "" {
 			bb.Outcome = "save_failed: no filename in chain state"
-			return 0
+			return -1
 		}
 		dir := arc42OutputDir()
 		_ = os.MkdirAll(dir, 0755)
 		path := filepath.Join(dir, filename)
 		if err := os.WriteFile(path, []byte(bb.Result), 0644); err != nil {
 			bb.Outcome = fmt.Sprintf("save_failed: %v", err)
-			return 0
+			return -1
 		}
 		bb.Outcome = fmt.Sprintf("saved: %s (%d bytes)", filename, len(bb.Result))
 		return 1
