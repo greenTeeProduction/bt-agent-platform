@@ -1,0 +1,28 @@
+{
+  "name": "bt-agent-platform-master",
+  "version": "1.0.0",
+  "description": "**Behavior-tree-driven AI agent framework** — 41 trees, 7 categories, 3 MCP servers, continuous self-evolution.",
+  "main": "playwright.config.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/greenTeeProduction/bt-agent-platform.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/greenTeeProduction/bt-agent-platform/issues"
+  },
+  "homepage": "https://github.com/greenTeeProduction/bt-agent-platform#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.60.0"
+  }
+}

@@ -1,0 +1,727 @@
+// Package evolution — MCTS-Guided Mutation Engine.
+//
+// Implements the algorithm described in:
+//   - Zheng et al., "MCTS-AHD: Monte Carlo Tree Search for Automated Heuristic
+//     Discovery" (ICML 2025)
+//   - Lu et al., "Empirical-MCTS: Dual-Experience Memory for Evolutionary
+//     Meta-Prompting" (arXiv 2602.04248)
+//
+// Instead of one random mutation (which regresses ~97.3% of the time), MCTS
+// runs K iterations of search, pre-evaluating mutations. Only the "winner"
+// of the MCTS search enters the GA population. The vast majority of regressions
+// are filtered out during the mini-search, not in the main population.
+package evolution
+
+import (
+	"cmp"
+	"encoding/json"
+	"fmt"
+	"math"
+	"math/rand"
+	"slices"
+	"sync"
+)
+
+// ─── MCTSNode ───────────────────────────────────────────────────────────────
+
+// MCTSNode represents one state in the Monte Carlo search tree.
+// Each node corresponds to a tree variant produced by a specific mutation.
+type MCTSNode struct {
+	Tree       *SerializableNode `json:"tree"`
+	Q          float64           `json:"q"`           // cumulative reward (fitness)
+	N          int               `json:"n"`           // visit count
+	Children   []*MCTSNode       `json:"children"`    // child nodes
+	Parent     *MCTSNode         `json:"-"`           // back-pointer (not serialized)
+	MutationOp string            `json:"mutation_op"` // what mutation created this
+	UntriedOps []string          `json:"-"`           // mutation ops not yet tried from this node
+	IsLeaf     bool              `json:"is_leaf"`
+
+	// Mutation is the CONCRETE mutation that produced this node's Tree from its
+	// parent's — MutationOp above is only the operation name, which is not
+	// enough to replay the mutation elsewhere. Candidates needs the resolved
+	// target (and any payload node/metadata) so a search result can leave the
+	// search tree and compete as a standalone MutationOp in evolveTreeV2's
+	// per-candidate benchmark/gate loop. Nil on the root.
+	Mutation *MutationOp `json:"mutation,omitempty"`
+}
+
+// Clone returns a deep copy of this MCTSNode (tree clone, new children slice).
+func (n *MCTSNode) Clone() *MCTSNode {
+	c := &MCTSNode{
+		Tree:       cloneTree(n.Tree),
+		Q:          n.Q,
+		N:          n.N,
+		MutationOp: n.MutationOp,
+		IsLeaf:     n.IsLeaf,
+	}
+	if n.UntriedOps != nil {
+		c.UntriedOps = make([]string, len(n.UntriedOps))
+		copy(c.UntriedOps, n.UntriedOps)
+	}
+	if n.Mutation != nil {
+		mutation := *n.Mutation
+		c.Mutation = &mutation
+	}
+	// Children and Parent are left nil — caller must re-establish linkage.
+	return c
+}
+
+// UCB1 computes the Upper Confidence Bound score for child selection.
+// Returns +inf for unvisited children to guarantee exploration.
+func (n *MCTSNode) UCB1(cExpl float64) float64 {
+	if n.N == 0 {
+		return math.Inf(1)
+	}
+	exploitation := n.Q / float64(n.N)
+	exploration := cExpl * math.Sqrt(math.Log(float64(n.Parent.N))/float64(n.N))
+	return exploitation + exploration
+}
+
+// BestChild returns the child with the highest UCB1 score.
+func (n *MCTSNode) BestChild(cExpl float64) *MCTSNode {
+	if len(n.Children) == 0 {
+		return nil
+	}
+	best := n.Children[0]
+	bestScore := best.UCB1(cExpl)
+	for _, ch := range n.Children[1:] {
+		score := ch.UCB1(cExpl)
+		if score > bestScore {
+			best = ch
+			bestScore = score
+		}
+	}
+	return best
+}
+
+// ─── Mutation Operation Catalog ─────────────────────────────────────────────
+
+// AllMutationOps lists the mutation operations the MCTS expander can try.
+var AllMutationOps = []string{
+	"add_before",
+	"add_after",
+	"add_fallback",
+	"replace_node",
+	"replace_children",
+	"reorder_children",
+	"increase_retries",
+	"prune_node",
+	"increase_iterations",
+	"add_tool",
+}
+
+// ─── MCTSMutator ────────────────────────────────────────────────────────────
+
+// FitnessFunc evaluates a tree and returns a composite fitness score.
+type FitnessFunc func(*SerializableNode) float64
+
+// MCTSMutator uses MCTS to find high-fitness mutation variants of a parent tree.
+// Instead of applying one random mutation, it searches K iterations using
+// SELECT → EXPAND → SIMULATE → BACKPROPAGATE, then returns the best variant found.
+type MCTSMutator struct {
+	Iterations       int         `json:"iterations"`           // K, default 10
+	ExplorationConst float64     `json:"exploration_constant"` // C, default 1.4
+	MaxDepth         int         `json:"max_depth"`            // search depth limit, default 3
+	FitnessEvaluator FitnessFunc `json:"-"`                    // evaluates tree fitness
+	Verbose          bool        `json:"verbose,omitzero"`     // enable logging
+
+	// Experience bank warm-start — optional reference to recent successful mutations
+	WarmStartHints []string `json:"warmstart_hints,omitempty"`
+
+	mu sync.Mutex
+}
+
+// NewMCTSMutator creates an MCTS mutator with sensible defaults.
+// The fitness evaluator must be set separately via SetFitnessEvaluator or
+// passed implicitly through configuration.
+func NewMCTSMutator() *MCTSMutator {
+	return &MCTSMutator{
+		Iterations:       10,
+		ExplorationConst: 1.4,
+		MaxDepth:         3,
+		FitnessEvaluator: nil, // must be set before Mutate() is called
+	}
+}
+
+// SetFitnessEvaluator sets the functio that evaluates tree fitness.
+func (m *MCTSMutator) SetFitnessEvaluator(fn FitnessFunc) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.FitnessEvaluator = fn
+}
+
+// WithConfig returns a copy with overridden parameters.
+func (m *MCTSMutator) WithConfig(iterations int, explorationConst float64, maxDepth int) *MCTSMutator {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return &MCTSMutator{
+		Iterations:       iterations,
+		ExplorationConst: explorationConst,
+		MaxDepth:         maxDepth,
+		FitnessEvaluator: m.FitnessEvaluator,
+		Verbose:          m.Verbose,
+		WarmStartHints:   append([]string{}, m.WarmStartHints...),
+	}
+}
+
+// ─── Core Algorithm ─────────────────────────────────────────────────────────
+
+// Mutate runs the MCTS-guided mutation search and returns the best variant found,
+// along with the name of the winning MutationOp (e.g. "add_before"). The op name
+// is "" when no mutation was applied (e.g. validation rejected the mutated tree).
+// Uses the parent tree as the root state and searches for promising mutations
+// across K iterations. Returns the parent tree (unmutated) if no improvement found.
+func (m *MCTSMutator) Mutate(parent *SerializableNode, parentFitness float64) (*SerializableNode, string) {
+	if parent == nil {
+		return nil, ""
+	}
+
+	m.mu.Lock()
+	fn := m.FitnessEvaluator
+	m.mu.Unlock()
+
+	if fn == nil {
+		// No evaluator configured — fall back to a single random mutation.
+		clone := cloneTree(parent)
+		ops := randomMutation(clone)
+		ApplyMutations(clone, ops)
+		return m.validateOrFallback(clone, parent, firstOpName(ops))
+	}
+
+	// 1. CREATE root node
+	root := &MCTSNode{
+		Tree:       cloneTree(parent),
+		Q:          parentFitness,
+		N:          1,
+		UntriedOps: m.buildMutationOps(parent),
+	}
+
+	bestNode := root
+	bestFitness := parentFitness
+
+	// 2. MAIN LOOP: K iterations
+	for range m.Iterations {
+		// SELECT: traverse using UCB1 until we hit a leaf or an unexpanded node
+		selected := m.selectNode(root, 0)
+
+		// EXPAND: generate a new mutation variant
+		leaf := m.expandNode(selected)
+		if leaf == nil {
+			continue // no new mutations to try from this node
+		}
+
+		// SIMULATE: evaluate the variant's fitness
+		fitness := fn(leaf.Tree)
+
+		// BACKPROPAGATE: update scores up the tree
+		m.backpropagate(leaf, fitness)
+
+		// Track best
+		if fitness > bestFitness {
+			bestFitness = fitness
+			bestNode = leaf
+		}
+	}
+
+	// 3. RETURN the best variant found
+	if bestNode == root || bestNode.Tree == nil {
+		// No improvement found — return a single random mutation as fallback
+		clone := cloneTree(parent)
+		ops := randomMutation(clone)
+		ApplyMutations(clone, ops)
+		return m.validateOrFallback(clone, parent, firstOpName(ops))
+	}
+
+	return m.validateOrFallback(cloneTree(bestNode.Tree), parent, bestNode.MutationOp)
+}
+
+// validateOrFallback validates the tree after mutation. If validation fails,
+// it returns a clean clone of the parent instead — rejecting invalid mutations.
+// opName is only returned alongside a mutation that survived validation; a
+// rejected mutation reports "" since no mutation actually took effect.
+func (m *MCTSMutator) validateOrFallback(mutated, parent *SerializableNode, opName string) (*SerializableNode, string) {
+	errors := mutated.Validate()
+	if len(errors) > 0 {
+		// Reject invalid mutation — return clean parent clone
+		return cloneTree(parent), ""
+	}
+	return mutated, opName
+}
+
+// firstOpName returns the Operation name of the first mutation in ops, or ""
+// if ops is empty.
+func firstOpName(ops []MutationOp) string {
+	if len(ops) == 0 {
+		return ""
+	}
+	return ops[0].Operation
+}
+
+// selectNode traverses from root using UCB1 until reaching an expandable leaf.
+// The maxDepth parameter bounds tree traversal depth for performance.
+func (m *MCTSMutator) selectNode(node *MCTSNode, depth int) *MCTSNode {
+	if node == nil {
+		return nil
+	}
+	// If node has unexpanded ops, it's a leaf for selection purposes
+	if len(node.UntriedOps) > 0 {
+		return node
+	}
+	// If node is a leaf with no children, return it for expansion
+	if len(node.Children) == 0 {
+		return node
+	}
+	// If at max depth, return this node
+	if depth >= m.MaxDepth {
+		return node
+	}
+	// Recurse into best child
+	best := node.BestChild(m.ExplorationConst)
+	if best == nil {
+		return node
+	}
+	return m.selectNode(best, depth+1)
+}
+
+// expandNode picks an untried mutation op and creates a child node.
+// Returns the new child, or nil if no expansion possible.
+func (m *MCTSMutator) expandNode(node *MCTSNode) *MCTSNode {
+	if node == nil {
+		return nil
+	}
+
+	var op string
+	m.mu.Lock()
+	if len(node.UntriedOps) == 0 {
+		m.mu.Unlock()
+		return nil
+	}
+	// Pick a random untried op
+	idx := rand.Intn(len(node.UntriedOps))
+	op = node.UntriedOps[idx]
+	// Remove from untried list
+	node.UntriedOps = append(node.UntriedOps[:idx], node.UntriedOps[idx+1:]...)
+	m.mu.Unlock()
+
+	// Apply mutation to a clone of the node's tree
+	childTree := cloneTree(node.Tree)
+	mutation := m.concreteMutationOp(op, childTree)
+	applied := ApplyMutations(childTree, []MutationOp{mutation})
+	if applied == 0 {
+		return nil // mutation didn't apply cleanly
+	}
+
+	child := &MCTSNode{
+		Tree:       childTree,
+		Q:          0,
+		N:          0,
+		Parent:     node,
+		MutationOp: op,
+		Mutation:   &mutation,
+		UntriedOps: m.buildMutationOps(childTree),
+	}
+
+	m.mu.Lock()
+	node.Children = append(node.Children, child)
+	m.mu.Unlock()
+
+	return child
+}
+
+func (m *MCTSMutator) concreteMutationOp(op string, tree *SerializableNode) MutationOp {
+	target := randomNodeName(tree, tree.Name)
+	unique := fmt.Sprintf("MCTS_%s_%d", op, rand.Intn(1_000_000))
+	switch op {
+	case "add_before", "add_after":
+		return MutationOp{Operation: op, Target: target, Node: &SerializableNode{
+			Type: "Condition", Name: unique, Description: "MCTS candidate guard",
+		}}
+	case "add_fallback":
+		if selector := firstNodeNameByType(tree, "Selector"); selector != "" {
+			target = selector
+		}
+		return MutationOp{Operation: op, Target: target, Node: &SerializableNode{
+			Type: "Action", Name: unique, Description: "MCTS candidate fallback",
+		}}
+	case "increase_iterations", "add_tool", "improve_prompt":
+		if chain := firstNodeNameByType(tree, "ChainAction"); chain != "" {
+			target = chain
+		}
+		if op == "add_tool" {
+			return MutationOp{Operation: op, Target: target, Metadata: map[string]any{"recommended_tool": "file_read"}}
+		}
+		if op == "improve_prompt" {
+			return MutationOp{Operation: op, Target: target, Metadata: map[string]any{"system_msg": "Verify every claim with real tool output. Never fabricate."}}
+		}
+	}
+	return MutationOp{Operation: op, Target: target}
+}
+
+func firstNodeNameByType(tree *SerializableNode, typ string) string {
+	if tree == nil {
+		return ""
+	}
+	if tree.Type == typ && tree.Name != "" {
+		return tree.Name
+	}
+	for i := range tree.Children {
+		if name := firstNodeNameByType(&tree.Children[i], typ); name != "" {
+			return name
+		}
+	}
+	return ""
+}
+
+// backpropagate propagates the fitness reward from the leaf up to the root.
+func (m *MCTSMutator) backpropagate(node *MCTSNode, fitness float64) {
+	for n := node; n != nil; n = n.Parent {
+		n.N++
+		n.Q += fitness
+	}
+}
+
+// buildMutationOps creates the set of mutation operations to try from a given tree.
+// Includes warm-start hints from the experience bank if available.
+func (m *MCTSMutator) buildMutationOps(_ *SerializableNode) []string {
+	ops := slices.Clone(AllMutationOps)
+
+	// Prepend warm-start hints if any
+	if len(m.WarmStartHints) > 0 {
+		// Filter hints to only include valid ops
+		for _, hint := range m.WarmStartHints {
+			if slices.Contains(AllMutationOps, hint) {
+				ops = append([]string{hint}, ops...)
+			}
+		}
+	}
+
+	return ops
+}
+
+// ─── MCTS as a second structural-mutation strategy ──────────────────────────
+//
+// Mutate above collapses a whole search into ONE winning tree, which makes it
+// all-or-nothing: a caller that wants to run each proposal through its own
+// benchmark / pre-score / quality-gate loop (evolveTreeV2) cannot use it at
+// all. Candidates exposes the same search as a list of individually applicable
+// MutationOps scored in the same normalized band the Stockfish-style heuristic
+// ordering (evaluator.OrderMutations) uses, so both generators can be merged
+// into one competition by MergeScoredMutations.
+
+const (
+	// mctsScoreFloor is the exclusive lower bound of the score band shared with
+	// evaluator.OrderMutations. A candidate the search has positive evidence
+	// for must outrank the 0.45 cutoff evolveTreeV2 stops at, so the band
+	// starts above it.
+	mctsScoreFloor = 0.5
+	// mctsScoreSpan maps the best observed fitness gain to the top of the band
+	// (mctsScoreFloor + mctsScoreSpan == 1.0).
+	mctsScoreSpan = 0.5
+	// mctsScoreEpsilon keeps a marginal-but-positive gain strictly inside the
+	// band instead of underflowing onto the floor.
+	mctsScoreEpsilon = 0.005
+	// mctsFullCreditRelativeGain is the fitness gain — as a fraction of the
+	// parent's own fitness — at which the search's best find earns the top of
+	// the band. Without it, normalizing purely against the best gain would hand
+	// every search a 1.0 candidate no matter how marginal the improvement, so
+	// the merged competition would be decided by which generator produced the
+	// candidate rather than by how much evidence backs it.
+	mctsFullCreditRelativeGain = 0.05
+)
+
+// ScoredMutation is a concrete, individually applicable mutation with an
+// ordering score and a human-readable justification — the common currency of
+// the merged structural-mutation competition. It mirrors
+// evaluator.MutationCandidate deliberately: the evaluator package imports
+// evolution (not the other way round), so the shared shape lives here and
+// callers convert at the boundary.
+type ScoredMutation struct {
+	Op     MutationOp `json:"op"`
+	Score  float64    `json:"score"` // higher = try first; (0.5, 1.0] for MCTS output
+	Reason string     `json:"reason"`
+}
+
+// Candidates runs the MCTS search over parent and returns every ROOT-level
+// mutation that beat parentFitness, scored into the (0.5, 1.0] band relative to
+// the best gain observed. Unlike Mutate it does not commit to a single winner:
+// each returned Op applies cleanly to parent on its own, so the caller can
+// benchmark, pre-score and gate them one at a time alongside its own heuristic
+// candidates.
+//
+// Only root-level mutations are returned. Deeper search nodes were mutated on
+// top of an already-mutated tree, so their ops are not replayable against the
+// untouched parent — offering them would hand the caller candidates that
+// silently fail to apply. The deeper search still happens and still informs the
+// UCB1 statistics; it just does not emit candidates.
+//
+// Returns nil for a nil parent, without a fitness evaluator (nothing could
+// score the search), or when no variant beat the parent — an empty result means
+// "the search found no evidence", never "try these unscored guesses". parent is
+// never mutated.
+func (m *MCTSMutator) Candidates(parent *SerializableNode, parentFitness float64) []ScoredMutation {
+	if parent == nil {
+		return nil
+	}
+
+	m.mu.Lock()
+	fn := m.FitnessEvaluator
+	m.mu.Unlock()
+	if fn == nil {
+		return nil
+	}
+
+	root := &MCTSNode{
+		Tree:       cloneTree(parent),
+		Q:          parentFitness,
+		N:          1,
+		UntriedOps: m.buildMutationOps(parent),
+	}
+
+	type improvement struct {
+		op   MutationOp
+		gain float64
+	}
+	best := make(map[string]improvement, len(AllMutationOps))
+	order := make([]string, 0, len(AllMutationOps))
+
+	for range m.Iterations {
+		selected := m.selectNode(root, 0)
+		leaf := m.expandNode(selected)
+		if leaf == nil {
+			continue
+		}
+		fitness := fn(leaf.Tree)
+		m.backpropagate(leaf, fitness)
+
+		if leaf.Parent != root || leaf.Mutation == nil || leaf.Mutation.Target == "" {
+			continue
+		}
+		gain := fitness - parentFitness
+		if gain <= 0 {
+			continue
+		}
+		key := leaf.Mutation.Operation + "\x00" + leaf.Mutation.Target
+		cur, seen := best[key]
+		if !seen {
+			order = append(order, key)
+		}
+		if !seen || gain > cur.gain {
+			best[key] = improvement{op: *leaf.Mutation, gain: gain}
+		}
+	}
+	if len(best) == 0 {
+		return nil
+	}
+
+	maxGain := 0.0
+	for _, imp := range best {
+		if imp.gain > maxGain {
+			maxGain = imp.gain
+		}
+	}
+
+	// strength damps the whole band when even the best find is marginal, so a
+	// +0.0001 search result lands just above the floor instead of at 1.0.
+	// The parent's fitness is floored at 1 so a zero/near-zero baseline cannot
+	// turn any absolute gain into full credit by division.
+	reference := math.Abs(parentFitness)
+	if reference < 1 {
+		reference = 1
+	}
+	strength := maxGain / (mctsFullCreditRelativeGain * reference)
+	if strength > 1 {
+		strength = 1
+	}
+
+	out := make([]ScoredMutation, 0, len(best))
+	for _, key := range order {
+		imp := best[key]
+		score := mctsScoreFloor + mctsScoreSpan*(imp.gain/maxGain)*strength
+		if score < mctsScoreFloor+mctsScoreEpsilon {
+			score = mctsScoreFloor + mctsScoreEpsilon
+		}
+		if score > 1.0 {
+			score = 1.0
+		}
+		out = append(out, ScoredMutation{
+			Op:    imp.op,
+			Score: score,
+			Reason: fmt.Sprintf("mcts search: %s on %q gained %+.4f fitness over the parent in %d iterations",
+				imp.op.Operation, imp.op.Target, imp.gain, m.Iterations),
+		})
+	}
+	slices.SortStableFunc(out, func(a, b ScoredMutation) int {
+		return cmp.Compare(b.Score, a.Score)
+	})
+	return out
+}
+
+// MergeScoredMutations folds the heuristic ordering and the MCTS search output
+// into ONE descending-score competition. Both generators can propose the same
+// op/target; the duplicate collapses to whichever side scored it higher,
+// keeping that side's own Reason so the winning candidate's provenance stays
+// honest. Ties and equal scores preserve heuristic-first order, so an empty
+// mcts side leaves an already-sorted heuristic ordering untouched.
+func MergeScoredMutations(heuristic, mcts []ScoredMutation) []ScoredMutation {
+	if len(heuristic) == 0 && len(mcts) == 0 {
+		return nil
+	}
+
+	merged := make([]ScoredMutation, 0, len(heuristic)+len(mcts))
+	index := make(map[string]int, len(heuristic)+len(mcts))
+	for _, side := range [][]ScoredMutation{heuristic, mcts} {
+		for _, sm := range side {
+			key := sm.Op.Operation + "\x00" + sm.Op.Target
+			if at, ok := index[key]; ok {
+				if sm.Score > merged[at].Score {
+					merged[at] = sm
+				}
+				continue
+			}
+			index[key] = len(merged)
+			merged = append(merged, sm)
+		}
+	}
+
+	slices.SortStableFunc(merged, func(a, b ScoredMutation) int {
+		return cmp.Compare(b.Score, a.Score)
+	})
+	return merged
+}
+
+// StructuralStrategy names which structural-mutation generator(s) a tree gets
+// this cycle.
+type StructuralStrategy string
+
+const (
+	// StrategyHeuristicOnly keeps today's behavior: the Stockfish-style
+	// heuristic ordering is the only source of structural candidates.
+	StrategyHeuristicOnly StructuralStrategy = "heuristic_only"
+	// StrategyMCTSAugmented additionally runs MCTSMutator.Candidates and merges
+	// its proposals into the same competition.
+	StrategyMCTSAugmented StructuralStrategy = "mcts_augmented"
+)
+
+// mctsAugmentationThreshold is the combined-affinity level at or above which
+// the search is worth its extra evaluations.
+const mctsAugmentationThreshold = 0.5
+
+// SelectStructuralStrategy decides, per tree, whether the MCTS search should
+// compete alongside the heuristic ordering. It averages the two independent
+// "how little do we already know about this tree" signals — the specialist
+// registry's archetype knowledge and the Selector optimizer's learned-ordering
+// telemetry — and augments whenever at least half of that combined signal is
+// missing.
+//
+// The rationale is symmetric with what each heuristic already does: a tree
+// whose shape is a proven, preserved specialist archetype AND whose Selectors
+// are fully informed by execution telemetry is exactly the tree where a
+// random-restart search is most likely to spend evaluations breaking something
+// that already works. Everything else — a cold start, an unseen shape, a tree
+// with untelemetered Selectors — earns the search. Nil arguments are treated as
+// "no knowledge", so a caller that has wired neither heuristic gets the search.
+func SelectStructuralStrategy(reg *SpecialistRegistry, so *SelectorOptimizer, tree *SerializableNode) StructuralStrategy {
+	affinity := (reg.MCTSAffinity(tree) + so.MCTSAffinity(tree)) / 2
+	if affinity >= mctsAugmentationThreshold {
+		return StrategyMCTSAugmented
+	}
+	return StrategyHeuristicOnly
+}
+
+// ─── Statistics / Introspection ─────────────────────────────────────────────
+
+// MCTSMetrics captures the result of an MCTS search for inspection/auditing.
+type MCTSMetrics struct {
+	Iterations       int     `json:"iterations"`
+	TotalNodes       int     `json:"total_nodes"`
+	RootFitness      float64 `json:"root_fitness"`
+	BestFitness      float64 `json:"best_fitness"`
+	Improvement      float64 `json:"improvement"`
+	ExplorationConst float64 `json:"exploration_constant"`
+	SearchDepth      int     `json:"search_depth"`
+	NodesExpanded    int     `json:"nodes_expanded"`
+}
+
+// Metrics returns a snapshot of the MCTS tree rooted at the given node.
+func (m *MCTSMutator) Metrics(root *MCTSNode) *MCTSMetrics {
+	if root == nil {
+		return nil
+	}
+	totalNodes := m.countNodes(root)
+	rootFitness := root.Q / float64(maxInt(root.N, 1))
+	bestFitness := rootFitness
+	m.findBest(root, &bestFitness)
+
+	return &MCTSMetrics{
+		Iterations:       m.Iterations,
+		TotalNodes:       totalNodes,
+		RootFitness:      rootFitness,
+		BestFitness:      bestFitness,
+		Improvement:      bestFitness - rootFitness,
+		ExplorationConst: m.ExplorationConst,
+		SearchDepth:      m.treeDepth(root),
+		NodesExpanded:    len(root.Children),
+	}
+}
+
+// countNodes recursively counts all MCTS nodes in the tree.
+func (m *MCTSMutator) countNodes(node *MCTSNode) int {
+	if node == nil {
+		return 0
+	}
+	count := 1
+	for _, ch := range node.Children {
+		count += m.countNodes(ch)
+	}
+	return count
+}
+
+// treeDepth computes the maximum depth of the MCTS tree.
+func (m *MCTSMutator) treeDepth(node *MCTSNode) int {
+	if node == nil || len(node.Children) == 0 {
+		return 0
+	}
+	maxD := 0
+	for _, ch := range node.Children {
+		d := 1 + m.treeDepth(ch)
+		if d > maxD {
+			maxD = d
+		}
+	}
+	return maxD
+}
+
+// findBest traverses the MCTS tree to find the best fitness value.
+func (m *MCTSMutator) findBest(node *MCTSNode, best *float64) {
+	if node == nil {
+		return
+	}
+	if node.N > 0 {
+		f := node.Q / float64(node.N)
+		if f > *best {
+			*best = f
+		}
+	}
+	for _, ch := range node.Children {
+		m.findBest(ch, best)
+	}
+}
+
+// ─── Serialization ──────────────────────────────────────────────────────────
+
+// MarshalJSON serializes the MCTS tree rooted at the given node.
+func MCTSTreeToJSON(root *MCTSNode) ([]byte, error) {
+	return json.MarshalIndent(root, "", "  ")
+}
+
+// ─── Internal helpers ───────────────────────────────────────────────────────
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+// Ensure cloneTree, randomMutation, ApplyMutations, randomNodeName,
+// and CountNodes are accessible (same package).

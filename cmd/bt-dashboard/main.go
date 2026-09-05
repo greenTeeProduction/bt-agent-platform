@@ -1,0 +1,2157 @@
+package main
+
+import (
+	"context"
+	"embed"
+	"encoding/json"
+	"fmt"
+	"io/fs"
+	"log/slog"
+	"maps"
+	"net/http"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/nico/go-bt-evolve/internal/a2a"
+	"github.com/nico/go-bt-evolve/internal/agent"
+	"github.com/nico/go-bt-evolve/internal/agentexec"
+	"github.com/nico/go-bt-evolve/internal/api"
+	"github.com/nico/go-bt-evolve/internal/config"
+	"github.com/nico/go-bt-evolve/internal/dashboard"
+	"github.com/nico/go-bt-evolve/internal/domains"
+	"github.com/nico/go-bt-evolve/internal/doormate"
+	"github.com/nico/go-bt-evolve/internal/engine"
+	"github.com/nico/go-bt-evolve/internal/evolution"
+	"github.com/nico/go-bt-evolve/internal/hitl"
+	"github.com/nico/go-bt-evolve/internal/knowledge"
+	"github.com/nico/go-bt-evolve/internal/llm"
+	"github.com/nico/go-bt-evolve/internal/persona"
+	"github.com/nico/go-bt-evolve/internal/reliability"
+	"github.com/nico/go-bt-evolve/internal/security"
+	"github.com/nico/go-bt-evolve/internal/startup"
+	"github.com/nico/go-bt-evolve/internal/thinktank"
+	"github.com/nico/go-bt-evolve/internal/tracing"
+)
+
+//go:embed static/*
+var staticFS embed.FS
+
+var kg *knowledge.KnowledgeGraph
+var sharedLLM llm.LLM
+var dashAgentRunner *agent.RunDeps
+
+// dashRequestsInFlight counts HTTP requests currently being served. Plugged
+// into agent.DriftWatchConfig.InFlightFn (via dashAnyInFlight) so the
+// deploy-drift AutoRestart wiring below can never SIGTERM the dashboard
+// mid-request, mirroring bt-agent's Scheduler.AnyInFlight guard and
+// gardener.Gardener.AnyInFlight.
+var dashRequestsInFlight atomic.Int64
+
+// dashAnyInFlight reports whether an HTTP request is currently being served.
+func dashAnyInFlight() bool {
+	return dashRequestsInFlight.Load() > 0
+}
+
+// inFlightMiddleware tracks requests for dashAnyInFlight for the full
+// duration each request spends in the handler chain it wraps.
+func inFlightMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		dashRequestsInFlight.Add(1)
+		defer dashRequestsInFlight.Add(-1)
+		next.ServeHTTP(w, r)
+	})
+}
+
+// dashPersonaStore is the shared per-user personalization store, loaded once
+// at startup from agent.UsersDir(). It backs dashboard.PersonaStore/
+// dashboard.AgentRegistry (set from dashAgentRunner.Registry below) so
+// HandleHITL's approve/reject cases can finalize dashboard-surfaced
+// automation proposals and feedback escalations exactly like the MCP
+// bt_hitl_approve/bt_hitl_reject path does (Q4 Personalization & Self-Growth
+// milestone 3/3).
+var dashPersonaStore *persona.Store
+
+// dashCBStore is the shared per-agent circuit breaker store, loaded once at
+// startup from agent.CircuitBreakersFile() so dashboard-dispatched runs honor
+// the same breaker state the scheduler and A2A auction paths already do (see
+// cmd/bt-agent/main.go's buildSchedulerConfig). newAgentExecutor wires it into
+// every AgentExecutor's CBStore field. Access it via getDashCBStore, which
+// creates and loads it on first use (guarded by dashCBStoreOnce) so it is
+// available even to callers that run before or without main()'s startup
+// sequence, such as tests that call newAgentExecutor() directly.
+
+// getDashCBStore returns the shared circuit breaker store, initializing it
+// from dashConfig's CB settings (or defaults, if dashConfig hasn't been
+// loaded yet) and restoring persisted state from agent.CircuitBreakersFile()
+// the first time it is called.
+var getDashCBStore = sync.OnceValue(func() *agent.AgentCircuitBreakerStore {
+	var opts agent.CircuitBreakerOptions
+	if dashConfig != nil {
+		opts.Threshold = dashConfig.CBThreshold
+		opts.Cooldown = time.Duration(dashConfig.CBCooldownSecs) * time.Second
+	}
+	store := agent.NewAgentCircuitBreakerStore(opts)
+	if err := store.Load(agent.CircuitBreakersFile()); err != nil {
+		slog.Warn("dashboard: restore circuit breaker state failed", "path", agent.CircuitBreakersFile(), "err", err)
+	}
+	return store
+})
+
+// dlq is the dead letter queue for failed agent tasks.
+// Persisted to ~/.go-bt-evolve/dead_letter_queue.json.
+var dlq *reliability.DeadLetterQueue
+
+// scalability components: WorkerPool and ConcurrencyLimiter for agent execution.
+var dashWorkerPool *reliability.WorkerPool
+var dashConcurrencyLimiter *reliability.ConcurrencyLimiter
+
+// dashTaskQueue is the pending-task backlog surfaced by /api/scalability.
+// It is fed by in-flight pipeline runs (pipeline_handlers.go) and drained as
+// each run completes, so the endpoint reports real queue depth instead of 0.
+var dashTaskQueue *reliability.TaskQueue
+
+// dashAgentRouter distributes agent execution across the horizontal-scaling
+// substrate. In single-node mode it holds one healthy in-process local
+// executor; RemoteExecutor peers join it when configured. The scalability
+// endpoint reports its executor count and health.
+var dashAgentRouter *reliability.AgentRouter
+
+// dashConfig holds the runtime configuration loaded at startup.
+var dashConfig *config.Config
+
+// sessionStore manages authenticated user sessions (login/logout, cookie-based auth).
+var sessionStore *security.SessionStore
+
+// loginThrottle prevents brute-force password guessing with per-IP exponential backoff.
+var loginThrottle *security.LoginThrottle
+
+// Sprint tracking
+var sprintState = struct {
+	sync.Mutex
+	Running        bool
+	JobID          string
+	StartedAt      time.Time
+	Progress       string
+	TasksTotal     int
+	TasksCompleted int
+	CurrentTask    string
+}{}
+
+// taskStore is the persistent task pipeline.
+var taskStore *dashboard.TaskStore
+
+// companyState holds the startup simulation state.
+var companyState *startup.CompanyState
+
+// currentWorkflow holds the most recently derived thinktank→task Workflow so
+// its own PendingApprovals/ApproveTask/RejectTask gate is reachable over HTTP
+// instead of only existing inside handleAnalyze's local scope.
+//
+// currentWorkflowMu guards every read and write of the currentWorkflow
+// pointer itself (handleAnalyze reassigns it on each new analysis while
+// handleWorkflowPending/Approve/Reject read it concurrently from other
+// requests). It does not need to be held while calling methods on the
+// *Workflow value — Workflow has its own internal mutex guarding Tasks.
+var currentWorkflow *dashboard.Workflow
+var currentWorkflowMu sync.RWMutex
+
+func getHomeDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		home = os.Getenv("HOME")
+	}
+	if home == "" {
+		home = "."
+	}
+	return home
+}
+
+func init() {
+	home := getHomeDir()
+	taskStore = dashboard.NewTaskStore(home + "/.go-bt-evolve/tasks.json")
+	companyState = startup.NewDefaultCompany()
+}
+
+// versionRequested reports whether the process was invoked with a version
+// flag. Used by the deploy-drift restart handoff to smoke-test a freshly
+// rebuilt binary before adopting it (internal/agent/deploy_drift.go).
+func versionRequested() bool {
+	for _, arg := range os.Args[1:] {
+		if arg == "--version" || arg == "-version" || arg == "version" {
+			return true
+		}
+	}
+	return false
+}
+
+// buildDashboardKnowledgeGraph mirrors bt-gardener's config.go and bt-agent's
+// scheduler.go: build the static tree catalog, then overlay persisted runtime
+// feedback from the shared feedback file so dashboard.DiscoverTreeFn and
+// analytics views reflect real Fitness/RunCount data instead of always
+// showing a zero-feedback seed catalog.
+func buildDashboardKnowledgeGraph(path string) *knowledge.KnowledgeGraph {
+	kg := knowledge.BuildKnowledgeGraph()
+	if err := kg.LoadFeedback(path); err != nil {
+		slog.Warn("load knowledge graph feedback", "path", path, "error", err)
+	}
+	// Inject the live domain registry as the expected-domain set, mirroring
+	// cmd/bt-agent's wiring (ADR-182), so knowledge.CoverageGaps audits this
+	// process's own graph against the real registry instead of always
+	// falling back to the always-satisfied defaultExpectedDomains slice.
+	kg.ExpectedDomains = domains.ExpectedDomainIDs(domains.AllDomainTrees())
+	return kg
+}
+
+func main() {
+	// Version fast path: print the stamped build identity and exit before any
+	// engine/store initialization, so the drift smoke test has no side effects.
+	if versionRequested() {
+		id := dashboard.ReadBuildIdentity()
+		fmt.Printf("bt-dashboard revision=%s vcs_time=%s dirty=%v\n", id.Revision, id.CommitTime, id.Dirty)
+		return
+	}
+
+	engine.Init()
+	engine.SetAsDefault()
+
+	port := os.Getenv("BT_DASHBOARD_PORT")
+	if port == "" {
+		port = "9800"
+	}
+
+	// Structured logging
+	slog.Info("BT Dashboard starting", "port", port)
+
+	kg = buildDashboardKnowledgeGraph(agent.FeedbackFile())
+	dashboard.DiscoverTreeFn = kg.Discover
+
+	// NotebookLM research goal: refresh KG analytics gauges from this process's
+	// own in-process knowledge graph on every /api/metrics scrape, instead of
+	// depending on the separate bt-agent process's bt_kg_analytics MCP tool
+	// handler (whose dashboard.RecordKGAnalytics call only ever updates that
+	// other process's own in-memory gauges).
+	dashboard.KGAnalyticsRefreshFn = func() {
+		a := kg.ComputeAnalytics()
+		dashboard.RecordKGAnalytics(len(a.CoverageGaps), len(a.Bottlenecks), len(a.SelectionPressure))
+	}
+
+	// Dead letter queue — persisted alongside other agent state
+	dlqPath := getHomeDir() + "/.go-bt-evolve/dead_letter_queue.json"
+	dlq = reliability.NewDeadLetterQueue(dlqPath)
+	slog.Info("DLQ initialized", "path", dlqPath, "entries", dlq.Len())
+	dashboard.DLQCategoriesFn = dlq.CategoryCounts
+
+	// Deploy-drift watcher (program 94b0b31) — detection-only by default; WARNs
+	// when this binary falls behind repo HEAD. BT_AUTO_REBUILD_ON_DRIFT=1 opts
+	// into out-of-place rebuild+swap.
+	if repoDir, wdErr := os.Getwd(); wdErr == nil {
+		agent.StartDriftWatcher(context.Background(), agent.DriftWatchConfig{
+			RepoDir:         repoDir,
+			RunningRevision: dashboard.ReadBuildIdentity().Revision,
+			AutoRebuild:     agent.AutoRebuildEnabled(),
+			AutoRestart:     agent.AutoRestartEnabled(),
+			Targets:         agent.DashboardRebuildTargets(repoDir),
+			Binary:          "bt-dashboard",
+			Backoff:         agent.NewRebuildBackoff(),
+			InFlightFn:      dashAnyInFlight,
+		}, agent.DefaultDriftCheckInterval)
+	}
+
+	// Scalability components: worker pool and concurrency limiter for agent tasks
+	dashWorkerPool = reliability.NewWorkerPool(4)                 // 4 concurrent agent workers
+	dashConcurrencyLimiter = reliability.NewConcurrencyLimiter(2) // max 2 concurrent LLM-bound agent executions
+
+	// Horizontal-scaling substrate: task queue + agent router. The router starts
+	// with a single in-process local executor (RemoteExecutor peers join it when
+	// configured); the queue tracks pending pipeline work. Both are surfaced by
+	// /api/scalability instead of the former nil/0 placeholders.
+	dashTaskQueue = reliability.NewTaskQueue(getHomeDir() + "/.go-bt-evolve/task_queue.json")
+	dashAgentRouter = reliability.NewAgentRouter(reliability.NewLocalExecutor(
+		"dashboard-local",
+		func(_ context.Context, agentName, task string) (*reliability.AgentResult, error) {
+			res, err := newAgentExecutor().RunTaskResult(agentName, task, "")
+			return dashboardLocalAgentResult(agentName, task, res, err)
+		},
+	))
+	slog.Info("Scalability components initialized",
+		"worker_pool_size", 4,
+		"concurrency_limit", 2,
+		"router_executors", len(dashAgentRouter.Executors()),
+		"queue_pending", dashTaskQueue.Len())
+
+	// ── Tracing (OTel SDK; no-op unless OTEL_EXPORTER_OTLP_ENDPOINT/BT_OTLP_ENDPOINT set) ──
+	tracingShutdown := tracing.InitFromEnv("bt-dashboard")
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = tracingShutdown(ctx)
+	}()
+
+	logShutdown := engine.InitLogExport("bt-dashboard")
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = logShutdown(ctx)
+	}()
+
+	var err error
+	sharedLLM, err = llm.NewClient(llm.DefaultConfig())
+	if err != nil {
+		slog.Warn("Ollama unavailable", "error", err)
+		sharedLLM = nil
+	}
+
+	// Load runtime configuration
+	cfg, cfgErr := config.Load()
+	if cfgErr != nil {
+		slog.Warn("Failed to load config, using defaults", "error", cfgErr)
+		dashConfig = &config.Config{}
+	} else {
+		dashConfig = cfg
+		slog.Info("Configuration loaded", "llm_provider", cfg.LLMProvider, "ollama_model", cfg.OllamaModel)
+	}
+
+	if runner, err := agentexec.NewRunDeps(); err != nil {
+		slog.Warn("In-process agent runner unavailable (pipelines will fail)", "error", err)
+	} else {
+		dashAgentRunner = runner
+		dashboard.AgentRegistry = runner.Registry
+		slog.Info("In-process agent runner initialized")
+
+		// Auction card source (mirrors cmd/bt-agent/main.go's a2a_mod.AuctionCardsFn
+		// = a2aSrv.AuctionCardSource() wiring): the dashboard runs auction_demo
+		// in-process via this same registry (internal/dashboard/executor.go's
+		// PickTreeForTask routes auction-keyword tasks there), and
+		// internal/a2a/auction.go's AuctionDelegate reads the package-level
+		// AuctionCardsFn seam to find candidate bidders. Without this, every
+		// auction-shaped task submitted through the dashboard UI deterministically
+		// finds zero bidders. The base URL is env-overridable and matches
+		// cmd/bt-agent's own resolution so these cards point at the same A2A
+		// endpoints the daemon actually serves.
+		a2aPort := 8686
+		if p := os.Getenv("BT_A2A_PORT"); p != "" {
+			_, _ = fmt.Sscanf(p, "%d", &a2aPort)
+		}
+		a2aBaseURL := fmt.Sprintf("http://localhost:%d", a2aPort)
+		if u := os.Getenv("BT_A2A_BASE_URL"); u != "" {
+			a2aBaseURL = u
+		}
+		a2a.ConfigurePlatformClient(dashboardAPIKey(), a2aBaseURL)
+		a2a.InitEngineDelegate()
+		if a2aSrv, err := a2a.NewServer(runner.Registry, sharedLLM, a2aPort, a2aBaseURL); err != nil {
+			slog.Warn("auction card source unavailable", "error", err)
+		} else {
+			a2a.AuctionCardsFn = a2aSrv.AuctionCardSource()
+			slog.Info("auction card source wired from dashboard's agent registry",
+				"agents", len(a2aSrv.CardCache))
+		}
+	}
+
+	if store, err := persona.NewStore(agent.UsersDir()); err != nil {
+		slog.Warn("Persona store unavailable (HITL finalization will be a no-op)", "error", err)
+	} else {
+		dashPersonaStore = store
+		dashboard.PersonaStore = store
+		slog.Info("Persona store initialized", "path", agent.UsersDir())
+	}
+
+	getDashCBStore()
+	slog.Info("Circuit breaker store initialized", "path", agent.CircuitBreakersFile())
+
+	// Privileged routes require a configured API key or a session established with it.
+	apiKey := dashboardAPIKey()
+
+	// TLS support — set BT_TLS_CERT and BT_TLS_KEY to enable HTTPS
+	tlsCert := os.Getenv("BT_TLS_CERT")
+	tlsKey := os.Getenv("BT_TLS_KEY")
+	tlsEnabled := tlsCert != "" && tlsKey != ""
+
+	// Session store — cookie-based session management with TTL-based expiry.
+	// Sessions are backed by the same API key for password-based login.
+	// CookieSecure matches the resolved TLS configuration.
+	sessionStore = security.NewSessionStore(security.SessionStoreConfig{
+		DefaultTTL:   24 * time.Hour,
+		CookieSecure: tlsEnabled,
+		CookieName:   "bt_session",
+		CookiePath:   "/api",
+		MaxSessions:  100,
+	})
+	slog.Info("Session store initialized", "ttl", "24h", "cookie", "bt_session")
+
+	// Login throttle — per-IP exponential backoff for brute-force protection
+	loginThrottle = security.NewLoginThrottle(security.DefaultLoginThrottleConfig())
+	slog.Info("Login throttle initialized",
+		"lockout_threshold", 20,
+		"lockout_duration", "30m",
+	)
+
+	// HITL — human-in-the-loop approval policy and store
+	config.ApplyHITLPolicy(dashConfig)
+	hitlBase := filepath.Join(getHomeDir(), ".go-bt-evolve")
+	if _, err := hitl.InitStore(hitlBase); err != nil {
+		slog.Warn("HITL store init failed", "error", err)
+	} else {
+		slog.Info("HITL store initialized", "path", hitlBase+"/hitl")
+	}
+
+	// CORS origin: default to wildcard for dev, restrict in production via config
+	corsOrigin := dashConfig.CORSDashboardOrigin
+	if corsOrigin == "" {
+		corsOrigin = "*"
+	}
+	slog.Info("Dashboard CORS origin", "origin", corsOrigin)
+
+	// Rate limiter: 10 req/sec per client, burst 10.
+	// Production tuning: the Jetson ARM64 cannot serve 100 req/s from a single process,
+	// so 10/10 provides meaningful protection against burst abuse while allowing
+	// normal interactive dashboard usage. The security probe sends 25 rapid requests;
+	// with burst 10 and 10 req/s refill, the 20th+ request within the same second
+	// should reliably trigger a 429.
+	rateLimiter := security.NewRateLimiter(10, 10)
+
+	// Security audit buffer: capture security events in-memory for dashboard visibility
+	auditBuffer := security.NewAuditBuffer(200)
+	security.SetGlobalAuditBuffer(auditBuffer)
+
+	mux := dashboardMux(apiKey)
+	sessionAuth := dashboardSessionAuth(apiKey)
+
+	// DoorMate components initialization & registration
+	dmStore, err := doormate.NewStore(filepath.Join(getHomeDir(), ".go-bt-evolve", "doormate"))
+	if err != nil {
+		slog.Error("DoorMate store initialization failed", "error", err)
+	} else {
+		slog.Info("DoorMate store initialized", "path", filepath.Join(getHomeDir(), ".go-bt-evolve", "doormate"))
+		dmAgent := doormate.NewPageAgent(sharedLLM)
+		dmHandler := doormate.NewHandler(dmStore, dmAgent)
+
+		mux.HandleFunc("/api/doormate/intent", sessionAuth(dmHandler.HandleIntent))
+		mux.HandleFunc("/api/doormate/bookmark", sessionAuth(dmHandler.HandleBookmark))
+		mux.HandleFunc("/api/doormate/rate", sessionAuth(dmHandler.HandleRate))
+		mux.HandleFunc("/api/doormate/profile", sessionAuth(dmHandler.HandleProfile))
+	}
+
+	// Security headers — enable HSTS when TLS is active
+	secCfg := security.DefaultSecurityHeaders()
+	if tlsEnabled {
+		secCfg.EnableHSTS = true
+	}
+
+	// Middleware stack: security headers → request ID → tracing → cors → csrf → content_type → sanitize → rate limit → metrics → compression → response validation
+	var handler http.Handler = mux
+	handler = security.SecurityHeadersMiddleware(secCfg)(handler)
+	handler = security.RequestIDMiddleware(handler) // correlation IDs for audit trail
+	handler = tracingMiddleware(handler)            // distributed tracing spans per request
+	handler = security.CrossOriginMiddleware(corsOrigin, "GET, POST, PUT, DELETE, OPTIONS")(handler)
+	handler = security.CSRFMiddleware(nil)(handler)                   // CSRF protection for state-changing requests
+	handler = security.JSONContentTypeMiddleware(handler)             // enforce application/json Content-Type on mutating requests
+	handler = security.SanitizeMiddleware(1 << 20)(handler)           // 1MB body limit + input cleaning
+	handler = security.RateLimitMiddleware(rateLimiter, nil)(handler) // token bucket rate limiting
+	handler = dashboard.MetricsMiddleware(handler)                    // Prometheus metrics collection
+	handler = api.CompressionMiddleware(handler)                      // gzip response compression (70-90% size reduction for JSON/HTML)
+	handler = api.ResponseValidator(api.DashboardRoutes(), &api.ResponseValidatorConfig{
+		Logger: slog.Default(),
+		SkipPaths: map[string]bool{
+			"/api/health":  true, // constant response — no schema drift risk
+			"/api/metrics": true, // Prometheus text format, not JSON
+			"/api/swagger": true, // HTML page, not JSON
+		},
+		Enforce: dashConfig.APIEnforceResponseValidation, // controlled by BT_API_ENFORCE_RESPONSE_VALIDATION env var or config file
+	})(handler)
+	handler = inFlightMiddleware(handler) // tracks dashAnyInFlight for the deploy-drift watcher above
+
+	// Security: enforce TLS. When cert+key are configured via env vars,
+	// serve HTTPS with HSTS enabled. Plain HTTP otherwise (dev mode).
+	addr, err := security.ListenerAddress(os.Getenv("BT_DASHBOARD_BIND"), port, apiKey)
+	if err != nil {
+		slog.Error("Dashboard listener configuration invalid", "error", err)
+		os.Exit(1)
+	}
+	if tlsEnabled {
+		slog.Info("BT Studio Dashboard ready (TLS)", "addr", addr)
+		if err := http.ListenAndServeTLS(addr, tlsCert, tlsKey, handler); err != nil {
+			slog.Error("Dashboard server failed", "error", err)
+			os.Exit(1)
+		}
+	} else {
+		slog.Warn("BT Studio Dashboard ready (HTTP — set BT_TLS_CERT+BT_TLS_KEY for TLS)", "addr", addr)
+		if err := http.ListenAndServe(addr, handler); err != nil {
+			slog.Error("Dashboard server failed", "error", err)
+			os.Exit(1)
+		}
+	}
+}
+
+// tracingResponseWriter wraps http.ResponseWriter to capture the status code
+// for the tracing middleware's http.status_code span attribute.
+type tracingResponseWriter struct {
+	http.ResponseWriter
+	statusCode  int
+	wroteHeader bool
+}
+
+func (rw *tracingResponseWriter) WriteHeader(code int) {
+	if !rw.wroteHeader {
+		rw.statusCode = code
+		rw.wroteHeader = true
+	}
+	rw.ResponseWriter.WriteHeader(code)
+}
+
+func (rw *tracingResponseWriter) Write(b []byte) (int, error) {
+	if !rw.wroteHeader {
+		rw.statusCode = http.StatusOK
+		rw.wroteHeader = true
+	}
+	return rw.ResponseWriter.Write(b)
+}
+
+func (rw *tracingResponseWriter) Flush() {
+	if f, ok := rw.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+var _ http.Flusher = (*tracingResponseWriter)(nil)
+
+// tracingMiddleware creates an OTel span (via the tracing facade, activated
+// by tracing.InitFromEnv at startup) for every HTTP request. If the incoming
+// request carries a W3C traceparent header, the span joins the remote trace
+// as a child — mirroring internal/engine/mcp_server.go's traceparent handling.
+func tracingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		ctx := r.Context()
+		if tp := r.Header.Get("traceparent"); tp != "" {
+			ctx = tracing.ContextWithTraceParentHeader(ctx, tp)
+		}
+
+		ctx, span := tracing.StartSpan(ctx, "http:"+r.Method+" "+r.URL.Path)
+		defer span.End()
+		span.SetAttribute("http.method", r.Method)
+		span.SetAttribute("http.url", r.URL.String())
+
+		rw := &tracingResponseWriter{ResponseWriter: w, statusCode: http.StatusOK}
+		next.ServeHTTP(rw, r.WithContext(ctx))
+
+		span.SetAttribute("http.status_code", fmt.Sprintf("%d", rw.statusCode))
+		span.SetAttribute("http.duration_ms", fmt.Sprintf("%d", time.Since(start).Milliseconds()))
+	})
+}
+
+func serveDashboard(w http.ResponseWriter, _ *http.Request) {
+	data, err := staticFS.ReadFile("static/index.html")
+	if err != nil {
+		http.Error(w, "dashboard not found", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = w.Write(data)
+}
+
+func serveStatic(w http.ResponseWriter, r *http.Request) {
+	sub, err := fs.Sub(staticFS, "static")
+	if err != nil {
+		http.Error(w, "static files not available", http.StatusInternalServerError)
+		return
+	}
+	http.StripPrefix("/static/", http.FileServer(http.FS(sub))).ServeHTTP(w, r)
+}
+
+func handleSummary(w http.ResponseWriter, _ *http.Request) {
+	cats := make(map[string]int)
+	for _, t := range kg.Trees {
+		cats[t.Category]++
+	}
+	model := "qwen3.6:35b-a3b"
+	if dashConfig != nil && dashConfig.OllamaModel != "" {
+		model = dashConfig.OllamaModel
+	}
+	_ = encodeJSON(w, map[string]any{
+		"total_trees": len(kg.Trees),
+		"categories":  cats,
+		"mcp_tools":   26,
+		"model":       model,
+	})
+}
+
+func handleMetricsLive(w http.ResponseWriter, _ *http.Request) {
+	cats := make(map[string]int)
+	snaps := make([]dashboard.TreeSnapshot, 0, len(kg.Trees))
+	for _, t := range kg.Trees {
+		cats[t.Category]++
+		snap := dashboard.TreeSnapshot{
+			ID:                t.ID,
+			StructuralFitness: t.StructuralFitness,
+			EvolvedCount:      t.EvolvedCount,
+		}
+		if baseID, _, ok := kg.EvolutionLineage(t.ID); ok && baseID != t.ID {
+			snap.BaseID = baseID
+		}
+		snaps = append(snaps, snap)
+	}
+	m := dashboard.Collect(len(kg.Trees), cats, snaps)
+	_ = encodeJSON(w, m)
+}
+func handleTrees(w http.ResponseWriter, _ *http.Request) {
+	seen := make(map[string]bool, len(kg.Trees))
+	r2 := make([]map[string]any, 0, 8)
+	for _, t := range kg.Trees {
+		seen[t.ID] = true
+		entry := map[string]any{
+			"id":                 t.ID,
+			"name":               t.Name,
+			"category":           t.Category,
+			"node_count":         t.NodeCount,
+			"fitness":            t.Fitness,
+			"structural_fitness": t.StructuralFitness,
+			"run_count":          t.RunCount,
+			"evolved_count":      t.EvolvedCount,
+			"last_outcome":       t.LastOutcome,
+		}
+		if baseID, evolvedIDs, ok := kg.EvolutionLineage(t.ID); ok {
+			entry["lineage"] = map[string]any{
+				"base_id":     baseID,
+				"evolved_ids": evolvedIDs,
+			}
+		}
+		r2 = append(r2, entry)
+	}
+
+	// Merge in the static domain-tree catalog (internal/domains) that isn't
+	// yet registered in the runtime knowledge graph, so the Create-Agent
+	// dropdown can fetch a single, complete tree list from this endpoint
+	// instead of relying on a hardcoded client-side list.
+	domainTrees := domains.AllDomainTrees()
+	names := slices.Sorted(maps.Keys(domainTrees))
+	for _, name := range names {
+		id := "domain:" + name
+		if seen[id] || seen[name] {
+			continue
+		}
+		tree := domainTrees[name]
+		// domains.DescriptionFor spans all three description maps; indexing
+		// domains.Descriptions directly would serve a blank description — and
+		// so an unexplained dropdown entry — for any registry tree described
+		// outside the curated map.
+		desc, _ := domains.DescriptionFor(name)
+		r2 = append(r2, map[string]any{
+			"id":          id,
+			"name":        tree.Name,
+			"category":    "domain",
+			"node_count":  evolution.CountNodes(tree),
+			"description": desc,
+		})
+	}
+
+	_ = encodeJSON(w, r2)
+}
+func handleFellows(w http.ResponseWriter, _ *http.Request) {
+	f := thinktank.DefaultFellows()
+	r2 := make([]map[string]any, 0, 8)
+	for _, x := range f {
+		r2 = append(r2, map[string]any{"name": x.Name, "role": x.Role, "perspective": x.Perspective, "confidence": x.Confidence})
+	}
+	_ = encodeJSON(w, r2)
+}
+func handleAnalyze(w http.ResponseWriter, r *http.Request) {
+	topic := r.URL.Query().Get("topic")
+	c := sharedLLM
+	if c == nil {
+		_ = encodeJSON(w, map[string]string{"error": "Ollama unavailable"})
+		return
+	}
+	tt := thinktank.NewThinkTank("Council", topic)
+	orch := thinktank.NewOrchestrator(tt, c)
+	if err := orch.RunResearchRound(); err != nil {
+		_ = encodeJSON(w, map[string]string{"error": "research round failed: " + err.Error()})
+		return
+	}
+	if err := orch.RunDebate(); err != nil {
+		_ = encodeJSON(w, map[string]string{"error": "debate failed: " + err.Error()})
+		return
+	}
+	if err := orch.RunSynthesis(); err != nil {
+		_ = encodeJSON(w, map[string]string{"error": "synthesis failed: " + err.Error()})
+		return
+	}
+
+	ff := make([]map[string]any, 0, 8)
+	for _, f := range tt.ResearchFindings {
+		ff = append(ff, map[string]any{
+			"fellow": f.FellowName, "role": f.Role,
+			"insights": f.KeyInsights, "confidence": f.ConfidenceScore,
+		})
+	}
+
+	// Derive tasks from the synthesized recommendation via the Workflow
+	// engine, so tasks get real role assignment (AssigneeRole), sprint
+	// targeting (SprintTarget), and Approval state instead of being
+	// auto-created straight from raw findings.
+	wf := dashboard.NewWorkflow(tt.Name, tt, companyState)
+	wf.RecommendationsToTasks()
+	wf.Prioritize()
+	currentWorkflowMu.Lock()
+	currentWorkflow = wf
+	currentWorkflowMu.Unlock()
+	for _, wt := range wf.Tasks {
+		task := dashboard.Task{
+			ID:          wf.ID + "-" + wt.ID,
+			Title:       wt.Title,
+			Description: wt.Description,
+			Priority:    wt.Priority.String(),
+			Assignee:    wt.AssigneeRole,
+			Source:      "thinktank",
+			SourceID:    wt.Source,
+			Sprint:      wt.SprintTarget,
+			StoryPoints: wt.EstimatedEffort,
+			Approval:    wt.Approval,
+		}
+		task.TreeID = dashboard.PickTreeForTask(task)
+		_ = taskStore.Create(task)
+	}
+
+	_ = encodeJSON(w, map[string]any{"topic": topic, "findings": ff})
+}
+
+// handleWorkflowRunFullPipeline drives Workflow.RunFullPipeline end-to-end —
+// thinktank analysis, task derivation, and company sprint execution — using
+// the same Orchestrator construction handleAnalyze/handleSprintExecute use.
+// This gives RunFullPipeline (internal/dashboard/workflow_engine.go), which
+// previously had zero production callers, its first one.
+func handleWorkflowRunFullPipeline(w http.ResponseWriter, r *http.Request) {
+	topic := r.URL.Query().Get("topic")
+	c := sharedLLM
+	if c == nil {
+		_ = encodeJSON(w, map[string]string{"error": "Ollama unavailable"})
+		return
+	}
+	tt := thinktank.NewThinkTank("Council", topic)
+	ttOrch := thinktank.NewOrchestrator(tt, c)
+	compOrch := startup.NewOrchestrator(companyState, c)
+
+	wf := dashboard.NewWorkflow(tt.Name, tt, companyState)
+	wf.RunFullPipeline(ttOrch, compOrch)
+
+	currentWorkflowMu.Lock()
+	currentWorkflow = wf
+	currentWorkflowMu.Unlock()
+
+	// Persist each derived WorkflowTask into taskStore under the same
+	// wf.ID+"-"+wt.ID convention handleAnalyze/handleWorkflowApprove/Reject
+	// share, so approvals, sprint dispatch, and status sync all see it.
+	for _, wt := range wf.Tasks {
+		task := dashboard.Task{
+			ID:          wf.ID + "-" + wt.ID,
+			Title:       wt.Title,
+			Description: wt.Description,
+			Priority:    wt.Priority.String(),
+			Assignee:    wt.AssigneeRole,
+			Source:      "thinktank",
+			SourceID:    wt.Source,
+			Sprint:      wt.SprintTarget,
+			StoryPoints: wt.EstimatedEffort,
+			Approval:    wt.Approval,
+		}
+		task.TreeID = dashboard.PickTreeForTask(task)
+		_ = taskStore.Create(task)
+	}
+
+	_ = encodeJSON(w, map[string]any{"topic": topic, "status": wf.Status})
+}
+
+func handleDefaultCompany(w http.ResponseWriter, _ *http.Request) {
+	companyState.Lock()
+	defer companyState.Unlock()
+	_ = encodeJSON(w, companyState)
+}
+
+func handleChat(w http.ResponseWriter, r *http.Request) {
+	msg := r.URL.Query().Get("msg")
+	tab := r.URL.Query().Get("tab")
+	if msg == "" {
+		msg = "Hello"
+	}
+
+	agents := map[string]string{
+		"overview":  "BT Studio admin agent. 38 trees, 26 MCP tools, 7 categories. Help the user navigate and manage.",
+		"thinktank": "ThinkTank moderator. 5 fellows: Bull, Bear, Technical, Macro, Contrarian. Help with analyses.",
+		"company":   "Startup strategy agent. BT Studio Inc, pre-seed. Help with company decisions.",
+		"tasks":     "PM agent. 6 tasks across 3 sprints. Help prioritize, approve, and execute.",
+		"trees":     "Tree architect. 38 trees. Help create, evolve, and manage behavior trees.",
+		"mindmap":   "Tree visualization agent. SVG mind maps. Help navigate tree structures.",
+		"evolution": "Evolution optimizer. Stockfish+genetic+Q-learning. Help tune evolution parameters.",
+	}
+	sys := agents[tab]
+	if sys == "" {
+		sys = "BT Studio assistant. Help the user administer the behavior tree framework."
+	}
+
+	if sharedLLM == nil {
+		_ = encodeJSON(w, map[string]string{"reply": "Ollama unavailable. Start the Ollama service."})
+		return
+	}
+
+	reply, err := sharedLLM.Generate(sys + "\n\nUser: " + msg)
+	if err != nil {
+		_ = encodeJSON(w, map[string]string{"reply": "Error: " + err.Error()})
+		return
+	}
+	_ = encodeJSON(w, map[string]string{"reply": reply, "tab": tab})
+}
+
+func handleTasks(w http.ResponseWriter, _ *http.Request) {
+	tasks := taskStore.List()
+	// Convert to []map for frontend compatibility
+	out := make([]map[string]any, len(tasks))
+	for i, t := range tasks {
+		out[i] = map[string]any{
+			"id": t.ID, "title": t.Title, "description": t.Description,
+			"priority": t.Priority, "role": t.Assignee, "sprint": t.Sprint,
+			"sp": t.StoryPoints, "status": t.Status, "source": t.Source,
+			"tree_id": t.TreeID, "output": t.Output, "outcome": t.Outcome,
+		}
+	}
+	_ = encodeJSON(w, out)
+}
+
+// pendingHITLBeforeResolve looks up the pending/escalated hitl.Request for
+// taskID before a Task/WorkflowTask decision resolves it, since
+// TaskStore.Approve/Reject (and Workflow.ApproveTask/RejectTask) now resolve
+// the HITL audit trail themselves as part of the single consolidated
+// approve/reject code path — leaving nothing pending for this handler to
+// resolve a second time. The pre-resolve lookup captures the request ID and
+// whether it started escalated so the HTTP response can still report
+// hitl_request_id/hitl_resolved_from once the decision lands.
+func pendingHITLBeforeResolve(taskID string) (id, resolvedFrom string) {
+	if hitl.DefaultStore == nil {
+		return "", ""
+	}
+	pending, ok := hitl.DefaultStore.FindPendingByTaskID(taskID)
+	if !ok {
+		return "", ""
+	}
+	resolvedFrom = "pending"
+	if pending.Status == hitl.StatusEscalated {
+		resolvedFrom = "escalated"
+	}
+	return pending.ID, resolvedFrom
+}
+
+func handleTaskApprove(w http.ResponseWriter, r *http.Request) {
+	taskID := r.URL.Query().Get("id")
+	pendingID, resolvedFrom := pendingHITLBeforeResolve(taskID)
+	if err := taskStore.Approve(taskID, "dashboard"); err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		_ = encodeJSON(w, map[string]string{"error": err.Error()})
+		return
+	}
+	resp := map[string]string{"status": "approved", "id": taskID}
+	if hitl.DefaultStore != nil {
+		if req, ok := hitl.DefaultStore.Get(pendingID); pendingID != "" && ok {
+			resp["hitl_request_id"] = req.ID
+			resp["hitl_status"] = string(req.Status)
+			resp["hitl_resolved_from"] = resolvedFrom
+		} else {
+			resp["hitl_note"] = fmt.Sprintf("hitl: no pending request for task %q", taskID)
+		}
+	}
+	if err := encodeJSON(w, resp); err != nil {
+		return
+	}
+}
+
+func handleTaskReject(w http.ResponseWriter, r *http.Request) {
+	taskID := r.URL.Query().Get("id")
+	reason := r.URL.Query().Get("reason")
+	if reason == "" {
+		reason = "task rejected via dashboard"
+	}
+	pendingID, resolvedFrom := pendingHITLBeforeResolve(taskID)
+	if err := taskStore.Reject(taskID, "dashboard", reason); err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		_ = encodeJSON(w, map[string]string{"error": err.Error()})
+		return
+	}
+	resp := map[string]string{"status": "rejected", "id": taskID}
+	if hitl.DefaultStore != nil {
+		if req, ok := hitl.DefaultStore.Get(pendingID); pendingID != "" && ok {
+			resp["hitl_request_id"] = req.ID
+			resp["hitl_status"] = string(req.Status)
+			resp["hitl_resolved_from"] = resolvedFrom
+		} else {
+			resp["hitl_note"] = fmt.Sprintf("hitl: no pending request for task %q", taskID)
+		}
+	}
+	if err := encodeJSON(w, resp); err != nil {
+		return
+	}
+}
+
+// handleWorkflowPending surfaces the current Workflow's PendingApprovals —
+// every WorkflowTask still awaiting an explicit human/HITL decision.
+func handleWorkflowPending(w http.ResponseWriter, _ *http.Request) {
+	currentWorkflowMu.RLock()
+	wf := currentWorkflow
+	currentWorkflowMu.RUnlock()
+	if wf == nil {
+		_ = encodeJSON(w, []dashboard.WorkflowTask{})
+		return
+	}
+	_ = encodeJSON(w, wf.PendingApprovals())
+}
+
+func handleWorkflowApprove(w http.ResponseWriter, r *http.Request) {
+	taskID := r.URL.Query().Get("id")
+	currentWorkflowMu.RLock()
+	wf := currentWorkflow
+	currentWorkflowMu.RUnlock()
+	if wf == nil {
+		w.WriteHeader(http.StatusNotFound)
+		_ = encodeJSON(w, map[string]string{"error": "no active workflow"})
+		return
+	}
+	if task := wf.ApproveTask(taskID, "dashboard"); task == nil {
+		w.WriteHeader(http.StatusNotFound)
+		_ = encodeJSON(w, map[string]string{"error": "workflow task not found: " + taskID})
+		return
+	}
+	// handleAnalyze persists each WorkflowTask into taskStore under the
+	// composed ID wf.ID+"-"+wt.ID, and handleSprintExecute dispatches
+	// exclusively from taskStore.Approved() — so the workflow-level approval
+	// must also land on that record, or the sprint runner never sees it.
+	_ = taskStore.Approve(wf.ID+"-"+taskID, "dashboard")
+	_ = encodeJSON(w, map[string]string{"status": "approved", "id": taskID})
+}
+
+func handleWorkflowReject(w http.ResponseWriter, r *http.Request) {
+	taskID := r.URL.Query().Get("id")
+	reason := r.URL.Query().Get("reason")
+	if reason == "" {
+		reason = "task rejected via dashboard"
+	}
+	currentWorkflowMu.RLock()
+	wf := currentWorkflow
+	currentWorkflowMu.RUnlock()
+	if wf == nil {
+		w.WriteHeader(http.StatusNotFound)
+		_ = encodeJSON(w, map[string]string{"error": "no active workflow"})
+		return
+	}
+	if task := wf.RejectTask(taskID, "dashboard", reason); task == nil {
+		w.WriteHeader(http.StatusNotFound)
+		_ = encodeJSON(w, map[string]string{"error": "workflow task not found: " + taskID})
+		return
+	}
+	// Mirror the taskStore record too — see handleWorkflowApprove.
+	_ = taskStore.Reject(wf.ID+"-"+taskID, "dashboard", reason)
+	_ = encodeJSON(w, map[string]string{"status": "rejected", "id": taskID})
+}
+
+// syncWorkflowTaskStatus reconciles currentWorkflow's WorkflowTask (and, via
+// Workflow.SetTaskStatus, Company.CurrentSprint on completion) with a
+// taskStore status change made by handleSprintExecute's per-task dispatch
+// loop. taskStore records composed IDs (wf.ID+"-"+wt.ID, the same convention
+// handleAnalyze uses to persist tasks and handleWorkflowApprove/Reject use to
+// mirror approvals — see those handlers), so only tasks carrying the active
+// workflow's ID prefix are eligible for reconciliation.
+func syncWorkflowTaskStatus(taskID string, status dashboard.WorkflowTaskStatus) {
+	currentWorkflowMu.RLock()
+	wf := currentWorkflow
+	currentWorkflowMu.RUnlock()
+	if wf == nil {
+		return
+	}
+	prefix := wf.ID + "-"
+	if !strings.HasPrefix(taskID, prefix) {
+		return
+	}
+	wf.SetTaskStatus(strings.TrimPrefix(taskID, prefix), status)
+}
+
+func handleSprintExecute(w http.ResponseWriter, _ *http.Request) {
+	// Approved() returns tasks ordered by priority then sprint, so the
+	// sequential dispatch loop below already runs critical/high-priority
+	// tasks before lower-priority ones regardless of creation order.
+	approved := taskStore.Approved()
+	if len(approved) == 0 {
+		_ = encodeJSON(w, map[string]string{"status": "no_approved_tasks"})
+		return
+	}
+
+	jobID := fmt.Sprintf("sprint-%d", time.Now().UnixNano())
+	sprintState.Lock()
+	sprintState.Running = true
+	sprintState.JobID = jobID
+	sprintState.StartedAt = time.Now()
+	sprintState.TasksTotal = len(approved)
+	sprintState.TasksCompleted = 0
+	sprintState.Progress = "dispatching"
+	sprintState.Unlock()
+
+	_ = encodeJSON(w, map[string]any{
+		"status": "sprint_started", "job_id": jobID,
+		"message": fmt.Sprintf("Dispatching %d tasks to BT agents", len(approved)),
+		"count":   len(approved),
+	})
+
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("sprint panic", "error", r)
+			}
+			sprintState.Lock()
+			sprintState.Running = false
+			sprintState.Progress = "done"
+			sprintState.Unlock()
+		}()
+
+		executor := newAgentExecutor()
+
+		for i, task := range approved {
+			sprintState.Lock()
+			sprintState.TasksCompleted = i
+			sprintState.CurrentTask = task.Title
+			sprintState.Progress = "running"
+			sprintState.Unlock()
+
+			// Mark as in_progress
+			_ = taskStore.UpdateStatus(task.ID, "in_progress")
+			syncWorkflowTaskStatus(task.ID, dashboard.StatusInProgress)
+
+			// Pick tree if not set
+			treeID := task.TreeID
+			if treeID == "" {
+				treeID = dashboard.PickTreeForTask(task)
+			}
+
+			// Resolve agent name
+			agentName := dashboard.ResolveAgentName(task.Assignee)
+			taskDesc := task.Title
+			if task.Description != "" {
+				taskDesc = task.Description
+			}
+
+			// Skip agents whose breaker is open, mirroring handleAgentExecute's
+			// gate and the scheduler's tick-time skip — no point burning a
+			// worker slot and an LLM call on a known-broken agent. The task
+			// goes back to approved so a later sprint retries it once the
+			// breaker recovers.
+			if !getDashCBStore().Allowed(agentName) {
+				slog.Warn("sprint: skipping task — circuit breaker open", "task", task.ID, "agent", agentName)
+				_ = taskStore.UpdateStatus(task.ID, "approved")
+				_ = taskStore.SetOutput(task.ID, "skipped: circuit breaker open for agent "+agentName, "deferred")
+				syncWorkflowTaskStatus(task.ID, dashboard.StatusPending)
+				continue
+			}
+
+			slog.Info("sprint: running task", "task", task.ID, "agent", agentName, "tree", treeID)
+
+			output, outcome, err := executor.RunTask(agentName, taskDesc, treeID)
+
+			switch sprintTaskDisposition(outcome, err) {
+			case sprintDeferred:
+				// Healthy rate-limit pause: requeue for a later sprint.
+				_ = taskStore.UpdateStatus(task.ID, "approved")
+				_ = taskStore.SetOutput(task.ID, output, "deferred")
+				syncWorkflowTaskStatus(task.ID, dashboard.StatusPending)
+			case sprintFailed:
+				failLabel := "failed"
+				if err != nil && outcome == "timeout" {
+					output = "timeout: " + err.Error()
+					failLabel = "timeout"
+				}
+				_ = taskStore.UpdateStatus(task.ID, "failed")
+				_ = taskStore.SetOutput(task.ID, output, failLabel)
+				syncWorkflowTaskStatus(task.ID, dashboard.StatusBlocked)
+			default: // sprintCompleted
+				_ = taskStore.UpdateStatus(task.ID, "completed")
+				_ = taskStore.SetOutput(task.ID, output, outcome)
+				syncWorkflowTaskStatus(task.ID, dashboard.StatusCompleted)
+			}
+		}
+
+		sprintState.Lock()
+		sprintState.TasksCompleted = len(approved)
+		sprintState.Unlock()
+	}()
+}
+
+func handleSprintStatus(w http.ResponseWriter, _ *http.Request) {
+	sprintState.Lock()
+	defer sprintState.Unlock()
+	tasks := taskStore.List()
+	completed := 0
+	for _, t := range tasks {
+		if t.Status == "completed" {
+			completed++
+		}
+	}
+	_ = encodeJSON(w, map[string]any{
+		"running": sprintState.Running, "job_id": sprintState.JobID,
+		"elapsed":         time.Since(sprintState.StartedAt).Seconds(),
+		"tasks_completed": completed, "tasks_total": len(tasks),
+		"current_task": sprintState.CurrentTask,
+	})
+}
+
+func handleTreeStructure(w http.ResponseWriter, r *http.Request) {
+	treeID := r.URL.Query().Get("id")
+
+	// Strip category prefix (e.g., "domain:code_review" -> "code_review")
+	if idx := strings.LastIndex(treeID, ":"); idx >= 0 {
+		treeID = treeID[idx+1:]
+	}
+
+	// ── Domain trees (14) ──
+	domainTrees := domains.AllDomainTrees()
+	if tree, ok := domainTrees[treeID]; ok {
+		_ = encodeJSON(w, tree)
+		return
+	}
+
+	// ── Finance trees (10) ──
+	financeTrees := map[string]*evolution.SerializableNode{
+		"pitch_agent":        evolution.PitchAgentTree(),
+		"earnings_reviewer":  evolution.EarningsReviewerTree(),
+		"market_researcher":  evolution.MarketResearcherTree(),
+		"model_builder":      evolution.ModelBuilderTree(),
+		"meeting_prep":       evolution.MeetingPrepTree(),
+		"valuation_reviewer": evolution.ValuationReviewerTree(),
+		"gl_reconciler":      evolution.GLReconcilerTree(),
+		"month_end_closer":   evolution.MonthEndCloserTree(),
+		"statement_auditor":  evolution.StatementAuditorTree(),
+		"kyc_screener":       evolution.KYCScreenerTree(),
+	}
+	if tree, ok := financeTrees[treeID]; ok {
+		_ = encodeJSON(w, tree)
+		return
+	}
+
+	// ── Startup trees (6) ──
+	startupTrees := map[string]*evolution.SerializableNode{
+		"ceo":       startup.CEOTree(),
+		"cto":       startup.CTOTree(),
+		"pm":        startup.PMTree(),
+		"engineer":  startup.EngineerTree(),
+		"marketing": startup.MarketingTree(),
+		"sales":     startup.SalesTree(),
+	}
+	if tree, ok := startupTrees[treeID]; ok {
+		_ = encodeJSON(w, tree)
+		return
+	}
+
+	// ── Research trees (2) ──
+	researchTrees := map[string]*evolution.SerializableNode{
+		"deep_research":  evolution.DeepResearchTree(),
+		"quick_research": evolution.QuickResearchTree(),
+	}
+	if tree, ok := researchTrees[treeID]; ok {
+		_ = encodeJSON(w, tree)
+		return
+	}
+
+	// ── ThinkTank trees (3 static + FellowResearch/Debate parameterized) ──
+	thinktankTrees := map[string]*evolution.SerializableNode{
+		"synthesis":   thinktank.SynthesisTree(),
+		"peer_review": thinktank.PeerReviewTree(),
+		"report":      thinktank.ReportGenerationTree(),
+	}
+	if tree, ok := thinktankTrees[treeID]; ok {
+		_ = encodeJSON(w, tree)
+		return
+	}
+
+	// ── Evolution / core trees (2) ──
+	evolutionTrees := map[string]*evolution.SerializableNode{
+		"godev":   evolution.GoDeveloperTree(),
+		"default": evolution.DefaultTree(),
+	}
+	if tree, ok := evolutionTrees[treeID]; ok {
+		_ = encodeJSON(w, tree)
+		return
+	}
+
+	// ── Fallback: simplified node for trees without SerializableNode ──
+	for _, t := range kg.Trees {
+		name := t.ID
+		if idx := strings.LastIndex(name, ":"); idx >= 0 {
+			name = name[idx+1:]
+		}
+		if name == treeID {
+			_ = encodeJSON(w, map[string]any{
+				"id": t.ID, "name": t.Name, "type": "Sequence", "node_type": "Sequence",
+				"node_count": t.NodeCount,
+				"children":   []map[string]any{},
+			})
+			return
+		}
+	}
+
+	http.Error(w, `{"error":"tree not found"}`, http.StatusNotFound)
+}
+
+// --- Security & Health ---
+
+// authMiddleware wraps a handler with optional API key authentication.
+// If apiKey is empty, all requests pass through (no auth required).
+// If apiKey is set, requests must include X-API-Key header matching the key.// handleHealth returns platform health status.
+func handleHealth(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write(dashboard.HealthJSON("1.0.0"))
+}
+
+// ─── Session Management Handlers ──────────────────────────────────────────────
+
+// handleLogin authenticates a user via password and creates a session.
+// POST /api/login — body: {"password": "<api_key>"}
+// The password must match BT_API_KEY env var. On success, sets a session cookie.
+// Public endpoint (no auth required — this is how you get a session).
+//
+// Brute-force protection: after 20 failed attempts from the same IP, the IP
+// is locked out for 30 minutes. Cooldown periods apply before lockout with
+// exponential backoff (1s → 5s → 30s → 2m → 10m).
+func handleLogin(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		_ = encodeJSON(w, map[string]string{"error": "method not allowed — use POST"})
+		return
+	}
+
+	apiKey := dashboardAPIKey()
+	if apiKey == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = encodeJSON(w, map[string]string{"error": "login not configured — set BT_API_KEY or config api_key"})
+		return
+	}
+
+	// Check brute-force throttle before processing
+	if loginThrottle.IsBlocked(r.RemoteAddr) {
+		remaining := loginThrottle.RemainingCooldown(r.RemoteAddr)
+		security.AuditSecurityEvent(r.Context(), "login_throttled",
+			"reason", "ip_blocked",
+			"remote_addr", r.RemoteAddr,
+			"remaining", remaining.String(),
+		)
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Retry-After", fmt.Sprintf("%.0f", remaining.Seconds()))
+		w.WriteHeader(http.StatusTooManyRequests)
+		_ = encodeJSON(w, map[string]string{
+			"error":    "too many failed login attempts — IP temporarily blocked",
+			"retry_in": remaining.String(),
+		})
+		return
+	}
+
+	// Apply cooldown delay if the IP has recent failures
+	remaining := loginThrottle.RemainingCooldown(r.RemoteAddr)
+	if remaining > 0 {
+		time.Sleep(remaining)
+	}
+
+	var body struct {
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = encodeJSON(w, map[string]string{"error": "invalid JSON body: " + err.Error()})
+		return
+	}
+
+	if body.Password != apiKey {
+		loginThrottle.RecordFailure(r.RemoteAddr)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		_ = encodeJSON(w, map[string]string{"error": "invalid password"})
+		security.AuditSecurityEvent(r.Context(), "login_failed",
+			"reason", "invalid_password",
+			"remote_addr", r.RemoteAddr,
+			"failed_attempts", loginThrottle.State(r.RemoteAddr).FailedCount,
+		)
+		return
+	}
+
+	// Successful login — clear throttle state
+	loginThrottle.RecordSuccess(r.RemoteAddr)
+
+	token, err := sessionStore.CreateSession("")
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = encodeJSON(w, map[string]string{"error": "failed to create session: " + err.Error()})
+		return
+	}
+
+	sessionStore.SetSessionCookie(w, token)
+	security.AuditSecurityEvent(r.Context(), "login_success",
+		"session_count", sessionStore.Count(),
+	)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = encodeJSON(w, map[string]any{
+		"status":  "authenticated",
+		"message": "Session created. Include the session cookie in subsequent requests.",
+	})
+}
+
+// handleLogout destroys the current session and clears the session cookie.
+// POST /api/logout — requires valid session cookie or API key header.
+func handleLogout(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		_ = encodeJSON(w, map[string]string{"error": "method not allowed — use POST"})
+		return
+	}
+
+	// Extract and destroy session from cookie
+	if cookie, err := r.Cookie("bt_session"); err == nil {
+		sessionStore.DestroySession(cookie.Value)
+	}
+	sessionStore.ClearSessionCookie(w)
+
+	security.AuditSecurityEvent(r.Context(), "logout",
+		"session_count", sessionStore.Count(),
+	)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = encodeJSON(w, map[string]string{
+		"status":  "logged_out",
+		"message": "Session destroyed and cookie cleared.",
+	})
+}
+
+// handleSession returns information about the current session.
+// GET /api/session — requires valid session cookie or API key header.
+func handleSession(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		_ = encodeJSON(w, map[string]string{"error": "method not allowed — use GET"})
+		return
+	}
+
+	// Check for session cookie
+	if cookie, err := r.Cookie("bt_session"); err == nil {
+		if info := sessionStore.SessionInfo(cookie.Value); info != nil {
+			w.Header().Set("Content-Type", "application/json")
+			_ = encodeJSON(w, map[string]any{
+				"status":      "authenticated",
+				"auth_method": "session",
+				"created_at":  info.CreatedAt,
+				"expires_at":  info.ExpiresAt,
+				"last_used":   info.LastUsed,
+				"remaining":   info.Remaining.String(),
+			})
+			return
+		}
+	}
+
+	// Check for API key header
+	apiKey := dashboardAPIKey()
+	if apiKey != "" && r.Header.Get("X-API-Key") == apiKey {
+		w.Header().Set("Content-Type", "application/json")
+		_ = encodeJSON(w, map[string]any{
+			"status":      "authenticated",
+			"auth_method": "api_key",
+		})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusUnauthorized)
+	_ = encodeJSON(w, map[string]string{
+		"status":  "unauthenticated",
+		"message": "No valid session cookie or API key found.",
+	})
+}
+
+// handleAlerts evaluates prometheus alert rules against current metrics and
+// returns which alerts are firing. Public endpoint (no auth) so monitoring
+// tools can scrape it.
+func handleAlerts(w http.ResponseWriter, _ *http.Request) {
+	metricsJSON := dashboard.MetricsJSON()
+	b, err := json.Marshal(metricsJSON)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	report, err := agent.EvaluateFromJSON(b)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = encodeJSON(w, report)
+}
+
+// ─── Dead Letter Queue Handlers ────────────────────────────────────────────────
+
+// handleDLQ lists all entries in the dead letter queue.
+func handleDLQ(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	// The executor process mutates the shared file as it replays; reload so
+	// the panel lists the current queue, not this process's boot-time view.
+	dlq.Reload()
+	entries := dlq.List()
+	resp := map[string]any{
+		"count":      len(entries),
+		"entries":    entries,
+		"categories": dlq.CategoryCounts(),
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = encodeJSON(w, resp)
+}
+
+// handleDLQReplay flags a dead-lettered entry for retry so bt-agent's executor
+// requeues it. The dashboard runs in a separate process and has no tree runner,
+// so it cannot execute the task itself. Calling dlq.Replay here would REMOVE the
+// entry and persist the removal — a cross-process silent drop, since bt-agent
+// would never see it again. Instead we reload the queue from disk (to pick up any
+// concurrent changes from the executor) and mark the entry via Requeue, which
+// stamps RequeuedAt without removing it, leaving it on disk for the executor.
+func handleDLQReplay(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = encodeJSON(w, map[string]string{"error": "missing id parameter"})
+		return
+	}
+
+	// Reload from disk so we requeue against the executor's latest view rather
+	// than a stale in-memory copy that could clobber concurrent changes.
+	dlq.Reload()
+
+	entry, ok := dlq.Requeue(id)
+	if !ok {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_ = encodeJSON(w, map[string]string{"error": "entry not found", "id": id})
+		return
+	}
+
+	resp := map[string]any{
+		"status":  "requeued",
+		"entry":   entry,
+		"pending": dlq.Len(),
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = encodeJSON(w, resp)
+}
+
+// handleDLQPurge removes all entries from the dead letter queue.
+func handleDLQPurge(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	count := dlq.Len()
+	dlq.Purge()
+	resp := map[string]any{
+		"status":  "purged",
+		"removed": count,
+		"pending": 0,
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = encodeJSON(w, resp)
+}
+
+// handleOpenAPI serves the OpenAPI 3.0 specification for the dashboard API.
+// This endpoint is public (no auth) so API consumers can discover the schema.
+func handleOpenAPI(w http.ResponseWriter, _ *http.Request) {
+	gen := api.NewOpenAPIGenerator(
+		"BT Platform API",
+		"1.0.0",
+		"Dashboard REST API for the Go Behavior Tree Platform. "+
+			"Manages behavior trees, thinktank analysis, company simulation, "+
+			"task pipelines, sprint execution, and dashboard chat. "+
+			"All /api/* endpoints except /api/health, /api/metrics, /api/alerts, /api/alerts/rules, "+
+			"and /api/openapi.json require an X-API-Key header when BT_API_KEY is configured.",
+	)
+	gen.AddServer("http://localhost:9800", "Local development server")
+	gen.AddServer("http://100.123.73.66:9800", "Tailscale production server")
+
+	gen.AddTag("System", "Health, metrics, and alerts")
+	gen.AddTag("Platform", "Platform overview and tree management")
+	gen.AddTag("Trees", "Behavior tree listing and structure")
+	gen.AddTag("Thinktank", "Analytical thinktank with 5 fellows")
+	gen.AddTag("Company", "Startup company state")
+	gen.AddTag("Tasks", "Task pipeline management")
+	gen.AddTag("Sprint", "Sprint execution")
+	gen.AddTag("Chat", "Dashboard AI chat")
+	gen.AddTag("Agents", "Agent management and execution")
+	gen.AddTag("Scalability", "Horizontal scaling, worker pool, queues")
+	gen.AddTag("Reliability", "Dead letter queue, circuit breaker")
+	gen.AddTag("Session", "Login, logout, session management")
+	gen.AddTag("DoorMate", "Page-First AI Assistant endpoints")
+
+	for _, route := range api.DashboardRoutes() {
+		gen.AddRoute(route)
+	}
+
+	data, err := gen.GenerateJSON()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	_, _ = w.Write(data)
+}
+
+// swaggerUIHTML is a self-contained Swagger UI page that loads the OpenAPI spec
+// from /api/openapi.json. Uses CDN-hosted Swagger UI (no local deps).
+const swaggerUIHTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BT Platform API — Swagger UI</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+  <style>
+    html { box-sizing: border-box; overflow: -moz-scrollbars-vertical; overflow-y: scroll; }
+    *, *:before, *:after { box-sizing: inherit; }
+    body { margin:0; background: #0f172a; }
+    .swagger-ui .topbar { background-color: #1e293b; }
+    .swagger-ui .topbar .download-url-wrapper .select-label { color: #e2e8f0; }
+    .swagger-ui .info .title { color: #f1f5f9; }
+    .swagger-ui .scheme-container { background: #1e293b; box-shadow: 0 1px 2px 0 rgba(0,0,0,.15); }
+    #swagger-ui { max-width: 1200px; margin: 0 auto; }
+  </style>
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js" crossorigin></script>
+  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-standalone-preset.js" crossorigin></script>
+  <script>
+    window.onload = function() {
+      window.ui = SwaggerUIBundle({
+        url: "/api/openapi.json",
+        dom_id: '#swagger-ui',
+        deepLinking: true,
+        presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
+        plugins: [SwaggerUIBundle.plugins.DownloadUrl],
+        layout: "StandaloneLayout",
+        defaultModelsExpandDepth: 1,
+        defaultModelExpandDepth: 1,
+        docExpansion: "list",
+        filter: true,
+        showExtensions: true,
+        showCommonExtensions: true,
+        syntaxHighlight: { theme: "monokai" }
+      });
+    };
+  </script>
+</body>
+</html>`
+
+// handleSwagger serves a Swagger UI page that renders the OpenAPI spec
+// from /api/openapi.json. Public endpoint — no auth required (same as
+// /api/health, /api/metrics, /api/alerts, /api/openapi.json).
+func handleSwagger(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	_, _ = w.Write([]byte(swaggerUIHTML))
+}
+
+// handleAlertRules serves the raw Prometheus alert rules YAML file so
+// Prometheus or other monitoring tools can scrape it directly.
+// Public endpoint (no auth) — same as /api/alerts, /api/health, /api/dashboard.
+func handleAlertRules(w http.ResponseWriter, _ *http.Request) {
+	// Look relative to the binary's working directory (repo root)
+	rulesPath := "monitoring/prometheus-alerts.yml"
+
+	// Fallback: if running from outside the repo, try absolute path
+	if _, err := os.Stat(rulesPath); os.IsNotExist(err) {
+		rulesPath = "/home/nico/go-bt-evolve/monitoring/prometheus-alerts.yml"
+	}
+
+	data, err := os.ReadFile(rulesPath)
+	if err != nil {
+		http.Error(w, "alert rules file not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/yaml; charset=utf-8")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	_, _ = w.Write(data)
+}
+
+func handleSecurityAudit(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	buf := security.GlobalAuditBuffer()
+	if buf == nil {
+		_ = encodeJSON(w, map[string]any{
+			"capacity":        0,
+			"total_events":    0,
+			"captured_events": 0,
+			"buffer_enabled":  false,
+			"event_counts":    map[string]int{},
+			"events":          []security.AuditEvent{},
+		})
+		return
+	}
+	events := buf.Recent(200)
+	_ = encodeJSON(w, security.AuditBufferJSON{
+		Capacity:       buf.Capacity(),
+		TotalEvents:    buf.Count(),
+		CapturedEvents: len(events),
+		Events:         events,
+		EventCounts:    security.CountEvents().EventCounts,
+		BufferEnabled:  true,
+	})
+}
+
+// handleScalability returns a JSON snapshot of scalability components:
+// worker pool, concurrency limiter, queue depth, and agent router health.
+// Public endpoint (no auth) — same as /api/health, /api/metrics, /api/alerts.
+func handleScalability(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Create a snapshot from the wired scalability components. WorkerPool,
+	// ConcurrencyLimiter, TaskQueue, and AgentRouter are all initialized at
+	// dashboard startup; read their live state instead of the former placeholders.
+	var (
+		queuePending, queueMax     int
+		routerTotal, routerHealthy int
+		routerFailures             int
+		heartbeat                  *reliability.HeartbeatStats
+	)
+	if dashTaskQueue != nil {
+		queuePending = dashTaskQueue.Len()
+	}
+	if dashAgentRouter != nil {
+		routerTotal = len(dashAgentRouter.Executors())
+		routerHealthy = len(dashAgentRouter.HealthyExecutors())
+		routerFailures = dashAgentRouter.ConsecutiveFailures()
+		heartbeat = dashAgentRouter.HeartbeatStats()
+	}
+
+	status := reliability.NewScalabilityStatus(
+		dashWorkerPool,         // worker pool (4 workers, active/queued counts from running tasks)
+		dashConcurrencyLimiter, // concurrency limiter (2 max concurrent LLM executions)
+		queuePending,           // queue pending (injected TaskQueue depth)
+		queueMax,               // queue max len (unbounded)
+		routerTotal,            // router total (injected AgentRouter executor count)
+		routerHealthy,          // router healthy
+		nil,                    // connection pool (managed by RemoteExecutor)
+		routerFailures,         // router failures (executors with consecutive failures)
+		heartbeat,              // heartbeat stats (nil unless a tracker is configured)
+	)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	_ = encodeJSON(w, status)
+}
+
+func handleConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	sanitized := dashConfig.Sanitized()
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	_ = encodeJSON(w, sanitized)
+}
+
+// handleTaskCreate creates a new task via query params (GET — avoids CSRF on API endpoints).
+func handleTaskCreate(w http.ResponseWriter, r *http.Request) {
+	title := r.URL.Query().Get("title")
+	if title == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = encodeJSON(w, map[string]string{"error": "missing title parameter"})
+		return
+	}
+	task := dashboard.Task{
+		ID:          fmt.Sprintf("task-%d", time.Now().UnixNano()),
+		Title:       title,
+		Description: r.URL.Query().Get("desc"),
+		Priority:    r.URL.Query().Get("priority"),
+		Assignee:    r.URL.Query().Get("assignee"),
+		Source:      "manual",
+	}
+	if task.Priority == "" {
+		task.Priority = "medium"
+	}
+	if task.Assignee == "" {
+		task.Assignee = "bt-implementer"
+	}
+	task.TreeID = dashboard.PickTreeForTask(task)
+	if err := taskStore.Create(task); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = encodeJSON(w, map[string]string{"error": err.Error()})
+		return
+	}
+	_ = encodeJSON(w, map[string]any{"status": "created", "id": task.ID})
+}
+
+// ─── Agent Handlers ──────────────────────────────────────────────────────
+
+// handleAgentExecute handles POST /api/agents/execute — the server-side
+// counterpart to RemoteExecutor for horizontal scaling. Accepts JSON body
+// {agent, task, tree?} and returns a reliability.AgentResult.
+// Execution is submitted through the dashboard WorkerPool with
+// ConcurrencyLimiter gating to prevent LLM resource exhaustion.
+func handleAgentExecute(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Agent string `json:"agent"`
+		Task  string `json:"task"`
+		Tree  string `json:"tree"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = encodeJSON(w, map[string]string{"error": "invalid JSON body: " + err.Error()})
+		return
+	}
+
+	if req.Agent == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = encodeJSON(w, map[string]string{"error": "missing required field: agent"})
+		return
+	}
+	if req.Task == "" {
+		req.Task = dashboard.DefaultAgentTask(req.Agent)
+	}
+
+	treeID := req.Tree
+
+	// Reject before submitting to the worker pool if the agent's circuit
+	// breaker is open, mirroring the job-skip gate in
+	// internal/agent/scheduler.go's tick — no point wasting a worker slot
+	// and an LLM call on a known-broken agent.
+	if !getDashCBStore().Allowed(req.Agent) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = encodeJSON(w, map[string]string{"error": "circuit breaker open for agent: " + req.Agent})
+		return
+	}
+
+	// Acquire concurrency slot before submitting to worker pool.
+	// The limiter prevents more than 2 simultaneous LLM-bound agent
+	// executions, avoiding Ollama queue overflows on this Jetson.
+	if dashConcurrencyLimiter != nil {
+		dashConcurrencyLimiter.Acquire()
+	}
+	releaseLimiter := func() {
+		if dashConcurrencyLimiter != nil {
+			dashConcurrencyLimiter.Release()
+		}
+	}
+
+	result := make(chan reliability.AgentResult, 1)
+	if dashWorkerPool != nil {
+		dashWorkerPool.Submit(func() {
+			defer releaseLimiter()
+			start := time.Now()
+			executor := newAgentExecutor()
+			runRes, err := executor.RunTaskResult(req.Agent, req.Task, treeID)
+			elapsed := time.Since(start)
+			result <- agentExecuteResult(req.Agent, req.Task, runRes, elapsed, err)
+		})
+	} else {
+		// Fallback: execute synchronously (no worker pool configured)
+		start := time.Now()
+		executor := newAgentExecutor()
+		runRes, err := executor.RunTaskResult(req.Agent, req.Task, treeID)
+		elapsed := time.Since(start)
+		releaseLimiter()
+		result <- agentExecuteResult(req.Agent, req.Task, runRes, elapsed, err)
+	}
+
+	res := <-result
+	w.Header().Set("Content-Type", "application/json")
+	_ = encodeJSON(w, res)
+}
+
+// agentExecuteResult adapts an agent.RunResult from AgentExecutor.RunTaskResult
+// into the reliability.AgentResult wire shape RemoteExecutor decodes, carrying
+// over the real Quality estimate RunOnce already computed. It mirrors
+// cmd/bt-agent/main.go's localAgentResult contract exactly: Success stays
+// strict (err == nil && outcome == "success") and the raw Outcome travels on
+// the wire, so a peer's routedRunResult can classify healthy non-"success"
+// outcomes (no_change, degraded, rate-limit carryover, completed) itself
+// instead of fabricating "failure" from a bare Success=false.
+func agentExecuteResult(agentName, task string, runRes *agent.RunResult, elapsed time.Duration, err error) reliability.AgentResult {
+	res := reliability.AgentResult{
+		Agent:    agentName,
+		Task:     task,
+		Duration: elapsed,
+	}
+	if runRes != nil {
+		res.Output = runRes.Output
+		res.QualityScore = runRes.Quality
+		res.Outcome = runRes.Outcome
+		res.Success = err == nil && runRes.Outcome == "success"
+	}
+	if err != nil {
+		res.Error = err.Error()
+	}
+	return res
+}
+
+// dashboardLocalAgentResult adapts an agent.RunResult into the router's
+// AgentResult, mirroring cmd/bt-agent/main.go's localAgentResult: Success
+// strict, raw Outcome preserved so downstream consumers classify it with the
+// shared helpers instead of a collapsed bool.
+func dashboardLocalAgentResult(agentName, task string, res *agent.RunResult, err error) (*reliability.AgentResult, error) {
+	if res == nil {
+		return nil, err
+	}
+	ar := &reliability.AgentResult{
+		Agent:        agentName,
+		Task:         task,
+		Output:       res.Output,
+		Duration:     res.Duration,
+		Success:      err == nil && res.Outcome == "success",
+		QualityScore: res.Quality,
+		Outcome:      res.Outcome,
+	}
+	if err != nil {
+		ar.Error = err.Error()
+	}
+	return ar, err
+}
+
+// sprintDisposition classifies one sprint task run for the dispatch loop.
+type sprintDisposition int
+
+const (
+	// sprintCompleted — the run was healthy per the shared classifier; the
+	// task is done.
+	sprintCompleted sprintDisposition = iota
+	// sprintFailed — a genuine failure; the task is marked failed/Blocked.
+	sprintFailed
+	// sprintDeferred — a rate-limit carryover: a healthy, expected pause the
+	// executor just recorded as a breaker/metric success. The task goes back
+	// to approved so a later sprint retries it instead of being marked failed.
+	sprintDeferred
+)
+
+// sprintTaskDisposition routes the sprint loop's task-status decision through
+// agent.IsBreakerSuccess — the same classifier that just recorded the run's
+// breaker and metric outcome — so one run can no longer be a breaker success
+// and a workflow-Blocked task failure at the same time.
+func sprintTaskDisposition(outcome string, err error) sprintDisposition {
+	if agent.IsRateLimitCarryover(outcome) {
+		return sprintDeferred
+	}
+	if agent.IsBreakerSuccess(outcome, err) {
+		return sprintCompleted
+	}
+	return sprintFailed
+}
+
+// handleAgentsList returns all registered BT agents with their live status and circuit breaker info.
+func handleAgentsList(w http.ResponseWriter, _ *http.Request) {
+	agents := dashboard.ListAgentsWithCB()
+	if agents == nil {
+		agents = []dashboard.AgentWithStatus{}
+	}
+	_ = encodeJSON(w, agents)
+}
+
+// handleAgentRun runs an agent with a given task.
+func handleAgentRun(w http.ResponseWriter, r *http.Request) {
+	agentName := r.URL.Query().Get("agent")
+	task := r.URL.Query().Get("task")
+	if agentName == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = encodeJSON(w, map[string]string{"error": "missing agent parameter"})
+		return
+	}
+	if task == "" {
+		task = dashboard.DefaultAgentTask(agentName)
+	}
+
+	treeID := r.URL.Query().Get("tree")
+
+	// Reject before submitting to the worker pool if the agent's circuit
+	// breaker is open, mirroring the job-skip gate in
+	// internal/agent/scheduler.go's tick.
+	if !getDashCBStore().Allowed(agentName) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = encodeJSON(w, map[string]string{"error": "circuit breaker open for agent: " + agentName})
+		return
+	}
+
+	// Acquire concurrency slot to prevent LLM resource exhaustion.
+	if dashConcurrencyLimiter != nil {
+		dashConcurrencyLimiter.Acquire()
+	}
+
+	result := make(chan map[string]any, 1)
+	if dashWorkerPool != nil {
+		dashWorkerPool.Submit(func() {
+			defer func() {
+				if dashConcurrencyLimiter != nil {
+					dashConcurrencyLimiter.Release()
+				}
+			}()
+			executor := newAgentExecutor()
+			res, err := executor.RunTaskResult(agentName, task, treeID)
+			resp := map[string]any{
+				"agent": agentName, "outcome": "failure", "output": "",
+			}
+			if res != nil {
+				resp["outcome"] = res.Outcome
+				resp["output"] = res.Output
+				if res.RunID != "" {
+					resp["run_id"] = res.RunID
+				}
+				if res.SessionID != "" {
+					resp["session_id"] = res.SessionID
+				}
+			}
+			if err != nil {
+				resp["error"] = err.Error()
+			}
+			result <- resp
+		})
+	} else {
+		executor := newAgentExecutor()
+		res, err := executor.RunTaskResult(agentName, task, treeID)
+		if dashConcurrencyLimiter != nil {
+			dashConcurrencyLimiter.Release()
+		}
+		resp := map[string]any{
+			"agent": agentName, "outcome": "failure", "output": "",
+		}
+		if res != nil {
+			resp["outcome"] = res.Outcome
+			resp["output"] = res.Output
+			if res.RunID != "" {
+				resp["run_id"] = res.RunID
+			}
+			if res.SessionID != "" {
+				resp["session_id"] = res.SessionID
+			}
+		}
+		if err != nil {
+			resp["error"] = err.Error()
+		}
+		result <- resp
+	}
+
+	res := <-result
+	_ = encodeJSON(w, res)
+}
+
+// handleAgentCreate handles POST /api/agents/create — creates a new agent in the registry.
+func handleAgentCreate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		_ = encodeJSON(w, map[string]string{"error": "method not allowed"})
+		return
+	}
+
+	var req struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+		Tree        string `json:"tree"`
+		Schedule    string `json:"schedule"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = encodeJSON(w, map[string]string{"error": "invalid JSON body: " + err.Error()})
+		return
+	}
+
+	if err := agent.ValidateName(req.Name); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = encodeJSON(w, map[string]string{"error": err.Error()})
+		return
+	}
+	if req.Tree == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = encodeJSON(w, map[string]string{"error": "missing required field: tree"})
+		return
+	}
+
+	cfg := dashboard.AgentYAMLConfig{
+		Name:        req.Name,
+		Description: req.Description,
+		Tree:        req.Tree,
+		Schedule:    req.Schedule,
+	}
+	if err := dashboard.CreateAgent(cfg); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		_ = encodeJSON(w, map[string]string{"error": err.Error()})
+		return
+	}
+
+	// Return the created agent info
+	info := dashboard.AgentWithStatus{
+		AgentInfo: dashboard.AgentInfo{
+			Name:        cfg.Name,
+			Description: cfg.Description,
+			Tree:        cfg.Tree,
+			Status:      "created",
+			Schedule:    cfg.Schedule,
+		},
+		CBStatus: "unknown",
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	_ = encodeJSON(w, info)
+}
+
+// handleAgentDelete handles POST /api/agents/delete — deletes an agent YAML template.
+func handleAgentDelete(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		_ = encodeJSON(w, map[string]string{"error": "method not allowed"})
+		return
+	}
+
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = encodeJSON(w, map[string]string{"error": "invalid JSON body: " + err.Error()})
+		return
+	}
+
+	if err := agent.ValidateName(req.Name); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = encodeJSON(w, map[string]string{"error": err.Error()})
+		return
+	}
+
+	if err := dashboard.DeleteAgent(req.Name); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_ = encodeJSON(w, map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = encodeJSON(w, map[string]string{"status": "deleted", "name": req.Name})
+}
+
+// dashboardMux registers the dashboard routes without starting runtime services.
+func dashboardMux(apiKey string) *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", serveDashboard)
+	mux.HandleFunc("/static/", serveStatic)
+	mux.HandleFunc("/api/health", handleHealth)
+	mux.HandleFunc("/api/metrics", dashboard.PrometheusHandler().ServeHTTP)
+	mux.HandleFunc("/api/alerts", handleAlerts)
+	mux.HandleFunc("/api/alerts/rules", handleAlertRules)
+	mux.HandleFunc("/api/security/audit", handleSecurityAudit)
+	mux.HandleFunc("/api/config", handleConfig)
+	mux.HandleFunc("/api/openapi.json", handleOpenAPI)
+	mux.HandleFunc("/api/swagger", handleSwagger)
+	mux.HandleFunc("/api/scalability", handleScalability)
+	mux.HandleFunc("/api/login", handleLogin)
+	mux.HandleFunc("/api/logout", handleLogout)
+	mux.HandleFunc("/api/session", handleSession)
+	// Session-aware auth: checks session cookie first, falls back to API key header.
+	// This preserves backward compatibility with existing X-API-Key header workflows
+	// while adding cookie-based browser sessions via /api/login.
+	sessionAuth := dashboardSessionAuth(apiKey)
+
+	mux.HandleFunc("/api/summary", sessionAuth(handleSummary))
+	mux.HandleFunc("/api/metrics/live", sessionAuth(handleMetricsLive))
+	mux.HandleFunc("/api/trees", sessionAuth(handleTrees))
+	mux.HandleFunc("/api/thinktank/fellows", sessionAuth(handleFellows))
+	mux.HandleFunc("/api/thinktank/analyze", sessionAuth(handleAnalyze))
+	mux.HandleFunc("/api/workflow/run-full-pipeline", sessionAuth(handleWorkflowRunFullPipeline))
+	mux.HandleFunc("/api/company/default", sessionAuth(handleDefaultCompany))
+	mux.HandleFunc("/api/agents", sessionAuth(handleAgentsList))
+	mux.HandleFunc("/api/agents/run", sessionAuth(handleAgentRun))
+	mux.HandleFunc("/api/agents/execute", sessionAuth(handleAgentExecute))
+	mux.HandleFunc("/api/agents/create", sessionAuth(handleAgentCreate))
+	mux.HandleFunc("/api/agents/delete", sessionAuth(handleAgentDelete))
+	mux.HandleFunc("/api/tasks", sessionAuth(handleTasks))
+	mux.HandleFunc("/api/tasks/approve", sessionAuth(handleTaskApprove))
+	mux.HandleFunc("/api/tasks/create", sessionAuth(handleTaskCreate))
+	mux.HandleFunc("/api/tasks/reject", sessionAuth(handleTaskReject))
+	mux.HandleFunc("/api/workflow/pending", sessionAuth(handleWorkflowPending))
+	mux.HandleFunc("/api/workflow/approve", sessionAuth(handleWorkflowApprove))
+	mux.HandleFunc("/api/workflow/reject", sessionAuth(handleWorkflowReject))
+	mux.HandleFunc("/api/hitl/pending", sessionAuth(dashboard.HandleHITLPending))
+	mux.HandleFunc("/api/hitl/", sessionAuth(dashboard.HandleHITL))
+	mux.HandleFunc("/api/sprint/execute", sessionAuth(handleSprintExecute))
+	mux.HandleFunc("/api/sprint/status", sessionAuth(handleSprintStatus))
+	mux.HandleFunc("/api/tree/structure", sessionAuth(handleTreeStructure))
+	mux.HandleFunc("/api/chat", sessionAuth(handleChat))
+	mux.HandleFunc("/api/dlq", sessionAuth(handleDLQ))
+	mux.HandleFunc("/api/dlq/replay", sessionAuth(handleDLQReplay))
+	mux.HandleFunc("/api/dlq/purge", sessionAuth(handleDLQPurge))
+	mux.HandleFunc("/api/pipelines", sessionAuth(handlePipelines))
+	mux.HandleFunc("/api/pipelines/run", sessionAuth(handlePipelineRun))
+	mux.HandleFunc("/api/pipelines/status", sessionAuth(handlePipelineStatus))
+	mux.HandleFunc("/api/blackboard", sessionAuth(handleBlackboard))
+	mux.HandleFunc("/api/blackboard/scopes", sessionAuth(handleBlackboardScopes))
+
+	return mux
+}
+
+func dashboardSessionAuth(apiKey string) func(http.HandlerFunc) http.HandlerFunc {
+	if apiKey == "" {
+		return func(http.HandlerFunc) http.HandlerFunc {
+			return func(w http.ResponseWriter, r *http.Request) {
+				http.Error(w, "unauthorized: platform API key is not configured", http.StatusUnauthorized)
+			}
+		}
+	}
+	return sessionStore.SessionMiddleware(apiKey, nil)
+}
+
+func dashboardAPIKey() string {
+	if key := os.Getenv("BT_API_KEY"); key != "" {
+		return key
+	}
+	if dashConfig != nil {
+		return dashConfig.APIKey
+	}
+	return ""
+}

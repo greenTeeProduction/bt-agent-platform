@@ -1,0 +1,21 @@
+name: health-check
+description: Health check pipeline — monitor system, diagnose issues, send notifications
+version: "1.0.0"
+steps:
+  - id: monitor
+    kind: agent
+    agent: system-monitor
+    input: "Check system health for the following targets: {{.input}}"
+    on_failure: abort
+
+  - id: diagnose
+    kind: agent
+    agent: daily-researcher
+    input: "Diagnose any issues found in the health check: {{.prev.monitor.output}}"
+    on_failure: skip
+
+  - id: notify
+    kind: agent
+    agent: notification-router
+    input: "Route notification based on diagnosis: {{.prev.diagnose.output}}"
+    on_failure: skip

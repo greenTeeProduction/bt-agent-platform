@@ -1,0 +1,13 @@
+name: skill-tree-syncer
+description: Keep Hermes skills and BT behavior trees in sync — scan skills, discover matching trees, flag mismatches, create missing trees via factory
+version: "1.0.0"
+tree: domain:goap_planning
+schedule: "0 10 * * *"
+outputs:
+  - name: sync_report
+    type: markdown
+quality:
+  required_sections: ["Status", "Mismatches", "New Trees"]
+metadata:
+  category: maintenance
+  tags: "skills,trees,sync"

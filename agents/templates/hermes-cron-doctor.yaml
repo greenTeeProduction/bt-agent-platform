@@ -1,0 +1,13 @@
+name: hermes-cron-doctor
+description: Monitor and fix all cron jobs, BT agents, and automated processes — diagnose failures, restore state, remove duplicates, and report health. Merge of Cron Job Doctor and BT Agent Health Monitor.
+version: "1.0.0"
+tree: domain:agent_monitor
+schedule: "15,37 * * * *"
+outputs:
+  - name: health_report
+    type: markdown
+quality:
+  required_sections: ["Status", "Actions Taken", "Issues"]
+metadata:
+  category: ops
+  tags: "monitoring,cron,health"

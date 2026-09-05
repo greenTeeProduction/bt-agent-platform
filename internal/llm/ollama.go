@@ -1,0 +1,240 @@
+// Package llm provides the LLM interface and Ollama client for the BT platform.
+//
+// The LLM interface abstracts language model access behind Generate, AnalyzeComplexity,
+// GeneratePlan, and Reflect methods, enabling testable tree execution with mock LLMs.
+// The concrete Client wraps langchaingo's Ollama integration with configurable model,
+// host, and timeout settings. The package also includes graceful degradation support
+// via the HealthMonitor that probes LLM availability and enables fail-fast behavior
+// in MCP servers when Ollama is unreachable.
+//
+// Key types:
+//   - LLM — interface for all LLM operations (Generate, AnalyzeComplexity, GeneratePlan, Reflect)
+//   - Client — Ollama-backed implementation via langchaingo
+//   - Config — model, host, timeout configuration with env var overrides
+//
+// Default model: qwen3.6:35b-a3b (24 GB, Q4_K_M) at http://localhost:11434.
+package llm
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/nico/go-bt-evolve/internal/config"
+	"github.com/nico/go-bt-evolve/internal/reliability"
+	"github.com/nico/go-bt-evolve/internal/tracing"
+	"github.com/tmc/langchaingo/llms"
+	"github.com/tmc/langchaingo/llms/ollama"
+)
+
+// Config holds Ollama connection settings.
+type Config struct {
+	ServerURL string
+	Model     string
+	Timeout   time.Duration
+}
+
+// DefaultConfig reads from the platform config (config.json or env vars).
+// Falls back to localhost:11434 / qwen3.6:35b-a3b / 300s if Load fails.
+func DefaultConfig() Config {
+	cfg, err := config.Load()
+	if err != nil || cfg == nil {
+		return Config{
+			ServerURL: "http://localhost:11434",
+			Model:     "qwen3.6:35b-a3b",
+			Timeout:   300 * time.Second,
+		}
+	}
+	return Config{
+		ServerURL: cfg.OllamaHost,
+		Model:     cfg.OllamaModel,
+		Timeout:   time.Duration(cfg.LLMTimeout) * time.Second,
+	}
+}
+
+// LLM is the interface for language model operations used by the BT engine and factory.
+type LLM interface {
+	Generate(prompt string) (string, error)
+	GenerateCtx(ctx context.Context, prompt string) (string, error)
+	GenerateWithTimeout(prompt string, timeout time.Duration) (string, error)
+	AnalyzeComplexity(task string) string
+	GeneratePlan(task, complexity string) string
+	Reflect(task, outcome, plan string) (wentWell string, toImprove string)
+}
+
+// Client wraps langchaingo's Ollama LLM with convenience methods for the BT harness.
+type Client struct {
+	cfg Config
+	llm *ollama.LLM
+}
+
+// NewClient creates a new Ollama client via langchaingo.
+func NewClient(cfg Config) (*Client, error) {
+	llm, err := ollama.New(
+		ollama.WithModel(cfg.Model),
+		ollama.WithServerURL(cfg.ServerURL),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create ollama llm: %w", err)
+	}
+	return &Client{cfg: cfg, llm: llm}, nil
+}
+
+// generateCtx calls the LLM with a caller-provided context and timeout.
+// Wraps the call in a tracing span so LLM execution time is visible
+// alongside the existing engine and MCP tracing. maxTokens caps the
+// response length (Ollama's num_predict) when > 0; 0 leaves it unbounded.
+func (c *Client) generateCtx(ctx context.Context, timeout time.Duration, prompt string, maxTokens int) (string, error) {
+	traceCtx, span := tracing.StartSpan(ctx, "llm:generate")
+	defer span.End()
+
+	span.SetAttribute("llm.model", c.cfg.Model)
+	span.SetAttribute("llm.prompt_len", fmt.Sprintf("%d", len(prompt)))
+	span.SetAttribute("llm.timeout", timeout.String())
+	var callOpts []llms.CallOption
+	if maxTokens > 0 {
+		span.SetAttribute("llm.max_tokens", fmt.Sprintf("%d", maxTokens))
+		callOpts = append(callOpts, llms.WithMaxTokens(maxTokens))
+	}
+
+	callCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	// The LLM call is wrapped in reliability.DefaultRetryPolicy()'s full-jitter
+	// backoff so a retryable failure (Ollama 5xx-style server errors) gets a
+	// jittered retry instead of failing the caller on the first transient
+	// response, while a non-retryable failure (validation, auth) fails
+	// immediately without a second call to the backend.
+	var result string
+	policy := reliability.DefaultRetryPolicy()
+	err := policy.ExecuteContext(callCtx, func() error {
+		out, callErr := c.llm.Call(callCtx, prompt, callOpts...)
+		if callErr != nil {
+			return callErr
+		}
+		result = out
+		return nil
+	})
+	if err != nil {
+		span.RecordError(err)
+		return "", fmt.Errorf("llm call: %w", err)
+	}
+	trimmed := strings.TrimSpace(result)
+	span.SetAttribute("llm.response_len", fmt.Sprintf("%d", len(trimmed)))
+
+	_ = traceCtx // may be used for cancellation propagation in the future
+	return trimmed, nil
+}
+
+// generate is the legacy helper using context.Background() and the default timeout.
+func (c *Client) generate(prompt string) (string, error) {
+	return c.generateCtx(context.Background(), c.cfg.Timeout, prompt, 0)
+}
+
+// Generate is the public entry point for raw LLM calls. Used by the agent factory.
+func (c *Client) Generate(prompt string) (string, error) {
+	return c.generate(prompt)
+}
+
+// GenerateCtx generates with a caller-provided context for cancellation propagation.
+func (c *Client) GenerateCtx(ctx context.Context, prompt string) (string, error) {
+	return c.generateCtx(ctx, c.cfg.Timeout, prompt, 0)
+}
+
+// GenerateWithTimeout generates with a per-operation timeout override.
+func (c *Client) GenerateWithTimeout(prompt string, timeout time.Duration) (string, error) {
+	return c.generateCtx(context.Background(), timeout, prompt, 0)
+}
+
+// GenerateWithMaxTokens generates like Generate, but caps the response at
+// maxTokens output tokens (Ollama's num_predict option) so a configured
+// ChainConfig.MaxTokens budget actually reaches the backend instead of being
+// silently discarded. maxTokens<=0 leaves the request unbounded.
+func (c *Client) GenerateWithMaxTokens(prompt string, maxTokens int) (string, error) {
+	return c.generateCtx(context.Background(), c.cfg.Timeout, prompt, maxTokens)
+}
+
+// AnalyzeComplexity classifies task complexity as "low", "medium", or "high".
+// Uses a short 30s timeout since this is a simple classification.
+func (c *Client) AnalyzeComplexity(task string) string {
+	prompt := fmt.Sprintf(
+		`Classify the complexity of this task as exactly one word: low, medium, or high.
+Task: %s
+Complexity:`, task,
+	)
+	result, err := c.generateCtx(context.Background(), 30*time.Second, prompt, 0)
+	if err != nil {
+		return "medium"
+	}
+	switch {
+	case strings.Contains(strings.ToLower(result), "low"):
+		return "low"
+	case strings.Contains(strings.ToLower(result), "high"):
+		return "high"
+	default:
+		return "medium"
+	}
+}
+
+// GeneratePlan creates an execution plan for a task.
+// Uses a 60s timeout — plans need reasoning but shouldn't take forever.
+func (c *Client) GeneratePlan(task, complexity string) string {
+	prompt := fmt.Sprintf(
+		`Create a step-by-step execution plan for this %s-complexity task.
+Task: %s
+Plan:`, complexity, task,
+	)
+	result, err := c.generateCtx(context.Background(), 60*time.Second, prompt, 0)
+	if err != nil {
+		return fmt.Sprintf("1. Analyze: %s\n2. Execute: %s\n3. Verify result", task, task)
+	}
+	return result
+}
+
+// Reflect generates a reflection (what went well, what to improve) on a completed task.
+// Uses a 60s timeout — reflection benefits from thoughtful output.
+func (c *Client) Reflect(task, outcome, plan string) (wentWell string, toImprove string) {
+	prompt := fmt.Sprintf(
+		`Task: %s
+Plan: %s
+Outcome: %s
+
+Analyze what went well and what could be improved. Respond in exactly this format:
+WENT_WELL: <text>
+TO_IMPROVE: <text>`,
+		task, plan, outcome,
+	)
+	result, err := c.generateCtx(context.Background(), 60*time.Second, prompt, 0)
+	if err != nil {
+		return "task completed", "better error handling"
+	}
+	wentWell = extractSection(result, "WENT_WELL:")
+	toImprove = extractSection(result, "TO_IMPROVE:")
+	if wentWell == "" {
+		wentWell = "task completed"
+	}
+	if toImprove == "" {
+		toImprove = "better error handling"
+	}
+	return
+}
+
+func extractSection(text, marker string) string {
+	idx := strings.Index(text, marker)
+	if idx < 0 {
+		return ""
+	}
+	start := idx + len(marker)
+	end := len(text)
+	// Find next section marker
+	for _, m := range []string{"\nWENT_WELL:", "\nTO_IMPROVE:"} {
+		if i := strings.Index(text[start:], m); i >= 0 {
+			if start+i < end {
+				end = start + i
+			}
+			break
+		}
+	}
+	return strings.TrimSpace(text[start:end])
+}

@@ -1,0 +1,699 @@
+package evolution
+
+import (
+	"cmp"
+	"encoding/json"
+	"fmt"
+	"maps"
+	"math"
+	"os"
+	"slices"
+	"sync"
+)
+
+// ─── Selector Node Optimization ──────────────────────────────────────────
+//
+// Based on NotebookLM research (2026-05-26):
+// Decision tree algorithms (ID3, C4.5, CART) can be adapted to optimize
+// Selector (fallback) node ordering by treating child return statuses as
+// classification data. References:
+//   - Information Gain (Shannon Entropy) for ordering by informativeness
+//   - Gini Impurity for ordering by outcome predictability
+//   - Killer Heuristic for caching successful children
+//   - Alpha-Beta pruning to skip statistically inferior children
+//
+// Sources: Wikipedia (Decision Tree Learning, Alpha-Beta Pruning,
+// Behavior Tree, Iterative Deepening)
+
+// ─── Data Structures ─────────────────────────────────────────────────────
+
+// NodeExecutionRecord captures one execution of a BT node.
+type NodeExecutionRecord struct {
+	NodeName string // which node was executed
+	Outcome  string // "success", "failure", "running"
+}
+
+// SelectorStats tracks execution history for children of a Selector node.
+type SelectorStats struct {
+	ParentName string
+	Children   map[string]*ChildStats // child name → stats
+}
+
+// ChildStats accumulates execution outcomes for one child node.
+type ChildStats struct {
+	Name      string
+	Successes int
+	Failures  int
+	Running   int
+	// Killer heuristic: last time this child caused a beta-cutoff
+	LastSuccessTick int
+	TotalTicks      int
+}
+
+// Total returns the total number of recorded outcomes.
+func (cs *ChildStats) Total() int {
+	return cs.Successes + cs.Failures + cs.Running
+}
+
+// SuccessRate returns the fraction of outcomes that succeeded.
+func (cs *ChildStats) SuccessRate() float64 {
+	t := cs.Total()
+	if t == 0 {
+		return 0
+	}
+	return float64(cs.Successes) / float64(t)
+}
+
+// ─── Information Gain (ID3/C4.5 metric) ──────────────────────────────────
+
+// Entropy computes Shannon entropy of a probability distribution.
+// H = -Σ p_i * log2(p_i)
+func Entropy(probs ...float64) float64 {
+	var h float64
+	for _, p := range probs {
+		if p > 0 {
+			h -= p * math.Log2(p)
+		}
+	}
+	return h
+}
+
+// SelectorEntropy computes the entropy of the Selector's overall outcome
+// distribution (what fraction of ticks result in success vs failure).
+func SelectorEntropy(stats *SelectorStats) float64 {
+	total, successes, failures := 0, 0, 0
+	for _, cs := range stats.Children {
+		successes += cs.Successes
+		failures += cs.Failures
+		total += cs.Total()
+	}
+	if total == 0 {
+		return 0
+	}
+	return Entropy(
+		float64(successes)/float64(total),
+		float64(failures)/float64(total),
+	)
+}
+
+// InformationGain computes the expected reduction in entropy from trying
+// a specific child first. Higher IG = more informative child.
+//
+// IG = H(parent) - Σ (weight_i * H(child_i))
+func InformationGain(child *ChildStats, allStats *SelectorStats) float64 {
+	parentEntropy := SelectorEntropy(allStats)
+	childTotal := child.Total()
+	total := 0
+	for _, cs := range allStats.Children {
+		total += cs.Total()
+	}
+	if total == 0 || childTotal == 0 {
+		return 0
+	}
+	// Child entropy: success vs failure proportion for this specific child
+	childEntropy := Entropy(
+		float64(child.Successes)/float64(childTotal),
+		float64(child.Failures)/float64(childTotal),
+	)
+	weight := float64(childTotal) / float64(total)
+	return parentEntropy - weight*childEntropy
+}
+
+// ─── Gini Impurity (CART metric) ─────────────────────────────────────────
+
+// GiniImpurityFromProbs computes the Gini impurity of a probability
+// distribution: Gini = 1 - Σ p_i². This is the canonical formula shared by
+// every Gini computation in this package — callers pass whatever
+// probabilities their outcome space uses (success/failure/running,
+// hit-count shares, etc.) rather than duplicating the 1-Σp² arithmetic.
+// Low Gini = predictable outcomes (a distribution concentrated on one class).
+func GiniImpurityFromProbs(probs ...float64) float64 {
+	sumSq := 0.0
+	for _, p := range probs {
+		sumSq += p * p
+	}
+	return 1.0 - sumSq
+}
+
+// GiniImpurity computes the Gini impurity for a child node.
+// Low Gini = predictable outcomes (almost always succeeds or almost always fails).
+func GiniImpurity(child *ChildStats) float64 {
+	t := float64(child.Total())
+	if t == 0 {
+		return 1.0 // maximum impurity when no data
+	}
+	s := float64(child.Successes) / t
+	f := float64(child.Failures) / t
+	r := float64(child.Running) / t
+	return GiniImpurityFromProbs(s, f, r)
+}
+
+// ─── Ordering Strategies ─────────────────────────────────────────────────
+
+// SelectorOrderingStrategy defines how to order Selector children.
+type SelectorOrderingStrategy string
+
+const (
+	// OrderByIG ranks by Information Gain descending (most informative first).
+	OrderByIG SelectorOrderingStrategy = "information_gain"
+	// OrderByGini ranks by Gini impurity ascending (most predictable first).
+	OrderByGini SelectorOrderingStrategy = "gini_impurity"
+	// OrderBySuccessRate ranks by success rate descending.
+	OrderBySuccessRate SelectorOrderingStrategy = "success_rate"
+	// OrderByKiller uses killer heuristic: last-successful child first.
+	OrderByKiller SelectorOrderingStrategy = "killer_heuristic"
+	// OrderByHybrid combines IG (70%) and Gini (30%) for balanced ordering.
+	OrderByHybrid SelectorOrderingStrategy = "hybrid"
+)
+
+// ParseSelectorOrderingStrategy validates s against the known ordering
+// strategy constants, returning OrderBySuccessRate — today's production
+// default — for an empty or unrecognized value. Shared by every production
+// wiring site (cmd/bt-gardener/config.go, internal/agentexec/wiring.go) that
+// reads BT_SELECTOR_ORDERING_STRATEGY from the environment, so an unset or
+// typo'd value can never silently change existing behavior.
+func ParseSelectorOrderingStrategy(s string) SelectorOrderingStrategy {
+	switch SelectorOrderingStrategy(s) {
+	case OrderByIG, OrderByGini, OrderByKiller, OrderByHybrid:
+		return SelectorOrderingStrategy(s)
+	default:
+		return OrderBySuccessRate
+	}
+}
+
+// SelectorOptimizer reorders Selector children based on execution history.
+type SelectorOptimizer struct {
+	Stats      map[string]*SelectorStats // selector name → stats
+	Strategy   SelectorOrderingStrategy
+	MinSamples int // minimum samples before reordering (default: 10)
+
+	// mu guards Stats/unsaved during Record and the durable Save/Load merge so
+	// an in-memory merge from disk is atomic with respect to the eventual
+	// rewrite. The cross-process/cross-optimizer guard is the ADR-024 sidecar
+	// flock.
+	mu sync.Mutex
+
+	// unsaved accumulates records not yet persisted. Save merges ONLY this
+	// delta onto disk (then clears it), so a long-lived optimizer saving
+	// repeatedly can never re-add counts already persisted (double-count).
+	unsaved map[string]*SelectorStats
+}
+
+// NewSelectorOptimizer creates a new optimizer with the given strategy.
+func NewSelectorOptimizer(strategy SelectorOrderingStrategy) *SelectorOptimizer {
+	return &SelectorOptimizer{
+		Stats:      make(map[string]*SelectorStats),
+		Strategy:   strategy,
+		MinSamples: 10,
+	}
+}
+
+// Record records an execution outcome for a child node — into both the live
+// stats and the unsaved delta that SaveSelectorStats persists.
+func (so *SelectorOptimizer) Record(parentName string, rec NodeExecutionRecord) {
+	so.mu.Lock()
+	defer so.mu.Unlock()
+	if so.Stats == nil {
+		so.Stats = make(map[string]*SelectorStats)
+	}
+	recordSelectorOutcomeInto(so.Stats, parentName, rec)
+	if so.unsaved == nil {
+		so.unsaved = make(map[string]*SelectorStats)
+	}
+	recordSelectorOutcomeInto(so.unsaved, parentName, rec)
+}
+
+// recordSelectorOutcomeInto accumulates one execution outcome into a stats map.
+func recordSelectorOutcomeInto(stats map[string]*SelectorStats, parentName string, rec NodeExecutionRecord) {
+	ss, ok := stats[parentName]
+	if !ok {
+		ss = &SelectorStats{
+			ParentName: parentName,
+			Children:   make(map[string]*ChildStats),
+		}
+		stats[parentName] = ss
+	}
+	cs, ok := ss.Children[rec.NodeName]
+	if !ok {
+		cs = &ChildStats{Name: rec.NodeName}
+		ss.Children[rec.NodeName] = cs
+	}
+	switch rec.Outcome {
+	case "success":
+		cs.Successes++
+		cs.LastSuccessTick = cs.TotalTicks
+	case "failure":
+		cs.Failures++
+	case "running":
+		cs.Running++
+	}
+	cs.TotalTicks++
+}
+
+// ─── Durable Telemetry (ADR-024 flock + atomic tmp+rename) ───────────────
+
+// selectorStatsFile is the on-disk envelope for persisted Selector telemetry.
+type selectorStatsFile struct {
+	Selectors map[string]*SelectorStats `json:"selectors"`
+}
+
+// SaveSelectorStats atomically persists per-Selector telemetry to path so it
+// survives process restarts. Under the ADR-024 sidecar flock it merges the
+// optimizer's UNSAVED delta onto whatever is already on disk and rewrites the
+// file via tmp + rename; the merged view becomes the live Stats and the delta
+// is cleared. Merging only the delta makes repeated saves idempotent (a
+// long-lived periodic saver can never double-count its own history) while
+// independent writers still accumulate. Holding the flock across read, merge,
+// and rename prevents a concurrent writer's snapshot from being silently
+// overwritten inside the window.
+func (so *SelectorOptimizer) SaveSelectorStats(path string) error {
+	release, lockErr := acquireExperienceLock(path)
+	if lockErr == nil {
+		defer release()
+	}
+	so.mu.Lock()
+	defer so.mu.Unlock()
+	merged, err := readSelectorStatsFile(path)
+	if err != nil {
+		return err
+	}
+	mergeSelectorStatsMaps(merged, so.unsaved)
+	if err := persistSelectorStats(path, merged); err != nil {
+		return err
+	}
+	so.Stats = merged
+	so.unsaved = nil
+	return nil
+}
+
+// LoadSelectorStats merges the persisted per-Selector telemetry at path into
+// the in-memory Stats, summing each child's success/failure/running counts so
+// a restarted optimizer resumes from the accumulated history. Loaded counts
+// never enter the unsaved delta — only fresh Records do — so a later Save
+// cannot re-persist them. A missing file is a no-op; a corrupt file is
+// reported.
+func (so *SelectorOptimizer) LoadSelectorStats(path string) error {
+	release, lockErr := acquireExperienceLock(path)
+	if lockErr == nil {
+		defer release()
+	}
+	so.mu.Lock()
+	defer so.mu.Unlock()
+	disk, err := readSelectorStatsFile(path)
+	if err != nil {
+		return err
+	}
+	if so.Stats == nil {
+		so.Stats = make(map[string]*SelectorStats)
+	}
+	mergeSelectorStatsMaps(so.Stats, disk)
+	return nil
+}
+
+// readSelectorStatsFile reads a persisted telemetry file into a fresh stats
+// map. A missing file yields an empty map.
+func readSelectorStatsFile(path string) (map[string]*SelectorStats, error) {
+	out := make(map[string]*SelectorStats)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return out, nil
+		}
+		return nil, fmt.Errorf("read selector stats %s: %w", path, err)
+	}
+	var file selectorStatsFile
+	if err := json.Unmarshal(data, &file); err != nil {
+		return nil, fmt.Errorf("unmarshal selector stats %s: %w", path, err)
+	}
+	mergeSelectorStatsMaps(out, file.Selectors)
+	return out, nil
+}
+
+// mergeSelectorStatsMaps sums src's per-child counts into dst.
+func mergeSelectorStatsMaps(dst, src map[string]*SelectorStats) {
+	for parent, ds := range src {
+		if ds == nil {
+			continue
+		}
+		cur, ok := dst[parent]
+		if !ok {
+			cur = &SelectorStats{ParentName: parent, Children: make(map[string]*ChildStats)}
+			dst[parent] = cur
+		}
+		for name, dcs := range ds.Children {
+			if dcs == nil {
+				continue
+			}
+			ccs, ok := cur.Children[name]
+			if !ok {
+				ccs = &ChildStats{Name: name}
+				cur.Children[name] = ccs
+			}
+			ccs.Successes += dcs.Successes
+			ccs.Failures += dcs.Failures
+			ccs.Running += dcs.Running
+			ccs.TotalTicks += dcs.TotalTicks
+			if dcs.LastSuccessTick > ccs.LastSuccessTick {
+				ccs.LastSuccessTick = dcs.LastSuccessTick
+			}
+		}
+	}
+}
+
+// persistSelectorStats marshals stats and atomically replaces path (write tmp
+// + rename). Callers hold the sidecar flock.
+func persistSelectorStats(path string, stats map[string]*SelectorStats) error {
+	data, err := json.MarshalIndent(selectorStatsFile{Selectors: stats}, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal selector stats: %w", err)
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0644); err != nil {
+		return fmt.Errorf("write tmp: %w", err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		os.Remove(tmp)
+		return fmt.Errorf("rename: %w", err)
+	}
+	return nil
+}
+
+// OrderChildren returns the recommended child ordering for a Selector,
+// as a string slice of child names in priority order.
+func (so *SelectorOptimizer) OrderChildren(selectorName string) []string {
+	stats, ok := so.Stats[selectorName]
+	if !ok {
+		return nil
+	}
+	// Check minimum sample threshold
+	total := 0
+	for _, cs := range stats.Children {
+		total += cs.Total()
+	}
+	if total < so.MinSamples {
+		return nil // not enough data
+	}
+
+	children := slices.Collect(maps.Values(stats.Children))
+
+	switch so.Strategy {
+	case OrderByIG:
+		slices.SortFunc(children, func(a, b *ChildStats) int {
+			return cmp.Compare(InformationGain(b, stats), InformationGain(a, stats))
+		})
+	case OrderByGini:
+		slices.SortFunc(children, func(a, b *ChildStats) int {
+			return cmp.Compare(GiniImpurity(a), GiniImpurity(b))
+		})
+	case OrderBySuccessRate:
+		slices.SortFunc(children, func(a, b *ChildStats) int {
+			return cmp.Compare(b.SuccessRate(), a.SuccessRate())
+		})
+	case OrderByKiller:
+		slices.SortFunc(children, func(a, b *ChildStats) int {
+			return cmp.Compare(b.LastSuccessTick, a.LastSuccessTick)
+		})
+	case OrderByHybrid:
+		// Normalize IG and Gini into [0,1] and combine; Gini is inverted so
+		// high = good, matching the direction of the information gain term.
+		hybrid := func(c *ChildStats) float64 {
+			return 0.7*normalizedIG(c, stats) + 0.3*(1.0-GiniImpurity(c))
+		}
+		slices.SortFunc(children, func(a, b *ChildStats) int {
+			return cmp.Compare(hybrid(b), hybrid(a))
+		})
+	}
+
+	names := make([]string, len(children))
+	for i, cs := range children {
+		names[i] = cs.Name
+	}
+	return names
+}
+
+// ApplyOrdering reorders children of a SerializableNode if it's a Selector.
+// Returns true if the ordering changed.
+func (so *SelectorOptimizer) ApplyOrdering(tree *SerializableNode, selectorName string) bool {
+	newOrder := so.OrderChildren(selectorName)
+	if len(newOrder) == 0 {
+		return false
+	}
+	return reorderSelectorChildren(tree, selectorName, newOrder)
+}
+
+// ApplyLearnedOrdering walks tree and reorders the children of every Selector
+// node according to the learned strategy, while keeping fallback/default-path
+// children (including AlwaysSucceed) last so the Selector's short-circuit
+// semantics are preserved — the default path must never be promoted ahead of a
+// real path just because it "succeeds" every tick. Returns the number of
+// Selector nodes whose ordering actually changed.
+//
+// This is the production entry point used before an evolved tree is persisted:
+// seed the optimizer from durable telemetry (LoadSelectorStats), then apply the
+// learned ordering in place.
+func (so *SelectorOptimizer) ApplyLearnedOrdering(tree *SerializableNode) int {
+	if tree == nil {
+		return 0
+	}
+	changes := 0
+	so.applyLearnedNode(tree, &changes)
+	return changes
+}
+
+func (so *SelectorOptimizer) applyLearnedNode(node *SerializableNode, changes *int) {
+	if node.Type == "Selector" && len(node.Children) > 1 {
+		ranked := so.OrderChildren(node.Name)
+		if len(ranked) == len(node.Children) {
+			rank := make(map[string]int, len(ranked))
+			for i, name := range ranked {
+				rank[name] = i
+			}
+			idx := make([]int, len(node.Children))
+			for i := range idx {
+				idx[i] = i
+			}
+			slices.SortStableFunc(idx, func(a, b int) int {
+				ca, cb := &node.Children[a], &node.Children[b]
+				da, db := isSelectorFallback(ca), isSelectorFallback(cb)
+				if da != db {
+					if da {
+						return 1
+					}
+					return -1 // non-default paths first; fallbacks stay last
+				}
+				if da {
+					return 0 // both fallbacks: preserve relative order
+				}
+				return cmp.Compare(rank[ca.Name], rank[cb.Name])
+			})
+			reordered := make([]SerializableNode, len(node.Children))
+			changed := false
+			for pos, oi := range idx {
+				reordered[pos] = node.Children[oi]
+				if oi != pos {
+					changed = true
+				}
+			}
+			if changed {
+				node.Children = reordered
+				*changes++
+			}
+		}
+	}
+	for i := range node.Children {
+		so.applyLearnedNode(&node.Children[i], changes)
+	}
+}
+
+// isSelectorFallback reports whether a Selector child is a fallback/default path
+// that must remain last. It honours the same default-path guard used by
+// BTOptimizer.optimizeNode (isDefaultPath) and additionally treats an
+// AlwaysSucceed leaf as a fallback, since such a node succeeds unconditionally
+// and would otherwise be promoted to the front by any success-rate ordering.
+func isSelectorFallback(child *SerializableNode) bool {
+	return child.Type == "AlwaysSucceed" || isDefaultPath(child)
+}
+
+// ─── MCTS Affinity (structural-strategy selection) ───────────────────────
+
+// MCTSAffinity reports, on [0,1], how much a speculative MCTS structural
+// search is worth for tree from the learned-ordering point of view: the
+// fraction of the tree's Selector nodes this optimizer has NO usable signal for
+// (fewer than MinSamples recorded outcomes, the same threshold OrderChildren
+// gates on).
+//
+// 1.0 means every Selector is cold — the learned ordering cannot improve this
+// tree at all, so the search has nothing to duplicate. 0.0 means every Selector
+// is fully informed and the cheap, evidence-backed reordering already covers
+// the decision points a search would blunder through. A tree with no Selector
+// at all, a nil tree, or a nil optimizer likewise offers this heuristic nothing
+// to lean on, so it returns 1.0.
+// See [SelectStructuralStrategy], which combines this with
+// [SpecialistRegistry.MCTSAffinity].
+func (so *SelectorOptimizer) MCTSAffinity(tree *SerializableNode) float64 {
+	if so == nil || tree == nil {
+		return 1.0
+	}
+	names := collectSelectorNames(tree, nil)
+	if len(names) == 0 {
+		return 1.0
+	}
+	informed := 0
+	for _, name := range names {
+		if so.hasEnoughSamples(name) {
+			informed++
+		}
+	}
+	return 1.0 - float64(informed)/float64(len(names))
+}
+
+// hasEnoughSamples reports whether selectorName has accumulated at least
+// MinSamples recorded outcomes — the same threshold OrderChildren requires
+// before it will propose an ordering at all.
+func (so *SelectorOptimizer) hasEnoughSamples(selectorName string) bool {
+	so.mu.Lock()
+	defer so.mu.Unlock()
+	stats, ok := so.Stats[selectorName]
+	if !ok || stats == nil {
+		return false
+	}
+	total := 0
+	for _, cs := range stats.Children {
+		total += cs.Total()
+	}
+	return total >= so.MinSamples
+}
+
+// collectSelectorNames returns the distinct names of every Selector node in the
+// tree, in pre-order. Unnamed Selectors are skipped — telemetry is keyed by
+// name, so they can never be informed.
+func collectSelectorNames(node *SerializableNode, seen map[string]bool) []string {
+	if node == nil {
+		return nil
+	}
+	if seen == nil {
+		seen = make(map[string]bool)
+	}
+	var names []string
+	if node.Type == "Selector" && node.Name != "" && !seen[node.Name] {
+		seen[node.Name] = true
+		names = append(names, node.Name)
+	}
+	for i := range node.Children {
+		names = append(names, collectSelectorNames(&node.Children[i], seen)...)
+	}
+	return names
+}
+
+// ─── Alpha-Beta Pruning for Selectors ────────────────────────────────────
+
+// ShouldPrune determines if a child can be skipped based on statistical
+// inferiority. If a child has proven to be worse than a previously examined
+// sibling (via Gini impurity), it can be pruned.
+func (so *SelectorOptimizer) ShouldPrune(child *ChildStats, bestSoFar *ChildStats) bool {
+	if bestSoFar == nil {
+		return false
+	}
+	// Prune if this child has both higher impurity AND lower success rate
+	childGini := GiniImpurity(child)
+	bestGini := GiniImpurity(bestSoFar)
+	if childGini > bestGini && child.SuccessRate() < bestSoFar.SuccessRate() {
+		return true
+	}
+	return false
+}
+
+// ─── Killer Heuristic ────────────────────────────────────────────────────
+
+// KillerChild returns the child that most recently caused success (beta-cutoff).
+func (so *SelectorOptimizer) KillerChild(selectorName string) string {
+	stats, ok := so.Stats[selectorName]
+	if !ok {
+		return ""
+	}
+	var killer string
+	lastTick := -1
+	for _, cs := range stats.Children {
+		if cs.LastSuccessTick > lastTick {
+			lastTick = cs.LastSuccessTick
+			killer = cs.Name
+		}
+	}
+	return killer
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────
+
+// normalizedIG returns IG normalized to [0,1] within the Selector's children.
+func normalizedIG(child *ChildStats, stats *SelectorStats) float64 {
+	maxIG := 0.0
+	for _, cs := range stats.Children {
+		ig := InformationGain(cs, stats)
+		if ig > maxIG {
+			maxIG = ig
+		}
+	}
+	if maxIG == 0 {
+		return 0
+	}
+	return InformationGain(child, stats) / maxIG
+}
+
+// reorderSelectorChildren finds a Selector node by name and reorders its
+// children to match newOrder. Returns true if reordering changed anything.
+func reorderSelectorChildren(tree *SerializableNode, selectorName string, newOrder []string) bool {
+	if tree.Name == selectorName && tree.Type == "Selector" {
+		return applyOrderToNode(tree, newOrder)
+	}
+	for i := range tree.Children {
+		if reorderSelectorChildren(&tree.Children[i], selectorName, newOrder) {
+			return true
+		}
+	}
+	return false
+}
+
+// applyOrderToNode reorders a node's children to match newOrder.
+func applyOrderToNode(node *SerializableNode, newOrder []string) bool {
+	if len(node.Children) != len(newOrder) {
+		return false
+	}
+	// Check if ordering already matches
+	matches := true
+	for i, name := range newOrder {
+		if i >= len(node.Children) || node.Children[i].Name != name {
+			matches = false
+			break
+		}
+	}
+	if matches {
+		return false
+	}
+	// Reorder
+	ordered := make([]SerializableNode, len(node.Children))
+	used := make(map[int]bool)
+	for pos, name := range newOrder {
+		for i := range node.Children {
+			if used[i] {
+				continue
+			}
+			if node.Children[i].Name == name {
+				ordered[pos] = node.Children[i]
+				used[i] = true
+				break
+			}
+		}
+	}
+	// Fill any unmatched children at the end
+	j := len(newOrder)
+	for i := range node.Children {
+		if !used[i] {
+			ordered[j] = node.Children[i]
+			j++
+		}
+	}
+	node.Children = ordered
+	return true
+}
+
+// NOTE: CountNodes is defined in mutate.go. Do not redeclare here.

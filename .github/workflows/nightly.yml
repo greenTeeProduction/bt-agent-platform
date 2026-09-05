@@ -1,0 +1,131 @@
+name: Nightly Full Tests + Benchmarks
+
+on:
+  schedule:
+    - cron: '0 3 * * *'  # Daily at 3am UTC
+  workflow_dispatch:       # Manual trigger for ad-hoc runs
+
+jobs:
+  full-tests:
+    name: Full Test Suite (Ollama)
+    runs-on: [self-hosted, jetson, arm64]
+    timeout-minutes: 120
+    env:
+      GOFLAGS: "-count=1"
+      GOMAXPROCS: 4
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Verify Ollama
+        run: |
+          curl -s http://localhost:11434/api/tags || echo "⚠ Ollama not reachable — Ollama-dependent tests will skip"
+
+      - name: Full test suite (no -short)
+        run: go test -count=1 -timeout 90m ./... 2>&1 | tee /tmp/full-test-output.txt
+
+      - name: Coverage report
+        run: |
+          go test -count=1 -coverprofile=/tmp/coverage.out -covermode=atomic -timeout 90m ./... 2>&1 || true
+          go tool cover -func=/tmp/coverage.out | tee /tmp/coverage.txt
+          TOTAL=$(go tool cover -func=/tmp/coverage.out | grep total | awk '{print $3}')
+          echo "Total coverage: $TOTAL"
+          echo "COVERAGE=$TOTAL" >> $GITHUB_ENV
+
+      - name: Build benchcmp
+        run: go build -o /tmp/benchcmp ./cmd/benchcmp/
+
+      - name: Run benchmarks and check for regressions
+        run: |
+          echo "=== Running benchmarks ==="
+          go test -bench=. -benchmem -timeout 30m ./internal/benchmark/ 2>&1 | tee /tmp/bench-output.txt || echo "⚠ Some benchmarks failed (may need Ollama)"
+
+      - name: Detect benchmark regressions
+        run: |
+          if [ -f /home/runner/.go-bt-benchcmp/baseline.json ]; then
+            echo "=== Comparing against baseline ==="
+            cat /tmp/bench-output.txt | /tmp/benchcmp check --warning 15 --critical 30 2>&1 | tee /tmp/bench-regression-report.txt
+            BENCH_EXIT=$?
+            if [ $BENCH_EXIT -eq 2 ]; then
+              echo "::error::Critical benchmark regressions detected!"
+              exit 1
+            elif [ $BENCH_EXIT -eq 1 ]; then
+              echo "::warning::Benchmark warnings detected — review before merging"
+            fi
+          else
+            echo "=== First run — saving baseline ==="
+            cat /tmp/bench-output.txt | /tmp/benchcmp baseline --save
+            echo "Baseline saved. Future runs will compare against this baseline."
+          fi
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Nightly Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "**Coverage:** ${{ env.COVERAGE }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Test Output (last 50 lines)" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tail -50 /tmp/full-test-output.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-report
+          path: /tmp/coverage.out
+          retention-days: 7
+
+      - name: Upload benchmark artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: benchmark-output
+          path: /tmp/bench-output.txt
+          retention-days: 7
+
+  benchmark-compare:
+    name: Benchmark Regression Analysis
+    runs-on: [self-hosted, jetson, arm64]
+    needs: [full-tests]
+    if: always() && needs.full-tests.result != 'cancelled'
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build benchcmp
+        run: go build -o /tmp/benchcmp ./cmd/benchcmp/
+
+      - name: Run benchmarks with comparison
+        run: |
+          echo "=== Regression Analysis ==="
+          # Run benchmarks with count=5 for statistical significance
+          go test -bench=. -benchmem -benchtime=3x -count=5 -timeout 30m \
+            ./internal/benchmark/ 2>&1 | tee /tmp/bench-regression.txt || true
+
+      - name: Detect regressions
+        run: |
+          if grep -q "^Benchmark" /tmp/bench-regression.txt; then
+            if [ -f /home/runner/.go-bt-benchcmp/baseline.json ]; then
+              echo "=== Comparing against stored baseline ==="
+              cat /tmp/bench-regression.txt | /tmp/benchcmp check --warning 15 --critical 30 2>&1 | tee /tmp/bench-report.txt
+            else
+              echo "=== First regression run — saving baseline ==="
+              cat /tmp/bench-regression.txt | /tmp/benchcmp baseline --save
+            fi
+          else
+            echo "No benchmark results found (Ollama may be unavailable)"
+          fi
+
+      - name: Upload regression artifact
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: benchmark-regression
+          path: /tmp/bench-regression.txt
+          retention-days: 14

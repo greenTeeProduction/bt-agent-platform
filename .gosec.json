@@ -1,0 +1,6 @@
+{
+  "global": {
+    "audit": "enabled",
+    "exclude": "G404,G304,G703,G704,G115"
+  }
+}

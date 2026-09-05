@@ -1,0 +1,20 @@
+name: code-reviewer
+description: Reviews code for bugs, security vulnerabilities, and style issues
+version: "1.0.0"
+tree: domain:code_review
+schedule: on_demand
+inputs:
+  - name: code
+    type: text
+    required: true
+    description: Source code to review
+outputs:
+  - name: report
+    type: markdown
+    description: Review report with bugs, security, and style sections
+quality:
+  min_length: 100
+  required_sections: ["Bugs", "Security", "Style"]
+metadata:
+  category: software-development
+  tags: "code-review,bugs,security"

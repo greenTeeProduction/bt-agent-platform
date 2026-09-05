@@ -1,0 +1,469 @@
+package research
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/nico/go-bt-evolve/internal/reliability"
+)
+
+// Programs are research-proposed multi-cycle changes: work too large for one
+// scheduled run, split into file-scoped milestones that successive cycles
+// execute one at a time. Persisted per ADR-003 (atomic JSON under
+// ~/.go-bt-evolve).
+
+type Milestone struct {
+	Goal         string    `json:"goal"`
+	Status       string    `json:"status"` // pending | done | blocked
+	Attempts     int       `json:"attempts,omitzero"`
+	CompletedRun string    `json:"completed_run,omitempty"`
+	CompletedAt  time.Time `json:"completed_at,omitzero"`
+	BlockedAt    time.Time `json:"blocked_at,omitzero"`
+	// RedPassStreak counts consecutive cycles whose RED command unexpectedly
+	// passed for this milestone — evidence the work already exists at HEAD
+	// rather than an unbuildable goal. Reset on any genuine failure.
+	RedPassStreak int `json:"red_pass_streak,omitzero"`
+	// LastRedCmd is the RED command whose unexpected pass produced the
+	// streak. The next cycle re-runs it at charge time (the red pre-check,
+	// 2026-07-23 review gap 5): a second pass completes the milestone
+	// without burning a Claude plan phase, a failure kills the
+	// already-landed hypothesis. Cleared with the streak.
+	LastRedCmd string `json:"last_red_cmd,omitempty"`
+}
+
+type Program struct {
+	ID         string      `json:"id"`
+	Title      string      `json:"title"`
+	Source     string      `json:"source"`
+	Created    time.Time   `json:"created"`
+	Updated    time.Time   `json:"updated"`
+	Milestones []Milestone `json:"milestones"`
+	// ClaimedBy is the agent (cycle RunID) currently landing this program's
+	// head milestone, set by ClaimActiveForCycle. Empty when unclaimed.
+	ClaimedBy string `json:"claimed_by,omitempty"`
+	// ClaimedAt is when ClaimedBy claimed the program. A claim older than the
+	// lease window passed to ClaimActiveForCycle is stale — evidence the
+	// claiming cycle crashed or is simply long done — and is reclaimable by a
+	// different agent.
+	ClaimedAt time.Time `json:"claimed_at,omitzero"`
+}
+
+// NextMilestone returns the first pending milestone and its index, or (-1, nil).
+// Blocked milestones (abandoned after too many attempts) are skipped, so a
+// program with one unbuildable milestone advances past it instead of freezing.
+func (p *Program) NextMilestone() (int, *Milestone) {
+	for i := range p.Milestones {
+		if p.Milestones[i].Status == "pending" {
+			return i, &p.Milestones[i]
+		}
+	}
+	return -1, nil
+}
+
+// RecordAttemptAndMaybeBlock increments the attempt count of the milestone at
+// idx and, when it reaches maxAttempts without landing, marks it "blocked" so
+// NextMilestone skips it — the loop moves on to the next milestone (or, if none
+// remain pending, the program is no longer Active and the self-seeder proposes
+// a fresh one). It reports whether the milestone is now blocked. This is how a
+// fabricated/unbuildable milestone (which the implementation agent correctly
+// declines every cycle) stops freezing the program (2026-07-05: a "TDAD
+// decorator node" research-echo milestone was declined 10 times).
+func (ps *ProgramStore) RecordAttemptAndMaybeBlock(programID string, idx, maxAttempts int) bool {
+	for _, p := range ps.Programs {
+		if p.ID != programID || idx < 0 || idx >= len(p.Milestones) {
+			continue
+		}
+		m := &p.Milestones[idx]
+		if m.Status != "pending" {
+			return m.Status == "blocked"
+		}
+		m.Attempts++
+		if m.Attempts >= maxAttempts {
+			m.Status = "blocked"
+			m.BlockedAt = time.Now().UTC()
+			p.Updated = time.Now().UTC()
+			return true
+		}
+		p.Updated = time.Now().UTC()
+		return false
+	}
+	return false
+}
+
+// RefundAttempt un-records one attempt charged against the milestone at idx —
+// the complement of RecordAttemptAndMaybeBlock for cycles that died for
+// *infrastructure* reasons (Claude rate limit, commit gate wedged by an
+// external landing, apply/sync refusal) rather than an implementation failure.
+// Only genuine agent declines may consume the milestone-abandon budget; without
+// the refund, three cycles of external outage wrongly block a milestone
+// (2026-07-09 doc-drift wedge, 2026-07-08 rate-limit window).
+//
+// The refund decrements Attempts (never below zero — a refund without a
+// remaining charge is a no-op) and, when the milestone is blocked but the
+// refunded charge is what pushed it to maxAttempts, restores it to pending and
+// clears BlockedAt. A block accrued from more genuine attempts in earlier
+// cycles stays blocked. Done milestones are immutable. Reports whether
+// anything changed.
+func (ps *ProgramStore) RefundAttempt(programID string, idx, maxAttempts int) bool {
+	for _, p := range ps.Programs {
+		if p.ID != programID {
+			continue
+		}
+		if idx < 0 || idx >= len(p.Milestones) {
+			return false
+		}
+		m := &p.Milestones[idx]
+		if m.Status == "done" || m.Attempts <= 0 {
+			return false
+		}
+		m.Attempts--
+		if m.Status == "blocked" && m.Attempts < maxAttempts {
+			m.Status = "pending"
+			m.BlockedAt = time.Time{}
+		}
+		p.Updated = time.Now().UTC()
+		return true
+	}
+	return false
+}
+
+type ProgramStore struct {
+	path     string
+	Programs []*Program `json:"programs"`
+}
+
+// DefaultProgramsPath is the ADR-003 location of the program backlog.
+func DefaultProgramsPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		home = "/home/nico"
+	}
+	return filepath.Join(home, ".go-bt-evolve", "research", "programs.json")
+}
+
+// OpenPrograms loads the store; a missing file yields an empty store.
+func OpenPrograms(path string) (*ProgramStore, error) {
+	ps := &ProgramStore{path: path}
+	b, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return ps, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("program store %s: %w", path, err)
+	}
+	if err := json.Unmarshal(b, ps); err != nil {
+		return nil, fmt.Errorf("program store %s is corrupt: %w", path, err)
+	}
+	return ps, nil
+}
+
+// UpdatePrograms performs one read-modify-write cycle against the store at
+// path under an exclusive cross-process flock: open, run fn against the
+// loaded store, then save — all while holding the lock. Plain OpenPrograms +
+// Save (as most callers still do) never merges against what is currently on
+// disk, so two concurrent read-modify-write callers can race: the second
+// Save silently clobbers the first's already-persisted change with a stale
+// in-memory copy. Holding one lock across the whole open→fn→save sequence
+// closes that gap by serializing writers, the same idiom
+// reliability.DeadLetterQueue.save uses for its own sidecar file.
+func UpdatePrograms(path string, fn func(*ProgramStore) error) error {
+	release, err := reliability.AcquireFileLock(path)
+	if err != nil {
+		return fmt.Errorf("update programs %s: %w", path, err)
+	}
+	defer release()
+
+	ps, err := OpenPrograms(path)
+	if err != nil {
+		return err
+	}
+	if err := fn(ps); err != nil {
+		return err
+	}
+	return ps.Save()
+}
+
+// SelfFixSourcePrefix tags programs seeded to repair the platform's own
+// defects (error-handler escalations, self-review findings, operator review
+// seeds). It is the canonical spelling — the engine's seeding cap and source
+// normalization key on it too — and Active() gives programs carrying it
+// absolute scheduling priority.
+const SelfFixSourcePrefix = "self-fix:"
+
+// Active returns the program the next cycle should work: self-fix programs
+// FIRST (fixes-first — the platform repairs itself before building more;
+// before 2026-07-23 self-fix seeds competed in plain array order and could
+// starve behind a continuously refilling feature backlog, ADR-197), then the
+// oldest general program that still has a pending milestone. Within each
+// class, array order (seed order) decides.
+// CoverageFillerSource tags the deterministic coverage backlog — the floor the
+// loop seeds from production files lacking a sibling _test.go when research is
+// unusable. It is deliberately FILLER: something to do when there is nothing
+// better, never a reason to stop looking for something better.
+//
+// 2026-08-01: treating it like real work starved the fleet. The arc42 seeder
+// skipped 15 of its last 18 runs with "a program is still active" and seeded
+// nothing from 2026-07-18 onward, because a coverage program was essentially
+// always active; programs created after 07-22 are almost entirely coverage. The
+// fleet spent Opus-at-max-effort cycles writing characterization tests for its
+// own files because nothing else could get queued behind the filler.
+const CoverageFillerSource = "auto-seed:coverage"
+
+// IsFiller reports whether the program is deterministic filler rather than
+// research- or review-grounded work.
+func (p *Program) IsFiller() bool { return p.Source == CoverageFillerSource }
+
+// Active returns the program the loop should work on next, in priority order:
+// self-fix (the platform repairing itself) > real work > filler. Filler never
+// outranks real work — otherwise seeding past it (see ActiveExcludingFiller)
+// would queue arc42 goals that never get picked up.
+func (ps *ProgramStore) Active() *Program {
+	tiers := []func(*Program) bool{
+		func(p *Program) bool { return strings.HasPrefix(p.Source, SelfFixSourcePrefix) },
+		func(p *Program) bool { return !strings.HasPrefix(p.Source, SelfFixSourcePrefix) && !p.IsFiller() },
+		func(p *Program) bool { return true },
+	}
+	for _, want := range tiers {
+		for _, p := range ps.Programs {
+			if !want(p) {
+				continue
+			}
+			if _, m := p.NextMilestone(); m != nil {
+				return p
+			}
+		}
+	}
+	return nil
+}
+
+// ActiveExcludingFiller is Active() for the SEEDERS' question — "is real work
+// already queued?" — and answers nil when the only thing in flight is filler.
+// One-program-at-a-time still holds for real programs; it just no longer lets
+// the coverage floor crowd out the research-grounded seeding it stands in for.
+func (ps *ProgramStore) ActiveExcludingFiller() *Program {
+	if p := ps.Active(); p != nil && !p.IsFiller() {
+		return p
+	}
+	return nil
+}
+
+// ClaimActiveForCycle returns Active() claimed for agentID (stamping
+// ClaimedBy + ClaimedAt), unless it is already claimed by a DIFFERENT agent
+// within the lease window — evidence a sibling cycle is still landing it,
+// in which case it returns nil so the caller charges nothing this cycle
+// rather than stealing the claim (the loop-runner burned 3 cycles 2026-07-23
+// 12:38-14:55 doing exactly that). A claim older than lease is stale — the
+// claiming cycle crashed, or is simply long done — and is overwritten. The
+// SAME agent may always re-claim its own program (e.g. a retried cycle
+// reuses its own RunID), refreshing ClaimedAt.
+func (ps *ProgramStore) ClaimActiveForCycle(agentID string, lease time.Duration) *Program {
+	p := ps.Active()
+	if p == nil {
+		return nil
+	}
+	if p.ClaimedBy != "" && p.ClaimedBy != agentID && time.Since(p.ClaimedAt) < lease {
+		return nil
+	}
+	now := time.Now().UTC()
+	p.ClaimedBy = agentID
+	p.ClaimedAt = now
+	p.Updated = now
+	return p
+}
+
+// ReleaseClaim clears agentID's claim on program programID — the counterpart
+// to ClaimActiveForCycle, called from the charging cycle's deferred handler
+// once it finishes (refunded or abandoned) so a sibling cycle need not wait
+// out the full lease window to plan the same program (2026-07-23 loop-runner
+// treadmill). A no-op when the program is unclaimed or claimed by a
+// DIFFERENT agent — a stale claim a sibling already reclaimed must never be
+// stolen back by this cycle's belated release. Reports whether anything
+// changed.
+func (ps *ProgramStore) ReleaseClaim(programID, agentID string) bool {
+	for _, p := range ps.Programs {
+		if p.ID != programID {
+			continue
+		}
+		if p.ClaimedBy == "" || p.ClaimedBy != agentID {
+			return false
+		}
+		p.ClaimedBy = ""
+		p.ClaimedAt = time.Time{}
+		p.Updated = time.Now().UTC()
+		return true
+	}
+	return false
+}
+
+// ClearClaim unconditionally clears programID's claim, whoever holds it — for
+// callers that complete a program's milestone on behalf of a DIFFERENT
+// agent's claim (the red pre-check re-runs a PRIOR cycle's recorded RED
+// command before this cycle ever claims the program itself, so there is no
+// agentID to compare against as ReleaseClaim requires). The completing cycle
+// has already re-validated the milestone under the store lock, so clearing
+// whatever claim is present is safe: no one is still landing it. A no-op
+// when already unclaimed. Reports whether anything changed.
+func (ps *ProgramStore) ClearClaim(programID string) bool {
+	for _, p := range ps.Programs {
+		if p.ID != programID {
+			continue
+		}
+		if p.ClaimedBy == "" {
+			return false
+		}
+		p.ClaimedBy = ""
+		p.ClaimedAt = time.Time{}
+		p.Updated = time.Now().UTC()
+		return true
+	}
+	return false
+}
+
+// Add registers a new program unless one with the same title-key already
+// exists (research may re-propose the same program across cycles).
+func (ps *ProgramStore) Add(title, source string, milestones []string) *Program {
+	key := Key(title)
+	for _, p := range ps.Programs {
+		if Key(p.Title) == key {
+			return p
+		}
+	}
+	now := time.Now().UTC()
+	p := &Program{
+		ID:      key,
+		Title:   title,
+		Source:  source,
+		Created: now,
+		Updated: now,
+	}
+	for _, m := range milestones {
+		p.Milestones = append(p.Milestones, Milestone{Goal: m, Status: "pending"})
+	}
+	ps.Programs = append(ps.Programs, p)
+	return p
+}
+
+// MarkDone completes one milestone; reports whether anything changed.
+func (ps *ProgramStore) MarkDone(programID string, milestoneIdx int, runID string) bool {
+	for _, p := range ps.Programs {
+		if p.ID != programID {
+			continue
+		}
+		if milestoneIdx < 0 || milestoneIdx >= len(p.Milestones) {
+			return false
+		}
+		m := &p.Milestones[milestoneIdx]
+		if m.Status == "done" {
+			return false
+		}
+		m.Status = "done"
+		m.CompletedRun = runID
+		m.CompletedAt = time.Now().UTC()
+		p.Updated = time.Now().UTC()
+		return true
+	}
+	return false
+}
+
+// Save writes the store atomically (tmp+rename) per ADR-003. The tmp file
+// uses a RANDOMIZED name (os.CreateTemp) rather than a fixed ps.path+".tmp" —
+// this branch adds a second scheduled writer (the self-review agent) to the
+// SAME programs.json alongside the existing arc42/goap seeders, and a fixed
+// tmp name lets two concurrent writers interleave: whichever writer's
+// os.Rename runs first moves the SHARED tmp file away, so the other writer's
+// own os.Rename of that now-nonexistent path fails outright (losing that
+// writer's update) or, with different timing, one writer's WriteFile can
+// truncate/overwrite the other's in-flight bytes before either renames.
+// Creating the tmp file in the SAME directory as ps.path keeps the rename
+// atomic on one filesystem while giving each concurrent Save its own,
+// unrelated tmp file.
+func (ps *ProgramStore) Save() error {
+	dir := filepath.Dir(ps.path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	b, err := json.MarshalIndent(ps, "", "  ")
+	if err != nil {
+		return err
+	}
+	f, err := os.CreateTemp(dir, filepath.Base(ps.path)+".*.tmp")
+	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	if _, err := f.Write(b); err != nil {
+		_ = f.Close()
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	// os.CreateTemp creates the file 0600; restore the documented 0644 perms
+	// before the rename makes it visible as ps.path.
+	if err := os.Chmod(tmp, 0o644); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := os.Rename(tmp, ps.path); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
+}
+
+// RecordRedPass increments the milestone's consecutive red-pass counter and
+// returns the new streak. A red-pass (the plan's RED command passing before
+// GREEN) is evidence the milestone's work already exists at HEAD.
+func (ps *ProgramStore) RecordRedPass(programID string, milestoneIdx int, redCmd string) int {
+	for _, p := range ps.Programs {
+		if p.ID != programID {
+			continue
+		}
+		if milestoneIdx < 0 || milestoneIdx >= len(p.Milestones) {
+			return 0
+		}
+		m := &p.Milestones[milestoneIdx]
+		if m.Status == "done" {
+			return m.RedPassStreak
+		}
+		m.RedPassStreak++
+		// Persist the passing RED command for the next cycle's charge-time
+		// pre-check; an empty command (extraction failed) keeps the previous
+		// record so the evidence never degrades.
+		if cmd := strings.TrimSpace(redCmd); cmd != "" {
+			m.LastRedCmd = cmd
+		}
+		p.Updated = time.Now().UTC()
+		return m.RedPassStreak
+	}
+	return 0
+}
+
+// ResetRedPassStreak clears the milestone's red-pass evidence — streak AND
+// recorded command — called when a genuine implementation failure (or a
+// failing charge-time pre-check) proves the milestone's tests can still
+// fail, killing the already-landed hypothesis outright.
+func (ps *ProgramStore) ResetRedPassStreak(programID string, milestoneIdx int) {
+	for _, p := range ps.Programs {
+		if p.ID != programID {
+			continue
+		}
+		if milestoneIdx < 0 || milestoneIdx >= len(p.Milestones) {
+			return
+		}
+		m := &p.Milestones[milestoneIdx]
+		if m.RedPassStreak == 0 && m.LastRedCmd == "" {
+			return
+		}
+		m.RedPassStreak = 0
+		m.LastRedCmd = ""
+		p.Updated = time.Now().UTC()
+		return
+	}
+}

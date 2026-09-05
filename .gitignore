@@ -1,0 +1,45 @@
+bin/
+*.exe
+*.test
+*.out
+/tmp/
+__pycache__/
+*.pyc
+.DS_Store
+*.log
+graphify-out/
+.claude-progress.md
+testdata/arc42/*.md
+
+# Compiled binaries (repo root)
+/bt-agent
+/bt-agent.previous
+/bt-agent~
+/bt-dashboard
+/bt-agent-cli
+/bt-agent-cli.previous
+/bt-docgen
+/bt-evaluator
+/bt-gardener
+/bt-langagent
+/bt-security-probe
+
+# Dependencies and tool output
+node_modules/
+test-results/
+.playwright-mcp/
+.superpowers/
+
+# Generated Superpowers runtime evidence (kept on disk, not committed)
+docs/superpowers/runs/
+docs/superpowers/plans/goap-fusion-*.md
+
+# Temp files
+.tmp
+bt-scalability-probe
+
+# Compiled binaries must never be committed (2026-07-15: a cycle re-committed
+# a rebuilt 19.8MB benchcmp; TestNoCommittedRootBinaries enforces this)
+/benchcmp
+/bt-ci-doctor
+.worktrees/

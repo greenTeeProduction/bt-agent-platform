@@ -1,0 +1,26 @@
+name: autonomous-research-implementer
+description: Full autonomous pipeline — research with NotebookLM (query + deep research + import), grill-me critical review to surface gaps, write implementation plan, implement task-by-task via subagents, run tests, build and deploy. Reproduces the complete research→plan→build→deploy workflow.
+version: "1.0.0"
+tree: domain:notebooklm_plan_implement
+schedule: on_demand
+inputs:
+  - name: research_topic
+    type: text
+    required: true
+    description: "Topic to research (e.g., 'BT platform gaps', 'GOAP optimization')"
+  - name: notebook_id
+    type: text
+    required: false
+    description: "NotebookLM notebook ID (default: BT Platform Research)"
+outputs:
+  - name: plan_path
+    type: text
+  - name: implementation_report
+    type: markdown
+  - name: test_results
+    type: text
+quality:
+  required_sections: ["Research Findings", "Gaps Identified", "Implementation Plan", "Test Results", "Deployment Status"]
+metadata:
+  category: research
+  tags: "autonomous,research,implementation,notebooklm,plan,deploy"

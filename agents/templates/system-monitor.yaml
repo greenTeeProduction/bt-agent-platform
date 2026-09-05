@@ -1,0 +1,22 @@
+name: system-monitor
+description: Monitors system health — disk, memory, CPU, processes, and alerts on degradation
+version: "1.0.0"
+tree: domain:agent_monitor
+schedule: "*/5 * * * *"
+inputs:
+  - name: targets
+    type: text
+    required: false
+    default: "disk,memory,cpu,processes"
+    description: Comma-separated list of what to monitor
+outputs:
+  - name: health_report
+    type: markdown
+    description: System health report with alerts
+quality:
+  min_length: 80
+  required_sections: ["Status", "Alerts"]
+  blocked_patterns: ["error: timeout"]
+metadata:
+  category: devops
+  tags: "monitoring,health,system"

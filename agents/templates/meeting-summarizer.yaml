@@ -1,0 +1,20 @@
+name: meeting-summarizer
+description: Converts meeting transcripts into structured notes with action items
+version: "1.0.0"
+tree: domain:meeting_notes
+schedule: on_demand
+inputs:
+  - name: transcript
+    type: text
+    required: true
+    description: Raw meeting transcript
+outputs:
+  - name: summary
+    type: markdown
+    description: Structured meeting notes with decisions and action items
+quality:
+  min_length: 150
+  required_sections: ["Context", "Decisions", "Action Items"]
+metadata:
+  category: productivity
+  tags: "meeting,notes,summary"

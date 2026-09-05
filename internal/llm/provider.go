@@ -1,0 +1,178 @@
+package llm
+
+import (
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/nico/go-bt-evolve/internal/config"
+)
+
+// NewProvider creates the appropriate LLM client based on configuration.
+// Supports "ollama", "deepseek", "openrouter", and "acp" providers. Reads API keys,
+// model settings, and ACP process settings from config or environment.
+func NewProvider(cfg *config.Config) (LLM, error) {
+	primary, primaryName, err := buildProvider(cfg.LLMProvider, primaryModel(cfg), cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	fallbackSpecs := parseFallbackModels(cfg.FallbackModels, cfg.LLMProvider)
+	if len(fallbackSpecs) == 0 {
+		return primary, nil
+	}
+
+	models := []NamedLLM{{Name: primaryName, LLM: primary}}
+	for _, spec := range fallbackSpecs {
+		fallback, name, err := buildProvider(spec.Provider, spec.Model, cfg)
+		if err != nil {
+			return nil, fmt.Errorf("fallback model %q: %w", spec.Raw, err)
+		}
+		models = append(models, NamedLLM{Name: name, LLM: fallback})
+	}
+	return NewFallbackLLM(models), nil
+}
+
+func buildProvider(provider, model string, cfg *config.Config) (LLM, string, error) {
+	switch provider {
+	case "deepseek":
+		dsCfg := DefaultDeepSeekConfig()
+		if cfg.DeepSeekHost != "" {
+			dsCfg.BaseURL = cfg.DeepSeekHost
+		}
+		if model != "" {
+			dsCfg.Model = model
+		} else if cfg.DeepSeekModel != "" {
+			dsCfg.Model = cfg.DeepSeekModel
+		}
+		if cfg.DeepSeekKey != "" {
+			dsCfg.APIKey = cfg.DeepSeekKey
+		}
+		if cfg.LLMTimeout != 0 {
+			dsCfg.Timeout = time.Duration(cfg.LLMTimeout) * time.Second
+		}
+		return NewDeepSeekClient(dsCfg), fmt.Sprintf("deepseek:%s", dsCfg.Model), nil
+	case "openrouter":
+		orModel := model
+		if orModel == "" {
+			orModel = cfg.OpenRouterModel
+		}
+		client := NewOpenAICompatClient(OpenAICompatConfig{
+			APIKey:  cfg.OpenRouterKey,
+			BaseURL: cfg.OpenRouterHost,
+			Model:   orModel,
+			Timeout: time.Duration(cfg.LLMTimeout) * time.Second,
+			AppName: "go-bt-evolve",
+		})
+		return client, fmt.Sprintf("openrouter:%s", orModel), nil
+	case "acp":
+		client := NewACPClient(ACPConfig{
+			Command: cfg.ACPCommand,
+			Args:    splitACPArgs(cfg.ACPArgs),
+			CWD:     cfg.ACPCwd,
+			Timeout: config.Duration(cfg.LLMTimeout),
+		})
+		return client, "acp:" + cfg.ACPCommand, nil
+	case "ollama":
+		ollamaModel := model
+		if ollamaModel == "" {
+			ollamaModel = cfg.OllamaModel
+		}
+		client, err := NewClient(Config{
+			ServerURL: cfg.OllamaHost,
+			Model:     ollamaModel,
+			Timeout:   config.Duration(cfg.LLMTimeout),
+		})
+		if err != nil {
+			return nil, "", err
+		}
+		return client, fmt.Sprintf("ollama:%s", ollamaModel), nil
+	default:
+		return nil, "", fmt.Errorf("unknown LLM provider: %s (valid: ollama, deepseek, openrouter, acp)", provider)
+	}
+}
+
+// maxTokensCapable is implemented by concrete LLM clients (e.g. *Client) that
+// support capping the number of output tokens on a single call. It mirrors
+// internal/engine/chains.go's maxTokensLLM and is checked via type assertion
+// rather than folded into the LLM interface itself — LLM is implemented by
+// many providers and test mocks (DeepSeekClient, OpenAICompatClient,
+// ACPClient, and every mock LLM across the codebase) that don't support this
+// and shouldn't be forced to grow the method just to keep compiling.
+type maxTokensCapable interface {
+	GenerateWithMaxTokens(prompt string, maxTokens int) (string, error)
+}
+
+// generateWithMaxTokens calls inner.GenerateWithMaxTokens(prompt, maxTokens)
+// when inner supports it, else falls back to the unbounded inner.Generate,
+// so decorators (ErrorRecorder, TracedLLM, FallbackLLM) forward the
+// capability when present without requiring every wrapped LLM to have it.
+func generateWithMaxTokens(inner LLM, prompt string, maxTokens int) (string, error) {
+	if capped, ok := inner.(maxTokensCapable); ok {
+		return capped.GenerateWithMaxTokens(prompt, maxTokens)
+	}
+	return inner.Generate(prompt)
+}
+
+type fallbackSpec struct {
+	Provider string
+	Model    string
+	Raw      string
+}
+
+func primaryModel(cfg *config.Config) string {
+	switch cfg.LLMProvider {
+	case "deepseek":
+		return cfg.DeepSeekModel
+	case "openrouter":
+		return cfg.OpenRouterModel
+	case "ollama":
+		return cfg.OllamaModel
+	default:
+		return ""
+	}
+}
+
+func parseFallbackModels(raw string, defaultProvider string) []fallbackSpec {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+
+	parts := strings.Split(raw, ",")
+	specs := make([]fallbackSpec, 0, len(parts))
+	for _, part := range parts {
+		item := strings.TrimSpace(part)
+		if item == "" {
+			continue
+		}
+
+		provider := defaultProvider
+		model := item
+		if before, after, ok := strings.Cut(item, ":"); ok {
+			provider = strings.TrimSpace(before)
+			model = strings.TrimSpace(after)
+		} else if before, after, ok := strings.Cut(item, "/"); ok && isKnownProvider(before) {
+			provider = strings.TrimSpace(before)
+			model = strings.TrimSpace(after)
+		}
+
+		specs = append(specs, fallbackSpec{Provider: provider, Model: model, Raw: item})
+	}
+	return specs
+}
+
+func isKnownProvider(provider string) bool {
+	switch provider {
+	case "ollama", "deepseek", "openrouter", "acp":
+		return true
+	default:
+		return false
+	}
+}
+
+func splitACPArgs(args string) []string {
+	if args == "" {
+		return nil
+	}
+	return strings.Fields(args)
+}

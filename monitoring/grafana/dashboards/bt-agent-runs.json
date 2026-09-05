@@ -1,0 +1,26 @@
+{
+  "title": "BT Agent Runs",
+  "uid": "bt-agent-runs",
+  "schemaVersion": 39,
+  "time": {"from": "now-6h", "to": "now"},
+  "panels": [
+    {
+      "type": "timeseries", "title": "Agent runs (spans/min)",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+      "datasource": {"uid": "tempo"},
+      "targets": [{"queryType": "traceqlSearch", "query": "{name =~ \"agent.run/.*\"}", "refId": "A"}]
+    },
+    {
+      "type": "table", "title": "Slowest actions (last 1h)",
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+      "datasource": {"uid": "tempo"},
+      "targets": [{"queryType": "traceql", "query": "{span.bt.node.kind = \"action\"} | select(span.bt.node.name, duration)", "refId": "A"}]
+    },
+    {
+      "type": "logs", "title": "Recent errors",
+      "gridPos": {"h": 10, "w": 24, "x": 0, "y": 8},
+      "datasource": {"uid": "loki"},
+      "targets": [{"expr": "{service_name=~\"bt-.*\"} | detected_level = `error`", "refId": "A"}]
+    }
+  ]
+}

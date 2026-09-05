@@ -1,0 +1,21 @@
+name: code-review
+description: Code review pipeline — review code, suggest improvements, apply fixes
+version: "1.0.0"
+steps:
+  - id: review
+    kind: agent
+    agent: code-reviewer
+    input: "Review the following code changes and report issues: {{.input}}"
+    on_failure: abort
+
+  - id: suggest
+    kind: agent
+    agent: code-reviewer
+    input: "Based on the review findings, suggest specific improvements: {{.prev.review.output}}"
+    on_failure: skip
+
+  - id: apply_fix
+    kind: agent
+    agent: bt-implementer
+    input: "Apply the suggested code fixes: {{.prev.suggest.output}}"
+    on_failure: retry
