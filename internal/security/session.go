@@ -15,7 +15,6 @@ package security
 
 import (
 	"crypto/rand"
-	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
@@ -349,12 +348,12 @@ func (ss *SessionStore) SessionMiddleware(apiKey string, checkAPIKey func(key st
 	}
 }
 
-// MatchAPIKey rejects an unconfigured key and compares fixed-size digests in
-// constant time, including when caller-supplied key lengths differ.
+// MatchAPIKey rejects an unconfigured key and compares API-key bytes without
+// data-dependent comparisons. As with crypto/subtle, unequal lengths fail early;
+// this helper verifies a shared API key and does not store password hashes.
 func MatchAPIKey(provided, expected string) bool {
 	if expected == "" {
 		return false
 	}
-	a, b := sha256.Sum256([]byte(provided)), sha256.Sum256([]byte(expected))
-	return subtle.ConstantTimeCompare(a[:], b[:]) == 1
+	return subtle.ConstantTimeCompare([]byte(provided), []byte(expected)) == 1
 }
