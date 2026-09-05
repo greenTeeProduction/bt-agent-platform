@@ -1398,7 +1398,7 @@ var nlmGrillRunFn = nlmRun
 // check-then-refresh guard the scheduled auth-guardian agent uses,
 // actions_notebooklm.go:161-176) instead of duplicating an inline
 // `nlm login --check` call. Tests substitute this var to avoid invoking that
-// action's own unconditional real nlm exec.
+// action's shared authentication policy.
 var nlmGrillAuthGuard = defaultNlmGrillAuthGuard
 
 // defaultNlmGrillAuthGuard extracts the Blackboard GrillDesignArtifact's own
@@ -1406,7 +1406,7 @@ var nlmGrillAuthGuard = defaultNlmGrillAuthGuard
 // context.Context via embedding) and drives CheckNotebookLMAuthAndRefresh
 // through it. The action's own bb.Result/bb.Outcome writes are saved and
 // restored around the call so they don't clobber GrillDesignArtifact's — this
-// is purely an auth side-effect (and possible `nlm login` refresh), not a
+// is purely an auth side-effect (including existing-session recovery), not a
 // change GrillDesignArtifact's caller should see reflected in bb.Result. When
 // ctx carries no Blackboard (e.g. a unit test calling nlmGrillAnswerer with a
 // bare context.Context) the guard is skipped rather than panicking; output-

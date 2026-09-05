@@ -17,6 +17,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/notebooklmauth"
 )
 
 // realTool is a tool implementation that actually executes commands,
@@ -419,11 +421,11 @@ func newGraphifyTool() *realTool {
 // Go functions instead of formatting shell commands (which the LLM may fabricate).
 // Each tool execs the real nlm binary and returns its JSON output.
 
-const nlmBin = "/home/nico/.local/bin/nlm"
+const nlmBin = notebooklmauth.CLIPath
 const defaultNotebook = "463ca402-e972-470b-889c-b735e37c6746"
 
 // nlmRun runs an nlm command with the given arguments, with retry and circuit breaker.
-// A var so tests can fake nlm output (same seam pattern as nlmAuthRun).
+// A var so tests can fake nlm output (same seam pattern as nlmAuthEnsure).
 var nlmRun = func(timeout time.Duration, args ...string) string {
 	return nlmRunContext(context.Background(), timeout, args...)
 }
@@ -495,7 +497,7 @@ var nlmRunContext = func(parent context.Context, timeout time.Duration, args ...
 		}
 
 		ctx, cancel := context.WithTimeout(parent, timeout)
-		cmd := exec.CommandContext(ctx, nlmBin, args...)
+		cmd := notebooklmauth.Command(ctx, args...)
 		cmd.Env = append(os.Environ(), "PATH="+os.Getenv("PATH")+":/home/nico/.local/bin")
 		bindToolCommandCancellation(cmd)
 		var stdout, stderr bytes.Buffer
@@ -726,13 +728,13 @@ func newNotebookLMQueryTool() *realTool {
 	}
 }
 
-// newNotebookLMAuthRefreshTool wraps `nlm login`.
+// newNotebookLMAuthRefreshTool shares the daemon/cron background-safe auth policy.
 func newNotebookLMAuthRefreshTool() *realTool {
 	return &realTool{
 		name: "notebooklm_refresh_auth",
-		desc: "Refresh NotebookLM authentication. Call this when server_info shows auth is stale/expired. Takes no input.",
+		desc: "Check saved NotebookLM authentication using the shared cooldown policy. Restores expired auth from an existing browser page; never launches login. Takes no input.",
 		fnCtx: func(parent context.Context, input string) string {
-			return nlmRunContext(parent, 120*time.Second, "login")
+			return nlmAuthEnsure(parent).String()
 		},
 	}
 }

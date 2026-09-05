@@ -5,12 +5,14 @@
 package engine
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/nico/go-bt-evolve/internal/notebooklmauth"
 	"github.com/nico/go-bt-evolve/internal/research"
 
 	btcore "github.com/rvitorper/go-bt/core"
@@ -20,9 +22,8 @@ func init() {
 	registerNotebookLMActions()
 }
 
-// nlmAuthRun is the nlm invocation used by auth actions — a var so tests can
-// script check/login/re-check sequences without the real CLI.
-var nlmAuthRun = nlmRun
+// Shared by auth actions and the raw refresh tool; tests can isolate the policy.
+var nlmAuthEnsure = notebooklmauth.Ensure
 
 // nlmResearchSynthesesDir is where ResearchNotebookLM writes its per-run
 // synthesis report; a var so tests never touch the live research vault.
@@ -69,43 +70,28 @@ func nlmMarkResearchQueryDone(query string) {
 	_ = store.Save()
 }
 
-// nlmAuthNeedsRefresh reports whether an auth-check output warrants an
-// `nlm login` attempt. "expired" matters: a stored Chrome profile often
-// re-authenticates non-interactively, and failing without trying left the
-// notebooklm-researcher dead-lettering every window (2026-07-03).
-func nlmAuthNeedsRefresh(out string) bool {
-	for _, marker := range []string{"stale", "not_configured", "expired", "failed", "error"} {
-		if strings.Contains(out, marker) {
-			return true
-		}
+func notebookLMAuthAction(ctx *btcore.BTContext[Blackboard]) int {
+	parent := ctx.Context
+	if parent == nil {
+		parent = context.Background()
 	}
-	return false
-}
-
-// nlmAuthUnhealthy reports whether an auth-check output is a hard failure.
-func nlmAuthUnhealthy(out string) bool {
-	for _, marker := range []string{"expired", "failed", "error", "not_configured"} {
-		if strings.Contains(out, marker) {
-			return true
-		}
+	result := nlmAuthEnsure(parent)
+	bb := ctx.Blackboard
+	bb.Result = "## NotebookLM Auth\n\n" + result.String() + "\n"
+	if bb.ChainState == nil {
+		bb.ChainState = map[string]any{}
 	}
-	return false
+	bb.ChainState["nlm_auth"] = result.String()
+	bb.Outcome = result.Status
+	if result.OK() {
+		bb.Outcome = "success"
+		return 1
+	}
+	return -1
 }
 
 func registerNotebookLMActions() {
-	// CheckNotebookLMAuth — runs nlm login --check and reports status.
-	RegisterAction("CheckNotebookLMAuth", func(ctx *btcore.BTContext[Blackboard]) int {
-		bb := ctx.Blackboard
-		out := nlmRun(30*time.Second, "login", "--check")
-		bb.Result = "## NotebookLM Auth\n\n```\n" + out + "\n```\n"
-		if strings.Contains(out, "not_configured") || strings.Contains(out, "stale") || strings.Contains(out, "error") {
-			bb.Result += "\n⚠ Auth issue detected."
-			bb.Outcome = "failure"
-			return -1
-		}
-		bb.Outcome = "success"
-		return 1
-	})
+	RegisterAction("CheckNotebookLMAuth", notebookLMAuthAction)
 
 	// ListNotebookLMNotebooks — runs nlm notebook list --json.
 	RegisterAction("ListNotebookLMNotebooks", func(ctx *btcore.BTContext[Blackboard]) int {
@@ -256,37 +242,7 @@ func registerNotebookLMActions() {
 		return 1
 	})
 
-	// CheckNotebookLMAuthAndRefresh — runs auth check; on any unhealthy
-	// status (stale, not_configured, expired, failed) attempts `nlm login`
-	// and re-checks. The verdict comes from the RE-CHECK only — grepping the
-	// concatenated transcript let the original failure text poison a
-	// successful refresh.
-	RegisterAction("CheckNotebookLMAuthAndRefresh", func(ctx *btcore.BTContext[Blackboard]) int {
-		bb := ctx.Blackboard
-		check := nlmAuthRun(30*time.Second, "login", "--check")
-		status := check
-		detail := check
-		if nlmAuthNeedsRefresh(check) {
-			refresh := nlmAuthRun(120*time.Second, "login")
-			recheck := nlmAuthRun(30*time.Second, "login", "--check")
-			detail = "Auth check: " + check + "\nRefresh: " + refresh + "\nRe-check: " + recheck
-			status = recheck
-		}
-		bb.Result = "## NotebookLM Auth\n\n```\n" + detail + "\n```\n"
-		bb.ChainState["nlm_auth"] = detail
-		if nlmAuthUnhealthy(status) {
-			// Still unhealthy after the refresh attempt: nlm login needs an
-			// interactive browser only the user can drive. Failing here just
-			// dead-letters the guardian every schedule tick (3 retries each)
-			// without changing anything — degrade with a loud instruction
-			// instead so the report reaches the user without DLQ noise.
-			bb.Result += "\nDEGRADED: automated refresh cannot recover this session — run `nlm login` interactively."
-			bb.Outcome = "nlm_auth_needs_user"
-			return 1
-		}
-		bb.Outcome = "success"
-		return 1
-	})
+	RegisterAction("CheckNotebookLMAuthAndRefresh", notebookLMAuthAction)
 }
 
 // extractTaskID extracts a UUID-like task ID from research output.

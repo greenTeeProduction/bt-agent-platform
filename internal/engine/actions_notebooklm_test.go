@@ -15,46 +15,6 @@ import (
 // the remaining actions and helpers, plus a few ResearchNotebookLM branches
 // those files don't reach.
 
-// --- CheckNotebookLMAuth ---------------------------------------------------
-
-func TestCheckNotebookLMAuth_HealthyReportsSuccess(t *testing.T) {
-	old := nlmRun
-	nlmRun = func(_ time.Duration, args ...string) string {
-		return "✓ Authenticated as user@example.com"
-	}
-	t.Cleanup(func() { nlmRun = old })
-
-	bb := &Blackboard{}
-	if got := runFusionAction(t, "CheckNotebookLMAuth", bb); got != 1 {
-		t.Fatalf("status = %d, want 1; result: %s", got, bb.Result)
-	}
-	if bb.Outcome != "success" {
-		t.Fatalf("outcome = %q, want success", bb.Outcome)
-	}
-	if !strings.Contains(bb.Result, "NotebookLM Auth") || !strings.Contains(bb.Result, "Authenticated as user@example.com") {
-		t.Fatalf("result must report the auth check output: %s", bb.Result)
-	}
-}
-
-func TestCheckNotebookLMAuth_UnhealthyReportsFailure(t *testing.T) {
-	old := nlmRun
-	nlmRun = func(_ time.Duration, args ...string) string {
-		return "Error: not_configured"
-	}
-	t.Cleanup(func() { nlmRun = old })
-
-	bb := &Blackboard{}
-	if got := runFusionAction(t, "CheckNotebookLMAuth", bb); got != -1 {
-		t.Fatalf("status = %d, want -1; result: %s", got, bb.Result)
-	}
-	if bb.Outcome != "failure" {
-		t.Fatalf("outcome = %q, want failure", bb.Outcome)
-	}
-	if !strings.Contains(bb.Result, "Auth issue detected") {
-		t.Fatalf("result must flag the auth issue: %s", bb.Result)
-	}
-}
-
 // --- ListNotebookLMNotebooks ------------------------------------------------
 
 func TestListNotebookLMNotebooks_StoresListInChainState(t *testing.T) {
@@ -413,50 +373,6 @@ func TestWriteString_ErrorsWhenParentIsARegularFile(t *testing.T) {
 	}
 	if err := writeString(filepath.Join(blocker, "child.md"), "content"); err == nil {
 		t.Fatal("writeString must error when a path component is a regular file")
-	}
-}
-
-// --- nlmAuthNeedsRefresh / nlmAuthUnhealthy -----------------------------------
-
-func TestNlmAuthNeedsRefresh(t *testing.T) {
-	tests := []struct {
-		out  string
-		want bool
-	}{
-		{"✓ Authenticated as user@example.com", false},
-		{"stale credentials", true},
-		{"not_configured", true},
-		{"Credentials have expired", true},
-		{"login failed", true},
-		{"an error occurred", true},
-		{"", false},
-	}
-	for _, tt := range tests {
-		if got := nlmAuthNeedsRefresh(tt.out); got != tt.want {
-			t.Errorf("nlmAuthNeedsRefresh(%q) = %v, want %v", tt.out, got, tt.want)
-		}
-	}
-}
-
-func TestNlmAuthUnhealthy(t *testing.T) {
-	tests := []struct {
-		out  string
-		want bool
-	}{
-		{"✓ Authenticated as user@example.com", false},
-		{"Credentials have expired", true},
-		{"login failed", true},
-		{"an error occurred", true},
-		{"not_configured", true},
-		// "stale" alone triggers a refresh attempt (nlmAuthNeedsRefresh) but is
-		// not itself treated as a hard failure verdict.
-		{"stale credentials", false},
-		{"", false},
-	}
-	for _, tt := range tests {
-		if got := nlmAuthUnhealthy(tt.out); got != tt.want {
-			t.Errorf("nlmAuthUnhealthy(%q) = %v, want %v", tt.out, got, tt.want)
-		}
 	}
 }
 

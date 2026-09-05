@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/nico/go-bt-evolve/internal/research"
 
@@ -111,31 +110,6 @@ func TestApplyCommitFailureWritesEvidenceArtifact(t *testing.T) {
 	}
 	if !strings.Contains(string(b), "forced failure") {
 		t.Fatalf("evidence must carry the git output: %s", b)
-	}
-}
-
-// --- Finding 6: auth guardian must not dead-letter on needs-user auth ---
-
-func TestAuthGuardianDegradesInsteadOfDeadLettering(t *testing.T) {
-	oldRun := nlmAuthRun
-	nlmAuthRun = func(timeout time.Duration, args ...string) string {
-		if len(args) >= 2 && args[0] == "login" && args[1] == "--check" {
-			return "Error: authentication expired"
-		}
-		return "Error: interactive browser login required"
-	}
-	t.Cleanup(func() { nlmAuthRun = oldRun })
-
-	fn := GetAction("CheckNotebookLMAuthAndRefresh")
-	bb := &Blackboard{ChainState: map[string]any{}}
-	if got := fn(&btcore.BTContext[Blackboard]{Blackboard: bb}); got != 1 {
-		t.Fatalf("auth guardian must degrade with success (nothing retries can do), got %d: %s", got, bb.Result)
-	}
-	if bb.Outcome != "nlm_auth_needs_user" {
-		t.Fatalf("outcome = %q, want nlm_auth_needs_user", bb.Outcome)
-	}
-	if !strings.Contains(bb.Result, "nlm login") {
-		t.Fatalf("result must tell the user to run nlm login: %s", bb.Result)
 	}
 }
 
