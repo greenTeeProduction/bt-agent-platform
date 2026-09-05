@@ -3,6 +3,10 @@ package a2a
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/url"
+	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
@@ -13,7 +17,9 @@ import (
 
 // BTAgentClient is an A2A client that BT trees use to delegate to external agents.
 type BTAgentClient struct {
-	Timeout time.Duration
+	APIKey      string
+	PlatformURL string
+	Timeout     time.Duration
 }
 
 // sendTaskRetries/sendTaskBaseDelay/sendTaskMaxDelay bound how hard SendTask
@@ -37,7 +43,11 @@ var _ BidCollector = (*BTAgentClient)(nil)
 
 // NewBTAgentClient creates a new A2A client for BT-to-external delegation.
 func NewBTAgentClient() *BTAgentClient {
-	return &BTAgentClient{Timeout: 120 * time.Second}
+	client := &BTAgentClient{Timeout: 120 * time.Second}
+	if cfg := platformClientCredentials.Load(); cfg != nil {
+		client.APIKey, client.PlatformURL = cfg.key, cfg.baseURL
+	}
+	return client
 }
 
 // SendTask delegates a task to an external A2A agent.
@@ -52,7 +62,12 @@ func (c *BTAgentClient) SendTask(ctx context.Context, agentURL, taskText string)
 	}
 
 	// Create client from card
-	client, err := a2aclient.NewFromCard(ctx, card)
+	httpClient := &http.Client{
+		Transport: &platformKeyTransport{key: c.APIKey, platformURL: c.PlatformURL, sourceURL: agentURL},
+		// Do not forward credentials through HTTP redirects.
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
+	client, err := a2aclient.NewFromCard(ctx, card, a2aclient.WithJSONRPCTransport(httpClient), a2aclient.WithRESTTransport(httpClient))
 	if err != nil {
 		return "", fmt.Errorf("create A2A client: %w", err)
 	}
@@ -132,4 +147,30 @@ func safetyGetMessageText(msg *a2a.Message) string {
 		}
 	}
 	return ""
+}
+
+// ConfigurePlatformClient wires the resolved platform credential into built-in
+// delegation and auction clients. Call during startup; no secret is generated.
+func ConfigurePlatformClient(apiKey, baseURL string) {
+	platformClientCredentials.Store(&clientCredentials{key: apiKey, baseURL: baseURL})
+}
+
+type clientCredentials struct{ key, baseURL string }
+
+var platformClientCredentials atomic.Pointer[clientCredentials]
+
+type platformKeyTransport struct{ key, platformURL, sourceURL string }
+
+func sameOrigin(a, b string) bool {
+	x, ex := url.Parse(a)
+	y, ey := url.Parse(b)
+	return ex == nil && ey == nil && x.Host != "" && y.Host != "" && x.User == nil && y.User == nil &&
+		(x.Scheme == "http" || x.Scheme == "https") && x.Scheme == y.Scheme && strings.EqualFold(x.Host, y.Host)
+}
+func (t *platformKeyTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	req = req.Clone(req.Context())
+	if t.key != "" && sameOrigin(t.sourceURL, t.platformURL) && sameOrigin(req.URL.String(), t.platformURL) {
+		req.Header.Set("X-API-Key", t.key)
+	}
+	return http.DefaultTransport.RoundTrip(req)
 }

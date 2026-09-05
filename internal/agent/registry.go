@@ -98,6 +98,9 @@ func NewRegistry(dir string) (*Registry, error) {
 
 // Create creates a new agent from a definition and adds it to the registry.
 func (r *Registry) Create(def Definition) (*Instance, error) {
+	if err := ValidateName(def.Name); err != nil {
+		return nil, err
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -184,6 +187,9 @@ func (r *Registry) UpdateSchedule(name, schedule string) error {
 
 // Delete removes an agent from the registry.
 func (r *Registry) Delete(name string) error {
+	if err := ValidateName(name); err != nil {
+		return err
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -191,8 +197,7 @@ func (r *Registry) Delete(name string) error {
 		return fmt.Errorf("agent %q not found", name)
 	}
 
-	defPath := filepath.Join(r.dir, name+".yaml")
-	if err := os.Remove(defPath); err != nil && !os.IsNotExist(err) {
+	if err := RemoveDefinitionFile(r.dir, name); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("remove definition file: %w", err)
 	}
 
@@ -227,17 +232,32 @@ func (r *Registry) ReloadFromDisk() error {
 
 // saveDef persists an agent definition to disk as YAML.
 func (r *Registry) saveDef(def Definition) error {
-	path := filepath.Join(r.dir, def.Name+".yaml")
+	if err := ValidateName(def.Name); err != nil {
+		return err
+	}
 	data, err := yaml.Marshal(def)
 	if err != nil {
 		return fmt.Errorf("marshal: %w", err)
 	}
-	return os.WriteFile(path, data, 0644)
+	return WriteDefinitionFile(r.dir, def.Name, data)
 }
 
 // loadAll loads all agent definitions from disk.
 func (r *Registry) loadAll() error {
-	entries, err := os.ReadDir(r.dir)
+	root, err := os.OpenRoot(r.dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	defer root.Close()
+	dir, err := root.Open(".")
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
+	entries, err := dir.ReadDir(-1)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
@@ -246,16 +266,18 @@ func (r *Registry) loadAll() error {
 	}
 
 	for _, entry := range entries {
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".yaml" {
+		if !entry.Type().IsRegular() || filepath.Ext(entry.Name()) != ".yaml" {
 			continue
 		}
-		path := filepath.Join(r.dir, entry.Name())
-		data, err := os.ReadFile(path)
+		data, err := root.ReadFile(entry.Name())
 		if err != nil {
 			continue
 		}
 		var def Definition
 		if err := yaml.Unmarshal(data, &def); err != nil {
+			continue
+		}
+		if err := ValidateName(def.Name); err != nil {
 			continue
 		}
 		r.instances[def.Name] = &Instance{

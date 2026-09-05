@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -219,8 +218,8 @@ func DefaultAgentTask(agentName string) string {
 
 // CreateAgent writes a new agent YAML to the registry.
 func CreateAgent(info AgentYAMLConfig) error {
-	if info.Name == "" {
-		return fmt.Errorf("agent name is required")
+	if err := agent.ValidateName(info.Name); err != nil {
+		return err
 	}
 	if info.Tree == "" {
 		return fmt.Errorf("tree is required")
@@ -239,8 +238,7 @@ func CreateAgent(info AgentYAMLConfig) error {
 		return fmt.Errorf("failed to marshal agent YAML: %w", err)
 	}
 
-	filePath := filepath.Join(agent.RegistryDir(), info.Name+".yaml")
-	if err := os.WriteFile(filePath, data, 0644); err != nil {
+	if err := agent.WriteDefinitionFile(agent.RegistryDir(), info.Name, data); err != nil {
 		return fmt.Errorf("failed to write agent file: %w", err)
 	}
 
@@ -259,8 +257,8 @@ func CreateAgent(info AgentYAMLConfig) error {
 
 // DeleteAgent removes an agent from the registry and clears its scheduler jobs.
 func DeleteAgent(name string) error {
-	if name == "" {
-		return fmt.Errorf("agent name is required")
+	if err := agent.ValidateName(name); err != nil {
+		return err
 	}
 
 	reg, err := agent.NewRegistry(agent.RegistryDir())
@@ -268,20 +266,13 @@ func DeleteAgent(name string) error {
 		return fmt.Errorf("open registry: %w", err)
 	}
 
-	if err := agent.DeleteRegisteredAgent(reg, name); err == nil {
-		return nil
+	if _, err := reg.Get(name); err == nil {
+		return agent.DeleteRegisteredAgent(reg, name)
+	}
+	if err := agent.RemoveDefinitionFile(agent.RegistryDir(), name); err != nil {
+		return fmt.Errorf("delete agent %q: %w", name, err)
 	}
 
-	filePath := filepath.Join(agent.RegistryDir(), name+".yaml")
-	if _, err := os.Stat(filePath); os.IsNotExist(err) {
-		filePath = filepath.Join(agent.RegistryDir(), name+".yml")
-	}
-	if err := os.Remove(filePath); err != nil {
-		if os.IsNotExist(err) {
-			return fmt.Errorf("agent %q not found", name)
-		}
-		return fmt.Errorf("failed to delete agent %q: %w", name, err)
-	}
 	return agent.RemoveAgentJobs(name)
 }
 

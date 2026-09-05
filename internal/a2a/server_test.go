@@ -655,6 +655,7 @@ func postAgentRPC(t *testing.T, srv *Server, agentName, method string, params an
 
 	req := httptest.NewRequest(http.MethodPost, "/agents/"+agentName, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", "fixture-key")
 	w := httptest.NewRecorder()
 	srv.handleAgentEndpoint(w, req)
 
@@ -679,6 +680,8 @@ func TestHandleAgentEndpoint_ReusesSharedTaskStoreAcrossRequests(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewServer: %v", err)
 	}
+
+	srv.APIKey = "fixture-key"
 
 	// First request: submit a task. There is no tree registered for "coder"
 	// (SetTreeResolver above returns nil), so Execute fails fast — but not

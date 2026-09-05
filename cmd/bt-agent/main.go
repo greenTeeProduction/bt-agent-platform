@@ -846,6 +846,11 @@ func main() {
 	// a2aPort/a2aBaseURL were resolved earlier, alongside the AgentRouter
 	// construction that needs them ahead of the scheduler/DLQ closures.
 	a2aSrv, a2aErr := a2a_mod.NewServer(agentReg, llmClient, a2aPort, a2aBaseURL)
+	if a2aErr == nil {
+		a2aSrv.APIKey = cfg.APIKey
+		a2aSrv.BindHost = os.Getenv("BT_A2A_BIND")
+	}
+	a2a_mod.ConfigurePlatformClient(cfg.APIKey, a2aBaseURL)
 	if a2aErr != nil {
 		engine.Warn("a2a server init failed, continuing without A2A", "error", a2aErr)
 	}

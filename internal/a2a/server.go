@@ -2,6 +2,7 @@ package a2a
 
 import (
 	"context"
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"iter"
@@ -9,6 +10,7 @@ import (
 	"maps"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -19,6 +21,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/llm"
+	"github.com/nico/go-bt-evolve/internal/security"
 )
 
 // BTAgentExecutor implements a2asrv.AgentExecutor for the BT platform.
@@ -329,6 +332,8 @@ func SetTreeResolver(fn func(string) *evolution.SerializableNode) {
 
 // Server is an A2A protocol server for the BT platform.
 type Server struct {
+	APIKey    string
+	BindHost  string
 	Port      int
 	BaseURL   string
 	Reg       *agent.Registry
@@ -424,8 +429,8 @@ func (s *Server) AuctionCardSource() func() map[string]*a2a.AgentCard {
 	return s.cardCacheSnapshot
 }
 
-// Start begins listening on the configured port.
-func (s *Server) Start() error {
+// Handler returns the production discovery and authenticated RPC routes.
+func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/.well-known/agent-card.json", s.handleGlobalAgentCard)
@@ -433,10 +438,18 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/agents/", s.handleAgentEndpoint)
 	mux.HandleFunc("/health", s.handleHealth)
 
-	addr := fmt.Sprintf(":%d", s.Port)
+	return mux
+}
+
+// Start begins listening on the configured port.
+func (s *Server) Start() error {
+	addr, err := security.ListenerAddress(s.BindHost, strconv.Itoa(s.Port), s.APIKey)
+	if err != nil {
+		return err
+	}
 	s.httpSrv = &http.Server{
 		Addr:    addr,
-		Handler: mux,
+		Handler: s.Handler(),
 	}
 
 	slog.Info("a2a: starting A2A server", "addr", addr)
@@ -496,11 +509,22 @@ func (s *Server) handleAgentEndpoint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, ok := cards[agentName]; !ok {
+	card, ok := cards[agentName]
+	if !ok {
 		http.Error(w, fmt.Sprintf(`{"error":"agent %q not found"}`, agentName), http.StatusNotFound)
 		return
 	}
 
+	// Per-agent card discovery is public; all JSON-RPC calls require a key.
+	if r.Method == http.MethodGet {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(card)
+		return
+	}
+	if s.APIKey == "" || subtle.ConstantTimeCompare([]byte(r.Header.Get("X-API-Key")), []byte(s.APIKey)) != 1 {
+		http.Error(w, "unauthorized: valid X-API-Key required", http.StatusUnauthorized)
+		return
+	}
 	ctx := context.WithValue(r.Context(), agentNameKey{}, agentName)
 	s.rpcHandler.ServeHTTP(w, r.WithContext(ctx))
 }

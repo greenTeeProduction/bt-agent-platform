@@ -27,13 +27,16 @@ cd bt-agent-platform
 # Run tests (no LLM needed)
 go test -short -count=1 ./...   # ~5s, 24 passing packages
 
-# Start the dashboard
+# Provide BT_API_KEY or config api_key before using privileged HTTP routes.
+# Start the dashboard (loopback by default)
 go run ./cmd/bt-dashboard/ &
 open http://localhost:9800       # 8-tab web UI
 
 # Start bt-agent (MCP server)
 go run ./cmd/bt-agent/           # JSON-RPC 2.0 over stdio, 36 tools
 ```
+
+HTTP launch and migration settings: [authentication and agent storage](docs/security-batch-2026-09-05.md).
 
 ## Architecture
 

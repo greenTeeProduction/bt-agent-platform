@@ -341,6 +341,8 @@ func main() {
 		if u := os.Getenv("BT_A2A_BASE_URL"); u != "" {
 			a2aBaseURL = u
 		}
+		a2a.ConfigurePlatformClient(dashboardAPIKey(), a2aBaseURL)
+		a2a.InitEngineDelegate()
 		if a2aSrv, err := a2a.NewServer(runner.Registry, sharedLLM, a2aPort, a2aBaseURL); err != nil {
 			slog.Warn("auction card source unavailable", "error", err)
 		} else {
@@ -361,20 +363,23 @@ func main() {
 	getDashCBStore()
 	slog.Info("Circuit breaker store initialized", "path", agent.CircuitBreakersFile())
 
-	// API key from env/config — if set, all /api/* endpoints require X-API-Key header
-	apiKey := os.Getenv("BT_API_KEY")
-	if apiKey == "" && dashConfig != nil {
-		apiKey = dashConfig.APIKey
-	}
+	// Privileged routes require a configured API key or a session established with it.
+	apiKey := dashboardAPIKey()
+
+	// TLS support — set BT_TLS_CERT and BT_TLS_KEY to enable HTTPS
+	tlsCert := os.Getenv("BT_TLS_CERT")
+	tlsKey := os.Getenv("BT_TLS_KEY")
+	tlsEnabled := tlsCert != "" && tlsKey != ""
 
 	// Session store — cookie-based session management with TTL-based expiry.
 	// Sessions are backed by the same API key for password-based login.
-	// CookieSecure matches TLS config (auto-detected below).
+	// CookieSecure matches the resolved TLS configuration.
 	sessionStore = security.NewSessionStore(security.SessionStoreConfig{
-		DefaultTTL:  24 * time.Hour,
-		CookieName:  "bt_session",
-		CookiePath:  "/api",
-		MaxSessions: 100,
+		DefaultTTL:   24 * time.Hour,
+		CookieSecure: tlsEnabled,
+		CookieName:   "bt_session",
+		CookiePath:   "/api",
+		MaxSessions:  100,
 	})
 	slog.Info("Session store initialized", "ttl", "24h", "cookie", "bt_session")
 
@@ -413,64 +418,8 @@ func main() {
 	auditBuffer := security.NewAuditBuffer(200)
 	security.SetGlobalAuditBuffer(auditBuffer)
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", serveDashboard)
-	mux.HandleFunc("/static/", serveStatic)
-	mux.HandleFunc("/api/health", handleHealth)
-	mux.HandleFunc("/api/metrics", dashboard.PrometheusHandler().ServeHTTP)
-	mux.HandleFunc("/api/alerts", handleAlerts)
-	mux.HandleFunc("/api/alerts/rules", handleAlertRules)
-	mux.HandleFunc("/api/security/audit", handleSecurityAudit)
-	mux.HandleFunc("/api/config", handleConfig)
-	mux.HandleFunc("/api/openapi.json", handleOpenAPI)
-	mux.HandleFunc("/api/swagger", handleSwagger)
-	mux.HandleFunc("/api/scalability", handleScalability)
-	mux.HandleFunc("/api/login", handleLogin)
-	mux.HandleFunc("/api/logout", handleLogout)
-	mux.HandleFunc("/api/session", handleSession)
-	// Session-aware auth: checks session cookie first, falls back to API key header.
-	// This preserves backward compatibility with existing X-API-Key header workflows
-	// while adding cookie-based browser sessions via /api/login.
-	sessionAuth := func(next http.HandlerFunc) http.HandlerFunc {
-		if apiKey == "" {
-			return next
-		}
-		return sessionStore.SessionMiddleware(apiKey, nil)(next)
-	}
-
-	mux.HandleFunc("/api/summary", sessionAuth(handleSummary))
-	mux.HandleFunc("/api/metrics/live", sessionAuth(handleMetricsLive))
-	mux.HandleFunc("/api/trees", sessionAuth(handleTrees))
-	mux.HandleFunc("/api/thinktank/fellows", sessionAuth(handleFellows))
-	mux.HandleFunc("/api/thinktank/analyze", sessionAuth(handleAnalyze))
-	mux.HandleFunc("/api/workflow/run-full-pipeline", sessionAuth(handleWorkflowRunFullPipeline))
-	mux.HandleFunc("/api/company/default", sessionAuth(handleDefaultCompany))
-	mux.HandleFunc("/api/agents", sessionAuth(handleAgentsList))
-	mux.HandleFunc("/api/agents/run", sessionAuth(handleAgentRun))
-	mux.HandleFunc("/api/agents/execute", sessionAuth(handleAgentExecute))
-	mux.HandleFunc("/api/agents/create", sessionAuth(handleAgentCreate))
-	mux.HandleFunc("/api/agents/delete", sessionAuth(handleAgentDelete))
-	mux.HandleFunc("/api/tasks", sessionAuth(handleTasks))
-	mux.HandleFunc("/api/tasks/approve", sessionAuth(handleTaskApprove))
-	mux.HandleFunc("/api/tasks/create", sessionAuth(handleTaskCreate))
-	mux.HandleFunc("/api/tasks/reject", sessionAuth(handleTaskReject))
-	mux.HandleFunc("/api/workflow/pending", sessionAuth(handleWorkflowPending))
-	mux.HandleFunc("/api/workflow/approve", sessionAuth(handleWorkflowApprove))
-	mux.HandleFunc("/api/workflow/reject", sessionAuth(handleWorkflowReject))
-	mux.HandleFunc("/api/hitl/pending", sessionAuth(dashboard.HandleHITLPending))
-	mux.HandleFunc("/api/hitl/", sessionAuth(dashboard.HandleHITL))
-	mux.HandleFunc("/api/sprint/execute", sessionAuth(handleSprintExecute))
-	mux.HandleFunc("/api/sprint/status", sessionAuth(handleSprintStatus))
-	mux.HandleFunc("/api/tree/structure", sessionAuth(handleTreeStructure))
-	mux.HandleFunc("/api/chat", sessionAuth(handleChat))
-	mux.HandleFunc("/api/dlq", sessionAuth(handleDLQ))
-	mux.HandleFunc("/api/dlq/replay", sessionAuth(handleDLQReplay))
-	mux.HandleFunc("/api/dlq/purge", sessionAuth(handleDLQPurge))
-	mux.HandleFunc("/api/pipelines", sessionAuth(handlePipelines))
-	mux.HandleFunc("/api/pipelines/run", sessionAuth(handlePipelineRun))
-	mux.HandleFunc("/api/pipelines/status", sessionAuth(handlePipelineStatus))
-	mux.HandleFunc("/api/blackboard", sessionAuth(handleBlackboard))
-	mux.HandleFunc("/api/blackboard/scopes", sessionAuth(handleBlackboardScopes))
+	mux := dashboardMux(apiKey)
+	sessionAuth := dashboardSessionAuth(apiKey)
 
 	// DoorMate components initialization & registration
 	dmStore, err := doormate.NewStore(filepath.Join(getHomeDir(), ".go-bt-evolve", "doormate"))
@@ -487,23 +436,10 @@ func main() {
 		mux.HandleFunc("/api/doormate/profile", sessionAuth(dmHandler.HandleProfile))
 	}
 
-	// TLS support — set BT_TLS_CERT and BT_TLS_KEY to enable HTTPS
-	tlsCert := os.Getenv("BT_TLS_CERT")
-	tlsKey := os.Getenv("BT_TLS_KEY")
-	tlsEnabled := tlsCert != "" && tlsKey != ""
-
 	// Security headers — enable HSTS when TLS is active
 	secCfg := security.DefaultSecurityHeaders()
 	if tlsEnabled {
 		secCfg.EnableHSTS = true
-		// Update session store cookie security for HTTPS
-		sessionStore = security.NewSessionStore(security.SessionStoreConfig{
-			DefaultTTL:   24 * time.Hour,
-			CookieName:   "bt_session",
-			CookiePath:   "/api",
-			CookieSecure: true,
-			MaxSessions:  100,
-		})
 	}
 
 	// Middleware stack: security headers → request ID → tracing → cors → csrf → content_type → sanitize → rate limit → metrics → compression → response validation
@@ -531,7 +467,11 @@ func main() {
 
 	// Security: enforce TLS. When cert+key are configured via env vars,
 	// serve HTTPS with HSTS enabled. Plain HTTP otherwise (dev mode).
-	addr := ":" + port
+	addr, err := security.ListenerAddress(os.Getenv("BT_DASHBOARD_BIND"), port, apiKey)
+	if err != nil {
+		slog.Error("Dashboard listener configuration invalid", "error", err)
+		os.Exit(1)
+	}
 	if tlsEnabled {
 		slog.Info("BT Studio Dashboard ready (TLS)", "addr", addr)
 		if err := http.ListenAndServeTLS(addr, tlsCert, tlsKey, handler); err != nil {
@@ -1285,11 +1225,11 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	apiKey := os.Getenv("BT_API_KEY")
+	apiKey := dashboardAPIKey()
 	if apiKey == "" {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusServiceUnavailable)
-		_ = encodeJSON(w, map[string]string{"error": "login not configured — BT_API_KEY not set"})
+		_ = encodeJSON(w, map[string]string{"error": "login not configured — set BT_API_KEY or config api_key"})
 		return
 	}
 
@@ -1419,7 +1359,7 @@ func handleSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check for API key header
-	apiKey := os.Getenv("BT_API_KEY")
+	apiKey := dashboardAPIKey()
 	if apiKey != "" && r.Header.Get("X-API-Key") == apiKey {
 		w.Header().Set("Content-Type", "application/json")
 		_ = encodeJSON(w, map[string]any{
@@ -2057,10 +1997,10 @@ func handleAgentCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Name == "" {
+	if err := agent.ValidateName(req.Name); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		_ = encodeJSON(w, map[string]string{"error": "missing required field: name"})
+		_ = encodeJSON(w, map[string]string{"error": err.Error()})
 		return
 	}
 	if req.Tree == "" {
@@ -2118,10 +2058,10 @@ func handleAgentDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Name == "" {
+	if err := agent.ValidateName(req.Name); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		_ = encodeJSON(w, map[string]string{"error": "missing required field: name"})
+		_ = encodeJSON(w, map[string]string{"error": err.Error()})
 		return
 	}
 
@@ -2134,4 +2074,84 @@ func handleAgentDelete(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = encodeJSON(w, map[string]string{"status": "deleted", "name": req.Name})
+}
+
+// dashboardMux registers the dashboard routes without starting runtime services.
+func dashboardMux(apiKey string) *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", serveDashboard)
+	mux.HandleFunc("/static/", serveStatic)
+	mux.HandleFunc("/api/health", handleHealth)
+	mux.HandleFunc("/api/metrics", dashboard.PrometheusHandler().ServeHTTP)
+	mux.HandleFunc("/api/alerts", handleAlerts)
+	mux.HandleFunc("/api/alerts/rules", handleAlertRules)
+	mux.HandleFunc("/api/security/audit", handleSecurityAudit)
+	mux.HandleFunc("/api/config", handleConfig)
+	mux.HandleFunc("/api/openapi.json", handleOpenAPI)
+	mux.HandleFunc("/api/swagger", handleSwagger)
+	mux.HandleFunc("/api/scalability", handleScalability)
+	mux.HandleFunc("/api/login", handleLogin)
+	mux.HandleFunc("/api/logout", handleLogout)
+	mux.HandleFunc("/api/session", handleSession)
+	// Session-aware auth: checks session cookie first, falls back to API key header.
+	// This preserves backward compatibility with existing X-API-Key header workflows
+	// while adding cookie-based browser sessions via /api/login.
+	sessionAuth := dashboardSessionAuth(apiKey)
+
+	mux.HandleFunc("/api/summary", sessionAuth(handleSummary))
+	mux.HandleFunc("/api/metrics/live", sessionAuth(handleMetricsLive))
+	mux.HandleFunc("/api/trees", sessionAuth(handleTrees))
+	mux.HandleFunc("/api/thinktank/fellows", sessionAuth(handleFellows))
+	mux.HandleFunc("/api/thinktank/analyze", sessionAuth(handleAnalyze))
+	mux.HandleFunc("/api/workflow/run-full-pipeline", sessionAuth(handleWorkflowRunFullPipeline))
+	mux.HandleFunc("/api/company/default", sessionAuth(handleDefaultCompany))
+	mux.HandleFunc("/api/agents", sessionAuth(handleAgentsList))
+	mux.HandleFunc("/api/agents/run", sessionAuth(handleAgentRun))
+	mux.HandleFunc("/api/agents/execute", sessionAuth(handleAgentExecute))
+	mux.HandleFunc("/api/agents/create", sessionAuth(handleAgentCreate))
+	mux.HandleFunc("/api/agents/delete", sessionAuth(handleAgentDelete))
+	mux.HandleFunc("/api/tasks", sessionAuth(handleTasks))
+	mux.HandleFunc("/api/tasks/approve", sessionAuth(handleTaskApprove))
+	mux.HandleFunc("/api/tasks/create", sessionAuth(handleTaskCreate))
+	mux.HandleFunc("/api/tasks/reject", sessionAuth(handleTaskReject))
+	mux.HandleFunc("/api/workflow/pending", sessionAuth(handleWorkflowPending))
+	mux.HandleFunc("/api/workflow/approve", sessionAuth(handleWorkflowApprove))
+	mux.HandleFunc("/api/workflow/reject", sessionAuth(handleWorkflowReject))
+	mux.HandleFunc("/api/hitl/pending", sessionAuth(dashboard.HandleHITLPending))
+	mux.HandleFunc("/api/hitl/", sessionAuth(dashboard.HandleHITL))
+	mux.HandleFunc("/api/sprint/execute", sessionAuth(handleSprintExecute))
+	mux.HandleFunc("/api/sprint/status", sessionAuth(handleSprintStatus))
+	mux.HandleFunc("/api/tree/structure", sessionAuth(handleTreeStructure))
+	mux.HandleFunc("/api/chat", sessionAuth(handleChat))
+	mux.HandleFunc("/api/dlq", sessionAuth(handleDLQ))
+	mux.HandleFunc("/api/dlq/replay", sessionAuth(handleDLQReplay))
+	mux.HandleFunc("/api/dlq/purge", sessionAuth(handleDLQPurge))
+	mux.HandleFunc("/api/pipelines", sessionAuth(handlePipelines))
+	mux.HandleFunc("/api/pipelines/run", sessionAuth(handlePipelineRun))
+	mux.HandleFunc("/api/pipelines/status", sessionAuth(handlePipelineStatus))
+	mux.HandleFunc("/api/blackboard", sessionAuth(handleBlackboard))
+	mux.HandleFunc("/api/blackboard/scopes", sessionAuth(handleBlackboardScopes))
+
+	return mux
+}
+
+func dashboardSessionAuth(apiKey string) func(http.HandlerFunc) http.HandlerFunc {
+	if apiKey == "" {
+		return func(http.HandlerFunc) http.HandlerFunc {
+			return func(w http.ResponseWriter, r *http.Request) {
+				http.Error(w, "unauthorized: platform API key is not configured", http.StatusUnauthorized)
+			}
+		}
+	}
+	return sessionStore.SessionMiddleware(apiKey, nil)
+}
+
+func dashboardAPIKey() string {
+	if key := os.Getenv("BT_API_KEY"); key != "" {
+		return key
+	}
+	if dashConfig != nil {
+		return dashConfig.APIKey
+	}
+	return ""
 }
