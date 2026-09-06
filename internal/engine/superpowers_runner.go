@@ -12,11 +12,16 @@ import (
 )
 
 type CommandResult struct {
-	Command  string
-	Dir      string
-	Output   string
-	Err      error
-	Duration time.Duration
+	// Provider records the CLI actually invoked, not the configured primary.
+	Provider DelegationProvider
+	// RetryAt is the earliest provider retry when all eligible quotas are closed.
+	RetryAt        time.Time
+	BackoffManaged bool
+	Command        string
+	Dir            string
+	Output         string
+	Err            error
+	Duration       time.Duration
 }
 
 type CommandRunner interface {

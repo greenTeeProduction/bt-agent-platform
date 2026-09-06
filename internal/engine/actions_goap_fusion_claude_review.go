@@ -360,8 +360,7 @@ func runClaudeCodeReviewResearch(bb *Blackboard, deps goapReviewDeps) int {
 	// -1 lets the ResearchRouter fall through to its non-fatal ResearchOptional
 	// skip in milliseconds. The backoff state is namespaced by provider — a
 	// Codex rate limit never closes Claude and vice versa.
-	if delegationBackoffActive(bb, provider, now()) {
-		until, _ := loadDelegationBackoffState(bb, provider)
+	if until, active := delegationPreflightBackoff(bb, provider, now()); active {
 		bb.Result = fmt.Sprintf("## Claude Review Fallback Skipped\n\nBackoff active until %s: a previous tick hit the %s rate limit, skipping without invoking it.", until.Format(time.RFC3339), provider)
 		bb.Outcome = "goap_fusion_claude_review_rate_limited"
 		return -1
@@ -376,16 +375,21 @@ func runClaudeCodeReviewResearch(bb *Blackboard, deps goapReviewDeps) int {
 	defer cancel()
 	result := deps.runner.RunClaude(runCtx, deps.repoDir, prompt)
 
+	if result.Provider.Valid() {
+		provider = result.Provider
+	}
 	combined := result.Output
 	if result.Err != nil {
 		combined += " " + result.Err.Error()
 	}
 	if result.Err != nil || strings.TrimSpace(result.Output) == "" {
-		if isDelegationRateLimit(provider, combined) {
+		if delegationResultRateLimited(result, provider, combined) {
 			// Record the backoff — the CLI-reported reset when the output names
 			// one, the provider's window otherwise — so the NEXT tick short-circuits
 			// at the entry guard instead of burning another 15-minute doomed run.
-			saveDelegationBackoffState(bb, provider, delegationBackoffDeadline(provider, combined, now(), delegationReviewBackoffWindow(provider)))
+			if !result.BackoffManaged {
+				saveDelegationBackoffState(bb, provider, delegationBackoffDeadline(provider, combined, now(), delegationReviewBackoffWindow(provider)))
+			}
 			bb.Result = fmt.Sprintf("## Claude Review Fallback Rate-Limited\n\n```\n%s\n```", truncateGoap(combined, 2000))
 			bb.Outcome = "goap_fusion_claude_review_rate_limited"
 			return -1

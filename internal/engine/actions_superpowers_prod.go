@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -1101,8 +1102,7 @@ func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboar
 	// so a stale deadline can never wedge the loop into skipping the provider
 	// forever. The backoff state is namespaced by provider — a Codex rate limit
 	// never closes Claude and vice versa.
-	if delegationBackoffActive(bb, provider, time.Now()) {
-		until, _ := loadDelegationBackoffState(bb, provider)
+	if until, active := delegationPreflightBackoff(bb, provider, time.Now()); active {
 		bb.ChainState["goap_fusion_goals_unchanged"] = "true"
 		bb.Result = fmt.Sprintf("## GOAP Superpowers Rate Limited\n\n%s rate-limit backoff active until %s; plan carried over to the next cycle.\n\nPlan: `%s`", provider, until.UTC().Format(time.RFC3339), planPath)
 		bb.Outcome = "goap_fusion_rate_limited"
@@ -1160,7 +1160,12 @@ func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboar
 	_ = writeSuperpowersRunJSON(run)
 	if err := ExecuteSuperpowersTaskBatchRuntime(c, run); err != nil {
 		errStr := err.Error()
-		if isDelegationRateLimit(provider, errStr) {
+		var limited *DelegationRateLimitError
+		managed := errors.As(err, &limited)
+		if managed {
+			provider = limited.Provider
+		}
+		if managed || (!errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) && isDelegationRateLimit(provider, errStr)) {
 			// Provider rate-limited — save the plan for the next cycle and fall
 			// back gracefully. Set goals_unchanged so the Selector falls through
 			// to ScheduledAnalysisPath instead of dead-ending. Record the durable
@@ -1168,7 +1173,9 @@ func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboar
 			// one, the fixed provider window otherwise — so the NEXT ticks
 			// short-circuit at the entry guard instead of re-resuming the plan
 			// against the closed quota.
-			saveDelegationBackoffState(bb, provider, delegationBackoffDeadline(provider, errStr, time.Now(), delegationBackoffWindow(provider)))
+			if !managed {
+				saveDelegationBackoffState(bb, provider, delegationBackoffDeadline(provider, errStr, time.Now(), delegationBackoffWindow(provider)))
+			}
 			bb.ChainState["goap_fusion_goals_unchanged"] = "true"
 			bb.Result = fmt.Sprintf("## GOAP Superpowers Rate Limited\n\n%s session limit reached. Plan saved for next cycle.\n\nPlan: `%s`\n\nError: %s", provider, planPath, errStr)
 			bb.Outcome = "goap_fusion_rate_limited"

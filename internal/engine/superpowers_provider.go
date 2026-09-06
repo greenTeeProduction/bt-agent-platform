@@ -89,10 +89,10 @@ func (d delegatingRunner) RunClaude(ctx context.Context, repoDir string, prompt 
 	if err != nil {
 		return CommandResult{Command: "delegation", Dir: repoDir, Err: err}
 	}
-	if p == DelegationProviderCodex {
-		return d.codex.RunCodex(ctx, repoDir, prompt)
+	if rateLimitFailoverEnabled() {
+		return d.runWithRateLimitFailover(ctx, repoDir, prompt, p)
 	}
-	return d.claude.RunClaude(ctx, repoDir, prompt)
+	return d.runProvider(ctx, repoDir, prompt, p)
 }
 
 // newImplementationDelegatingRunner builds the default write-capable

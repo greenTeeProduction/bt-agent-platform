@@ -555,8 +555,7 @@ func runSelfReview(bb *Blackboard, deps selfReviewDeps) int {
 	// this range has not actually been reviewed yet. The backoff state is
 	// namespaced by provider — a Codex rate limit never closes Claude and
 	// vice versa.
-	if delegationBackoffActive(bb, provider, now()) {
-		until, _ := loadDelegationBackoffState(bb, provider)
+	if until, active := delegationPreflightBackoff(bb, provider, now()); active {
 		bb.Outcome = "self_review_rate_limited"
 		bb.Result = fmt.Sprintf("## Self-Review Skipped\n\nBackoff active until %s: a previous tick hit the %s rate limit, skipping without invoking it.", until.Format(time.RFC3339), provider)
 		return 1
@@ -567,13 +566,18 @@ func runSelfReview(bb *Blackboard, deps selfReviewDeps) int {
 	defer cancel()
 	result := deps.runner.RunClaude(runCtx, deps.repoDir, prompt)
 
+	if result.Provider.Valid() {
+		provider = result.Provider
+	}
 	combined := result.Output
 	if result.Err != nil {
 		combined += " " + result.Err.Error()
 	}
 	if result.Err != nil || strings.TrimSpace(result.Output) == "" {
-		if isDelegationRateLimit(provider, combined) {
-			saveDelegationBackoffState(bb, provider, delegationBackoffDeadline(provider, combined, now(), delegationReviewBackoffWindow(provider)))
+		if delegationResultRateLimited(result, provider, combined) {
+			if !result.BackoffManaged {
+				saveDelegationBackoffState(bb, provider, delegationBackoffDeadline(provider, combined, now(), delegationReviewBackoffWindow(provider)))
+			}
 			bb.Outcome = "self_review_rate_limited"
 			bb.Result = fmt.Sprintf("## Self-Review Rate-Limited\n\n```\n%s\n```", truncateGoap(combined, 2000))
 			return 1
