@@ -5,8 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/nico/go-bt-evolve/internal/reliability"
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 // ─── Decision Tree Analyzer ───
@@ -50,23 +54,16 @@ type dtStatsFile struct {
 // cross-process discipline the ExperienceBank uses. An analyzer with no
 // recorded telemetry writes an empty stats object rather than erroring.
 func (d *DTAnalyzer) Save(path string) error {
-	release, lockErr := acquireExperienceLock(path)
-	if lockErr == nil {
-		defer release()
+	// Create the sidecar directory before acquiring the read/write guard.
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("create decision-tree stats dir: %w", err)
 	}
-	data, err := json.MarshalIndent(dtStatsFile{Stats: d.Stats}, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal decision-tree stats: %w", err)
+	release, lockErr := reliability.AcquireFileLock(path)
+	if lockErr != nil {
+		return lockErr
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0644); err != nil {
-		return fmt.Errorf("write tmp decision-tree stats: %w", err)
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		os.Remove(tmp)
-		return fmt.Errorf("rename decision-tree stats: %w", err)
-	}
-	return nil
+	defer release()
+	return util.SaveJSONAtomic(path, dtStatsFile{Stats: d.Stats})
 }
 
 // Load merges persisted selector statistics from path into the in-memory
@@ -75,7 +72,7 @@ func (d *DTAnalyzer) Save(path string) error {
 // file is a silent no-op — a fresh deployment has nothing to load. The read
 // runs under the shared sidecar flock so it never observes a half-written Save.
 func (d *DTAnalyzer) Load(path string) error {
-	release, lockErr := acquireExperienceLock(path)
+	release, lockErr := reliability.AcquireFileLock(path)
 	if lockErr == nil {
 		defer release()
 	}

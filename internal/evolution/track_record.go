@@ -6,6 +6,9 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+
+	"github.com/nico/go-bt-evolve/internal/reliability"
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 // TrackRecord accumulates benchmark-gate outcomes (Q2 Evolvability) across
@@ -107,26 +110,17 @@ func (tr *TrackRecord) WinRate() float64 {
 // concurrent writers cannot interleave partial archives, mirroring
 // ExpertKnowledge.Save and QTable.Save.
 func (tr *TrackRecord) Save(path string) error {
-	data, err := json.MarshalIndent(tr.Runs, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal track record archive: %w", err)
-	}
+	// The flock sidecar is created beside the archive, so the directory has
+	// to exist before the lock is taken.
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create track record archive dir: %w", err)
 	}
-	release, err := acquireExperienceLock(path)
+	release, err := reliability.AcquireFileLock(path)
 	if err != nil {
 		return err
 	}
 	defer release()
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		return fmt.Errorf("write track record archive: %w", err)
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		return fmt.Errorf("commit track record archive: %w", err)
-	}
-	return nil
+	return util.SaveJSONAtomic(path, tr.Runs)
 }
 
 // Load warm-starts Runs by appending the archive at path onto the in-memory
@@ -137,7 +131,7 @@ func (tr *TrackRecord) Load(path string) error {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return nil
 	}
-	release, err := acquireExperienceLock(path)
+	release, err := reliability.AcquireFileLock(path)
 	if err != nil {
 		return err
 	}

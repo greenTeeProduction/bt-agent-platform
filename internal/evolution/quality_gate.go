@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 // GateResult is the outcome of a quality gate validation.
@@ -216,21 +218,9 @@ func loadSnapshotIndex(treeName, snapshotDir string) (snapshotIndex, error) {
 }
 
 func saveSnapshotIndex(treeName, snapshotDir string, idx snapshotIndex) error {
-	data, err := json.MarshalIndent(idx, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal snapshot index: %w", err)
-	}
-
-	path := snapshotIndexPath(treeName, snapshotDir)
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0600); err != nil {
-		return fmt.Errorf("write snapshot index: %w", err)
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		os.Remove(tmp)
-		return fmt.Errorf("rename snapshot index: %w", err)
-	}
-	return nil
+	// Snapshots stay deliberately tighter than the 0644/0755 default: the
+	// revision files and this index are restricted to the owner.
+	return util.SaveJSONAtomicMode(snapshotIndexPath(treeName, snapshotDir), idx, 0o600, 0o700)
 }
 
 // SnapshotTree saves a copy of the tree as a new revision in the snapshot
@@ -264,19 +254,9 @@ func snapshotTree(tree *SerializableNode, treeName, snapshotDir string, fitness 
 		revision = idx.Revisions[n-1] + 1
 	}
 
-	data, err := json.MarshalIndent(tree, "", "  ")
-	if err != nil {
-		return "", fmt.Errorf("marshal snapshot: %w", err)
-	}
-
 	path := snapshotRevisionPath(treeName, snapshotDir, revision)
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0600); err != nil {
-		return "", fmt.Errorf("write snapshot: %w", err)
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		os.Remove(tmp)
-		return "", fmt.Errorf("rename snapshot: %w", err)
+	if err := util.SaveJSONAtomicMode(path, tree, 0o600, 0o700); err != nil {
+		return "", err
 	}
 
 	idx.Revisions = append(idx.Revisions, revision)

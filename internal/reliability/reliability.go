@@ -500,10 +500,9 @@ func (dlq *DeadLetterQueue) Len() int {
 // Linux flock semantics (the platform target). The returned release func is
 // safe to call more than once.
 //
-// This replicates the internal/evolution file-lock idiom locally: reliability
-// imports zero internal packages, so it cannot borrow that helper. Exported so
-// other packages guarding their own sidecar files (e.g. research.ProgramStore)
-// can share one flock idiom instead of re-implementing it. The
+// This is the single owner of the sidecar-flock idiom. Exported so packages
+// guarding their own persisted files (internal/evolution,
+// research.ProgramStore) share it instead of re-implementing it. The
 // unlink-on-release variant must re-verify the sidecar after acquisition: a
 // waiter can acquire the flock on an inode the previous holder already
 // unlinked, and that lock excludes nobody (a fresh open of the path creates a

@@ -6,6 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/nico/go-bt-evolve/internal/reliability"
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 // ExpertKnowledge encodes proven behavior tree design patterns discovered
@@ -76,26 +79,18 @@ func (ek *ExpertKnowledge) Observe(action, category string, gain float64) {
 // Heuristics, TreeArchetypes) is rebuilt fresh by NewExpertKnowledge on every
 // call and is deliberately not persisted.
 func (ek *ExpertKnowledge) Save(path string) error {
-	data, err := json.MarshalIndent(ek.LearnedPatterns, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal expert archive: %w", err)
-	}
+	// The flock sidecar is created beside the archive, so the directory has
+	// to exist before the lock is taken — SaveJSONAtomic's own MkdirAll runs
+	// under the lock and so cannot cover the sidecar open.
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create expert archive dir: %w", err)
 	}
-	release, err := acquireExperienceLock(path)
+	release, err := reliability.AcquireFileLock(path)
 	if err != nil {
 		return err
 	}
 	defer release()
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		return fmt.Errorf("write expert archive: %w", err)
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		return fmt.Errorf("commit expert archive: %w", err)
-	}
-	return nil
+	return util.SaveJSONAtomic(path, ek.LearnedPatterns)
 }
 
 // Load warm-starts LearnedPatterns by appending the archive at path onto the
@@ -106,7 +101,7 @@ func (ek *ExpertKnowledge) Load(path string) error {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return nil
 	}
-	release, err := acquireExperienceLock(path)
+	release, err := reliability.AcquireFileLock(path)
 	if err != nil {
 		return err
 	}

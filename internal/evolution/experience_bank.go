@@ -24,6 +24,8 @@ import (
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/llm"
+	"github.com/nico/go-bt-evolve/internal/reliability"
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 // ─── Experience Bank ────────────────────────────────────────────────────────
@@ -251,10 +253,15 @@ func (eb *ExperienceBank) MarkReused(ids []string) error {
 	for _, id := range ids {
 		idSet[id] = true
 	}
-	release, lockErr := acquireExperienceLock(eb.PersistPath)
-	if lockErr == nil {
-		defer release()
+	// The sidecar must exist before any merge or state mutation.
+	if err := os.MkdirAll(filepath.Dir(eb.PersistPath), 0o755); err != nil {
+		return fmt.Errorf("create experience dir: %w", err)
 	}
+	release, lockErr := reliability.AcquireFileLock(eb.PersistPath)
+	if lockErr != nil {
+		return lockErr
+	}
+	defer release()
 	eb.mu.Lock()
 	defer eb.mu.Unlock()
 	eb.mergeFromDiskLocked()
@@ -300,13 +307,17 @@ func (eb *ExperienceBank) SeedDomain(sourceTree, targetTree string) int {
 // Persist writes the experience bank to disk atomically. It runs the same
 // lock→merge→write sequence as addEntry and MarkReused so no exported write
 // path can rewrite the file from stale memory and drop a concurrent writer's
-// entries. If the sidecar lock cannot be acquired, it falls back to the
-// unlocked (still merged) path rather than failing the persist.
+// entries. A sidecar lock failure aborts without merging or writing state.
 func (eb *ExperienceBank) Persist() error {
-	release, lockErr := acquireExperienceLock(eb.PersistPath)
-	if lockErr == nil {
-		defer release()
+	// The sidecar must exist before any merge or state mutation.
+	if err := os.MkdirAll(filepath.Dir(eb.PersistPath), 0o755); err != nil {
+		return fmt.Errorf("create experience dir: %w", err)
 	}
+	release, lockErr := reliability.AcquireFileLock(eb.PersistPath)
+	if lockErr != nil {
+		return lockErr
+	}
+	defer release()
 	eb.mu.Lock()
 	defer eb.mu.Unlock()
 	eb.mergeFromDiskLocked()
@@ -321,21 +332,9 @@ func (eb *ExperienceBank) Persist() error {
 // own snapshot into place in between and have it silently overwritten.
 func (eb *ExperienceBank) persistLocked() error {
 	// Serialize only the entries (not the mutex or path fields)
-	data, err := json.MarshalIndent(struct {
+	return util.SaveJSONAtomic(eb.PersistPath, struct {
 		Entries []ExperienceEntry `json:"entries"`
-	}{Entries: eb.Entries}, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal experience bank: %w", err)
-	}
-	tmp := eb.PersistPath + ".tmp"
-	if err := os.WriteFile(tmp, data, 0644); err != nil {
-		return fmt.Errorf("write tmp: %w", err)
-	}
-	if err := os.Rename(tmp, eb.PersistPath); err != nil {
-		os.Remove(tmp)
-		return fmt.Errorf("rename: %w", err)
-	}
-	return nil
+	}{Entries: eb.Entries})
 }
 
 // Stats returns a summary of the experience bank.
@@ -383,14 +382,18 @@ func (eb *ExperienceBank) Stats() map[string]any {
 // concurrent writer's adds (daemon + gardener share experience.json) are
 // never silently dropped. The sidecar file lock is held from the merge
 // through the rename: without it a second process can rename its own
-// snapshot into place inside that window and have it overwritten. If the
-// lock cannot be acquired (e.g. read-only dir), fall back to the unlocked
-// path rather than dropping the entry.
+// snapshot into place inside that window and have it overwritten. A lock
+// failure is returned before modifying memory so the caller can retry.
 func (eb *ExperienceBank) addEntry(entry ExperienceEntry) error {
-	release, lockErr := acquireExperienceLock(eb.PersistPath)
-	if lockErr == nil {
-		defer release()
+	// The sidecar must exist before any merge or state mutation.
+	if err := os.MkdirAll(filepath.Dir(eb.PersistPath), 0o755); err != nil {
+		return fmt.Errorf("create experience dir: %w", err)
 	}
+	release, lockErr := reliability.AcquireFileLock(eb.PersistPath)
+	if lockErr != nil {
+		return lockErr
+	}
+	defer release()
 	eb.mu.Lock()
 	defer eb.mu.Unlock()
 	eb.mergeFromDiskLocked()
