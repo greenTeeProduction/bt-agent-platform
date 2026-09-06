@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 // Outcome is the result of a task execution.
@@ -115,20 +117,7 @@ func (s *Store) Save(r *Record) error {
 		r.TaskID = fmt.Sprintf("task-%d", r.Timestamp)
 	}
 	path := filepath.Join(s.dir, fmt.Sprintf("%s%s.json", reflectionFilePrefix, r.TaskID))
-	data, err := json.MarshalIndent(r, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal record: %w", err)
-	}
-	// Atomic write
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0644); err != nil {
-		return fmt.Errorf("write tmp: %w", err)
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		os.Remove(tmp)
-		return fmt.Errorf("rename: %w", err)
-	}
-	return nil
+	return util.SaveJSONAtomic(path, r)
 }
 
 // LoadAll reads all reflection records from the store directory.

@@ -8,6 +8,9 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/nico/go-bt-evolve/internal/reliability"
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 // FitnessDimension names a single objective axis for multi-objective optimization.
@@ -232,26 +235,17 @@ func cappedIndividuals(individuals []*MultiIndividual, limit int) []*MultiIndivi
 // (by composite Fitness) are persisted — the weakest are evicted from the
 // archive first. The in-memory front is left untouched.
 func (pf *ParetoFront) Save(path string) error {
-	data, err := json.MarshalIndent(paretoArchive{Individuals: cappedIndividuals(pf.Individuals, pf.Cap)}, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal pareto archive: %w", err)
-	}
+	// The flock sidecar is created beside the archive, so the directory has
+	// to exist before the lock is taken.
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create pareto archive dir: %w", err)
 	}
-	release, err := acquireExperienceLock(path)
+	release, err := reliability.AcquireFileLock(path)
 	if err != nil {
 		return err
 	}
 	defer release()
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		return fmt.Errorf("write pareto archive: %w", err)
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		return fmt.Errorf("commit pareto archive: %w", err)
-	}
-	return nil
+	return util.SaveJSONAtomic(path, paretoArchive{Individuals: cappedIndividuals(pf.Individuals, pf.Cap)})
 }
 
 // Load warm-starts the front from the archive at path by merging disk
@@ -267,7 +261,7 @@ func (pf *ParetoFront) Load(path string) error {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return nil
 	}
-	release, err := acquireExperienceLock(path)
+	release, err := reliability.AcquireFileLock(path)
 	if err != nil {
 		return err
 	}

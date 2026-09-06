@@ -149,14 +149,21 @@ func (kr *KeyRing) RevokeKeyByValue(keyStr string) error {
 	return kr.RevokeKey(sha256Hex(keyStr))
 }
 
-// RotateKey generates a new key and optionally marks the old key for expiry
-// after a grace period. The old key continues to work until gracePeriod elapses.
+// RotateKey mints a replacement key and marks the old key for expiry after a
+// grace period. The old key keeps working until gracePeriod elapses, or until
+// its own deadline if that comes first; it can only be rotated once, and an
+// already-expired key cannot be revived.
 //
 // oldKeyStr is the raw key to rotate out (empty = no old key to expire).
 // label is the label for the new key.
 // gracePeriod is how long the old key remains valid after rotation.
 //
-// Returns the new raw key value and its hash.
+// The replacement inherits the rotated key's lifetime: rotating a non-expiring
+// key yields a non-expiring replacement, while rotating a key that has a
+// deadline yields a replacement expiring 24h from now. With no old key to
+// inherit from (oldKeyStr == ""), the new key expires after 24h.
+//
+// Returns the new raw key value — the ONLY time it is exposed.
 func (kr *KeyRing) RotateKey(oldKeyStr, label string, gracePeriod time.Duration) (string, error) {
 	if oldKeyStr == "" {
 		return kr.GenerateKey(label, 24*time.Hour)
@@ -336,6 +343,11 @@ func (kr *KeyRing) rotateExpiring(hash, label string, window time.Duration) (str
 	return kr.replaceKey(hash, label, max(24*time.Hour, 2*window), nil)
 }
 
+// replaceKey atomically claims a live, not-yet-rotated key and mints its
+// replacement. The replacement inherits the rotated key's lifetime: rotating a
+// non-expiring key leaves the new entry non-expiring, otherwise the new entry
+// expires after ttl. grace, when non-nil, brings the old key's deadline forward
+// to now+*grace (an existing deadline is never pushed out).
 func (kr *KeyRing) replaceKey(hash, label string, ttl time.Duration, grace *time.Duration) (string, error) {
 	kr.mu.Lock()
 	defer kr.mu.Unlock()
@@ -344,13 +356,18 @@ func (kr *KeyRing) replaceKey(hash, label string, ttl time.Duration, grace *time
 	if !ok || old.Rotated || (old.ExpiresAt.IsZero() && grace == nil) || (!old.ExpiresAt.IsZero() && !old.ExpiresAt.After(now)) {
 		return "", fmt.Errorf("key no longer eligible")
 	}
+	oldExpiresAt := old.ExpiresAt // captured before grace rewrites it below
 	raw := make([]byte, 32)
 	if _, err := rand.Read(raw); err != nil {
 		return "", err
 	}
 	key := "sk-" + hex.EncodeToString(raw)
 	newHash := sha256Hex(key)
-	kr.keys[newHash] = &apiKey{Hash: newHash, Label: label, CreatedAt: now, ExpiresAt: now.Add(ttl)}
+	entry := &apiKey{Hash: newHash, Label: label, CreatedAt: now}
+	if !oldExpiresAt.IsZero() {
+		entry.ExpiresAt = now.Add(ttl)
+	}
+	kr.keys[newHash] = entry
 	if grace != nil {
 		deadline := now.Add(*grace)
 		if old.ExpiresAt.IsZero() || deadline.Before(old.ExpiresAt) {

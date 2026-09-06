@@ -1015,6 +1015,15 @@ const superpowersRuntimeRunBudget = 90 * time.Minute
 
 func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboard]) (result int) {
 	bb := ctx.Blackboard
+	// Resolve the configured delegation provider for this run's backoff /
+	// rate-limit accounting. An invalid BT_SUPERPOWERS_PROVIDER is rejected
+	// here (not silently defaulted) so a misconfiguration surfaces instead of
+	// implementing through the wrong provider.
+	provider, err := resolvedSuperpowersProvider()
+	if err != nil {
+		bb.Result = fmt.Sprintf("## GOAP Superpowers Runtime Failed\n\n%v", err)
+		return -1
+	}
 	// Restore durable charge stamps BEFORE the deferred failure handler below
 	// can need them: a resumed cron tick builds a fresh Blackboard with an
 	// empty ChainState, so chargeGoapResearchGoalFailure/
@@ -1088,12 +1097,14 @@ func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboar
 	// run doomed, so degrade to ScheduledAnalysisPath instantly with the exact
 	// rate-limited Result/Outcome shape — the deferred clearSuperpowersPlanState
 	// guard then preserves the plan carryover for the tick after the window
-	// expires. claudeBackoffActive self-clears an elapsed window (half-open),
-	// so a stale deadline can never wedge the loop into skipping Claude forever.
-	if claudeBackoffActive(bb, time.Now()) {
-		until, _ := loadClaudeBackoffState(bb)
+	// expires. delegationBackoffActive self-clears an elapsed window (half-open),
+	// so a stale deadline can never wedge the loop into skipping the provider
+	// forever. The backoff state is namespaced by provider — a Codex rate limit
+	// never closes Claude and vice versa.
+	if delegationBackoffActive(bb, provider, time.Now()) {
+		until, _ := loadDelegationBackoffState(bb, provider)
 		bb.ChainState["goap_fusion_goals_unchanged"] = "true"
-		bb.Result = fmt.Sprintf("## GOAP Superpowers Rate Limited\n\nClaude rate-limit backoff active until %s; plan carried over to the next cycle.\n\nPlan: `%s`", until.UTC().Format(time.RFC3339), planPath)
+		bb.Result = fmt.Sprintf("## GOAP Superpowers Rate Limited\n\n%s rate-limit backoff active until %s; plan carried over to the next cycle.\n\nPlan: `%s`", provider, until.UTC().Format(time.RFC3339), planPath)
 		bb.Outcome = "goap_fusion_rate_limited"
 		return -1
 	}
@@ -1149,17 +1160,17 @@ func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboar
 	_ = writeSuperpowersRunJSON(run)
 	if err := ExecuteSuperpowersTaskBatchRuntime(c, run); err != nil {
 		errStr := err.Error()
-		if isClaudeRateLimit(errStr) {
-			// Claude rate-limited — save the plan for the next cycle and fall
+		if isDelegationRateLimit(provider, errStr) {
+			// Provider rate-limited — save the plan for the next cycle and fall
 			// back gracefully. Set goals_unchanged so the Selector falls through
 			// to ScheduledAnalysisPath instead of dead-ending. Record the durable
 			// backoff deadline — the CLI-reported reset when the output names
-			// one, the fixed window otherwise — so the NEXT ticks short-circuit
-			// at the entry guard instead of re-resuming the plan against the
-			// closed quota.
-			saveClaudeBackoffState(bb, claudeBackoffDeadline(errStr, time.Now(), claudeBackoffWindow()))
+			// one, the fixed provider window otherwise — so the NEXT ticks
+			// short-circuit at the entry guard instead of re-resuming the plan
+			// against the closed quota.
+			saveDelegationBackoffState(bb, provider, delegationBackoffDeadline(provider, errStr, time.Now(), delegationBackoffWindow(provider)))
 			bb.ChainState["goap_fusion_goals_unchanged"] = "true"
-			bb.Result = fmt.Sprintf("## GOAP Superpowers Rate Limited\n\nClaude Code session limit reached. Plan saved for next cycle.\n\nPlan: `%s`\n\nError: %s", planPath, errStr)
+			bb.Result = fmt.Sprintf("## GOAP Superpowers Rate Limited\n\n%s session limit reached. Plan saved for next cycle.\n\nPlan: `%s`\n\nError: %s", provider, planPath, errStr)
 			bb.Outcome = "goap_fusion_rate_limited"
 			// -1, not 0: a Selector only advances to its next child on Failure;
 			// 0 means Running in this engine and re-ticks the tree until the

@@ -140,9 +140,9 @@ type selfReviewDeps struct {
 
 func defaultSelfReviewDeps() selfReviewDeps {
 	return selfReviewDeps{
-		runner: execClaudeRunner{
-			AllowedTools: getenvDefault("BT_SELF_REVIEW_ALLOWED_TOOLS", goapReviewAllowedTools),
-		},
+		runner: newReadOnlyDelegatingRunner(
+			getenvDefault("BT_SELF_REVIEW_ALLOWED_TOOLS", goapReviewAllowedTools),
+		),
 		repoDir:       goapFusionRepo,
 		stateDir:      selfReviewDir(),
 		timeout:       15 * time.Minute,
@@ -493,6 +493,16 @@ func runSelfReview(bb *Blackboard, deps selfReviewDeps) int {
 	if now == nil {
 		now = time.Now
 	}
+	// Resolve the configured delegation provider for this run's backoff /
+	// rate-limit accounting. An invalid BT_SUPERPOWERS_PROVIDER is rejected
+	// here (not silently defaulted) so a misconfiguration surfaces instead of
+	// quietly reviewing through the wrong provider.
+	provider, err := resolvedSuperpowersProvider()
+	if err != nil {
+		bb.Outcome = "self_review_failed"
+		bb.Result = fmt.Sprintf("## Self-Review Failed\n\n%v", err)
+		return 1
+	}
 
 	state := loadSelfReviewState(deps.stateDir)
 	lastSHA := state.LastReviewedSHA
@@ -540,13 +550,15 @@ func runSelfReview(bb *Blackboard, deps selfReviewDeps) int {
 		return 1
 	}
 
-	// Rate-limit backoff guard — BEFORE invoking Claude. Return 1 (not -1):
+	// Rate-limit backoff guard — BEFORE invoking the provider. Return 1 (not -1):
 	// this healthy skip must not fail the sequence. Do NOT advance the SHA:
-	// this range has not actually been reviewed yet.
-	if claudeBackoffActive(bb, now()) {
-		until, _ := loadClaudeBackoffState(bb)
+	// this range has not actually been reviewed yet. The backoff state is
+	// namespaced by provider — a Codex rate limit never closes Claude and
+	// vice versa.
+	if delegationBackoffActive(bb, provider, now()) {
+		until, _ := loadDelegationBackoffState(bb, provider)
 		bb.Outcome = "self_review_rate_limited"
-		bb.Result = fmt.Sprintf("## Self-Review Skipped\n\nBackoff active until %s: a previous tick hit the Claude rate limit, skipping without invoking Claude.", until.Format(time.RFC3339))
+		bb.Result = fmt.Sprintf("## Self-Review Skipped\n\nBackoff active until %s: a previous tick hit the %s rate limit, skipping without invoking it.", until.Format(time.RFC3339), provider)
 		return 1
 	}
 
@@ -560,8 +572,8 @@ func runSelfReview(bb *Blackboard, deps selfReviewDeps) int {
 		combined += " " + result.Err.Error()
 	}
 	if result.Err != nil || strings.TrimSpace(result.Output) == "" {
-		if isClaudeRateLimit(combined) {
-			saveClaudeBackoffState(bb, claudeBackoffDeadline(combined, now(), goapClaudeBackoffWindow))
+		if isDelegationRateLimit(provider, combined) {
+			saveDelegationBackoffState(bb, provider, delegationBackoffDeadline(provider, combined, now(), delegationReviewBackoffWindow(provider)))
 			bb.Outcome = "self_review_rate_limited"
 			bb.Result = fmt.Sprintf("## Self-Review Rate-Limited\n\n```\n%s\n```", truncateGoap(combined, 2000))
 			return 1

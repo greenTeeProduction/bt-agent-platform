@@ -947,10 +947,11 @@ func ExpectedDomainIDs(registry map[string]*evolution.SerializableNode) []string
 // registry only — the curated gardener/dashboard surface. Trees that live
 // outside that registry are described in NonRegistryDescriptions (the
 // kanban/hermes trees returned by KanbanAndHermesDomainTrees) or in
-// ResolverReachableDescriptions (trees reachable only through ResolveTreeID);
-// the three maps are kept disjoint. Callers that want a description for an
-// arbitrary tree name should use DescriptionFor rather than indexing any map
-// directly, so an off-registry tree still resolves.
+// ResolverReachableDescriptions (trees reachable only through ResolveTreeID),
+// or — when the tree is resolver-selectable but built by another package — in
+// ExternalPackageDescriptions; the four maps are kept disjoint. Callers that
+// want a description for an arbitrary tree name should use DescriptionFor rather
+// than indexing any map directly, so an off-registry tree still resolves.
 var Descriptions = map[string]string{
 	"code_review":               "Bug detection, security review, style checking for any language",
 	"devops_ci":                 "Build → test → lint → deploy → verify → rollback pipeline",
@@ -1021,7 +1022,7 @@ var NonRegistryDescriptions = map[string]string{
 // ResolveTreeID("superpowers_pipeline") returns the production SDLC tree, so an
 // operator can switch onto it, yet it had no describable home and rendered as a
 // bare identifier wherever builtins are listed. This map is that home. It must
-// stay disjoint from the other two for the same reason they are disjoint from
+// stay disjoint from the other three for the same reason they are disjoint from
 // each other: a name in two maps makes DescriptionFor's precedence silently
 // choose between divergent descriptions.
 //
@@ -1038,6 +1039,56 @@ var ResolverReachableDescriptions = map[string]string{
 	"superpowers_pipeline": "Production Superpowers SDLC run: design artifact → safe worktree with a verified baseline build → strictly validated implementation plan → dry-run artifacts or a HITL-gated Claude Code TDD apply path → layered verification → finish report with evidence",
 }
 
+// fusionDeliberationDescription is shared by the two IDs resolveTreeIDWithResolver
+// accepts for the one tree evolution.FusionDeliberationTree builds ("fusion" and
+// "fusion_deliberation"). It is a constant rather than two literals for the same
+// reason ResolverIDAliases prefers an alias over a copied sentence: two copies of
+// one tree's description are two things to keep in sync. An alias cannot express
+// this pair — ResolverIDAliases keys must name a branch returning a
+// domains-package constructor (TestResolverIDAliasesHaveNoOrphans), and this
+// branch returns a qualified evolution call — so the sharing happens here.
+const fusionDeliberationDescription = "OpenRouter Fusion as a native BT: classify task complexity, then either deliberate across multiple models when several perspectives are worth the cost or fall back to a single direct LLM call, then reflect, handle the outcome, and adapt"
+
+// ExternalPackageDescriptions is the fourth and last description home: the trees
+// an operator can select through ResolveTreeID (tree_resolver.go — bt-agent's
+// switch_tree, A2A, template validation) whose branch builds a tree owned by
+// ANOTHER package, currently all of internal/evolution.
+//
+// The other three maps cannot describe these. Each is orphan-guarded against the
+// domains registry that defines it — Descriptions against AllDomainTrees(),
+// NonRegistryDescriptions against KanbanAndHermesDomainTrees(),
+// ResolverReachableDescriptions against ResolverReachableDomainTrees() — and
+// none of those registries may name a tree this package does not build, because
+// membership there is what subjects a tree to the domains smoke, condition and
+// structure guards. So an entry for evolution.GoDeveloperTree in any of them is
+// an orphan by construction.
+//
+// Ownership elsewhere is a statement about which package guards the tree's
+// structure, though, not about whether an operator can pick it: ResolveTreeID
+// ("vault_manager") hands back a real, runnable tree exactly the way
+// ResolveTreeID("superpowers_pipeline") does. Without this map those eight IDs
+// missed in DescriptionFor and rendered as bare identifiers wherever builtins are
+// listed — the precise failure DescriptionFor exists to prevent, and the reason
+// internal/gardener/gardener.go carries a hand-written "Go software developer BT"
+// string for godev instead of resolving one.
+//
+// Structure stays where it is built: these trees keep their smoke and condition
+// coverage in internal/evolution's own tests. Only the operator-facing sentence
+// lives here. Every key must be a bare ID the resolver actually accepts and must
+// not appear in the other three maps (TestExternalPackageDescriptionsHaveNoOrphans),
+// so a renamed or deleted branch fails rather than leaving a dead entry
+// advertising a builtin that can never be selected.
+var ExternalPackageDescriptions = map[string]string{
+	"stockfish_evolve":    "Stockfish-adapted meta-evolution of a behavior tree: transposition-table fitness lookup, killer-move and history move ordering, iterative deepening, late-move reduction and alpha-beta pruning, then apply the best mutation, benchmark-validate it, and store the score",
+	"stockfish_loop":      "Continuous Stockfish evolution loop: score every registered tree, run the full search pipeline on the weakest one, update the transposition, killer-move and history heuristics, sleep for the configured interval, and repeat indefinitely",
+	"vault_manager":       "Obsidian vault workflow agent: route to session start, raw/ ingest, wiki synthesis, cross-linking, index refresh, session-end summary, or the weekly durable-knowledge sweep — treating raw sources as append-only",
+	"notebooklm-bridge":   "NotebookLM → BT platform bridge: confirm NotebookLM authentication is fresh, scan notebooks for new sources and artifacts, download Audio Overviews, reports and mind maps, index them into the Obsidian vault, and report bridge health",
+	"godev":               "Go software development agent: gate on a clear Go-related task, then route to code review, build-and-fix, test-and-analyze, Go concept explanation, or general execution, then reflect on the outcome and adapt",
+	"fusion":              fusionDeliberationDescription,
+	"fusion_deliberation": fusionDeliberationDescription,
+	"telegram_clarify":    "Telegram clarify() quality gate: when a Telegram response asks the user a question, verify the clarify() tool was called with explicit choices, and report the violation with a suggested fix when it was not",
+}
+
 // ResolverIDAliases maps a bare tree ID that resolveTreeIDWithResolver accepts
 // (tree_resolver.go) onto the registry name describing the same tree, for the
 // IDs where the two spellings differ. ResolveTreeID("kanban:refiner") returns
@@ -1051,12 +1102,14 @@ var ResolverReachableDescriptions = map[string]string{
 //
 // Aliasing rather than copying the sentence is what keeps one description per
 // tree. A second copy under the colon spelling would have to live in one of the
-// three description maps, and every one of them is orphan-guarded against the
-// registry that defines it, so the copy would be an orphan in all three — and
-// two copies of a sentence are two things to keep in sync. An alias instead
-// asserts the fact that is actually true: these are two names for one tree.
+// four description maps, and every one of them is guarded against the registry
+// or ID set that defines it — the three domains registries, and for
+// ExternalPackageDescriptions the resolver branches another package owns — so
+// the copy would be an orphan in all four, and two copies of a sentence are two
+// things to keep in sync. An alias instead asserts the fact that is actually
+// true: these are two names for one tree.
 //
-// Resolution is a single hop and runs only after all three maps miss, so a real
+// Resolution is a single hop and runs only after all four maps miss, so a real
 // description entry always wins and an alias can never chain or cycle. Every
 // target must itself be describable.
 var ResolverIDAliases = map[string]string{
@@ -1070,15 +1123,16 @@ var ResolverIDAliases = map[string]string{
 }
 
 // DescriptionFor resolves the description for a domain tree by name across all
-// three description maps, so callers do not have to know whether a tree is part
+// four description maps, so callers do not have to know whether a tree is part
 // of the curated AllDomainTrees() surface, the KanbanAndHermesDomainTrees() set,
-// or the ResolveTreeID-only extras in ResolverReachableDomainTrees() — the three
-// registries the three maps are respectively orphan-guarded against, one map per
-// registry. Resolution runs registry → non-registry →
-// resolver-reachable, so a curated entry wins if a name somehow appears in more
-// than one map. A whitespace-only entry is reported as a miss rather than
-// returned: a blank description would otherwise be rendered as an unexplained
-// builtin, which is exactly the state this lookup exists to prevent.
+// the ResolveTreeID-only extras in ResolverReachableDomainTrees() — the three
+// registries the first three maps are respectively orphan-guarded against, one
+// map per registry — or a resolver-selectable tree another package builds
+// (ExternalPackageDescriptions). Resolution runs registry → non-registry →
+// resolver-reachable → external, so a curated entry wins if a name somehow
+// appears in more than one map. A whitespace-only entry is reported as a miss
+// rather than returned: a blank description would otherwise be rendered as an
+// unexplained builtin, which is exactly the state this lookup exists to prevent.
 //
 // This is the only supported way to describe a tree by name. Every production
 // consumer goes through it — gardener.Registry.loadAll (builtin registration),
@@ -1089,7 +1143,7 @@ var ResolverIDAliases = map[string]string{
 // its description entry moving along with it looks like. That failure is silent:
 // the surface renders a bare identifier rather than reporting a miss.
 //
-// On a miss in all three maps the name is retried once through
+// On a miss in all four maps the name is retried once through
 // ResolverIDAliases, so a tree whose ResolveTreeID spelling differs from its
 // registry spelling ("kanban:refiner" vs "kanban_refiner") describes as the one
 // tree it is. The alias hop is last precisely so it can only turn a miss into a
@@ -1105,11 +1159,16 @@ func DescriptionFor(name string) (string, bool) {
 }
 
 // describeExactName is DescriptionFor's map lookup without the alias hop: the
-// three description maps in precedence order, treating a whitespace-only entry
+// four description maps in precedence order, treating a whitespace-only entry
 // as a miss. Kept separate so the alias retry resolves its target by exactly the
 // same rules and cannot itself chain through another alias.
+//
+// ExternalPackageDescriptions is consulted last because it is the only map whose
+// trees this package does not build: a domains-owned entry always wins, so a
+// tree that later moves into this package describes from its own registry's map
+// without the external entry having to be removed in the same commit.
 func describeExactName(name string) (string, bool) {
-	for _, m := range []map[string]string{Descriptions, NonRegistryDescriptions, ResolverReachableDescriptions} {
+	for _, m := range []map[string]string{Descriptions, NonRegistryDescriptions, ResolverReachableDescriptions, ExternalPackageDescriptions} {
 		if desc, ok := m[name]; ok && strings.TrimSpace(desc) != "" {
 			return desc, true
 		}

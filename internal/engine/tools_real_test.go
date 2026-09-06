@@ -213,54 +213,47 @@ func TestNewFileWriteTool_AllowsPlainPathsWithBenignPunctuation(t *testing.T) {
 // ─── newGoBuildTool — execution tests ───
 
 func TestNewGoBuildTool_DefaultArgs(t *testing.T) {
-	tool := newGoBuildTool()
-	result := tool.Call("")
-	if !strings.Contains(result, "build successful") {
-		t.Errorf("expected 'build successful', got %q", result)
+	fixture := newRealToolCommandFixture(t, "go", "")
+	if result := newGoBuildTool().Call(""); result != "build successful" {
+		t.Fatalf("unexpected result: %q", result)
 	}
+	fixture.assertInvocation(t, "build", "./...")
 }
 
 func TestNewGoBuildTool_WithPackageArg(t *testing.T) {
-	tool := newGoBuildTool()
-	result := tool.Call("./...")
-	if !strings.Contains(result, "build successful") {
-		t.Errorf("expected 'build successful', got %q", result)
+	fixture := newRealToolCommandFixture(t, "go", "printf '  fixture build output  \\n'")
+	if result := newGoBuildTool().Call("  -tags fixture	./fixture/...  "); result != "fixture build output" {
+		t.Fatalf("unexpected result: %q", result)
 	}
+	fixture.assertInvocation(t, "build", "-tags", "fixture", "./fixture/...")
 }
 
 // ─── newGoVetTool — execution tests ───
 
 func TestNewGoVetTool_VetPasses(t *testing.T) {
-	tool := newGoVetTool()
-	result := tool.Call("")
-	if !strings.Contains(result, "vet passed") && !strings.Contains(result, "no issues") {
-		t.Errorf("expected vet success message, got %q", result)
+	fixture := newRealToolCommandFixture(t, "go", "")
+	if result := newGoVetTool().Call(""); result != "vet passed: no issues found" {
+		t.Fatalf("unexpected result: %q", result)
 	}
+	fixture.assertInvocation(t, "vet", "./...")
 }
 
 // ─── newGraphifyTool — execution tests ───
 
 func TestNewGraphifyTool_UpdateDefault(t *testing.T) {
-	tool := newGraphifyTool()
-	result := tool.Call("update")
-	// graphify may or may not be installed, but shouldn't panic
-	t.Logf("graphify update result: %s", result[:min(len(result), 100)])
+	assertGraphifyFixtureCall(t, "update", "update", ".")
 }
 
-func TestNewGraphifyTool_UnknownActionIsQuery(_ *testing.T) {
-	tool := newGraphifyTool()
-	// Fallback to query — graphify may complain but shouldn't panic
-	tool.Call("unknowncommand")
+func TestNewGraphifyTool_UnknownActionIsQuery(t *testing.T) {
+	assertGraphifyFixtureCall(t, "unknowncommand", "query", "unknowncommand")
 }
 
-func TestNewGraphifyTool_QueryAction(_ *testing.T) {
-	tool := newGraphifyTool()
-	tool.Call("query test")
+func TestNewGraphifyTool_QueryAction(t *testing.T) {
+	assertGraphifyFixtureCall(t, "  query how does BuildTree work?  ", "query", "how does BuildTree work?")
 }
 
-func TestNewGraphifyTool_ExplainAction(_ *testing.T) {
-	tool := newGraphifyTool()
-	tool.Call("explain BuildTree")
+func TestNewGraphifyTool_ExplainAction(t *testing.T) {
+	assertGraphifyFixtureCall(t, "explain BuildTree", "explain", "BuildTree")
 }
 
 // ─── newWebSearchTool — execution tests ───
@@ -319,27 +312,19 @@ func TestNewWebSearchTool_Truncation(t *testing.T) {
 // ─── newGoTestTool — execution tests ───
 
 func TestNewGoTestTool_NonRecursivePackage(t *testing.T) {
-	// Use a tiny non-engine package to avoid recursive test execution. This is fast
-	// (~0.3s) because -run ^$ matches no tests.
-	tool := newGoTestTool()
-	result := tool.Call("-run ^$ -count=1 ./internal/reflection/")
-	if result == "" {
-		t.Error("expected non-empty result")
+	fixture := newRealToolCommandFixture(t, "go", "printf 'fixture tests passed\\n'")
+	if result := newGoTestTool().Call("-run ^$ -count=1 ./internal/reflection/"); result != "fixture tests passed" {
+		t.Fatalf("unexpected result: %q", result)
 	}
+	fixture.assertInvocation(t, "test", "-run", "^$", "-count=1", "./internal/reflection/")
 }
 
 func TestNewGoTestTool_EmptyInputDefaultArgs(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping go test execution in short mode")
+	fixture := newRealToolCommandFixture(t, "go", "")
+	if result := newGoTestTool().Call(""); result != "go test completed (no output)" {
+		t.Fatalf("unexpected result: %q", result)
 	}
-	// Empty input triggers default args (./... -v -count=1) which is slow.
-	// Just verify the tool constructor doesn't panic by calling with empty input
-	// but with a ctrl-c-cancel-fast approach using -run ^$ as default.
-	tool := newGoTestTool()
-	result := tool.Call("-run ^$ -count=1 ./internal/reflection/")
-	if result == "" {
-		t.Error("expected non-empty result")
-	}
+	fixture.assertInvocation(t, "test", "./...", "-v", "-count=1")
 }
 
 // ─── extractDuckDuckGoResults — additional edge cases ───

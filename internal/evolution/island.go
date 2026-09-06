@@ -10,6 +10,9 @@ import (
 	"slices"
 	"strings"
 	"sync"
+
+	"github.com/nico/go-bt-evolve/internal/reliability"
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 // IslandModel manages domain-separated subpopulations with periodic migration.
@@ -377,6 +380,10 @@ type islandArchive struct {
 // advisory flock so concurrent writers cannot interleave partial archives
 // (ADR-024).
 func (im *IslandModel) Save(path string) error {
+	// Snapshot under the read lock and hand the finished bytes to
+	// SaveJSONAtomic: marshaling inside it would walk the live Islands maps
+	// unguarded, and holding im.mu across the file lock instead would invert
+	// Load's flock→im.mu.Lock order into a deadlock.
 	im.mu.RLock()
 	data, err := json.MarshalIndent(islandArchive{
 		Islands:         im.Islands,
@@ -387,22 +394,17 @@ func (im *IslandModel) Save(path string) error {
 	if err != nil {
 		return fmt.Errorf("marshal island archive: %w", err)
 	}
+	// The flock sidecar is created beside the archive, so the directory has
+	// to exist before the lock is taken.
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create island archive dir: %w", err)
 	}
-	release, err := acquireExperienceLock(path)
+	release, err := reliability.AcquireFileLock(path)
 	if err != nil {
 		return err
 	}
 	defer release()
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		return fmt.Errorf("write island archive: %w", err)
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		return fmt.Errorf("commit island archive: %w", err)
-	}
-	return nil
+	return util.SaveJSONAtomic(path, json.RawMessage(data))
 }
 
 // Load warm-starts the model from the archive at path by merging per-domain
@@ -418,7 +420,7 @@ func (im *IslandModel) Load(path string) error {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return nil
 	}
-	release, err := acquireExperienceLock(path)
+	release, err := reliability.AcquireFileLock(path)
 	if err != nil {
 		return err
 	}

@@ -473,6 +473,60 @@ func TestRunClaudeCodeReviewResearch_NoParseableGoalFails(t *testing.T) {
 	}
 }
 
+// TestRunClaudeCodeReviewResearch_CodexRateLimitWritesCodexStoreOnly proves the
+// review fallback's rate-limit accounting is provider-aware: a Codex rate limit
+// lands in the Codex store and never touches the Claude cooldown.
+func TestRunClaudeCodeReviewResearch_CodexRateLimitWritesCodexStoreOnly(t *testing.T) {
+	t.Setenv("BT_SUPERPOWERS_PROVIDER", "codex")
+	isolateBackoffStores(t)
+	repo, _ := newReviewTestRepo(t)
+	runner := &fakeReviewClaudeRunner{
+		output: "429 too many requests",
+		err:    fmt.Errorf("exit status 1"),
+	}
+	mgr := blackboard.NewManager(nil)
+	bb := &Blackboard{BB: blackboard.NewHandle(mgr, "run-1", "", "goap-loop"), Task: "improve"}
+
+	if got := runClaudeCodeReviewResearch(bb, reviewTestDeps(t, repo, runner)); got != -1 {
+		t.Fatalf("status = %d, want -1; result: %s", got, bb.Result)
+	}
+	if bb.Outcome != "goap_fusion_claude_review_rate_limited" {
+		t.Fatalf("outcome = %q, want goap_fusion_claude_review_rate_limited", bb.Outcome)
+	}
+	if _, ok := loadDelegationBackoffState(bb, DelegationProviderCodex); !ok {
+		t.Fatal("codex backoff store inactive after a Codex rate limit, want a recorded deadline")
+	}
+	if _, ok := loadDelegationBackoffState(bb, DelegationProviderClaude); ok {
+		t.Fatal("claude backoff store active after a Codex rate limit: providers must not share cooldown state")
+	}
+}
+
+// TestRunClaudeCodeReviewResearch_ClaudeBackoffDoesNotBlockCodex proves the
+// review fallback's entry guard reads the provider's OWN backoff state: a
+// Claude cooldown must be invisible to a Codex-configured run (and the run must
+// actually invoke the provider).
+func TestRunClaudeCodeReviewResearch_ClaudeBackoffDoesNotBlockCodex(t *testing.T) {
+	t.Setenv("BT_SUPERPOWERS_PROVIDER", "codex")
+	isolateBackoffStores(t)
+	repo, _ := newReviewTestRepo(t)
+	runner := &fakeReviewClaudeRunner{output: `GOAL: Add regression test for var X initialization
+GAP: second commit added var X without any test coverage
+FILES: a.go, a_test.go
+TESTS: /usr/local/go/bin/go test ./... -run TestX
+FINDINGS: - none`}
+	mgr := blackboard.NewManager(nil)
+	bb := &Blackboard{BB: blackboard.NewHandle(mgr, "run-1", "", "goap-loop"), Task: "improve"}
+	// Arm ONLY the Claude backoff.
+	saveClaudeBackoffState(bb, time.Now().Add(time.Hour))
+
+	if got := runClaudeCodeReviewResearch(bb, reviewTestDeps(t, repo, runner)); got != 1 {
+		t.Fatalf("status = %d, want 1: a Claude backoff must not block a Codex run; result: %s", got, bb.Result)
+	}
+	if len(runner.prompts) != 1 {
+		t.Fatalf("runner invoked %d time(s), want 1: a Claude cooldown must be invisible to a Codex-configured run", len(runner.prompts))
+	}
+}
+
 func TestRunClaudeCodeReviewResearchActionRegistered(t *testing.T) {
 	if GetAction("RunClaudeCodeReviewResearch") == nil {
 		t.Fatal("RunClaudeCodeReviewResearch not registered")

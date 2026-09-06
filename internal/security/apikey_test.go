@@ -173,6 +173,50 @@ func TestKeyRing_RotateEmptyOldKey(t *testing.T) {
 	}
 }
 
+// TestRotateKey_ReplacementDoesNotSilentlyExpire pins the contract that a
+// rotated key's replacement inherits the old key's lifetime. Rotating a
+// non-expiring key must yield a non-expiring replacement — RotateKey's
+// signature offers no TTL for the new key, so a hardcoded cap would silently
+// expire a key the caller declared permanent, with no way to opt out.
+func TestRotateKey_ReplacementDoesNotSilentlyExpire(t *testing.T) {
+	kr := NewKeyRing()
+	kr.AddKey("k", "platform", 0) // non-expiring
+
+	const gracePeriod = time.Minute
+	if _, err := kr.RotateKey("k", "platform", gracePeriod); err != nil {
+		t.Fatalf("RotateKey failed: %v", err)
+	}
+
+	keys := kr.ListKeys()
+	if len(keys) != 2 {
+		t.Fatalf("expected 2 keys after rotation, got %d", len(keys))
+	}
+
+	// Both entries share the label "platform", so identify the old key by its
+	// grace deadline (~now+1m) and treat the remaining entry as the replacement.
+	graceCutoff := time.Now().Add(2 * gracePeriod)
+	var replacement *APIKeyInfo
+	graced := 0
+	for i, k := range keys {
+		if !k.ExpiresAt.IsZero() && k.ExpiresAt.Before(graceCutoff) {
+			graced++
+			continue
+		}
+		replacement = &keys[i]
+	}
+	if graced != 1 {
+		t.Fatalf("expected exactly 1 key expiring within the grace period, got %d", graced)
+	}
+	if replacement == nil {
+		t.Fatal("expected a replacement key distinct from the graced old key")
+	}
+
+	if !replacement.ExpiresAt.IsZero() {
+		t.Errorf("replacement key expires at %v (in %v); want zero ExpiresAt inherited from the non-expiring old key",
+			replacement.ExpiresAt, time.Until(replacement.ExpiresAt).Round(time.Second))
+	}
+}
+
 func TestKeyRing_ListKeys(t *testing.T) {
 	kr := NewKeyRing()
 
