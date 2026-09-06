@@ -58,8 +58,15 @@ review run into a write-capable session.
 | Env var | Effect | Default |
 |---|---|---|
 | `BT_SUPERPOWERS_CODEX_BIN` | Codex CLI binary | `/mnt/ssd/npm-global/bin/codex` |
-| `BT_SUPERPOWERS_CODEX_MODEL` | `-m`; `auto`/`default`/`none` omits the flag | `gpt-6-astra` |
+| `BT_SUPERPOWERS_CODEX_MODEL` | `-m`; `auto`/`default`/`none` omits the flag | `gpt-5.3-codex-spark` |
 | `BT_SUPERPOWERS_CODEX_SANDBOX` | `--sandbox` (implementation seams; review seams always pin `read-only`) | `workspace-write` |
+
+The default passes the exact model ID `gpt-5.3-codex-spark` for both
+implementation and read-only review. Unset, empty, or whitespace-only model
+values use this default; an explicit model ID overrides it. Availability is
+account-dependent: an unavailable model fails the delegation without silently
+substituting another model. Only an explicit `auto`/`default`/`none` value opts
+into the CLI/account default. These settings do not change Hermes's own model.
 
 ### Per-seam tool overrides
 

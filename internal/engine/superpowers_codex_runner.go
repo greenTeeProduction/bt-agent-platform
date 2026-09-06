@@ -146,11 +146,10 @@ func (r execCodexRunner) RunCodex(ctx context.Context, repoDir string, prompt st
 // BT_SUPERPOWERS_CODEX_MODEL is unset. Like the Claude default, the exact
 // model ID is pinned (not an alias) so a CLI/account-side alias move cannot
 // silently reroute autonomous cycles onto a different model and quota pool.
-// `gpt-6-astra` is the current frontier model the fleet's ChatGPT-account
-// login accepts (verified by smoke run); set BT_SUPERPOWERS_CODEX_MODEL to
-// "auto" (or "default"/"none") to drop the flag and inherit the account
-// default instead.
-const defaultSuperpowersCodexModel = "gpt-6-astra"
+// Set BT_SUPERPOWERS_CODEX_MODEL to an explicit model ID to override this
+// default, or "auto" (or "default"/"none") to drop the flag and inherit the
+// account default instead. Unavailable models fail without substitution.
+const defaultSuperpowersCodexModel = "gpt-5.3-codex-spark"
 
 // resolvedSuperpowersCodexModel returns the model for codex runs.
 // BT_SUPERPOWERS_CODEX_MODEL semantics mirror the Claude model env:

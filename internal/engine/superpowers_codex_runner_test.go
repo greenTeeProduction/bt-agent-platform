@@ -13,19 +13,33 @@ import (
 	"time"
 )
 
-func TestResolvedSuperpowersCodexModelDefaultsToAstra(t *testing.T) {
+func TestResolvedSuperpowersCodexModelDefaultsToSpark(t *testing.T) {
 	t.Setenv("BT_SUPERPOWERS_CODEX_MODEL", "")
 
-	if got := resolvedSuperpowersCodexModel(); got != "gpt-6-astra" {
-		t.Fatalf("resolvedSuperpowersCodexModel() = %q, want gpt-6-astra", got)
+	if got := resolvedSuperpowersCodexModel(); got != "gpt-5.3-codex-spark" {
+		t.Fatalf("resolvedSuperpowersCodexModel() = %q, want gpt-5.3-codex-spark", got)
 	}
 }
 
 func TestResolvedSuperpowersCodexModelAllowsExplicitAuto(t *testing.T) {
-	t.Setenv("BT_SUPERPOWERS_CODEX_MODEL", "auto")
+	for _, value := range []string{"auto", "default", "none", " AUTO ", "Default", "NONE"} {
+		t.Run(value, func(t *testing.T) {
+			t.Setenv("BT_SUPERPOWERS_CODEX_MODEL", value)
+			if got := resolvedSuperpowersCodexModel(); got != "" {
+				t.Fatalf("resolvedSuperpowersCodexModel() = %q, want empty auto/default model", got)
+			}
+		})
+	}
+}
 
-	if got := resolvedSuperpowersCodexModel(); got != "" {
-		t.Fatalf("resolvedSuperpowersCodexModel() = %q, want empty auto/default model", got)
+func TestResolvedSuperpowersCodexModelExplicitOverride(t *testing.T) {
+	t.Setenv("BT_SUPERPOWERS_CODEX_MODEL", " custom-model-id ")
+	if got := resolvedSuperpowersCodexModel(); got != "custom-model-id" {
+		t.Fatalf("resolvedSuperpowersCodexModel() = %q, want custom-model-id", got)
+	}
+	args := captureRunnerCodexArgs(t, execCodexRunner{})
+	if !strings.Contains(strings.Join(args, "\n"), "-m\ncustom-model-id") {
+		t.Fatalf("codex args = %q, want explicit model override", args)
 	}
 }
 
@@ -43,8 +57,8 @@ func TestExecCodexRunnerBuildsReadOnlyArgs(t *testing.T) {
 			t.Fatalf("codex args = %q, missing %q", args, want)
 		}
 	}
-	if !strings.Contains(joined, "-m\ngpt-6-astra") {
-		t.Fatalf("codex args = %q, want default -m gpt-6-astra", args)
+	if !strings.Contains(joined, "-m\ngpt-5.3-codex-spark") {
+		t.Fatalf("codex args = %q, want default -m gpt-5.3-codex-spark", args)
 	}
 	if args[len(args)-1] != "hello" {
 		t.Fatalf("codex args = %q, want prompt last", args)
@@ -57,6 +71,9 @@ func TestExecCodexRunnerBuildsWriteArgs(t *testing.T) {
 
 	args := captureRunnerCodexArgs(t, execCodexRunner{})
 	joined := strings.Join(args, "\n")
+	if !strings.Contains(joined, "-m\ngpt-5.3-codex-spark") {
+		t.Fatalf("codex args = %q, want default -m gpt-5.3-codex-spark", args)
+	}
 	if !strings.Contains(joined, "--sandbox\nworkspace-write") {
 		t.Fatalf("codex args = %q, want default --sandbox workspace-write", args)
 	}
