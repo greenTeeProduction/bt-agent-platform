@@ -492,8 +492,8 @@ func (dlq *DeadLetterQueue) Len() int {
 }
 
 // AcquireFileLock takes an exclusive advisory flock on the sidecar
-// `<path>.lock`, blocking until the lock is available, and unlinks the sidecar
-// on release so no stray artifact is left beside the guarded file. flock
+// `<path>.lock`, and unlinks the sidecar on release so no stray artifact is
+// left beside the guarded file. flock
 // attaches to the open file description, so two separate opens of the same
 // sidecar exclude each other even within one process — the same shape as the
 // daemon/dashboard cross-process case. The lock is advisory and relies on
@@ -507,20 +507,47 @@ func (dlq *DeadLetterQueue) Len() int {
 // waiter can acquire the flock on an inode the previous holder already
 // unlinked, and that lock excludes nobody (a fresh open of the path creates a
 // new inode), so it retries on the live path instead.
+//
+// Legacy persistence callers wait until the lock is available: they do not
+// all retain or retry failed writes. Callers with a cancellation/retry policy
+// should explicitly use AcquireFileLockWithContext instead.
 func AcquireFileLock(path string) (func(), error) {
+	return AcquireFileLockWithContext(context.Background(), path)
+}
+
+// AcquireFileLockWithContext acquires `<path>.lock` with context cancellation
+// and deadline support.
+func AcquireFileLockWithContext(ctx context.Context, path string) (func(), error) {
 	lockPath := path + ".lock"
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+
 	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+
 		f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0644)
 		if err != nil {
 			return nil, fmt.Errorf("open lock %s: %w", lockPath, err)
 		}
-		if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX); err != nil {
-			f.Close()
-			return nil, fmt.Errorf("flock lock %s: %w", lockPath, err)
+		if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+			_ = f.Close()
+			if errno, ok := err.(syscall.Errno); !ok || (errno != syscall.EWOULDBLOCK && errno != syscall.EAGAIN) {
+				return nil, fmt.Errorf("flock lock %s: %w", lockPath, err)
+			}
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-ticker.C:
+			}
+			continue
 		}
 		held, err := f.Stat()
 		if err != nil {
-			f.Close()
+			_ = f.Close()
 			return nil, fmt.Errorf("stat lock %s: %w", lockPath, err)
 		}
 		if current, err := os.Stat(lockPath); err != nil || !os.SameFile(held, current) {

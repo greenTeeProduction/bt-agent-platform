@@ -18,6 +18,7 @@
 | A2A clients | Agent card discovery, task requests | Task results, agent cards |
 | Webhook subscribers | Agent events (lifecycle, outcome) | HTTP POST to configured endpoints |
 | git (version control) | Tree mutations, evolution commits | Versioned tree history, rollback capability |
+| Host filesystem | Queue/state mutations, lock attempts, event persistence | Local JSON state files plus `.lock` sidecar files |
 
 ## 3.2 Technical Context
 
@@ -36,6 +37,7 @@
 | NotebookLM | subprocess (`nlm` CLI) | local binary → Google NotebookLM | Quota-metered research: query, import, web-research; quota economy in [§2](02-constraints.md) |
 | Claude Code | subprocess (`claude` CLI) | local binary → Anthropic API | Self-improvement loop: plan implementation and code review; durable rate-limit backoff ([§2](02-constraints.md)) |
 | git | subprocess (`git` CLI) | local repos + origin | Tree version history, evolution commits, worktree isolation, autonomous landing pushes |
+| Local persistence files and lock sidecars | advisory file lock + atomic replace | local FS paths (`*.json`, `*.json.lock`) | Cross-process coordination for state files; non-blocking `flock` retries, with cancellation/deadlines available to explicit-context callers |
 
 ### System Boundary
 
@@ -51,11 +53,11 @@
   Cron / systemd ────────▶│                             │        (HTTP POST via :8644 bridge)
   (triggers, lifecycle)   └──────────────┬──────────────┘
                                          │ outbound calls
-              ┌───────────┬──────────────┼──────────────┬─────────────┐
-              ▼           ▼              ▼              ▼             ▼
-            Ollama     DeepSeek      NotebookLM    Claude Code       git
-            :11434     API (ext)    (`nlm` CLI)   (`claude` CLI)  (local repos
-                                                                   + origin)
+              ┌───────────┬──────────────┼──────────────┬─────────────┬──────────────┐
+              ▼           ▼              ▼              ▼             ▼               ▼
+            Ollama     DeepSeek      NotebookLM    Claude Code      git       Host filesystem
+            :11434     API (ext)    (`nlm` CLI)   (`claude` CLI) (local repos  (state &
+                                                                   + origin)    lock sidecars)
 ```
 
 The platform itself runs entirely on the Jetson ARM64 host. Cloud services —
@@ -64,6 +66,12 @@ DeepSeek API (HTTPS), NotebookLM (via the `nlm` CLI), and the Anthropic API
 manages the MCP child-process lifecycle; the dashboard, A2A server, and the
 goap-fusion daemon (`bt-agent.service`) run independently via systemd user
 services or the gateway.
+
+Local filesystem interactions are shared across sibling processes. Legacy
+persistence writers wait for lock availability rather than dropping writes under
+ordinary contention. Explicit-context callers can bound lock contention with a
+deadline or cancellation, and must handle an unsuccessful acquisition; filesystem
+operations themselves are not bounded by this polling API.
 
 ---
 
