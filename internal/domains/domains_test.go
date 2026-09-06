@@ -2370,6 +2370,7 @@ func TestResolverIDAliasesHaveNoOrphans(t *testing.T) {
 			"Descriptions":                  Descriptions,
 			"NonRegistryDescriptions":       NonRegistryDescriptions,
 			"ResolverReachableDescriptions": ResolverReachableDescriptions,
+			"ExternalPackageDescriptions":   ExternalPackageDescriptions,
 		} {
 			if _, ok := m[alias]; ok {
 				t.Errorf("%q is both a ResolverIDAliases key and a %s entry — the alias is dead (DescriptionFor answers from the map first), so the two can silently diverge", alias, mapName)
@@ -2527,6 +2528,115 @@ func TestResolverReachableRegistryIsDerivedFromTreeResolver(t *testing.T) {
 					id, root, resolverBareIDFile)
 			}
 		})
+	}
+}
+
+// TestEveryResolverSelectableTreeIsDescribable closes the last describability
+// hole in the goal "all domain trees have smoke tests, descriptions, and
+// condition coverage": the bare tree IDs resolveTreeIDWithResolver accepts whose
+// branch builds ANOTHER package's tree.
+//
+// TestEveryResolverReachableDomainTreeIsCovered already requires a description
+// for every bare ID whose branch returns an unqualified constructor, and
+// TestResolverReachableRegistryIsDerivedFromTreeResolver requires every other
+// bare ID to be exempted by name in externalPackageResolverIDs. Both stop at the
+// exemption. But that exemption is about which package OWNS the tree, not about
+// whether an operator can select it: ResolveTreeID("vault_manager") hands back a
+// real, runnable tree exactly the way ResolveTreeID("superpowers_pipeline")
+// does, and cmd/bt-agent (resolveTree), internal/agentexec (RunDeps.ResolveTree)
+// and the A2A path all resolve agent definitions through that one function.
+// Ownership elsewhere does not make the ID any less selectable here.
+//
+// So all eight exempted IDs — stockfish_evolve, stockfish_loop, vault_manager,
+// notebooklm-bridge, godev, fusion, fusion_deliberation, telegram_clarify —
+// miss in DescriptionFor, the function trees.go documents as "the only supported
+// way to describe a tree by name". That is the same bare-identifier failure
+// ResolverReachableDescriptions was introduced to fix for superpowers_pipeline,
+// and the reason internal/gardener/gardener.go carries its own hand-written
+// "Go software developer BT" string for godev instead of resolving one.
+//
+// The fix is a description home for this class in trees.go that DescriptionFor
+// consults — not an entry in one of the three existing maps, each of which is
+// orphan-guarded against a domains registry that must not name another package's
+// tree.
+func TestEveryResolverSelectableTreeIsDescribable(t *testing.T) {
+	ids := resolverBareIDLiterals(t)
+	if len(ids) == 0 {
+		t.Fatalf("no `id == \"...\"` comparisons found in %s's resolveTreeIDWithResolver — the guard has lost the production selection surface and would pass vacuously", resolverBareIDFile)
+	}
+
+	for _, id := range ids {
+		t.Run(id, func(t *testing.T) {
+			tree := ResolveTreeID(id)
+			if tree == nil || len(tree.Children) == 0 {
+				t.Fatalf("ResolveTreeID(%q) returned a nil or childless tree even though %s has a branch for that ID", id, resolverBareIDFile)
+			}
+
+			owner := "a domains-package tree"
+			if ctor, external := externalPackageResolverIDs[id]; external {
+				owner = "built by " + ctor
+			}
+
+			desc, ok := DescriptionFor(id)
+			if !ok {
+				t.Fatalf("DescriptionFor(%q) returned ok=false, but ResolveTreeID(%q) hands an operator a real tree rooted at %q (%s).\n"+
+					"No description map knows that ID, so it renders as a bare identifier wherever builtins are listed. Give the ID a description home in trees.go and have DescriptionFor consult it.",
+					id, id, coverageRootName(tree), owner)
+			}
+
+			// Same floor the other description guards enforce: a description
+			// must explain the tree, not restate its name.
+			const minDescLen = 20
+			if trimmed := strings.TrimSpace(desc); len(trimmed) < minDescLen {
+				t.Errorf("DescriptionFor(%q) = %q (%s): only %d chars, want >= %d", id, trimmed, owner, len(trimmed), minDescLen)
+			}
+		})
+	}
+}
+
+// TestExternalPackageDescriptionsHaveNoOrphans is the reverse guard to
+// TestEveryResolverSelectableTreeIsDescribable, and the fourth-map sibling of
+// TestDescriptionsHaveNoOrphans / TestNonRegistryDescriptionsHaveNoOrphans /
+// TestResolverReachableDescriptionsHaveNoOrphans.
+//
+// The other three maps are each checked against the domains registry that
+// defines them, which is what stops a renamed or deleted tree from leaving a
+// dead entry advertising a builtin nobody can select. ExternalPackageDescriptions
+// has no such registry by construction — its trees are built in another package,
+// and naming them in a domains registry is exactly what the three orphan guards
+// forbid — so its ground truth is the resolver source itself: a key must be a
+// bare ID resolveTreeIDWithResolver accepts, and it must be an ID this package
+// deliberately does not own. A key that stops satisfying either has to move to
+// (or back to) a registry-backed map rather than sit here unguarded.
+//
+// It also keeps the map disjoint from the other three, for the same reason they
+// are disjoint from each other: a name in two maps makes DescriptionFor's
+// precedence silently choose between two divergent descriptions.
+func TestExternalPackageDescriptionsHaveNoOrphans(t *testing.T) {
+	selectable := map[string]bool{}
+	for _, id := range resolverBareIDLiterals(t) {
+		selectable[id] = true
+	}
+	if len(selectable) == 0 {
+		t.Fatalf("no `id == \"...\"` comparisons found in %s's resolveTreeIDWithResolver — the guard cannot see the production selection surface, so every entry below would look like an orphan", resolverBareIDFile)
+	}
+
+	for _, name := range slices.Sorted(maps.Keys(ExternalPackageDescriptions)) {
+		if !selectable[name] {
+			t.Errorf("ExternalPackageDescriptions has entry %q but no bare-ID branch in %s resolves that spelling — the entry describes a builtin ResolveTreeID rejects", name, resolverBareIDFile)
+		}
+		if _, external := externalPackageResolverIDs[name]; !external {
+			t.Errorf("ExternalPackageDescriptions has entry %q, but %q is not exempted in externalPackageResolverIDs — this map is only for trees another package builds, so a domains-package tree belongs in Descriptions, NonRegistryDescriptions, or ResolverReachableDescriptions, where it is orphan-guarded against a registry", name, name)
+		}
+		for mapName, m := range map[string]map[string]string{
+			"Descriptions":                  Descriptions,
+			"NonRegistryDescriptions":       NonRegistryDescriptions,
+			"ResolverReachableDescriptions": ResolverReachableDescriptions,
+		} {
+			if _, ok := m[name]; ok {
+				t.Errorf("tree %q is described in both %s and ExternalPackageDescriptions — the description maps must be disjoint", name, mapName)
+			}
+		}
 	}
 }
 
