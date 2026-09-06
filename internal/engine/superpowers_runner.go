@@ -166,7 +166,7 @@ func getenvDefault(key, fallback string) string {
 }
 
 var defaultSuperpowersCommandRunner CommandRunner = execCommandRunner{}
-var defaultSuperpowersClaudeRunner ClaudeRunner = execClaudeRunner{}
+var defaultSuperpowersClaudeRunner ClaudeRunner = newImplementationDelegatingRunner()
 
 // superpowersCommandTimeoutSecs is the wall-clock budget for a single wrapped
 // command (build/test/lint/git). Default 600s. The OLD 180s budget was <= the

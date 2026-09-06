@@ -311,9 +311,9 @@ type goapReviewDeps struct {
 
 func defaultGoapReviewDeps() goapReviewDeps {
 	return goapReviewDeps{
-		runner: execClaudeRunner{
-			AllowedTools: getenvDefault("BT_GOAP_REVIEW_ALLOWED_TOOLS", goapReviewAllowedTools),
-		},
+		runner: newReadOnlyDelegatingRunner(
+			getenvDefault("BT_GOAP_REVIEW_ALLOWED_TOOLS", goapReviewAllowedTools),
+		),
 		repoDir:      goapFusionRepo,
 		synthesesDir: goapFusionSynthesesDir,
 		graphReport:  goapFusionGraphReport,
@@ -344,14 +344,25 @@ func runClaudeCodeReviewResearch(bb *Blackboard, deps goapReviewDeps) int {
 	if now == nil {
 		now = time.Now
 	}
+	// Resolve the configured delegation provider once for this run's backoff /
+	// rate-limit accounting. An invalid BT_SUPERPOWERS_PROVIDER is rejected here
+	// (not silently defaulted) so a misconfiguration surfaces instead of quietly
+	// reviewing through the wrong provider.
+	provider, err := resolvedSuperpowersProvider()
+	if err != nil {
+		bb.Result = fmt.Sprintf("## Claude Review Fallback Failed\n\n%v", err)
+		bb.Outcome = "goap_fusion_claude_review_failed"
+		return -1
+	}
 	// Consume the durable rate-limit backoff before doing ANY work: a skipped
-	// tick must not spend a 15-minute Claude run against a quota known to be
+	// tick must not spend a 15-minute run against a quota known to be
 	// closed, and it must not consume a review-mode rotation slot either. The
 	// -1 lets the ResearchRouter fall through to its non-fatal ResearchOptional
-	// skip in milliseconds.
-	if claudeBackoffActive(bb, now()) {
-		until, _ := loadClaudeBackoffState(bb)
-		bb.Result = fmt.Sprintf("## Claude Review Fallback Skipped\n\nBackoff active until %s: a previous tick hit the Claude rate limit, skipping without invoking Claude.", until.Format(time.RFC3339))
+	// skip in milliseconds. The backoff state is namespaced by provider — a
+	// Codex rate limit never closes Claude and vice versa.
+	if delegationBackoffActive(bb, provider, now()) {
+		until, _ := loadDelegationBackoffState(bb, provider)
+		bb.Result = fmt.Sprintf("## Claude Review Fallback Skipped\n\nBackoff active until %s: a previous tick hit the %s rate limit, skipping without invoking it.", until.Format(time.RFC3339), provider)
 		bb.Outcome = "goap_fusion_claude_review_rate_limited"
 		return -1
 	}
@@ -370,11 +381,11 @@ func runClaudeCodeReviewResearch(bb *Blackboard, deps goapReviewDeps) int {
 		combined += " " + result.Err.Error()
 	}
 	if result.Err != nil || strings.TrimSpace(result.Output) == "" {
-		if isClaudeRateLimit(combined) {
+		if isDelegationRateLimit(provider, combined) {
 			// Record the backoff — the CLI-reported reset when the output names
-			// one, the hour window otherwise — so the NEXT tick short-circuits
+			// one, the provider's window otherwise — so the NEXT tick short-circuits
 			// at the entry guard instead of burning another 15-minute doomed run.
-			saveClaudeBackoffState(bb, claudeBackoffDeadline(combined, now(), goapClaudeBackoffWindow))
+			saveDelegationBackoffState(bb, provider, delegationBackoffDeadline(provider, combined, now(), delegationReviewBackoffWindow(provider)))
 			bb.Result = fmt.Sprintf("## Claude Review Fallback Rate-Limited\n\n```\n%s\n```", truncateGoap(combined, 2000))
 			bb.Outcome = "goap_fusion_claude_review_rate_limited"
 			return -1

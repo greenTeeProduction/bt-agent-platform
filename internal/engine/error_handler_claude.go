@@ -31,10 +31,13 @@ const (
 )
 
 // errorHandlerClaudeRunner is swappable in tests (same seam pattern as
-// defaultSuperpowersClaudeRunner). ForceReadOnly: the proposal run's security
-// contract is its Read,Glob,Grep tool list — the skip-permissions env override
-// must never widen it.
-var errorHandlerClaudeRunner ClaudeRunner = execClaudeRunner{AllowedTools: errorHandlerAllowedTools, ForceReadOnly: true}
+// defaultSuperpowersClaudeRunner). It is a READ-ONLY delegating runner: the
+// proposal run's security contract is its restricted tool list, so the
+// claude side pins Read,Glob,Grep with ForceReadOnly (the skip-permissions
+// env override must never widen it) and the codex side pins
+// --sandbox read-only. Provider selection routes through it like every other
+// delegation seam (BT_SUPERPOWERS_PROVIDER).
+var errorHandlerClaudeRunner ClaudeRunner = newReadOnlyDelegatingRunner(errorHandlerAllowedTools)
 
 func errorHandlerEnabled() bool {
 	return !strings.EqualFold(os.Getenv("BT_CLAUDE_ERROR_HANDLER"), "off")

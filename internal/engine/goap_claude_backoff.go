@@ -13,22 +13,28 @@ import (
 	"github.com/nico/go-bt-evolve/internal/blackboard"
 )
 
-// Claude rate-limit backoff state must survive across scheduled runs AND
-// across agents: a rate-limited outcome in one cron tick should stop the next
-// ticks — of every agent — from burning 15-minute Claude retry budgets
-// against a quota that is known to be closed. The deadline lives in a single
-// fleet-wide ADR-003 file (primary), with the run-local ChainState as the
-// fallback when the file is unwritable. Per-agent stamps written by the
-// previous implementation are still honored until they expire, then cleared.
+// Rate-limit backoff state must survive across scheduled runs AND across
+// agents: a rate-limited outcome in one cron tick should stop the next ticks —
+// of every agent — from burning 15-minute retry budgets against a quota that
+// is known to be closed. The deadline lives in a single fleet-wide ADR-003
+// file (primary), with the run-local ChainState as the fallback when the file
+// is unwritable. Per-agent stamps written by the previous implementation are
+// still honored until they expire, then cleared.
 //
 // Why fleet-wide: on 2026-07-14/15 goap-fusion-runner's private stamp expired
 // at 23:47 and its probe found Claude healthy, while goap-fusion-loop-runner
 // kept fast-failing ~3h more on its own later-armed stamp. One agent's probe
 // result is knowledge the whole fleet should share.
+//
+// Provider namespacing (2026-09): the state is now keyed by DelegationProvider.
+// Claude keeps the historical claude_backoff.json stamp (and its existing
+// tests); Codex gets a sibling codex_backoff.json plus its own agent-scope /
+// ChainState keys. A Claude rate limit must never close a Codex run, a Codex
+// failure must never write or clear the Claude cooldown, and vice versa.
 
-// sharedClaudeBackoff is the on-disk shape of the fleet-wide stamp.
+// sharedBackoff is the on-disk shape of the fleet-wide stamp.
 // set_by/set_at exist for operator forensics only.
-type sharedClaudeBackoff struct {
+type sharedBackoff struct {
 	Until string `json:"until"`
 	SetBy string `json:"set_by,omitempty"`
 	SetAt string `json:"set_at,omitempty"`
@@ -39,21 +45,57 @@ var (
 	// isolateClaudeBackoffStore) — the default is the operator's LIVE
 	// fleet-wide stamp.
 	goapClaudeBackoffPath = defaultClaudeBackoffPath()
-	goapClaudeBackoffMu   sync.Mutex
+	// goapCodexBackoffPath is the Codex-namespaced stamp (same seam pattern).
+	goapCodexBackoffPath = defaultCodexBackoffPath()
+	goapClaudeBackoffMu  sync.Mutex
 )
 
-func defaultClaudeBackoffPath() string {
+func backoffHomeDir() string {
 	home, err := os.UserHomeDir()
-	if err != nil {
+	if err != nil || home == "" {
 		home = "/home/nico"
 	}
-	return filepath.Join(home, ".go-bt-evolve", "claude_backoff.json")
+	return home
 }
 
-func writeSharedClaudeBackoff(until time.Time, setBy string) {
+func defaultClaudeBackoffPath() string {
+	return filepath.Join(backoffHomeDir(), ".go-bt-evolve", "claude_backoff.json")
+}
+
+func defaultCodexBackoffPath() string {
+	return filepath.Join(backoffHomeDir(), ".go-bt-evolve", "codex_backoff.json")
+}
+
+func backoffPathFor(p DelegationProvider) string {
+	if p == DelegationProviderCodex {
+		return goapCodexBackoffPath
+	}
+	return goapClaudeBackoffPath
+}
+
+// backoffChainKey returns the full "goap_fusion_*" key used in ChainState and
+// the agent-scope blackboard for a provider. Claude keeps the historical key
+// (so the legacy per-agent stamp is still honored); Codex uses its own.
+func backoffChainKey(p DelegationProvider) string {
+	if p == DelegationProviderCodex {
+		return "goap_fusion_codex_backoff_until"
+	}
+	return "goap_fusion_claude_backoff_until"
+}
+
+// backoffStateKey returns the UNPREFIXED key passed to setGoapState (which
+// prepends "goap_fusion_"). Mirrors the historical "claude_backoff_until".
+func backoffStateKey(p DelegationProvider) string {
+	if p == DelegationProviderCodex {
+		return "codex_backoff_until"
+	}
+	return "claude_backoff_until"
+}
+
+func writeSharedBackoff(path string, until time.Time, setBy string) {
 	goapClaudeBackoffMu.Lock()
 	defer goapClaudeBackoffMu.Unlock()
-	b, err := json.Marshal(sharedClaudeBackoff{
+	b, err := json.Marshal(sharedBackoff{
 		Until: until.UTC().Format(time.RFC3339),
 		SetBy: setBy,
 		SetAt: time.Now().UTC().Format(time.RFC3339),
@@ -61,7 +103,6 @@ func writeSharedClaudeBackoff(until time.Time, setBy string) {
 	if err != nil {
 		return
 	}
-	path := goapClaudeBackoffPath
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return
 	}
@@ -72,14 +113,14 @@ func writeSharedClaudeBackoff(until time.Time, setBy string) {
 	_ = os.Rename(tmp, path)
 }
 
-func readSharedClaudeBackoff() (time.Time, bool) {
+func readSharedBackoff(path string) (time.Time, bool) {
 	goapClaudeBackoffMu.Lock()
 	defer goapClaudeBackoffMu.Unlock()
-	b, err := os.ReadFile(goapClaudeBackoffPath)
+	b, err := os.ReadFile(path)
 	if err != nil {
 		return time.Time{}, false
 	}
-	var s sharedClaudeBackoff
+	var s sharedBackoff
 	if json.Unmarshal(b, &s) != nil {
 		return time.Time{}, false
 	}
@@ -90,41 +131,42 @@ func readSharedClaudeBackoff() (time.Time, bool) {
 	return until, true
 }
 
-func removeSharedClaudeBackoff() {
+func removeSharedBackoff(path string) {
 	goapClaudeBackoffMu.Lock()
 	defer goapClaudeBackoffMu.Unlock()
-	_ = os.Remove(goapClaudeBackoffPath)
+	_ = os.Remove(path)
 }
 
-// saveClaudeBackoffState records the fleet-wide backoff deadline (plus the
-// run-local ChainState fallback). It intentionally no longer writes the
-// per-agent blackboard key — that is what let sibling agents oversleep on
-// private stamps.
-func saveClaudeBackoffState(bb *Blackboard, until time.Time) {
+// saveDelegationBackoffState records the fleet-wide backoff deadline for a
+// provider (plus the run-local ChainState fallback). It intentionally no
+// longer writes the per-agent blackboard key — that is what let sibling
+// agents oversleep on private stamps.
+func saveDelegationBackoffState(bb *Blackboard, p DelegationProvider, until time.Time) {
 	stamp := until.UTC().Format(time.RFC3339)
-	setGoapState(bb, "claude_backoff_until", stamp)
+	setGoapState(bb, backoffStateKey(p), stamp)
 	setBy := ""
 	if bb.BB != nil {
 		setBy = bb.BB.AgentName
 	}
-	writeSharedClaudeBackoff(until, setBy)
+	writeSharedBackoff(backoffPathFor(p), until, setBy)
 }
 
-// loadClaudeBackoffState returns the latest valid deadline among the shared
-// file, the legacy per-agent entry, and the ChainState fallback. Missing or
-// malformed state reads as inactive — corrupt state must never wedge the
-// loop into skipping Claude forever.
-func loadClaudeBackoffState(bb *Blackboard) (time.Time, bool) {
-	best, ok := readSharedClaudeBackoff()
+// loadDelegationBackoffState returns the latest valid deadline among the
+// shared file, the legacy per-agent entry, and the ChainState fallback.
+// Missing or malformed state reads as inactive — corrupt state must never
+// wedge the loop into skipping the provider forever.
+func loadDelegationBackoffState(bb *Blackboard, p DelegationProvider) (time.Time, bool) {
+	best, ok := readSharedBackoff(backoffPathFor(p))
+	key := backoffChainKey(p)
 	if bb.BB != nil && bb.BB.AgentName != "" {
 		scope := blackboard.Scope{Kind: blackboard.ScopeAgent, ID: bb.BB.AgentName}
-		if e, err := bb.BB.Mgr.Get(scope, "goap_fusion_claude_backoff_until"); err == nil {
+		if e, err := bb.BB.Mgr.Get(scope, key); err == nil {
 			if until, perr := time.Parse(time.RFC3339, strings.TrimSpace(e.Value)); perr == nil && (!ok || until.After(best)) {
 				best, ok = until, true
 			}
 		}
 	}
-	if s, sok := bb.ChainState["goap_fusion_claude_backoff_until"].(string); sok {
+	if s, sok := bb.ChainState[key].(string); sok {
 		if until, perr := time.Parse(time.RFC3339, strings.TrimSpace(s)); perr == nil && (!ok || until.After(best)) {
 			best, ok = until, true
 		}
@@ -132,32 +174,128 @@ func loadClaudeBackoffState(bb *Blackboard) (time.Time, bool) {
 	return best, ok
 }
 
-// claudeBackoffActive reports whether now is still inside the persisted
-// backoff window. An elapsed window self-clears (half-open, mirroring the
-// runaway-backstop lesson) so stale state cannot permanently block attempts.
-func claudeBackoffActive(bb *Blackboard, now time.Time) bool {
-	until, ok := loadClaudeBackoffState(bb)
+// delegationBackoffActive reports whether now is still inside the persisted
+// backoff window for a provider. An elapsed window self-clears (half-open,
+// mirroring the runaway-backstop lesson) so stale state cannot permanently
+// block attempts.
+func delegationBackoffActive(bb *Blackboard, p DelegationProvider, now time.Time) bool {
+	until, ok := loadDelegationBackoffState(bb, p)
 	if !ok {
 		return false
 	}
 	if now.Before(until) {
 		return true
 	}
-	clearClaudeBackoffState(bb)
+	clearDelegationBackoffState(bb, p)
 	return false
 }
 
-// clearClaudeBackoffState wipes the shared file, the legacy per-agent entry,
-// and the ChainState fallback — a probe result reopens Claude fleet-wide.
-func clearClaudeBackoffState(bb *Blackboard) {
+// clearDelegationBackoffState wipes the shared file, the legacy per-agent
+// entry, and the ChainState fallback for a provider — a probe result reopens
+// that provider fleet-wide.
+func clearDelegationBackoffState(bb *Blackboard, p DelegationProvider) {
+	key := backoffChainKey(p)
 	if bb.ChainState != nil {
-		delete(bb.ChainState, "goap_fusion_claude_backoff_until")
+		delete(bb.ChainState, key)
 	}
 	if bb.BB != nil && bb.BB.AgentName != "" {
 		scope := blackboard.Scope{Kind: blackboard.ScopeAgent, ID: bb.BB.AgentName}
-		_ = bb.BB.Mgr.Delete(scope, "goap_fusion_claude_backoff_until")
+		_ = bb.BB.Mgr.Delete(scope, key)
 	}
-	removeSharedClaudeBackoff()
+	removeSharedBackoff(backoffPathFor(p))
+}
+
+// isDelegationRateLimit reports whether a provider's failure output is a
+// rate-limit signal. Claude uses the CLI-specific matcher; Codex uses a
+// conservative generic matcher.
+func isDelegationRateLimit(p DelegationProvider, errStr string) bool {
+	if p == DelegationProviderCodex {
+		return isCodexRateLimit(errStr)
+	}
+	return isClaudeRateLimit(errStr)
+}
+
+// delegationBackoffDeadline converts a provider's rate-limited output into the
+// backoff deadline. Claude parses the CLI-reported reset (claudeBackoffDeadline);
+// Codex's reset shape is not yet characterized, so it uses the fixed fallback
+// window (codexBackoffWindow).
+func delegationBackoffDeadline(p DelegationProvider, errText string, now time.Time, fallback time.Duration) time.Time {
+	if p == DelegationProviderCodex {
+		return now.Add(fallback)
+	}
+	return claudeBackoffDeadline(errText, now, fallback)
+}
+
+// codexBackoffWindow is the duration a rate-limited Codex outcome closes Codex
+// attempts for (no reset-hint parsing yet). BT_GOAP_CODEX_BACKOFF when
+// parsable, 1h otherwise.
+func codexBackoffWindow() time.Duration {
+	if d, err := time.ParseDuration(getenvDefault("BT_GOAP_CODEX_BACKOFF", "1h")); err == nil && d > 0 {
+		return d
+	}
+	return time.Hour
+}
+
+// delegationBackoffWindow returns the fixed fallback backoff window for a
+// provider when the CLI output carries no parseable reset hint: Claude uses
+// claudeBackoffWindow (BT_GOAP_CLAUDE_BACKOFF, 6h default), Codex uses
+// codexBackoffWindow (BT_GOAP_CODEX_BACKOFF, 1h default).
+func delegationBackoffWindow(p DelegationProvider) time.Duration {
+	if p == DelegationProviderCodex {
+		return codexBackoffWindow()
+	}
+	return claudeBackoffWindow()
+}
+
+// delegationReviewBackoffWindow returns the fixed fallback backoff window used
+// by the read-only review seams (GOAP review fallback, self review, PR
+// shepherd fix). Claude keeps the historical 1h review constant
+// (goapClaudeBackoffWindow); Codex uses codexBackoffWindow (1h default).
+func delegationReviewBackoffWindow(p DelegationProvider) time.Duration {
+	if p == DelegationProviderCodex {
+		return codexBackoffWindow()
+	}
+	return goapClaudeBackoffWindow
+}
+
+// isCodexRateLimit reports whether Codex CLI failure output looks like a rate
+// limit or quota closure. Codex-specific reset text is not yet characterized,
+// so the matcher is deliberately conservative on the generic signals the
+// OpenAI backend emits (429 / rate limit / quota / usage limit).
+func isCodexRateLimit(errStr string) bool {
+	lower := strings.ToLower(errStr)
+	for _, s := range []string{
+		"429", "rate limit", "rate_limit", "too many requests",
+		"quota exceeded", "usage limit", "rate exceeded",
+	} {
+		if strings.Contains(lower, s) {
+			return true
+		}
+	}
+	return false
+}
+
+// ── Claude wrappers (historical public surface; tests depend on these) ─────
+
+// saveClaudeBackoffState records the fleet-wide Claude backoff deadline.
+func saveClaudeBackoffState(bb *Blackboard, until time.Time) {
+	saveDelegationBackoffState(bb, DelegationProviderClaude, until)
+}
+
+// loadClaudeBackoffState returns the latest valid Claude backoff deadline.
+func loadClaudeBackoffState(bb *Blackboard) (time.Time, bool) {
+	return loadDelegationBackoffState(bb, DelegationProviderClaude)
+}
+
+// claudeBackoffActive reports whether now is still inside the persisted Claude
+// backoff window.
+func claudeBackoffActive(bb *Blackboard, now time.Time) bool {
+	return delegationBackoffActive(bb, DelegationProviderClaude, now)
+}
+
+// clearClaudeBackoffState wipes Claude's shared backoff state.
+func clearClaudeBackoffState(bb *Blackboard) {
+	clearDelegationBackoffState(bb, DelegationProviderClaude)
 }
 
 // claudeBackoffWindow is the FALLBACK duration a rate-limited outcome closes
