@@ -98,6 +98,9 @@ func (r execClaudeRunner) RunClaude(ctx context.Context, repoDir string, prompt 
 	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Dir = repoDir
 	cmd.Env = append(os.Environ(), "PATH=/usr/local/go/bin:"+os.Getenv("HOME")+"/go/bin:"+os.Getenv("PATH"))
+	// Match Codex: cancellation must stop delegated child commands as well
+	// as the CLI, otherwise inherited pipes can hold the cycle open forever.
+	bindToolCommandCancellation(cmd)
 	out, err := cmd.CombinedOutput()
 	return CommandResult{
 		Command:  fmt.Sprintf("%s %s <prompt>", bin, strings.Join(args[:len(args)-1], " ")),

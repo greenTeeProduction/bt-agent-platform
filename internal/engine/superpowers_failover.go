@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -48,7 +49,19 @@ func (d delegatingRunner) runProvider(ctx context.Context, dir, prompt string, p
 
 // Two attempts maximum, in the same workspace and with the same context and
 // permission policy. Never mutate process environment or retry unrelated errors.
-func (d delegatingRunner) runWithRateLimitFailover(ctx context.Context, dir, prompt string, primary DelegationProvider) CommandResult {
+// delegationAttemptError preserves a managed non-quota classification through
+// task-phase wrapping. Runtime callers must not classify its transcript again.
+type delegationAttemptError struct{ error }
+
+func (e *delegationAttemptError) Unwrap() error { return e.error }
+
+func (d delegatingRunner) runWithRateLimitFailover(ctx context.Context, dir, prompt string, primary DelegationProvider) (final CommandResult) {
+	defer func() {
+		var limited *DelegationRateLimitError
+		if final.Err != nil && !errors.As(final.Err, &limited) {
+			final.Err = &delegationAttemptError{final.Err}
+		}
+	}()
 	var earliest time.Time
 	var retryProvider DelegationProvider
 	var lastProvider DelegationProvider
@@ -76,7 +89,14 @@ func (d delegatingRunner) runWithRateLimitFailover(ctx context.Context, dir, pro
 			if result.Err == nil {
 				return result
 			}
-			text := result.Output + "\n" + result.Err.Error()
+			// Codex's failure transcript includes the user prompt verbatim.
+			// Remove that known untrusted region before classifying diagnostics;
+			// retain the original output for artifacts and ordinary error reporting.
+			diagnostic := result.Output
+			if prompt != "" {
+				diagnostic = strings.ReplaceAll(diagnostic, prompt, "")
+			}
+			text := diagnostic + "\n" + result.Err.Error()
 			if !isDelegationRateLimit(p, text) {
 				return result
 			}
