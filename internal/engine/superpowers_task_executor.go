@@ -66,7 +66,7 @@ func superpowersBudgetKillError(ctx context.Context, phase string, err error, ou
 	if ctx.Err() == nil {
 		return nil
 	}
-	return fmt.Errorf("%s aborted: cycle budget exhausted (%v)\nerror: %v\n%s", phase, ctx.Err(), err, output)
+	return fmt.Errorf("%s aborted: cycle budget exhausted (%w)\nerror: %v\n%s", phase, ctx.Err(), err, output)
 }
 
 // superpowersTaskRed executes the RED phase: it captures the pre-change
@@ -84,7 +84,7 @@ func superpowersTaskRed(ctx context.Context, runner CommandRunner, claude Claude
 		if kill := superpowersBudgetKillError(ctx, "red-phase claude", redClaudeRes.Err, redClaudeRes.Output); kill != nil {
 			return kill
 		}
-		return fmt.Errorf("red-phase claude failed: %v\n%s", redClaudeRes.Err, redClaudeRes.Output)
+		return fmt.Errorf("red-phase claude failed: %w\n%s", redClaudeRes.Err, redClaudeRes.Output)
 	}
 	return nil
 }
@@ -137,7 +137,7 @@ func superpowersTaskGreen(ctx context.Context, runner CommandRunner, claude Clau
 		if kill := superpowersBudgetKillError(ctx, "green-phase claude", greenClaudeRes.Err, greenClaudeRes.Output); kill != nil {
 			return kill
 		}
-		return fmt.Errorf("green-phase claude failed: %v\n%s", greenClaudeRes.Err, greenClaudeRes.Output)
+		return fmt.Errorf("green-phase claude failed: %w\n%s", greenClaudeRes.Err, greenClaudeRes.Output)
 	}
 	return nil
 }

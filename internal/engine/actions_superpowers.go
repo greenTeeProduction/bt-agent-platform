@@ -263,9 +263,11 @@ func init() {
 		if perr != nil {
 			missing = append(missing, perr.Error())
 		} else {
-			bin := delegationBinary(provider)
-			if info, err := os.Stat(bin); err != nil || info.IsDir() || info.Mode().Perm()&0o111 == 0 {
-				missing = append(missing, fmt.Sprintf("%s binary `%s` is not an executable file: %v", provider, bin, err))
+			for _, candidate := range delegationRuntimeBinaries(provider) {
+				bin := delegationBinary(candidate)
+				if info, err := os.Stat(bin); err != nil || info.IsDir() || info.Mode().Perm()&0o111 == 0 {
+					missing = append(missing, fmt.Sprintf("%s binary `%s` is not an executable file: %v", candidate, bin, err))
+				}
 			}
 		}
 

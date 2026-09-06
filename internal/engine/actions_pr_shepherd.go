@@ -689,8 +689,7 @@ func runPRShepherdFix(ctx context.Context, bb *Blackboard, deps prShepherdDeps, 
 			"## PR Shepherd Fix Budget Exhausted\n\nPR #%d head %s: %d/%d attempts for this head, %d total since the last merge. Operator attention needed.",
 			prNumber, headSHA[:min(12, len(headSHA))], state.FixAttempts[headSHA], maxAttempts, state.TotalFixAttempts)
 	}
-	if delegationBackoffActive(bb, provider, now()) {
-		until, _ := loadDelegationBackoffState(bb, provider)
+	if until, active := delegationPreflightBackoff(bb, provider, now()); active {
 		return prShepherdSkip(bb, "pr_shepherd_rate_limited",
 			"## PR Shepherd Skipped\n\n%s backoff active until %s; fix deferred.", provider, until.Format(time.RFC3339))
 	}
@@ -727,13 +726,18 @@ func runPRShepherdFix(ctx context.Context, bb *Blackboard, deps prShepherdDeps, 
 	claudeCtx, cancel := context.WithTimeout(ctx, deps.claudeTimeout)
 	res := deps.claude.RunClaude(claudeCtx, wtPath, prompt)
 	cancel()
+	if res.Provider.Valid() {
+		provider = res.Provider
+	}
 	combined := res.Output
 	if res.Err != nil {
 		combined += " " + res.Err.Error()
 	}
-	if isDelegationRateLimit(provider, combined) {
+	if delegationResultRateLimited(res, provider, combined) {
 		cleanup()
-		saveDelegationBackoffState(bb, provider, delegationBackoffDeadline(provider, combined, now(), delegationReviewBackoffWindow(provider)))
+		if !res.BackoffManaged {
+			saveDelegationBackoffState(bb, provider, delegationBackoffDeadline(provider, combined, now(), delegationReviewBackoffWindow(provider)))
+		}
 		return prShepherdSkip(bb, "pr_shepherd_rate_limited",
 			"## PR Shepherd Rate-Limited\n\n```\n%s\n```", truncateGoap(combined, 1200))
 	}

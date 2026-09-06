@@ -97,6 +97,50 @@ clears the Claude cooldown, and vice versa. This is pinned by
 `TestDelegationBackoffState_ProviderNamespaced` and
 `TestDelegationBackoffState_ClearCodexLeavesClaudeIntact`.
 
+## Opt-in rate-limit failover
+
+Set `BT_SUPERPOWERS_RATE_LIMIT_FAILOVER=true` to permit **one** alternate
+attempt after the selected primary reports a rate limit, or skip a primary
+whose fleet cooldown is already active. Unset/false retains single-provider
+behavior. The primary remains `BT_SUPERPOWERS_PROVIDER`; no process environment
+is mutated. The runner bounds each call to primary → alternate, never ping-pong.
+
+Both attempts use the same context, prompt, workspace, and caller's permission
+policy. Read-only reviews stay read-only on either CLI. Authentication failures,
+missing binaries/models, ordinary errors, successful output mentioning quotas,
+cancellation, and deadline expiration do not trigger failover. A rate-limited
+implementation may have partial edits: the alternate continues in that same
+isolated worktree; normal RED/GREEN, verification, and apply gates still apply.
+
+Each limited provider arms only its own durable stamp. Successful alternate
+work does not clear the primary's cooldown. Both closed returns a typed
+`DelegationRateLimitError` and `CommandResult.RetryAt` with the earliest retry;
+callers must not re-arm the configured primary from this managed result.
+`CommandResult.Provider` records the CLI actually invoked. Preflight skips a
+run for quota only when **both** providers are cooling down and reports the
+earliest deadline. Runtime binary preflight requires both executables when
+failover is enabled (it does not silently fall back for missing installations).
+
+### Deployment after safe integration
+
+`deploy/systemd/rate-limit-failover.conf` enables the opt-in and pins Codex to
+`gpt-5.3-codex-spark`. After integrating the reviewed commit into the deployed
+branch and passing its dirty-worktree preflight, install it under each of:
+
+- `~/.config/systemd/user/bt-agent.service.d/`
+- `~/.config/systemd/user/bt-dashboard.service.d/`
+- `~/.config/systemd/user/bt-gardener.service.d/`
+
+Check for conflicting model values in the operator-managed EnvironmentFile
+(`/mnt/ssd/bt-secrets/codex.env` on the deployed host); systemd EnvironmentFile
+values override `Environment=` settings. Keep its model exactly
+`gpt-5.3-codex-spark` and enable the flag there if it already defines it.
+Then reload/restart the three services and verify their effective non-secret
+provider/model/failover settings. Do not deploy a feature-worktree binary into
+scheduled services that still operate on a different, dirty main branch.
+**Deployment is deferred until safe integration; this template alone does not
+change running services.** Disable the flag and restart to roll back routing.
+
 ## Configuring and restarting the daemon
 
 The daemon is the systemd **user** unit `bt-agent.service` (running
