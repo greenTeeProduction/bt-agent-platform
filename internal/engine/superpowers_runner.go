@@ -89,6 +89,12 @@ func (r execClaudeRunner) buildClaudeArgs(prompt string) []string {
 }
 
 func (r execClaudeRunner) RunClaude(ctx context.Context, repoDir string, prompt string) CommandResult {
+	isolatedDir, isolatedPrompt, cleanup, err := isolateProductionExploration(ctx, repoDir, prompt)
+	if err != nil {
+		return CommandResult{Dir: repoDir, Err: err}
+	}
+	defer cleanup()
+	repoDir, prompt = isolatedDir, isolatedPrompt
 	bin := r.Bin
 	if bin == "" {
 		bin = getenvDefault("BT_SUPERPOWERS_CLAUDE_BIN", "/home/nico/.local/bin/claude")

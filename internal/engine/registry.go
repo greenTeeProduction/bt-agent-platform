@@ -652,7 +652,7 @@ func init() {
 		home := homeDir()
 		repoPath := filepath.Join(home, ".hermes", "hermes-agent")
 		hermesBin := filepath.Join(home, ".local", "bin", "hermes")
-		gitBin := "/usr/bin/git"
+		const gitBin = "/usr/bin/git"
 		env := append(os.Environ(),
 			"PATH="+filepath.Join(home, ".local", "bin")+":"+os.Getenv("PATH"),
 			"HOME="+home,
@@ -677,8 +677,11 @@ func init() {
 		report.WriteString(hermesUpdateReportHeader(beforeVersion))
 
 		// 2. Current commit
-		commitOut, _ := exec.Command(gitBin, "-C", repoPath, "rev-parse", "--short", "HEAD").CombinedOutput()
+		commitOut, commitErr := exec.Command(gitBin, "-C", repoPath, "rev-parse", "--verify", "HEAD^{commit}").Output() // #nosec G204 -- fixed /usr/bin/git, no shell; -C path derives only from operator HOME, refs and flags are literals.
 		beforeCommit := strings.TrimSpace(string(commitOut))
+		if commitErr != nil {
+			beforeCommit = ""
+		}
 
 		// 3. Fetch
 		fetchOut, fetchErr := exec.Command(gitBin, "-C", repoPath, "fetch", "origin").CombinedOutput()
@@ -687,19 +690,22 @@ func init() {
 		}
 		logf("git fetch: err=%v", fetchErr)
 
-		// 4. Behind count
-		behindOut, _ := exec.Command(gitBin, "-C", repoPath, "rev-list", "--count", "HEAD..origin/main").CombinedOutput()
-		behindStr := strings.TrimSpace(string(behindOut))
-		behindCount := 0
-		if behindStr != "" {
-			if n, pe := strconv.Atoi(behindStr); pe == nil {
-				behindCount = n
+		// 4. Behind count — an undeterminable count (e.g. origin/main gone)
+		// must not read as 0, or the agent would report "up to date" forever.
+		behindOut, behindErr := exec.Command(gitBin, "-C", repoPath, "rev-list", "--count", "HEAD..origin/main").CombinedOutput() // #nosec G204 -- fixed /usr/bin/git, no shell; -C path derives only from operator HOME, refs and flags are literals.
+		behindBefore := parseHermesBehindCount(behindOut, behindErr)
+		if behindBefore.known {
+			fmt.Fprintf(&report, "**Commits behind**: %d\n\n", behindBefore.count)
+		} else {
+			detail := firstLine(string(behindOut))
+			if behindErr != nil {
+				detail = fmt.Sprintf("%v: %s", behindErr, detail)
 			}
+			fmt.Fprintf(&report, "**WARN**: could not determine commits behind (%s) — running hermes update anyway\n\n", detail)
 		}
-		fmt.Fprintf(&report, "**Commits behind**: %d\n\n", behindCount)
-		logf("behind count: %d raw=%q", behindCount, behindStr)
+		logf("behind count: known=%v count=%d raw=%q err=%v", behindBefore.known, behindBefore.count, strings.TrimSpace(string(behindOut)), behindErr)
 
-		if behindCount == 0 {
+		if fetchErr == nil && validHermesCommit(beforeCommit) && hermesRepoUpToDate(behindBefore) {
 			report.WriteString(hermesUpToDateStatus())
 			bb.Result = report.String()
 			bb.Outcome = "success"
@@ -709,7 +715,7 @@ func init() {
 
 		// 5. Run update
 		report.WriteString("Running hermes update...\n")
-		logf("running hermes update, behind=%d", behindCount)
+		logf("running hermes update, behind known=%v count=%d", behindBefore.known, behindBefore.count)
 		updateCmd := exec.Command("bash", "-c",
 			"HERMES_YOLO_MODE=1 timeout --kill-after=10 180 hermes update 2>&1")
 		updateCmd.Dir = repoPath
@@ -731,7 +737,8 @@ func init() {
 			return -1
 		}
 
-		// 6. New version
+		// 6. Verify — exit code 0 alone is not proof the update applied:
+		// re-read version, HEAD, and the residual behind count.
 		afterVerCmd := exec.Command(hermesBin, "--version")
 		afterVerCmd.Env = env
 		afterVerOut, _ := afterVerCmd.CombinedOutput()
@@ -739,15 +746,27 @@ func init() {
 		if len(afterVerOut) > 0 {
 			afterVersion = firstLine(string(afterVerOut))
 		}
-		afterCommitOut, _ := exec.Command(gitBin, "-C", repoPath, "rev-parse", "--short", "HEAD").CombinedOutput()
+		afterCommitOut, afterCommitErr := exec.Command(gitBin, "-C", repoPath, "rev-parse", "--verify", "HEAD^{commit}").Output() // #nosec G204 -- fixed /usr/bin/git, no shell; -C path derives only from operator HOME, refs and flags are literals.
 		afterCommit := strings.TrimSpace(string(afterCommitOut))
+		if afterCommitErr != nil {
+			afterCommit = ""
+		}
+		reBehindOut, reBehindErr := exec.Command(gitBin, "-C", repoPath, "rev-list", "--count", "HEAD..origin/main").CombinedOutput() // #nosec G204 -- fixed /usr/bin/git, no shell; -C path derives only from operator HOME, refs and flags are literals.
+		behindAfter := parseHermesBehindCount(reBehindOut, reBehindErr)
 
 		fmt.Fprintf(&report, "**Version (after)**: %s\n", afterVersion)
 		if beforeCommit != "" && afterCommit != "" && beforeCommit != afterCommit {
 			fmt.Fprintf(&report, "**Commits**: %s → %s\n", beforeCommit, afterCommit)
 		}
-		fmt.Fprintf(&report, "\n**Status**: Updated (+%d commits)\n", behindCount)
+		status, verified := hermesUpdateVerdict(beforeCommit, afterCommit, behindBefore, behindAfter)
+		report.WriteString("\n")
+		report.WriteString(status)
 		bb.Result = report.String()
+		if !verified {
+			bb.Outcome = "failure"
+			logf("DONE: update NOT verified — %s", strings.TrimSpace(status))
+			return -1
+		}
 		bb.Outcome = "success"
 		logf("DONE: updated successfully")
 		return 1
@@ -1251,4 +1270,74 @@ func hermesUpdateReportHeader(beforeVersion string) string {
 // hermesUpToDateStatus is the report tail for the 0-commits-behind path.
 func hermesUpToDateStatus() string {
 	return "**Status**: Already up to date — no version change needed\n"
+}
+
+// hermesBehind is the result of counting commits behind origin/main. known
+// is false when rev-list failed or printed no number — that must never be
+// conflated with a real zero.
+type hermesBehind struct {
+	count int
+	known bool
+}
+
+func parseHermesBehindCount(out []byte, err error) hermesBehind {
+	if err != nil {
+		return hermesBehind{}
+	}
+	s := strings.TrimSpace(string(out))
+	n, perr := strconv.Atoi(s)
+	if perr != nil || n < 0 {
+		return hermesBehind{}
+	}
+	return hermesBehind{count: n, known: true}
+}
+
+// hermesRepoUpToDate gates the early "Already up to date" exit: only a
+// verified zero qualifies; an unknown count falls through to hermes update.
+func hermesRepoUpToDate(b hermesBehind) bool {
+	return b.known && b.count == 0
+}
+
+// hermesUpdateVerdict turns post-update state into the report status line
+// and the run's success. A zero exit from hermes update is not trusted on
+// its own: readable HEADs must differ and the residual count must be zero.
+func hermesUpdateVerdict(beforeCommit, afterCommit string, behindBefore, behindAfter hermesBehind) (string, bool) {
+	applied := "Updated"
+	if behindBefore.known {
+		applied = fmt.Sprintf("Updated (+%d commits)", behindBefore.count)
+	}
+
+	if !validHermesCommit(beforeCommit) || !validHermesCommit(afterCommit) {
+		return "**Status**: FAILED — could not verify HEAD movement\n", false
+	}
+	if beforeCommit == afterCommit {
+		residual := "behind count could not be determined"
+		if behindAfter.known {
+			residual = fmt.Sprintf("still %d commits behind", behindAfter.count)
+		} else if behindBefore.known {
+			residual = fmt.Sprintf("was %d commits behind", behindBefore.count)
+		}
+		return fmt.Sprintf("**Status**: FAILED — hermes update exited 0 but HEAD did not move (%s)\n", residual), false
+	}
+	switch {
+	case !behindAfter.known || behindAfter.count < 0:
+		return "**Status**: FAILED — could not re-verify behind count after update\n", false
+	case behindAfter.count > 0:
+		return fmt.Sprintf("**Status**: FAILED — HEAD moved but still %d behind; update incomplete, retry next run\n", behindAfter.count), false
+	default:
+		return fmt.Sprintf("**Status**: %s\n", applied), true
+	}
+}
+
+// Accept Git object IDs, not diagnostics accidentally captured as command output.
+func validHermesCommit(commit string) bool {
+	if len(commit) < 4 || len(commit) > 64 {
+		return false
+	}
+	for _, c := range commit {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
 }

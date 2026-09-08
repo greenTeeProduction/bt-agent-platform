@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -24,6 +25,13 @@ type Scheduler struct {
 	jobs          map[string]*ScheduledJob
 	stopCh        chan struct{}
 	running       bool
+	stopping      bool
+	stopOnce      sync.Once
+	workers       sync.WaitGroup
+	ctx           context.Context
+	cancel        context.CancelFunc
+	maxConcurrent int
+	activeAgents  map[string]bool // survives job removal until execution finishes
 	tickInterval  time.Duration
 	jobStore      JobStore                  // optional: persists job state across restarts
 	cbStore       *AgentCircuitBreakerStore // per-agent circuit breakers (nil = disabled)
@@ -76,11 +84,14 @@ type AgentRunner func(ctx RunContext) (outcome, output string, res *RunResult, e
 
 // SchedulerConfig configures a new scheduler.
 type SchedulerConfig struct {
-	Registry     *Registry
-	History      *History
-	TickInterval time.Duration             // how often to check for due jobs (default: 1m)
-	JobStore     JobStore                  // optional: persists jobs across restarts (nil = in-memory only)
-	CBStore      *AgentCircuitBreakerStore // optional: per-agent circuit breakers (nil = disabled)
+	// MaxConcurrent bounds scheduled and RunNow executions. Zero defaults to 3;
+	// values clamp to [1, 12]. Saturated jobs remain due for the next tick.
+	MaxConcurrent int
+	Registry      *Registry
+	History       *History
+	TickInterval  time.Duration             // how often to check for due jobs (default: 1m)
+	JobStore      JobStore                  // optional: persists jobs across restarts (nil = in-memory only)
+	CBStore       *AgentCircuitBreakerStore // optional: per-agent circuit breakers (nil = disabled)
 
 	// FeedbackPath, when set, points at the on-disk knowledge-graph feedback
 	// snapshot. On startup the scheduler re-hydrates prior Fitness/RunCount/
@@ -110,10 +121,22 @@ type SchedulerConfig struct {
 // NewScheduler creates a new agent scheduler.
 // If cfg.JobStore is set, persisted jobs are loaded on startup.
 func NewScheduler(cfg SchedulerConfig) *Scheduler {
+	if cfg.MaxConcurrent == 0 {
+		cfg.MaxConcurrent = 3
+	}
+	if cfg.MaxConcurrent < 1 {
+		cfg.MaxConcurrent = 1
+	}
+	if cfg.MaxConcurrent > 12 {
+		cfg.MaxConcurrent = 12
+	}
+	ctx, cancel := context.WithCancel(context.Background())
 	if cfg.TickInterval == 0 {
 		cfg.TickInterval = 1 * time.Minute
 	}
 	s := &Scheduler{
+		ctx: ctx, cancel: cancel, maxConcurrent: cfg.MaxConcurrent,
+		activeAgents:  make(map[string]bool),
 		reg:           cfg.Registry,
 		history:       cfg.History,
 		jobs:          make(map[string]*ScheduledJob),
@@ -256,8 +279,18 @@ func (s *Scheduler) RunNow(agentName, task string, runner AgentRunner, timeout s
 		return "", "", err
 	}
 
+	s.mu.Lock()
+	if s.stopping || s.activeAgents[agentName] || len(s.activeAgents) >= s.maxConcurrent {
+		s.mu.Unlock()
+		return "", "", fmt.Errorf("scheduler stopped or execution capacity busy for agent %q", agentName)
+	}
+	s.activeAgents[agentName] = true
+	s.workers.Add(1)
+	s.mu.Unlock()
+	defer s.releaseAgent(agentName)
+
 	timeoutDur := parseTimeout(timeout)
-	ctx, cancel := context.WithTimeout(context.Background(), timeoutDur)
+	ctx, cancel := context.WithTimeout(s.ctx, timeoutDur)
 	defer cancel()
 
 	runCtx := RunContext{
@@ -323,12 +356,14 @@ func (s *Scheduler) RunNow(agentName, task string, runner AgentRunner, timeout s
 // down the system.
 func (s *Scheduler) Start(runner AgentRunner) {
 	s.mu.Lock()
-	if s.running {
+	if s.running || s.stopping {
 		s.mu.Unlock()
 		return
 	}
 	s.running = true
+	s.workers.Add(1)
 	s.mu.Unlock()
+	defer s.workers.Done()
 
 	ticker := time.NewTicker(s.tickInterval)
 	defer ticker.Stop()
@@ -351,15 +386,25 @@ func (s *Scheduler) Start(runner AgentRunner) {
 	}
 }
 
-// Stop stops the scheduler.
+// Stop permanently closes admission, cancels runners and drains their bookkeeping.
+// Runners must honor RunContext.Context. Safe to call repeatedly/concurrently,
+// but not from a runner or idle callback. A stopped scheduler cannot be restarted.
 func (s *Scheduler) Stop() {
-	// Force a final feedback flush so any pending (throttled) run feedback is
-	// durably written even inside the throttle window. No-op when persistence is
-	// not configured or nothing is dirty.
-	if err := knowledge.GlobalGraph.FlushFeedback(true); err != nil {
-		slog.Warn("scheduler: final feedback flush failed", "err", err)
-	}
-	close(s.stopCh)
+	s.stopOnce.Do(func() {
+		s.mu.Lock()
+		s.stopping = true
+		s.cancel()
+		close(s.stopCh)
+		s.mu.Unlock()
+		// Admission adds under mu, and cannot add once stopping is set.
+		s.workers.Wait()
+		// Force a final feedback flush so any pending (throttled) run feedback is
+		// durably written even inside the throttle window. No-op when persistence is
+		// not configured or nothing is dirty.
+		if err := knowledge.GlobalGraph.FlushFeedback(true); err != nil {
+			slog.Warn("scheduler: final feedback flush failed", "err", err)
+		}
+	})
 }
 
 // persistRunFeedback marks the knowledge graph dirty after a run recorded
@@ -397,6 +442,9 @@ func (s *Scheduler) GetCBStore() *AgentCircuitBreakerStore {
 func (s *Scheduler) AnyInFlight() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	if len(s.activeAgents) != 0 {
+		return true
+	}
 
 	for _, j := range s.jobs {
 		if j.InFlight {
@@ -598,29 +646,71 @@ func (s *Scheduler) ReconcileWithRegistry() {
 }
 
 func (s *Scheduler) tick(runner AgentRunner) {
-	s.mu.RLock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.stopping {
+		return
+	}
 	var due []*ScheduledJob
 	now := time.Now()
 	for _, j := range s.jobs {
-		if j.Active && (j.NextRun.IsZero() || now.After(j.NextRun)) {
+		if j.Active && !j.InFlight && (j.NextRun.IsZero() || !now.Before(j.NextRun)) {
 			due = append(due, j)
 		}
 	}
-	s.mu.RUnlock()
-
-	for _, job := range due {
-		// Check circuit breaker before starting the job.
-		// If the circuit is open, skip the run entirely instead of
-		// wasting resources on a known-broken agent.
-		if s.cbStore != nil {
-			if !s.cbStore.Allowed(job.AgentName) {
-				cb := s.cbStore.Get(job.AgentName)
-				slog.Warn("scheduler: skipping agent — circuit breaker open",
-					"agent", job.AgentName, "state", cb.State(), "failures", cb.FailureCount(), "cooldown", cb.Cooldown())
-				continue
-			}
+	// Stable oldest-first admission prevents busy lanes from starving overdue work.
+	sort.Slice(due, func(i, j int) bool {
+		if due[i].NextRun.Equal(due[j].NextRun) {
+			return due[i].ID < due[j].ID
 		}
-		s.runJob(job, runner)
+		return due[i].NextRun.Before(due[j].NextRun)
+	})
+	for _, job := range due {
+		if len(s.activeAgents) >= s.maxConcurrent {
+			break
+		}
+		if s.activeAgents[job.AgentName] {
+			continue
+		}
+		// Allowed consumes a half-open probe: call only after all lane checks.
+		if s.cbStore != nil && !s.cbStore.Allowed(job.AgentName) {
+			continue
+		}
+		s.activeAgents[job.AgentName] = true
+		job.InFlight = true
+		s.workers.Add(1)
+		go func(job *ScheduledJob) {
+			defer s.releaseAgent(job.AgentName)
+			// Includes bookkeeping panics, not just the runner's panic handler.
+			defer func() {
+				if r := recover(); r != nil {
+					slog.Error("scheduler: worker panicked (recovered)", "agent", job.AgentName, "panic", r)
+					reportAgentOutcome(s.cbStore, job.AgentName, false)
+				}
+				s.mu.Lock()
+				job.InFlight = false
+				s.saveStateLocked()
+				s.mu.Unlock()
+			}()
+			s.runJob(job, runner)
+		}(job)
+	}
+}
+
+// releaseAgent runs after all execution and persistence, even for removed jobs.
+func (s *Scheduler) releaseAgent(name string) {
+	defer s.workers.Done()
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("scheduler: idle callback panicked (recovered)", "panic", r)
+		}
+	}()
+	s.mu.Lock()
+	delete(s.activeAgents, name)
+	idle := len(s.activeAgents) == 0 && !s.stopping
+	s.mu.Unlock()
+	if idle && s.onCycleIdle != nil {
+		s.onCycleIdle()
 	}
 }
 
@@ -639,8 +729,15 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 	}
 	_ = inst
 
+	s.mu.RLock()
 	timeoutDur := parseTimeout(job.Timeout)
-	ctx, cancel := context.WithTimeout(context.Background(), timeoutDur)
+	var checkpoint *Checkpoint
+	if job.Checkpoint != nil {
+		snapshot := *job.Checkpoint
+		checkpoint = &snapshot
+	}
+	s.mu.RUnlock()
+	ctx, cancel := context.WithTimeout(s.ctx, timeoutDur)
 	defer cancel()
 
 	// Build a meaningful task from the agent's description.
@@ -655,7 +752,7 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 		AgentName:  job.AgentName,
 		Task:       task,
 		JobID:      job.ID,
-		Checkpoint: job.Checkpoint,
+		Checkpoint: checkpoint,
 		Context:    ctx,
 	}
 
@@ -701,6 +798,7 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 	job.InFlight = false
 	job.LastRun = time.Now()
 	job.RunCount++
+	runCount := job.RunCount
 
 	// Schedule next run
 	next, err := parseSchedule(job.Schedule)
@@ -746,7 +844,7 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 		"outcome", outcome,
 		"duration", duration.Truncate(time.Second).String(),
 		"quality", quality,
-		"run_count", job.RunCount,
+		"run_count", runCount,
 	}
 	for k, v := range extractCycleFacts(output) {
 		logArgs = append(logArgs, k, v)
