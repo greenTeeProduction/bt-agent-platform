@@ -65,6 +65,12 @@ func (r execCodexRunner) buildCodexArgs(prompt string, outputFile string) []stri
 }
 
 func (r execCodexRunner) RunCodex(ctx context.Context, repoDir string, prompt string) CommandResult {
+	isolatedDir, isolatedPrompt, cleanup, err := isolateProductionExploration(ctx, repoDir, prompt)
+	if err != nil {
+		return CommandResult{Dir: repoDir, Err: err}
+	}
+	defer cleanup()
+	repoDir, prompt = isolatedDir, isolatedPrompt
 	bin := r.Bin
 	if bin == "" {
 		bin = getenvDefault("BT_SUPERPOWERS_CODEX_BIN", "/mnt/ssd/npm-global/bin/codex")
