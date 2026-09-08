@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -58,6 +59,7 @@ func (r execCodexRunner) buildCodexArgs(prompt string, outputFile string) []stri
 		"--ephemeral",
 		"--color", "never",
 		"--output-last-message", outputFile,
+		"--", // Untrusted prompt must never be parsed as CLI options.
 		prompt,
 	)
 }
@@ -68,41 +70,39 @@ func (r execCodexRunner) RunCodex(ctx context.Context, repoDir string, prompt st
 		bin = getenvDefault("BT_SUPERPOWERS_CODEX_BIN", "/mnt/ssd/npm-global/bin/codex")
 	}
 
-	// The final response is written to a dedicated tempfile; CombinedOutput
-	// only feeds the diagnostics path (below). The path is reserved via
-	// CreateTemp and then left absent so codex creates it itself (verified
-	// against 0.153.4) — that keeps a success-with-no-file distinguishable
-	// from an empty file, and mirrors the real CLI, which leaves the file
-	// unwritten on error.
-	outputFile, err := os.CreateTemp("", "codex-last-message-*.txt")
+	// Bin and its environment override are trusted operator configuration,
+	// never model/request input. Refuse relative paths so repoDir/PATH cannot
+	// substitute a repository-controlled executable. Symlinks are supported
+	// for npm-global installs; operators must protect the installation and
+	// its owning group (shared npm installs legitimately use 0775).
+	if !filepath.IsAbs(bin) || filepath.Clean(bin) != bin {
+		return CommandResult{Dir: repoDir, Err: fmt.Errorf("codex executable must be a clean absolute path")}
+	}
+	info, err := os.Stat(bin)
 	if err != nil {
-		return CommandResult{
-			Command: fmt.Sprintf("%s exec <prompt>", bin),
-			Dir:     repoDir,
-			Err:     fmt.Errorf("codex output tempfile: %w", err),
-		}
+		return CommandResult{Dir: repoDir, Err: fmt.Errorf("codex executable: %w", err)}
 	}
-	outputPath := outputFile.Name()
-	if err := outputFile.Close(); err != nil {
-		os.Remove(outputPath)
-		return CommandResult{
-			Command: fmt.Sprintf("%s exec <prompt>", bin),
-			Dir:     repoDir,
-			Err:     fmt.Errorf("codex output tempfile close: %w", err),
-		}
+	if !info.Mode().IsRegular() || info.Mode().Perm()&0o002 != 0 || info.Mode().Perm()&0o111 == 0 {
+		return CommandResult{Dir: repoDir, Err: fmt.Errorf("codex executable must be a regular executable not writable by others")}
 	}
-	if err := os.Remove(outputPath); err != nil {
-		return CommandResult{
-			Command: fmt.Sprintf("%s exec <prompt>", bin),
-			Dir:     repoDir,
-			Err:     fmt.Errorf("codex output tempfile reset: %w", err),
-		}
+	// Keep the missing-vs-empty distinction without an unreserved name in a
+	// shared temp directory. The directory is 0700 and the read is rooted so
+	// even the child cannot redirect the final response outside it by symlink.
+	outputDir, err := os.MkdirTemp("", "codex-last-message-*")
+	if err != nil {
+		return CommandResult{Dir: repoDir, Err: fmt.Errorf("codex output directory: %w", err)}
 	}
-	defer os.Remove(outputPath)
+	defer os.RemoveAll(outputDir)
+	outputRoot, err := os.OpenRoot(outputDir)
+	if err != nil {
+		return CommandResult{Dir: repoDir, Err: fmt.Errorf("codex output root: %w", err)}
+	}
+	defer outputRoot.Close()
+	outputPath := filepath.Join(outputDir, "response.txt")
 
 	args := r.buildCodexArgs(prompt, outputPath)
 	start := time.Now()
-	cmd := exec.CommandContext(ctx, bin, args...)
+	cmd := exec.CommandContext(ctx, bin, args...) // #nosec G204 -- validated absolute operator-configured CLI; no shell, prompt follows --.
 	cmd.Dir = repoDir
 	// Codex shells out to git/go; make the npm-global codex install and the
 	// absolute Go toolchain reachable regardless of the ambient PATH.
@@ -115,7 +115,7 @@ func (r execCodexRunner) RunCodex(ctx context.Context, repoDir string, prompt st
 	diag, runErr := cmd.CombinedOutput()
 
 	result := CommandResult{
-		Command:  fmt.Sprintf("%s %s <prompt>", bin, strings.Join(args[:len(args)-3], " ")),
+		Command:  fmt.Sprintf("%s %s <prompt>", bin, strings.Join(args[:len(args)-4], " ")),
 		Dir:      repoDir,
 		Duration: time.Since(start),
 	}
@@ -128,7 +128,7 @@ func (r execCodexRunner) RunCodex(ctx context.Context, repoDir string, prompt st
 		return result
 	}
 
-	data, err := os.ReadFile(outputPath)
+	data, err := outputRoot.ReadFile("response.txt")
 	if err != nil {
 		result.Err = fmt.Errorf("codex succeeded but final response missing: %w", err)
 		return result

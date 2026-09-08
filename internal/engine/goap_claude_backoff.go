@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/blackboard"
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 // Rate-limit backoff state must survive across scheduled runs AND across
@@ -95,28 +96,17 @@ func backoffStateKey(p DelegationProvider) string {
 func writeSharedBackoff(path string, until time.Time, setBy string) {
 	goapClaudeBackoffMu.Lock()
 	defer goapClaudeBackoffMu.Unlock()
-	b, err := json.Marshal(sharedBackoff{
+	_ = util.SaveJSONAtomic(path, sharedBackoff{
 		Until: until.UTC().Format(time.RFC3339),
 		SetBy: setBy,
 		SetAt: time.Now().UTC().Format(time.RFC3339),
 	})
-	if err != nil {
-		return
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return
-	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o644); err != nil {
-		return
-	}
-	_ = os.Rename(tmp, path)
 }
 
 func readSharedBackoff(path string) (time.Time, bool) {
 	goapClaudeBackoffMu.Lock()
 	defer goapClaudeBackoffMu.Unlock()
-	b, err := os.ReadFile(path)
+	b, err := util.ReadPersistenceFile(path)
 	if err != nil {
 		return time.Time{}, false
 	}

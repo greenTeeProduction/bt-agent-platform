@@ -174,7 +174,7 @@ func TestPersistenceFirstSaveCreatesParentBeforeLock(t *testing.T) {
 						if !ok {
 							return true
 						}
-						if isPkgSelector(sel, "os", "MkdirAll") {
+						if isPkgSelector(sel, "util", "EnsurePersistenceParent") {
 							calls = append(calls, "mkdir")
 						}
 						if isPkgSelector(sel, "reliability", "AcquireFileLock") {

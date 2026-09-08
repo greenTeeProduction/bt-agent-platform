@@ -78,14 +78,14 @@ type ExperienceEntry struct {
 // given directory (~/.go-bt-evolve/experience/). If the path already exists
 // on disk, it loads existing entries.
 func NewExperienceBank(dir string) (*ExperienceBank, error) {
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return nil, fmt.Errorf("create experience dir: %w", err)
 	}
 	eb := &ExperienceBank{
 		PersistPath: filepath.Join(dir, "experience.json"),
 	}
 	// Load existing entries if present
-	data, err := os.ReadFile(eb.PersistPath)
+	data, err := util.ReadPersistenceFile(eb.PersistPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return eb, nil // fresh bank
@@ -254,7 +254,7 @@ func (eb *ExperienceBank) MarkReused(ids []string) error {
 		idSet[id] = true
 	}
 	// The sidecar must exist before any merge or state mutation.
-	if err := os.MkdirAll(filepath.Dir(eb.PersistPath), 0o755); err != nil {
+	if err := util.EnsurePersistenceParent(eb.PersistPath); err != nil {
 		return fmt.Errorf("create experience dir: %w", err)
 	}
 	release, lockErr := reliability.AcquireFileLock(eb.PersistPath)
@@ -310,7 +310,7 @@ func (eb *ExperienceBank) SeedDomain(sourceTree, targetTree string) int {
 // entries. A sidecar lock failure aborts without merging or writing state.
 func (eb *ExperienceBank) Persist() error {
 	// The sidecar must exist before any merge or state mutation.
-	if err := os.MkdirAll(filepath.Dir(eb.PersistPath), 0o755); err != nil {
+	if err := util.EnsurePersistenceParent(eb.PersistPath); err != nil {
 		return fmt.Errorf("create experience dir: %w", err)
 	}
 	release, lockErr := reliability.AcquireFileLock(eb.PersistPath)
@@ -386,7 +386,7 @@ func (eb *ExperienceBank) Stats() map[string]any {
 // failure is returned before modifying memory so the caller can retry.
 func (eb *ExperienceBank) addEntry(entry ExperienceEntry) error {
 	// The sidecar must exist before any merge or state mutation.
-	if err := os.MkdirAll(filepath.Dir(eb.PersistPath), 0o755); err != nil {
+	if err := util.EnsurePersistenceParent(eb.PersistPath); err != nil {
 		return fmt.Errorf("create experience dir: %w", err)
 	}
 	release, lockErr := reliability.AcquireFileLock(eb.PersistPath)
@@ -408,7 +408,7 @@ func (eb *ExperienceBank) addEntry(entry ExperienceEntry) error {
 // survive this writer's rewrite). A missing or corrupt file leaves the
 // in-memory state untouched. Caller must hold eb.mu.
 func (eb *ExperienceBank) mergeFromDiskLocked() {
-	data, err := os.ReadFile(eb.PersistPath)
+	data, err := util.ReadPersistenceFile(eb.PersistPath)
 	if err != nil {
 		return
 	}

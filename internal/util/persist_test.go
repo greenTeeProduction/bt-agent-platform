@@ -153,7 +153,7 @@ func TestSaveJSONAtomicMode_HonorsFileAndDirPerms(t *testing.T) {
 	}
 }
 
-func TestSaveJSONAtomic_DefaultsMatchLegacyMode(t *testing.T) {
+func TestSaveJSONAtomic_PrivateDefaults(t *testing.T) {
 	umask := effectiveUmask(t)
 	dir := t.TempDir()
 	sub := filepath.Join(dir, "sub")
@@ -167,7 +167,7 @@ func TestSaveJSONAtomic_DefaultsMatchLegacyMode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stat %s error = %v", path, err)
 	}
-	if got, wantPerm := fileInfo.Mode().Perm(), os.FileMode(0o644)&^umask; got != wantPerm {
+	if got, wantPerm := fileInfo.Mode().Perm(), os.FileMode(0o600)&^umask; got != wantPerm {
 		t.Errorf("file perm = %04o, want %04o", got, wantPerm)
 	}
 
@@ -175,7 +175,7 @@ func TestSaveJSONAtomic_DefaultsMatchLegacyMode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("stat %s error = %v", sub, err)
 	}
-	if got, wantPerm := dirInfo.Mode().Perm(), os.FileMode(0o755)&^umask; got != wantPerm {
+	if got, wantPerm := dirInfo.Mode().Perm(), os.FileMode(0o750)&^umask; got != wantPerm {
 		t.Errorf("dir perm = %04o, want %04o", got, wantPerm)
 	}
 }
@@ -192,8 +192,12 @@ func TestSaveJSONAtomic_RemovesTmpOnRenameFailure(t *testing.T) {
 	if err := SaveJSONAtomic(path, persistFixture{Name: "doomed"}); err == nil {
 		t.Fatalf("SaveJSONAtomic() error = nil, want rename failure")
 	}
-	if _, err := os.Stat(path + ".tmp"); !os.IsNotExist(err) {
-		t.Errorf("expected tmp sibling to be cleaned up after rename failure, stat err = %v", err)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "fixture.json" {
+		t.Fatalf("temporary state left after rename failure: %v", entries)
 	}
 }
 

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 
@@ -55,7 +54,7 @@ type dtStatsFile struct {
 // recorded telemetry writes an empty stats object rather than erroring.
 func (d *DTAnalyzer) Save(path string) error {
 	// Create the sidecar directory before acquiring the read/write guard.
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := util.EnsurePersistenceParent(path); err != nil {
 		return fmt.Errorf("create decision-tree stats dir: %w", err)
 	}
 	release, lockErr := reliability.AcquireFileLock(path)
@@ -76,7 +75,7 @@ func (d *DTAnalyzer) Load(path string) error {
 	if lockErr == nil {
 		defer release()
 	}
-	data, err := os.ReadFile(path)
+	data, err := util.ReadPersistenceFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil

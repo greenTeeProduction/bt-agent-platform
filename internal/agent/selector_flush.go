@@ -36,7 +36,8 @@ func selectorTelemetryPath(treeID, suffix string) string {
 		dir = filepath.Join(HomeDir(), "selector-stats")
 	}
 	sanitized := strings.NewReplacer(":", "_", "/", "_", "\\", "_").Replace(treeID)
-	return filepath.Join(dir, sanitized+suffix)
+	// Base is a structural confinement boundary for request-derived tree IDs.
+	return filepath.Join(dir, filepath.Base(sanitized+suffix))
 }
 
 // flushSelectorTelemetry merges the run's Selector-attributed terminal child

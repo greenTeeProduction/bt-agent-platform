@@ -1,60 +1,129 @@
 package util
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
-// SaveJSONAtomic marshals v as indented JSON and writes it to path
-// atomically with the historical 0644 file / 0755 directory permissions.
-// See SaveJSONAtomicMode for the mechanics and the locking invariant that
-// callers are responsible for.
+// SaveJSONAtomic writes private state (0600 files, 0750 new directories).
 func SaveJSONAtomic(path string, v any) error {
-	return SaveJSONAtomicMode(path, v, 0o644, 0o755)
+	return SaveJSONAtomicMode(path, v, 0o600, 0o750)
 }
 
-// SaveJSONAtomicMode marshals v as indented JSON and writes it to path
-// atomically: it creates any missing parent directories with dirPerm, writes
-// to a "path.tmp" sibling with filePerm, then renames it into place so
-// readers never observe a partially-written file. Both permissions are
-// subject to the process umask. If the rename fails the tmp sibling is
-// removed, so a failed write never leaves a "path.tmp" file behind for
-// directory globs (e.g. the named-tree and gardener registry scans) to pick
-// up.
-//
-// The tmp sibling name is derived from path and is therefore NOT safe
-// against concurrent writers on its own — two writers racing on the same
-// path share one tmp name and can corrupt each other. Callers that share a
-// path across goroutines or processes must hold
-// reliability.AcquireFileLock(path) across the call. The lock deliberately
-// lives outside this package: internal/reliability imports internal/util, so
-// taking it here would create an import cycle.
+// persistenceParent anchors operations in the configured storage directory.
+// Paths are operator configuration, not arbitrary request paths: callers must
+// constrain request-derived names to their storage root before calling us.
+// Reject traversal BEFORE cleaning. Existing directory symlinks are supported
+// (operators relocate storage to SSD); after OpenRoot, relative operations
+// cannot escape that directory, even through symlinks or concurrent renames.
+func persistenceParent(path string, create bool, perm os.FileMode) (*os.Root, string, error) {
+	if path == "" || strings.ContainsRune(path, 0) || strings.HasSuffix(path, string(os.PathSeparator)) {
+		return nil, "", fmt.Errorf("invalid persistence path %q", path)
+	}
+	for _, part := range strings.Split(filepath.ToSlash(path), "/") {
+		if part == ".." {
+			return nil, "", fmt.Errorf("parent traversal in persistence path %q", path)
+		}
+	}
+	name := filepath.Base(path)
+	if !filepath.IsLocal(name) || name == "." {
+		return nil, "", fmt.Errorf("invalid persistence filename %q", name)
+	}
+	dir := filepath.Dir(path)
+	root, err := os.OpenRoot(dir)
+	if err == nil || !create || !os.IsNotExist(err) {
+		return root, name, err
+	}
+	// Find an existing configured ancestor and create missing parents through
+	// its directory handle rather than unchecked path-based MkdirAll.
+	ancestor := dir
+	for {
+		parent := filepath.Dir(ancestor)
+		if parent == ancestor {
+			return nil, "", err
+		}
+		ancestor = parent
+		root, err = os.OpenRoot(ancestor)
+		if err == nil {
+			break
+		}
+		if !os.IsNotExist(err) {
+			return nil, "", err
+		}
+	}
+	defer root.Close()
+	rel, err := filepath.Rel(ancestor, dir)
+	if err != nil || !filepath.IsLocal(rel) {
+		return nil, "", fmt.Errorf("invalid persistence directory %q", dir)
+	}
+	if err := root.MkdirAll(rel, perm); err != nil {
+		return nil, "", err
+	}
+	child, err := root.OpenRoot(rel)
+	return child, name, err
+}
+
+// EnsurePersistenceParent creates a private parent before a caller acquires
+// its existing sidecar lock. It applies the same validation as the write.
+func EnsurePersistenceParent(path string) error {
+	root, _, err := persistenceParent(path, true, 0o750)
+	if err != nil {
+		return err
+	}
+	return root.Close()
+}
+
+// SaveJSONAtomicMode writes an exclusively-created random sibling and renames
+// it within one directory handle. Neither a preplanted .tmp symlink nor a
+// concurrent writer can redirect/truncate the temporary file. Callers still
+// need their sidecar lock across read/merge/write transactions.
 func SaveJSONAtomicMode(path string, v any, filePerm, dirPerm os.FileMode) error {
 	data, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal %s: %w", path, err)
 	}
-	if err := os.MkdirAll(filepath.Dir(path), dirPerm); err != nil {
+	root, name, err := persistenceParent(path, true, dirPerm)
+	if err != nil {
 		return fmt.Errorf("create dir for %s: %w", path, err)
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, filePerm); err != nil {
-		return fmt.Errorf("write %s: %w", tmp, err)
+	defer root.Close()
+	tmp := ".persist-" + rand.Text() + ".tmp"
+	f, err := root.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, filePerm)
+	if err != nil {
+		return fmt.Errorf("create temporary state: %w", err)
 	}
-	if err := os.Rename(tmp, path); err != nil {
-		_ = os.Remove(tmp)
+	defer root.Remove(tmp)
+	_, writeErr := f.Write(data)
+	closeErr := f.Close()
+	if writeErr != nil {
+		return fmt.Errorf("write %s: %w", path, writeErr)
+	}
+	if closeErr != nil {
+		return fmt.Errorf("close %s: %w", path, closeErr)
+	}
+	if err := root.Rename(tmp, name); err != nil {
 		return fmt.Errorf("commit %s: %w", path, err)
 	}
 	return nil
 }
 
-// LoadJSON reads path and unmarshals it into dest. A missing file is a
-// silent cold start: dest is left untouched and nil is returned. Any other
-// read or parse error is returned to the caller.
+// ReadPersistenceFile reads only within the configured parent directory.
+func ReadPersistenceFile(path string) ([]byte, error) {
+	root, name, err := persistenceParent(path, false, 0)
+	if err != nil {
+		return nil, err
+	}
+	defer root.Close()
+	return root.ReadFile(name)
+}
+
+// LoadJSON leaves dest untouched for a missing file (a silent cold start).
 func LoadJSON(path string, dest any) error {
-	data, err := os.ReadFile(path)
+	data, err := ReadPersistenceFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil

@@ -7,7 +7,6 @@ import (
 	"maps"
 	"math"
 	"os"
-	"path/filepath"
 	"slices"
 	"sync"
 
@@ -272,7 +271,7 @@ type selectorStatsFile struct {
 // overwritten inside the window.
 func (so *SelectorOptimizer) SaveSelectorStats(path string) error {
 	// Create the sidecar directory before acquiring the read/write guard.
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	if err := util.EnsurePersistenceParent(path); err != nil {
 		return fmt.Errorf("create selector stats dir: %w", err)
 	}
 	release, lockErr := reliability.AcquireFileLock(path)
@@ -323,7 +322,7 @@ func (so *SelectorOptimizer) LoadSelectorStats(path string) error {
 // map. A missing file yields an empty map.
 func readSelectorStatsFile(path string) (map[string]*SelectorStats, error) {
 	out := make(map[string]*SelectorStats)
-	data, err := os.ReadFile(path)
+	data, err := util.ReadPersistenceFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return out, nil
