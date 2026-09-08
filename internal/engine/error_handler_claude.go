@@ -317,6 +317,7 @@ var errorHandlerDeclarativeActions = map[string]bool{
 var errorHandlerUnrecoverableCategories = map[string]bool{
 	"resource_exhausted": true, // disk full / OOM — needs an external actor
 	"auth":               true, // expired credentials — needs an external actor
+	"working_tree_drift": true, // source differs from HEAD — needs operator reconciliation
 }
 
 // firstTickedLeaf follows first children down to the leaf a tick reaches

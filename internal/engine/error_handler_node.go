@@ -119,6 +119,15 @@ func BuildClaudeErrorHandler(node *evolution.SerializableNode, bb *Blackboard) b
 				b.ChainState["last_error_node"] = protected.Name
 			}
 		}
+		// Enforce fault policy at runtime too: a LastErrorNodeIs guard bypasses
+		// category-only proposal validation. Blackboard/LLM-only actions cannot
+		// repair external state, even if their BT tick reports success. Detect
+		// preflight drift directly as it can fail before GOAP state is stamped.
+		cat, _ := b.ChainState["last_error_category"].(string)
+		if errorHandlerUnrecoverableCategories[cat] || isGoapWorkingTreeDriftFailure(b.Result) {
+			Warn("claude error handler: external repair required", "handler", handlerName, "category", cat)
+			return -1
+		}
 		sig := errorHandlerSignatureFromBB(b, handlerName, protected.Name)
 		// 1. Existing recovery extensions, guard-first. The guard is evaluated
 		// separately from the tick so a guard mismatch (expected on unrelated
