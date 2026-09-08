@@ -23,8 +23,8 @@ func isolateProductionExploration(ctx context.Context, dir, prompt string) (stri
 	}
 	canonical := func(p string) string {
 		p, _ = filepath.Abs(p)
-		if real, e := filepath.EvalSymlinks(p); e == nil {
-			return real
+		if resolved, e := filepath.EvalSymlinks(p); e == nil {
+			return resolved
 		}
 		return p
 	}

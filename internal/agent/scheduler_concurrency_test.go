@@ -75,13 +75,13 @@ func TestSchedulerBoundedOldestFirst(t *testing.T) {
 			}
 			s.tick(runner)
 			seen := map[string]bool{}
-			for i := 0; i < limit; i++ {
+			for range limit {
 				seen[receiveAgent(t, started)] = true
 			}
 			if !seen["a"] {
 				t.Fatal("oldest job was not admitted")
 			}
-			for i := 0; i < 10; i++ {
+			for range 10 {
 				s.tick(runner)
 			}
 			s.mu.RLock()
@@ -144,7 +144,7 @@ func TestSchedulerRemovalDoesNotReleaseAgent(t *testing.T) {
 		t.Fatal("RunNow overlapped scheduled agent")
 	}
 	// Exercise mutable timeout/schedule reads concurrently with completion.
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		if _, err := s.Schedule("a", "every 1h", "30m", 0); err != nil {
 			t.Fatal(err)
 		}
@@ -183,9 +183,8 @@ func TestSchedulerRunNowSharesAdmissionAndCancellation(t *testing.T) {
 func TestSchedulerStopBeforeStartAndConcurrentStop(t *testing.T) {
 	s := concurrencyScheduler(t, "a")
 	var wg sync.WaitGroup
-	for i := 0; i < 10; i++ {
-		wg.Add(1)
-		go func() { defer wg.Done(); s.Stop() }()
+	for range 10 {
+		wg.Go(func() { ; s.Stop() })
 	}
 	wg.Wait()
 	runner := func(RunContext) (string, string, *RunResult, error) {
@@ -340,7 +339,7 @@ func TestSchedulerConcurrentDueAgents(t *testing.T) {
 		t.Fatal("tick waited for runners")
 	}
 	// Repeated ticks cannot admit the same still-due jobs again.
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		s.tick(runner)
 	}
 	select {

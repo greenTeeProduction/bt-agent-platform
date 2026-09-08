@@ -733,8 +733,8 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 	timeoutDur := parseTimeout(job.Timeout)
 	var checkpoint *Checkpoint
 	if job.Checkpoint != nil {
-		copy := *job.Checkpoint
-		checkpoint = &copy
+		snapshot := *job.Checkpoint
+		checkpoint = &snapshot
 	}
 	s.mu.RUnlock()
 	ctx, cancel := context.WithTimeout(s.ctx, timeoutDur)
