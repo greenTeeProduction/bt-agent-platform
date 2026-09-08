@@ -652,7 +652,7 @@ func init() {
 		home := homeDir()
 		repoPath := filepath.Join(home, ".hermes", "hermes-agent")
 		hermesBin := filepath.Join(home, ".local", "bin", "hermes")
-		gitBin := "/usr/bin/git"
+		const gitBin = "/usr/bin/git"
 		env := append(os.Environ(),
 			"PATH="+filepath.Join(home, ".local", "bin")+":"+os.Getenv("PATH"),
 			"HOME="+home,
@@ -677,7 +677,7 @@ func init() {
 		report.WriteString(hermesUpdateReportHeader(beforeVersion))
 
 		// 2. Current commit
-		commitOut, commitErr := exec.Command(gitBin, "-C", repoPath, "rev-parse", "--verify", "HEAD^{commit}").Output()
+		commitOut, commitErr := exec.Command(gitBin, "-C", repoPath, "rev-parse", "--verify", "HEAD^{commit}").Output() // #nosec G204 -- fixed /usr/bin/git, no shell; -C path derives only from operator HOME, refs and flags are literals.
 		beforeCommit := strings.TrimSpace(string(commitOut))
 		if commitErr != nil {
 			beforeCommit = ""
@@ -692,7 +692,7 @@ func init() {
 
 		// 4. Behind count — an undeterminable count (e.g. origin/main gone)
 		// must not read as 0, or the agent would report "up to date" forever.
-		behindOut, behindErr := exec.Command(gitBin, "-C", repoPath, "rev-list", "--count", "HEAD..origin/main").CombinedOutput()
+		behindOut, behindErr := exec.Command(gitBin, "-C", repoPath, "rev-list", "--count", "HEAD..origin/main").CombinedOutput() // #nosec G204 -- fixed /usr/bin/git, no shell; -C path derives only from operator HOME, refs and flags are literals.
 		behindBefore := parseHermesBehindCount(behindOut, behindErr)
 		if behindBefore.known {
 			fmt.Fprintf(&report, "**Commits behind**: %d\n\n", behindBefore.count)
@@ -746,12 +746,12 @@ func init() {
 		if len(afterVerOut) > 0 {
 			afterVersion = firstLine(string(afterVerOut))
 		}
-		afterCommitOut, afterCommitErr := exec.Command(gitBin, "-C", repoPath, "rev-parse", "--verify", "HEAD^{commit}").Output()
+		afterCommitOut, afterCommitErr := exec.Command(gitBin, "-C", repoPath, "rev-parse", "--verify", "HEAD^{commit}").Output() // #nosec G204 -- fixed /usr/bin/git, no shell; -C path derives only from operator HOME, refs and flags are literals.
 		afterCommit := strings.TrimSpace(string(afterCommitOut))
 		if afterCommitErr != nil {
 			afterCommit = ""
 		}
-		reBehindOut, reBehindErr := exec.Command(gitBin, "-C", repoPath, "rev-list", "--count", "HEAD..origin/main").CombinedOutput()
+		reBehindOut, reBehindErr := exec.Command(gitBin, "-C", repoPath, "rev-list", "--count", "HEAD..origin/main").CombinedOutput() // #nosec G204 -- fixed /usr/bin/git, no shell; -C path derives only from operator HOME, refs and flags are literals.
 		behindAfter := parseHermesBehindCount(reBehindOut, reBehindErr)
 
 		fmt.Fprintf(&report, "**Version (after)**: %s\n", afterVersion)
