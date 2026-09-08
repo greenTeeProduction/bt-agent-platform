@@ -581,6 +581,21 @@ func runPRShepherd(bb *Blackboard, deps prShepherdDeps) int {
 	if err != nil {
 		return prShepherdSkip(bb, "pr_shepherd_api_error", "## PR Shepherd Skipped\n\n%v", err)
 	}
+	// A PR may have been merged outside this process while new commits
+	// kept local master ahead. Clear its budget only with merge evidence,
+	// not merely because a PR was closed and reopened.
+	if state.PRNumber != 0 && (pr == nil || pr.Number != state.PRNumber) {
+		var previous struct {
+			Merged bool `json:"merged"`
+		}
+		path := fmt.Sprintf("/repos/%s/%s/pulls/%d", api.owner, api.repo, state.PRNumber)
+		if _, err := api.do(ctx, http.MethodGet, path, nil, &previous); err != nil {
+			return prShepherdSkip(bb, "pr_shepherd_api_error", "## PR Shepherd Skipped\n\nCould not verify previous PR merge: %v", err)
+		}
+		if previous.Merged {
+			state = prShepherdState{}
+		}
+	}
 	if pr == nil {
 		// No open PR: this is a fresh batch, so push local master and open
 		// one. The branch is ALWAYS pushed from local master (fix commits
@@ -653,6 +668,10 @@ func runPRShepherd(bb *Blackboard, deps prShepherdDeps) int {
 			return prShepherdSkip(bb, "pr_shepherd_merge_blocked",
 				"## PR Shepherd Merge Blocked\n\nPR #%d is green but the merge was refused: %v", pr.Number, err)
 		}
+		// The remote merge ends this budget even if local materialization
+		// must wait for a later cycle.
+		state.FixAttempts = map[string]int{}
+		state.TotalFixAttempts = 0
 		_ = deps.runner.Run(ctx, deps.repoDir, "git", "fetch", "origin", "--prune")
 		if ff := deps.runner.Run(ctx, deps.repoDir, "git", "fetch", ".", "refs/remotes/origin/master:master"); ff.Err != nil {
 			return prShepherdSkip(bb, "pr_shepherd_merged",

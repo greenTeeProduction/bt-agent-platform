@@ -87,13 +87,14 @@ func (f *fakeClaudeFixRunner) RunClaude(_ context.Context, _ string, prompt stri
 // fakeGitHub is a minimal scripted GitHub API server covering the endpoints
 // the shepherd uses. Every request path is recorded for assertions.
 type fakeGitHub struct {
-	t           *testing.T
-	openPRs     []map[string]any
-	checkRuns   map[string][]map[string]any // head sha -> runs
-	statuses    map[string][]map[string]any // head sha -> legacy commit statuses
-	annotations map[int64][]map[string]any  // check-run id -> annotations
-	mergeCode   int                         // 0 => 200 merged
-	mergeMsg    string
+	t              *testing.T
+	openPRs        []map[string]any
+	checkRuns      map[string][]map[string]any // head sha -> runs
+	statuses       map[string][]map[string]any // head sha -> legacy commit statuses
+	annotations    map[int64][]map[string]any  // check-run id -> annotations
+	mergeCode      int                         // 0 => 200 merged
+	mergeMsg       string
+	previousMerged bool
 	// Branch protection: required contexts is nil => the endpoint 404s, which
 	// is how GitHub answers a branch with no required status checks.
 	requiredContexts []string
@@ -107,6 +108,8 @@ func (g *fakeGitHub) server() *httptest.Server {
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		g.requests = append(g.requests, r.Method+" "+r.URL.Path+"?"+r.URL.RawQuery)
 		switch {
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/pulls/76"):
+			_ = json.NewEncoder(w).Encode(map[string]any{"merged": g.previousMerged})
 		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/pulls"):
 			_ = json.NewEncoder(w).Encode(g.openPRs)
 		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/pulls"):
@@ -215,6 +218,30 @@ func gitAncestryScript(localSHA, originSHA string, localIsAncestorOfOrigin, orig
 			return CommandResult{Output: "3\n"}, true
 		}
 		return CommandResult{}, false
+	}
+}
+
+func TestPRShepherd_ResetBudgetAfterExternalMerge(t *testing.T) {
+	for _, merged := range []bool{false, true} {
+		t.Run(fmt.Sprint(merged), func(t *testing.T) {
+			t.Setenv("BT_PR_SHEPHERD", "on")
+			gh := &fakeGitHub{t: t, previousMerged: merged}
+			runner := &prShepherdScriptRunner{script: gitAncestryScript("newlocal", "mergedorigin", false, true)}
+			deps := prTestDeps(t, gh, runner, &fakeClaudeFixRunner{})
+			if err := savePRShepherdState(deps.stateDir, prShepherdState{PRNumber: 76, FixAttempts: map[string]int{"oldhead": 3}, TotalFixAttempts: 6}); err != nil {
+				t.Fatal(err)
+			}
+			bb := newTestBlackboard()
+			runPRShepherd(bb, deps)
+			st := loadPRShepherdState(deps.stateDir)
+			if merged {
+				if st.TotalFixAttempts != 0 || len(st.FixAttempts) != 0 {
+					t.Fatalf("merged PR retained exhausted budget: %+v", st)
+				}
+			} else if st.TotalFixAttempts != 6 {
+				t.Fatalf("unmerged PR lost budget: %+v", st)
+			}
+		})
 	}
 }
 
