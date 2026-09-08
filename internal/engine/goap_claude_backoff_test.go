@@ -15,6 +15,9 @@ import (
 //   - the fleet-wide Claude backoff store: no test may arm or clear the live
 //     ~/.go-bt-evolve/claude_backoff.json — the pollution class that silently
 //     blocked live milestone 0977b1fa on 2026-07-10;
+//   - the fleet-wide Codex backoff store: same isolation for the
+//     provider-namespaced ~/.go-bt-evolve/codex_backoff.json, so Codex backoff
+//     tests never arm or clear the live stamp;
 //   - the Superpowers runs directory: no test may scan or write the live
 //     docs/superpowers/runs — tests running actions that embed the saturation
 //     scan, pending-patch recovery, or orphaned-branch reap passes previously
@@ -22,12 +25,13 @@ import (
 //     4–1000× and misleading the 2026-07-23 fleet review three times.
 //
 // Tests whose assertions depend on store/dir contents additionally call
-// isolateClaudeBackoffStore(t) / isolateSuperpowersRunsDir(t) for a private,
-// deterministic path.
+// isolateClaudeBackoffStore(t) / isolateCodexBackoffStore(t) /
+// isolateSuperpowersRunsDir(t) for a private, deterministic path.
 func TestMain(m *testing.M) {
 	dir, err := os.MkdirTemp("", "engine-claude-backoff-*")
 	if err == nil {
 		goapClaudeBackoffPath = filepath.Join(dir, "claude_backoff.json")
+		goapCodexBackoffPath = filepath.Join(dir, "codex_backoff.json")
 	}
 	runsDir, runsErr := os.MkdirTemp("", "engine-superpowers-runs-*")
 	if runsErr == nil {
@@ -52,6 +56,33 @@ func isolateClaudeBackoffStore(t *testing.T) {
 	prev := goapClaudeBackoffPath
 	goapClaudeBackoffPath = filepath.Join(t.TempDir(), "claude_backoff.json")
 	t.Cleanup(func() { goapClaudeBackoffPath = prev })
+}
+
+// isolateCodexBackoffStore points goapCodexBackoffPath at a private temp store
+// (the Codex-namespaced sibling of isolateClaudeBackoffStore). Codex backoff
+// tests MUST call this so a Codex stamp never leaks into another test's
+// assertions or the live ~/.go-bt-evolve/codex_backoff.json.
+func isolateCodexBackoffStore(t *testing.T) {
+	t.Helper()
+	prev := goapCodexBackoffPath
+	goapCodexBackoffPath = filepath.Join(t.TempDir(), "codex_backoff.json")
+	t.Cleanup(func() { goapCodexBackoffPath = prev })
+}
+
+// isolateBackoffStores isolates BOTH provider backoff stores in one call — for
+// tests that assert the cross-provider non-interference contract (a Codex stamp
+// must never appear in the Claude store and vice versa).
+func isolateBackoffStores(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	prevClaude := goapClaudeBackoffPath
+	prevCodex := goapCodexBackoffPath
+	goapClaudeBackoffPath = filepath.Join(dir, "claude_backoff.json")
+	goapCodexBackoffPath = filepath.Join(dir, "codex_backoff.json")
+	t.Cleanup(func() {
+		goapClaudeBackoffPath = prevClaude
+		goapCodexBackoffPath = prevCodex
+	})
 }
 
 func TestParseClaudeRateLimitReset(t *testing.T) {
@@ -205,5 +236,126 @@ func TestClaudeBackoffState_LegacyAgentScopeStampStillHonored(t *testing.T) {
 	}
 	if _, ok := loadClaudeBackoffState(bb); ok {
 		t.Fatal("expired legacy stamp must self-clear from the agent scope")
+	}
+}
+
+// TestDelegationBackoffState_ProviderNamespaced proves a Codex rate limit
+// writes ONLY the Codex store (codex_backoff.json + codex ChainState key) and
+// never touches the Claude store. A Codex failure must not close Claude and
+// vice versa — this is the isolation contract the provider selector depends on.
+func TestDelegationBackoffState_ProviderNamespaced(t *testing.T) {
+	isolateBackoffStores(t)
+	bb := &Blackboard{BB: blackboard.NewHandle(blackboard.NewManager(nil), "run-1", "", "goap-loop")}
+	until := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
+
+	saveDelegationBackoffState(bb, DelegationProviderCodex, until)
+
+	if _, ok := readSharedBackoff(backoffPathFor(DelegationProviderCodex)); !ok {
+		t.Fatal("codex shared store = inactive after a Codex save, want a recorded deadline")
+	}
+	if _, ok := readSharedBackoff(backoffPathFor(DelegationProviderClaude)); ok {
+		t.Fatal("claude shared store = active after a Codex save: a Codex rate limit must never write the Claude cooldown")
+	}
+	if _, ok := bb.ChainState[backoffChainKey(DelegationProviderCodex)]; !ok {
+		t.Fatalf("Codex ChainState key %q not written: saveDelegationBackoffState must stamp the provider's own key", backoffChainKey(DelegationProviderCodex))
+	}
+	if _, ok := bb.ChainState[backoffChainKey(DelegationProviderClaude)]; ok {
+		t.Fatalf("Claude ChainState key %q written by a Codex save: the keys must be namespaced by provider", backoffChainKey(DelegationProviderClaude))
+	}
+
+	if _, ok := loadDelegationBackoffState(bb, DelegationProviderClaude); ok {
+		t.Fatal("loadDelegationBackoffState(claude) = active after a Codex save: a Codex stamp must be invisible to Claude's backoff guard")
+	}
+	if got, ok := loadDelegationBackoffState(bb, DelegationProviderCodex); !ok || !got.Equal(until) {
+		t.Fatalf("loadDelegationBackoffState(codex) = (%v, %v), want (%v, true)", got, ok, until)
+	}
+}
+
+// TestDelegationBackoffState_ClearCodexLeavesClaudeIntact proves that clearing
+// one provider's cooldown never clears the other's.
+func TestDelegationBackoffState_ClearCodexLeavesClaudeIntact(t *testing.T) {
+	isolateBackoffStores(t)
+	bb := &Blackboard{BB: blackboard.NewHandle(blackboard.NewManager(nil), "run-1", "", "goap-loop")}
+	claudeUntil := time.Now().Add(2 * time.Hour).UTC().Truncate(time.Second)
+	codexUntil := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
+
+	saveDelegationBackoffState(bb, DelegationProviderClaude, claudeUntil)
+	saveDelegationBackoffState(bb, DelegationProviderCodex, codexUntil)
+
+	clearDelegationBackoffState(bb, DelegationProviderCodex)
+
+	if _, ok := loadDelegationBackoffState(bb, DelegationProviderCodex); ok {
+		t.Fatal("loadDelegationBackoffState(codex) = active after clearDelegationBackoffState(codex), want inactive")
+	}
+	if got, ok := loadDelegationBackoffState(bb, DelegationProviderClaude); !ok || !got.Equal(claudeUntil) {
+		t.Fatalf("loadDelegationBackoffState(claude) = (%v, %v) after clearing Codex, want (%v, true): clearing Codex must never clear the Claude cooldown", got, ok, claudeUntil)
+	}
+}
+
+// TestIsDelegationRateLimit_ProviderDispatch proves the rate-limit matcher is
+// provider-specific: a Claude-only signal must not trip the Codex matcher and a
+// Codex-only signal must not trip the Claude matcher.
+func TestIsDelegationRateLimit_ProviderDispatch(t *testing.T) {
+	// "session limit" is a Claude CLI phrase (isClaudeRateLimit), not in the
+	// conservative Codex matcher.
+	if !isDelegationRateLimit(DelegationProviderClaude, "Claude Code session limit reached") {
+		t.Fatal("claude session-limit output must read as a Claude rate limit")
+	}
+	if isDelegationRateLimit(DelegationProviderCodex, "Claude Code session limit reached") {
+		t.Fatal("claude session-limit output must NOT read as a Codex rate limit")
+	}
+	// "429" is an OpenAI/Codex HTTP signal (isCodexRateLimit); the Claude
+	// matcher does not include it.
+	if !isDelegationRateLimit(DelegationProviderCodex, "429 too many requests") {
+		t.Fatal("429 output must read as a Codex rate limit")
+	}
+	if isDelegationRateLimit(DelegationProviderClaude, "429 too many requests") {
+		t.Fatal("429 output must NOT read as a Claude rate limit")
+	}
+}
+
+// TestDelegationBackoffDeadline_CodexUsesFixedFallback proves Codex does not
+// inherit Claude's CLI-reset parsing: Codex's reset shape is uncharacterized,
+// so a Codex rate limit uses the fixed fallback window, while Claude still
+// honors a parseable "resets <time>" hint.
+func TestDelegationBackoffDeadline_CodexUsesFixedFallback(t *testing.T) {
+	now := time.Date(2026, 7, 15, 10, 0, 0, 0, time.Local)
+
+	codexGot := delegationBackoffDeadline(DelegationProviderCodex, "usage limit reached|resets 3pm", now, time.Hour)
+	if want := now.Add(time.Hour); !codexGot.Equal(want) {
+		t.Fatalf("codex deadline = %v, want fixed now+fallback %v: Codex must not parse Claude's reset hint", codexGot, want)
+	}
+	claudeGot := delegationBackoffDeadline(DelegationProviderClaude, "usage limit reached|resets 3pm", now, time.Hour)
+	if want := time.Date(2026, 7, 15, 15, 0, 0, 0, time.Local).Add(claudeResetMargin); !claudeGot.Equal(want) {
+		t.Fatalf("claude deadline = %v, want CLI-reported reset+margin %v", claudeGot, want)
+	}
+}
+
+// TestDelegationBackoffWindow_Provider proves each provider reads its OWN
+// fallback-window env var (BT_GOAP_CLAUDE_BACKOFF vs BT_GOAP_CODEX_BACKOFF).
+func TestDelegationBackoffWindow_Provider(t *testing.T) {
+	t.Setenv("BT_GOAP_CLAUDE_BACKOFF", "3h")
+	t.Setenv("BT_GOAP_CODEX_BACKOFF", "90m")
+
+	if got, want := delegationBackoffWindow(DelegationProviderClaude), 3*time.Hour; got != want {
+		t.Fatalf("delegationBackoffWindow(claude) = %v, want %v (BT_GOAP_CLAUDE_BACKOFF)", got, want)
+	}
+	if got, want := delegationBackoffWindow(DelegationProviderCodex), 90*time.Minute; got != want {
+		t.Fatalf("delegationBackoffWindow(codex) = %v, want %v (BT_GOAP_CODEX_BACKOFF)", got, want)
+	}
+}
+
+// TestDelegationBinary_Provider proves the preflight resolves each provider's
+// own binary env var (BT_SUPERPOWERS_CLAUDE_BIN vs BT_SUPERPOWERS_CODEX_BIN)
+// rather than hardcoding Claude.
+func TestDelegationBinary_Provider(t *testing.T) {
+	t.Setenv("BT_SUPERPOWERS_CLAUDE_BIN", "/opt/claude")
+	t.Setenv("BT_SUPERPOWERS_CODEX_BIN", "/opt/codex")
+
+	if got := delegationBinary(DelegationProviderClaude); got != "/opt/claude" {
+		t.Fatalf("delegationBinary(claude) = %q, want /opt/claude", got)
+	}
+	if got := delegationBinary(DelegationProviderCodex); got != "/opt/codex" {
+		t.Fatalf("delegationBinary(codex) = %q, want /opt/codex", got)
 	}
 }

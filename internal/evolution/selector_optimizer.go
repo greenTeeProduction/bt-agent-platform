@@ -9,6 +9,9 @@ import (
 	"os"
 	"slices"
 	"sync"
+
+	"github.com/nico/go-bt-evolve/internal/reliability"
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 // ─── Selector Node Optimization ──────────────────────────────────────────
@@ -267,10 +270,15 @@ type selectorStatsFile struct {
 // and rename prevents a concurrent writer's snapshot from being silently
 // overwritten inside the window.
 func (so *SelectorOptimizer) SaveSelectorStats(path string) error {
-	release, lockErr := acquireExperienceLock(path)
-	if lockErr == nil {
-		defer release()
+	// Create the sidecar directory before acquiring the read/write guard.
+	if err := util.EnsurePersistenceParent(path); err != nil {
+		return fmt.Errorf("create selector stats dir: %w", err)
 	}
+	release, lockErr := reliability.AcquireFileLock(path)
+	if lockErr != nil {
+		return lockErr
+	}
+	defer release()
 	so.mu.Lock()
 	defer so.mu.Unlock()
 	merged, err := readSelectorStatsFile(path)
@@ -293,7 +301,7 @@ func (so *SelectorOptimizer) SaveSelectorStats(path string) error {
 // cannot re-persist them. A missing file is a no-op; a corrupt file is
 // reported.
 func (so *SelectorOptimizer) LoadSelectorStats(path string) error {
-	release, lockErr := acquireExperienceLock(path)
+	release, lockErr := reliability.AcquireFileLock(path)
 	if lockErr == nil {
 		defer release()
 	}
@@ -314,7 +322,7 @@ func (so *SelectorOptimizer) LoadSelectorStats(path string) error {
 // map. A missing file yields an empty map.
 func readSelectorStatsFile(path string) (map[string]*SelectorStats, error) {
 	out := make(map[string]*SelectorStats)
-	data, err := os.ReadFile(path)
+	data, err := util.ReadPersistenceFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return out, nil
@@ -363,19 +371,7 @@ func mergeSelectorStatsMaps(dst, src map[string]*SelectorStats) {
 // persistSelectorStats marshals stats and atomically replaces path (write tmp
 // + rename). Callers hold the sidecar flock.
 func persistSelectorStats(path string, stats map[string]*SelectorStats) error {
-	data, err := json.MarshalIndent(selectorStatsFile{Selectors: stats}, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal selector stats: %w", err)
-	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0644); err != nil {
-		return fmt.Errorf("write tmp: %w", err)
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		os.Remove(tmp)
-		return fmt.Errorf("rename: %w", err)
-	}
-	return nil
+	return util.SaveJSONAtomic(path, selectorStatsFile{Selectors: stats})
 }
 
 // OrderChildren returns the recommended child ordering for a Selector,

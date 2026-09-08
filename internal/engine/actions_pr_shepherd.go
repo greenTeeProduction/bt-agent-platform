@@ -438,11 +438,10 @@ var prShepherdDepsOverride *prShepherdDeps
 func defaultPRShepherdDeps() prShepherdDeps {
 	return prShepherdDeps{
 		runner: defaultSuperpowersCommandRunner,
-		claude: execClaudeRunner{
-			AllowedTools: getenvDefault("BT_PR_SHEPHERD_ALLOWED_TOOLS",
+		claude: newImplementationDelegatingRunnerWithTools(
+			getenvDefault("BT_PR_SHEPHERD_ALLOWED_TOOLS",
 				defaultSuperpowersAllowedTools+
-					",Bash(go mod tidy:*),Bash(/usr/local/go/bin/go mod tidy:*),Bash(make check-quick:*)"),
-		},
+					",Bash(go mod tidy:*),Bash(/usr/local/go/bin/go mod tidy:*),Bash(make check-quick:*)")),
 		repoDir:         goapFusionRepo,
 		stateDir:        prShepherdDir(),
 		now:             time.Now,
@@ -676,16 +675,23 @@ func runPRShepherd(bb *Blackboard, deps prShepherdDeps) int {
 // superpowers apply step), landing on local master via the non-forced ff
 // primitive, then re-pushing the fleet branch.
 func runPRShepherdFix(ctx context.Context, bb *Blackboard, deps prShepherdDeps, api *githubPRClient, state *prShepherdState, branch, headSHA string, prNumber int, failed []githubCheckRun, now func() time.Time) int {
+	// Resolve the configured delegation provider for this fix attempt's
+	// backoff / rate-limit accounting. An invalid BT_SUPERPOWERS_PROVIDER is
+	// rejected here (not silently defaulted).
+	provider, err := resolvedSuperpowersProvider()
+	if err != nil {
+		return prShepherdSkip(bb, "pr_shepherd_fix_failed",
+			"## PR Shepherd Fix Failed\n\n%v", err)
+	}
 	maxAttempts := prShepherdMaxFixAttempts()
 	if state.FixAttempts[headSHA] >= maxAttempts || state.TotalFixAttempts >= 2*maxAttempts {
 		return prShepherdSkip(bb, "pr_shepherd_fix_exhausted",
 			"## PR Shepherd Fix Budget Exhausted\n\nPR #%d head %s: %d/%d attempts for this head, %d total since the last merge. Operator attention needed.",
 			prNumber, headSHA[:min(12, len(headSHA))], state.FixAttempts[headSHA], maxAttempts, state.TotalFixAttempts)
 	}
-	if claudeBackoffActive(bb, now()) {
-		until, _ := loadClaudeBackoffState(bb)
+	if until, active := delegationPreflightBackoff(bb, provider, now()); active {
 		return prShepherdSkip(bb, "pr_shepherd_rate_limited",
-			"## PR Shepherd Skipped\n\nClaude backoff active until %s; fix deferred.", until.Format(time.RFC3339))
+			"## PR Shepherd Skipped\n\n%s backoff active until %s; fix deferred.", provider, until.Format(time.RFC3339))
 	}
 
 	var evidence strings.Builder
@@ -720,13 +726,18 @@ func runPRShepherdFix(ctx context.Context, bb *Blackboard, deps prShepherdDeps, 
 	claudeCtx, cancel := context.WithTimeout(ctx, deps.claudeTimeout)
 	res := deps.claude.RunClaude(claudeCtx, wtPath, prompt)
 	cancel()
+	if res.Provider.Valid() {
+		provider = res.Provider
+	}
 	combined := res.Output
 	if res.Err != nil {
 		combined += " " + res.Err.Error()
 	}
-	if isClaudeRateLimit(combined) {
+	if delegationResultRateLimited(res, provider, combined) {
 		cleanup()
-		saveClaudeBackoffState(bb, claudeBackoffDeadline(combined, now(), goapClaudeBackoffWindow))
+		if !res.BackoffManaged {
+			saveDelegationBackoffState(bb, provider, delegationBackoffDeadline(provider, combined, now(), delegationReviewBackoffWindow(provider)))
+		}
 		return prShepherdSkip(bb, "pr_shepherd_rate_limited",
 			"## PR Shepherd Rate-Limited\n\n```\n%s\n```", truncateGoap(combined, 1200))
 	}

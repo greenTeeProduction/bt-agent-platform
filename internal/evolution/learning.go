@@ -12,6 +12,9 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
+
+	"github.com/nico/go-bt-evolve/internal/reliability"
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 // ─── Genetic Algorithm Engine ───
@@ -711,26 +714,17 @@ func (qt *QTable) enforceCap() {
 // advisory flock so concurrent writers cannot interleave partial archives,
 // mirroring IslandModel.Save (ADR-024).
 func (qt *QTable) Save(path string) error {
-	data, err := json.MarshalIndent(qt.Values, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal qtable archive: %w", err)
-	}
+	// The flock sidecar is created beside the archive, so the directory has
+	// to exist before the lock is taken.
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create qtable archive dir: %w", err)
 	}
-	release, err := acquireExperienceLock(path)
+	release, err := reliability.AcquireFileLock(path)
 	if err != nil {
 		return err
 	}
 	defer release()
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		return fmt.Errorf("write qtable archive: %w", err)
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		return fmt.Errorf("commit qtable archive: %w", err)
-	}
-	return nil
+	return util.SaveJSONAtomic(path, qt.Values)
 }
 
 // Load warm-starts the table by merging the archive at path into the
@@ -744,7 +738,7 @@ func (qt *QTable) Load(path string) error {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return nil
 	}
-	release, err := acquireExperienceLock(path)
+	release, err := reliability.AcquireFileLock(path)
 	if err != nil {
 		return err
 	}

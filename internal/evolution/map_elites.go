@@ -8,6 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+
+	"github.com/nico/go-bt-evolve/internal/reliability"
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 // FeatureDimension defines a behavioral feature axis for MAP-Elites.
@@ -439,26 +442,17 @@ func cappedCells(cells map[string]*Individual, limit int) map[string]*Individual
 // persisted — the weakest cells are evicted from the archive first. The
 // in-memory grid is left untouched.
 func (g *MAPElitesGrid) Save(path string) error {
-	data, err := json.MarshalIndent(mapElitesArchive{Cells: cappedCells(g.Cells, g.Cap)}, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal map-elites archive: %w", err)
-	}
+	// The flock sidecar is created beside the archive, so the directory has
+	// to exist before the lock is taken.
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("create map-elites archive dir: %w", err)
 	}
-	release, err := acquireExperienceLock(path)
+	release, err := reliability.AcquireFileLock(path)
 	if err != nil {
 		return err
 	}
 	defer release()
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
-		return fmt.Errorf("write map-elites archive: %w", err)
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		return fmt.Errorf("commit map-elites archive: %w", err)
-	}
-	return nil
+	return util.SaveJSONAtomic(path, mapElitesArchive{Cells: cappedCells(g.Cells, g.Cap)})
 }
 
 // Load warm-starts the grid from the archive at path by merging niches:
@@ -474,7 +468,7 @@ func (g *MAPElitesGrid) Load(path string) error {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return nil
 	}
-	release, err := acquireExperienceLock(path)
+	release, err := reliability.AcquireFileLock(path)
 	if err != nil {
 		return err
 	}

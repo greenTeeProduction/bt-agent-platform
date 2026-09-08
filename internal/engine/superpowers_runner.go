@@ -12,11 +12,16 @@ import (
 )
 
 type CommandResult struct {
-	Command  string
-	Dir      string
-	Output   string
-	Err      error
-	Duration time.Duration
+	// Provider records the CLI actually invoked, not the configured primary.
+	Provider DelegationProvider
+	// RetryAt is the earliest provider retry when all eligible quotas are closed.
+	RetryAt        time.Time
+	BackoffManaged bool
+	Command        string
+	Dir            string
+	Output         string
+	Err            error
+	Duration       time.Duration
 }
 
 type CommandRunner interface {
@@ -93,6 +98,9 @@ func (r execClaudeRunner) RunClaude(ctx context.Context, repoDir string, prompt 
 	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Dir = repoDir
 	cmd.Env = append(os.Environ(), "PATH=/usr/local/go/bin:"+os.Getenv("HOME")+"/go/bin:"+os.Getenv("PATH"))
+	// Match Codex: cancellation must stop delegated child commands as well
+	// as the CLI, otherwise inherited pipes can hold the cycle open forever.
+	bindToolCommandCancellation(cmd)
 	out, err := cmd.CombinedOutput()
 	return CommandResult{
 		Command:  fmt.Sprintf("%s %s <prompt>", bin, strings.Join(args[:len(args)-1], " ")),
@@ -166,7 +174,7 @@ func getenvDefault(key, fallback string) string {
 }
 
 var defaultSuperpowersCommandRunner CommandRunner = execCommandRunner{}
-var defaultSuperpowersClaudeRunner ClaudeRunner = execClaudeRunner{}
+var defaultSuperpowersClaudeRunner ClaudeRunner = newImplementationDelegatingRunner()
 
 // superpowersCommandTimeoutSecs is the wall-clock budget for a single wrapped
 // command (build/test/lint/git). Default 600s. The OLD 180s budget was <= the

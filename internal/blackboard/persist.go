@@ -23,8 +23,6 @@ func (m *Manager) EnablePersistence(baseDir string) error {
 	if baseDir == "" {
 		return fmt.Errorf("blackboard persist dir required")
 	}
-	m.operations.Lock()
-	defer m.operations.Unlock()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if err := os.MkdirAll(filepath.Join(baseDir, "session"), 0o755); err != nil {
@@ -41,12 +39,31 @@ func isPersistentScope(kind ScopeKind) bool {
 	return kind == ScopeSession || kind == ScopeAgent
 }
 
-func (m *Manager) persistFile(scope Scope) string {
-	if m == nil || m.persistDir == "" || !isPersistentScope(scope.Kind) {
+// persistRoot reads the persistence root under the store lock. Operations
+// resolve it once after acquiring their scope gate and thread it through the
+// entire cycle. An operation already in flight may finish on the previous root
+// after EnablePersistence returns; it never loads from one root and saves to another.
+func (m *Manager) persistRoot() string {
+	if m == nil {
+		return ""
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.persistDir
+}
+
+// scopePath is the on-disk file for a scope under persistence root dir, or ""
+// when persistence is off or the scope kind is ephemeral.
+func scopePath(dir string, scope Scope) string {
+	if dir == "" || !isPersistentScope(scope.Kind) {
 		return ""
 	}
 	sub := string(scope.Kind)
-	return filepath.Join(m.persistDir, sub, "v2."+base64.RawURLEncoding.EncodeToString([]byte(scope.ID))+".json")
+	return filepath.Join(dir, sub, "v2."+base64.RawURLEncoding.EncodeToString([]byte(scope.ID))+".json")
+}
+
+func (m *Manager) persistFile(scope Scope) string {
+	return scopePath(m.persistRoot(), scope)
 }
 
 func loadScopeFile(path string, s *scopedStore) error {
@@ -84,8 +101,7 @@ func loadScopeFile(path string, s *scopedStore) error {
 	return nil
 }
 
-func (m *Manager) persistScope(scope Scope, s *scopedStore) error {
-	path := m.persistFile(scope)
+func persistScope(path string, s *scopedStore) error {
 	if path == "" || s == nil {
 		return nil
 	}
@@ -137,13 +153,14 @@ func (s *scopedStore) snapshot() map[string]Entry {
 
 // ListPersistedScopeIDs returns scope IDs that have on-disk storage (session/agent only).
 func (m *Manager) ListPersistedScopeIDs(kind ScopeKind) ([]string, error) {
-	if m == nil || m.persistDir == "" {
+	root := m.persistRoot()
+	if root == "" {
 		return nil, fmt.Errorf("blackboard persistence not enabled")
 	}
 	if !isPersistentScope(kind) {
 		return nil, fmt.Errorf("scope kind %q is not persisted", kind)
 	}
-	dir := filepath.Join(m.persistDir, string(kind))
+	dir := filepath.Join(root, string(kind))
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -172,10 +189,13 @@ func (m *Manager) ListPersistedScopeIDs(kind ScopeKind) ([]string, error) {
 
 // Legacy filenames can be attributed safely only to IDs the old encoder left
 // unchanged. Ambiguous lossy IDs must never silently inherit another scope.
-func (m *Manager) loadScope(scope Scope, s *scopedStore) error {
-	path := m.persistFile(scope)
+func loadScope(dir string, scope Scope, s *scopedStore) error {
+	path := scopePath(dir, scope)
+	if path == "" {
+		return nil
+	}
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		legacy := filepath.Join(m.persistDir, string(scope.Kind), safeFilename(scope.ID)+".json")
+		legacy := filepath.Join(dir, string(scope.Kind), safeFilename(scope.ID)+".json")
 		if _, legacyErr := os.Stat(legacy); legacyErr == nil {
 			if safeFilename(scope.ID) != scope.ID || strings.Contains(scope.ID, "_") {
 				return fmt.Errorf("legacy scope %q is ambiguous; explicit migration required", scope.ID)

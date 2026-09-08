@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -658,6 +659,67 @@ func TestDeadLetterQueue_PoisonPillExclusion(t *testing.T) {
 	// Terminal: subsequent requeues stay refused (no infinite replay loop).
 	if _, ok := dlq.Requeue("poison"); ok {
 		t.Error("an abandoned entry must never be auto-requeued again")
+	}
+}
+
+func TestFileLockContextTimeout(t *testing.T) {
+	path := t.TempDir() + "/locked"
+	lockPath := path + ".lock"
+
+	holder, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0644)
+	if err != nil {
+		t.Fatalf("open lock holder: %v", err)
+	}
+	if err := syscall.Flock(int(holder.Fd()), syscall.LOCK_EX); err != nil {
+		holder.Close()
+		t.Fatalf("lock holder: %v", err)
+	}
+	defer holder.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 80*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	_, err = AcquireFileLockWithContext(ctx, path)
+	if err == nil {
+		t.Fatal("expected context-bound lock acquisition to fail")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected timeout or cancel error, got: %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > 250*time.Millisecond {
+		t.Fatalf("context acquisition took too long: %v", elapsed)
+	}
+
+}
+
+func TestFileLockLegacyWaitsThroughContention(t *testing.T) {
+	path := t.TempDir() + "/locked"
+	release, err := AcquireFileLock(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	result := make(chan error, 1)
+	go func() {
+		unlock, err := AcquireFileLock(path)
+		if err == nil {
+			unlock()
+		}
+		result <- err
+	}()
+	select {
+	case err := <-result:
+		t.Fatalf("legacy acquisition returned before holder released: %v", err)
+	case <-time.After(400 * time.Millisecond):
+	}
+	release()
+	select {
+	case err := <-result:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("legacy acquisition did not recover after contention")
 	}
 }
 

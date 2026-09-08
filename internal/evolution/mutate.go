@@ -25,6 +25,8 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 // SerializableNode represents a behavior tree node in a serializable format.
@@ -93,19 +95,7 @@ func (ts *TreeStore) LoadMeta() (*EvolutionMetadata, error) {
 
 // SaveTo writes the tree to a specific path atomically.
 func (ts *TreeStore) SaveTo(tree *SerializableNode, path string) error {
-	data, err := json.MarshalIndent(tree, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal tree: %w", err)
-	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0644); err != nil {
-		return fmt.Errorf("write tmp: %w", err)
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		os.Remove(tmp)
-		return fmt.Errorf("rename: %w", err)
-	}
-	return nil
+	return util.SaveJSONAtomic(path, tree)
 }
 
 // Load reads the tree from disk. Returns nil if no tree exists yet.
@@ -126,19 +116,7 @@ func (ts *TreeStore) Load() (*SerializableNode, error) {
 
 // Save writes the tree to disk atomically.
 func (ts *TreeStore) Save(tree *SerializableNode) error {
-	data, err := json.MarshalIndent(tree, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal tree: %w", err)
-	}
-	tmp := ts.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0644); err != nil {
-		return fmt.Errorf("write tmp: %w", err)
-	}
-	if err := os.Rename(tmp, ts.path); err != nil {
-		os.Remove(tmp)
-		return fmt.Errorf("rename: %w", err)
-	}
-	return nil
+	return util.SaveJSONAtomic(ts.path, tree)
 }
 
 // GoDeveloperTree returns a behavior tree specialized for Go software development.

@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 // TreeFileName returns the canonical on-disk file name for a generated tree ID
@@ -74,21 +76,9 @@ func SaveNamedTree(dir, id string, tree *SerializableNode) (string, error) {
 	if tree == nil {
 		return "", fmt.Errorf("save named tree %q: nil tree", id)
 	}
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return "", fmt.Errorf("create tree dir %q: %w", dir, err)
-	}
 	path := filepath.Join(dir, TreeFileName(id))
-	data, err := json.MarshalIndent(tree, "", "  ")
-	if err != nil {
-		return "", fmt.Errorf("marshal tree %q: %w", id, err)
-	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0644); err != nil {
-		return "", fmt.Errorf("write tree %q: %w", id, err)
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		os.Remove(tmp)
-		return "", fmt.Errorf("rename tree %q: %w", id, err)
+	if err := util.SaveJSONAtomic(path, tree); err != nil {
+		return "", fmt.Errorf("save tree %q: %w", id, err)
 	}
 	return path, nil
 }

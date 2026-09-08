@@ -125,14 +125,9 @@ func TestRegistry_SaveAndReload(t *testing.T) {
 	}
 }
 
-// TestRegistry_SaveTree_WriteFailureLeavesOriginalUntouched forces the
-// os.WriteFile call in SaveTree to fail while a stale tmp file is already on
-// disk (e.g. left over from a prior crashed write). A naive implementation
-// that ignores the WriteFile error still calls os.Rename, which succeeds
-// unconditionally (rename permission is governed by the *directory*, not the
-// file's own mode) and silently clobbers entry.FilePath with the stale tmp
-// content. SaveTree must check the WriteFile error first and refuse to
-// rename, leaving entry.FilePath untouched and reporting a non-nil error.
+// TestRegistry_SaveTree_WriteFailureLeavesOriginalUntouched denies creation
+// of the random exclusive temporary file. A failed write must preserve both
+// the destination and any unrelated stale legacy temporary file.
 func TestRegistry_SaveTree_WriteFailureLeavesOriginalUntouched(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("running as root: file write permission cannot be revoked to force this failure")
@@ -147,18 +142,16 @@ func TestRegistry_SaveTree_WriteFailureLeavesOriginalUntouched(t *testing.T) {
 		t.Fatalf("seed WriteFile: %v", err)
 	}
 
-	// Pre-create the tmp file SaveTree will target, then revoke its write
-	// permission so os.WriteFile(tmp, ...) inside SaveTree fails while the
-	// stale tmp file remains on disk.
+	// Seed an unrelated legacy temporary file, then deny directory writes.
 	tmpPath := filePath + ".tmp"
 	stale := []byte("stale-leftover-data")
 	if err := os.WriteFile(tmpPath, stale, 0644); err != nil {
 		t.Fatalf("seed tmp WriteFile: %v", err)
 	}
-	if err := os.Chmod(tmpPath, 0444); err != nil {
-		t.Fatalf("Chmod tmp: %v", err)
+	if err := os.Chmod(tempDir, 0555); err != nil {
+		t.Fatalf("Chmod directory: %v", err)
 	}
-	t.Cleanup(func() { _ = os.Chmod(tmpPath, 0644) })
+	t.Cleanup(func() { _ = os.Chmod(tempDir, 0755) })
 
 	entry := TreeEntry{
 		Name:     "write-failure-test",
@@ -179,8 +172,8 @@ func TestRegistry_SaveTree_WriteFailureLeavesOriginalUntouched(t *testing.T) {
 		t.Errorf("original file content changed after failed SaveTree: got %q, want %q", data, original)
 	}
 
-	if _, statErr := os.Stat(tmpPath); !os.IsNotExist(statErr) {
-		t.Errorf("expected stale tmp file to be removed after failed write, stat err = %v", statErr)
+	if data, err := os.ReadFile(tmpPath); err != nil || string(data) != string(stale) {
+		t.Errorf("unrelated legacy temp file changed: %q, %v", data, err)
 	}
 }
 
