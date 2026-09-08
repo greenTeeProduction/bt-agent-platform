@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -24,10 +25,8 @@ func persistenceParent(path string, create bool, perm os.FileMode) (*os.Root, st
 	if path == "" || strings.ContainsRune(path, 0) || strings.HasSuffix(path, string(os.PathSeparator)) {
 		return nil, "", fmt.Errorf("invalid persistence path %q", path)
 	}
-	for _, part := range strings.Split(filepath.ToSlash(path), "/") {
-		if part == ".." {
-			return nil, "", fmt.Errorf("parent traversal in persistence path %q", path)
-		}
+	if slices.Contains(strings.Split(filepath.ToSlash(path), "/"), "..") {
+		return nil, "", fmt.Errorf("parent traversal in persistence path %q", path)
 	}
 	name := filepath.Base(path)
 	if !filepath.IsLocal(name) || name == "." {
@@ -96,7 +95,7 @@ func SaveJSONAtomicMode(path string, v any, filePerm, dirPerm os.FileMode) error
 	if err != nil {
 		return fmt.Errorf("create temporary state: %w", err)
 	}
-	defer root.Remove(tmp)
+	defer func() { _ = root.Remove(tmp) }()
 	_, writeErr := f.Write(data)
 	closeErr := f.Close()
 	if writeErr != nil {
