@@ -41,7 +41,8 @@ routine bug fix.
 The review found several implementation/operations gaps that remain open:
 unequal island-adoption gates, unchecked cursors in two control nodes,
 unverified network isolation/TLS and backup recovery, incomplete evolution
-provenance, cooperative cancellation, and a hardcoded health toolchain field.
+provenance and cooperative cancellation. The hardcoded health toolchain
+field was corrected on 2026-09-16 (D7).
 Provider/model readiness and clean-repository preconditions also require
 operational verification; a closed GOAP breaker does not prove a successful
 code delivery. Their acceptance steps are in §11.

@@ -123,8 +123,9 @@ configuration must be checked after restart without printing secrets.
 
 **Evidence levels:** `/api/health` proves HTTP process liveness, not model
 readiness or successful GOAP implementation. Use `bt_build_info`/startup
-build identity and executable metadata for revision checks; the legacy
-health payload's Go-version string is hardcoded (D7). Read full phase output
+build identity and executable metadata for revision checks. The health
+payload now derives its Go-version string from the running runtime (D7);
+older binaries retain the historical hardcoded value. Read full phase output
 for provider errors. A closed breaker can coexist with `degraded` runs.
 
 **Rollback:** retain the known-good executable and corresponding configuration,

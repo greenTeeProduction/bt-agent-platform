@@ -166,7 +166,8 @@ shared-file state; this does not make every metric a fleet aggregate.
 Liveness, dependency readiness, scheduler breaker health and successful
 implementation are different signals. Preserve run/phase identifiers,
 selected provider and build identity when diagnosing failure. The
-`/api/health` Go-version string is not reliable binary metadata (D7).
+`/api/health` Go-version string reports the running Go runtime after D7;
+use build identity separately for the source revision.
 
 ## 8.12 A2A Auction Task Allocation
 

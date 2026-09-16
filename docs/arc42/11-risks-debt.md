@@ -55,7 +55,7 @@ personalization renumbering. Every open risk has a closure criterion.
 | D4 | **Open:** per-node token-budget adequacy | Audit representative workloads and truncation/quality evidence before changing budgets; no fleet-wide minimum has been proved. |
 | D5 | **Ongoing:** documentation drift | Structural checks now cover links, inventories and goal/scenario/ADR integrity; runtime assertions still need human/source review (QS33). |
 | D6 | **Partial:** gate and observability consistency | Preserve fixed feedback flushing, incremental verification artifacts, description accessors and ordinary mutation gates. Island adoption and evolutionary attribution remain R23/R20/R24. |
-| D7 | **Open:** health toolchain field is hardcoded | `HealthMetrics.GoVersion` is populated with `go1.26.3` in [metrics_utils.go](../../internal/dashboard/metrics_utils.go), while the deployed binaries inspected on 2026-09-16 were built with Go 1.26.5. Derive it from runtime/build metadata and test it; use `go version -m` meanwhile. |
+| D7 | **Resolved (2026-09-16):** health toolchain identity | `HealthJSON` now derives `go_version` from `runtime.Version()` in [metrics_utils.go](../../internal/dashboard/metrics_utils.go), with a regression in [metrics_test.go](../../internal/dashboard/metrics_test.go). Verify the deployed response against executable metadata after upgrading the service. |
 
 Historic utility extraction, default-tree splitting, old scaffold activation
 and individual bug-fix narratives remain in [the ADR log](09-decisions.md).
