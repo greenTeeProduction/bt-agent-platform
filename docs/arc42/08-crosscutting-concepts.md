@@ -152,6 +152,16 @@ verification; some writes remain best-effort (D6). Per-task snapshots and
 explicit apply state allow eligible partial landings/carryover. Use actual
 commit/apply evidence before marking a program milestone complete.
 
+Engine tests isolate `BT_SUPERPOWERS_*` settings inherited from a service;
+individual tests declare provider/model/failover inputs with `t.Setenv`.
+Verification failure classification uses the executor's diagnostic, excluding
+subprocess logs: fixture messages about RED passes, quotas or pending patches
+must not refund a failed implementation or mark unfinished work complete.
+Full command output remains in the run evidence. These contracts are covered
+by [engine test setup](../../internal/engine/goap_claude_backoff_test.go),
+[failure classification](../../internal/engine/actions_goap_fusion_redpass_test.go)
+and [runtime regression tests](../../internal/engine/superpowers_failover_runtime_independent_test.go).
+
 Code landing, binary replacement, service restart and documentation sync
 are different transitions. The [deployment view](07-deployment.md#73-release-recovery-and-operational-checks)
 defines their operational verification. Auto-rebuild/restart are opt-in.

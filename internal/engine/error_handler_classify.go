@@ -63,7 +63,7 @@ func goapFailureCategory(bb *Blackboard) string {
 		return "goap_fusion_failure"
 	}
 	outcome := bb.Outcome
-	result := bb.Result
+	result := goapFailureDiagnostic(bb.Result)
 	if strings.Contains(outcome, "rate_limited") || strings.Contains(strings.ToLower(result), "rate limit") {
 		return "rate_limit"
 	}

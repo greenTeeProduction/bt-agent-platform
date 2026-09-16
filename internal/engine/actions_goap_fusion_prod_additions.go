@@ -199,7 +199,7 @@ func registerGoapFusionProductionAdditions() {
 
 	RegisterAction("VerifyGoapFusionEvidence", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
-		out := strings.TrimSpace(bb.Result)
+		out := strings.TrimSpace(goapFailureDiagnostic(bb.Result))
 		lower := strings.ToLower(out)
 		fail := func(reason string) int {
 			bb.Outcome = "failure"
@@ -294,7 +294,7 @@ func registerGoapFusionProductionAdditions() {
 			// out-of-band. That is a healthy no-op, not a degradation
 			// (2026-07-15 23:04: the re-attempt of hand-landed milestones
 			// alarmed as "degraded").
-			if strings.Contains(lower, "red command unexpectedly passed") {
+			if isGoapRedUnexpectedlyPassed(out) {
 				bb.OutcomeRefinement = "no_change"
 				bb.QualityScore = 0.5
 			} else if strings.Contains(lower, "implementation degraded (fallback)") ||

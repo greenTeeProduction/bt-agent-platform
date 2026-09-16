@@ -88,6 +88,30 @@ func TestVerifyGoapFusionEvidenceClassifiesDegraded(t *testing.T) {
 	}
 }
 
+func TestVerifyGoapFusionEvidenceIgnoresVerificationFixtures(t *testing.T) {
+	for _, fixture := range []string{
+		"RED command unexpectedly passed; refusing to run GREEN without failing regression evidence: go test ./internal/example",
+		"simulated fixture: ## Superpowers Implementation Complete",
+	} {
+		t.Run(fixture, func(t *testing.T) {
+			report := writeGoapFusionCycleReport(t,
+				"delegated to apply-stage worktree verification (bare main repo)", "graphify update .: PASSED")
+			report += "\n## Implementation Degraded (Fallback)\nClaudeSuperpowersPath failed; degraded to deterministic analysis.\n\n```\n" +
+				"## GOAP Superpowers Execution Failed\n\ntask GREEN verification failed: go test ./internal/engine\nerror: exit status 1\n" + fixture + "\n```"
+			bb := &Blackboard{Result: report}
+			if got := GetAction("VerifyGoapFusionEvidence")(btcore.NewBTContext(context.Background(), bb)); got != 1 {
+				t.Fatalf("analysis evidence rejected because of test output: %s", bb.Result)
+			}
+			if bb.OutcomeRefinement != "degraded" || bb.QualityScore != 0.3 {
+				t.Fatalf("failed implementation must remain degraded, got %q / %v", bb.OutcomeRefinement, bb.QualityScore)
+			}
+			if bb.Result != report {
+				t.Fatal("the original report must retain the complete verification output")
+			}
+		})
+	}
+}
+
 // TestVerifyGoapFusionEvidenceClassifiesRedPassAsNoChange: a cycle whose
 // Claude path stopped because the RED command unexpectedly passed carries the
 // degraded-fallback wrapper, but the underlying reason means the predicted

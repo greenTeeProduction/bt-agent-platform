@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -28,6 +29,18 @@ import (
 // isolateClaudeBackoffStore(t) / isolateCodexBackoffStore(t) /
 // isolateSuperpowersRunsDir(t) for a private, deterministic path.
 func TestMain(m *testing.M) {
+	// Scheduled verification inherits the daemon's provider, model, and failover
+	// settings. Tests own these inputs through t.Setenv; service settings must
+	// not change their fixtures or select a real coding-provider executable.
+	for _, entry := range os.Environ() {
+		name, _, _ := strings.Cut(entry, "=")
+		if strings.HasPrefix(name, "BT_SUPERPOWERS_") {
+			if err := os.Unsetenv(name); err != nil {
+				fmt.Fprintln(os.Stderr, "isolate engine test environment:", err)
+				os.Exit(1)
+			}
+		}
+	}
 	dir, err := os.MkdirTemp("", "engine-claude-backoff-*")
 	if err == nil {
 		goapClaudeBackoffPath = filepath.Join(dir, "claude_backoff.json")

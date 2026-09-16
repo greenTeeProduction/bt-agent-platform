@@ -1166,7 +1166,7 @@ func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboar
 			provider = limited.Provider
 		}
 		var attempt *delegationAttemptError
-		if managed || (!errors.As(err, &attempt) && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) && isDelegationRateLimit(provider, errStr)) {
+		if managed || (!errors.As(err, &attempt) && !errors.Is(err, context.Canceled) && !errors.Is(err, context.DeadlineExceeded) && isDelegationRateLimit(provider, goapFailureDiagnostic(errStr))) {
 			// Provider rate-limited — save the plan for the next cycle and fall
 			// back gracefully. Set goals_unchanged so the Selector falls through
 			// to ScheduledAnalysisPath instead of dead-ending. Record the durable
