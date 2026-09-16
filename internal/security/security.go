@@ -4,6 +4,7 @@ package security
 
 import (
 	"bytes"
+	"container/list"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -24,18 +25,27 @@ import (
 
 // ─── Rate Limiter ───────────────────────────────────────────────────────────
 
+// maxRateLimitBuckets bounds the per-client bucket map so a flood of distinct
+// keys cannot grow it without limit.
+const maxRateLimitBuckets = 10000
+
 // RateLimiter implements a token bucket rate limiter per client (by IP or API key).
 type RateLimiter struct {
-	mu              sync.Mutex
-	buckets         map[string]*tokenBucket
+	mu      sync.Mutex
+	buckets map[string]*tokenBucket
+	// lru orders buckets by recency of use, most recently used at the front,
+	// so Allow can evict the coldest bucket in O(1) once the map is full.
+	lru             *list.List
 	rate            float64 // tokens per second
 	burst           int     // max burst size
 	cleanupInterval time.Duration
 }
 
 type tokenBucket struct {
+	key      string
 	tokens   float64
 	lastTime time.Time
+	elem     *list.Element // this bucket's position in RateLimiter.lru
 }
 
 // NewRateLimiter creates a rate limiter. rate=tokens/sec, burst=max burst.
@@ -49,6 +59,7 @@ func NewRateLimiter(rate float64, burst int) *RateLimiter {
 func NewRateLimiterWithCleanupInterval(rate float64, burst int, cleanupInterval time.Duration) *RateLimiter {
 	rl := &RateLimiter{
 		buckets:         make(map[string]*tokenBucket),
+		lru:             list.New(),
 		rate:            rate,
 		burst:           burst,
 		cleanupInterval: cleanupInterval,
@@ -64,7 +75,11 @@ func (rl *RateLimiter) cleanup() {
 		rl.mu.Lock()
 		cutoff := time.Now().Add(-30 * time.Minute)
 		maps.DeleteFunc(rl.buckets, func(_ string, b *tokenBucket) bool {
-			return b.lastTime.Before(cutoff)
+			if !b.lastTime.Before(cutoff) {
+				return false
+			}
+			rl.lru.Remove(b.elem)
+			return true
 		})
 		rl.mu.Unlock()
 	}
@@ -79,13 +94,24 @@ func (rl *RateLimiter) Allow(key string) bool {
 	b, ok := rl.buckets[key]
 	now := time.Now()
 	if !ok {
-		if len(rl.buckets) >= 10000 {
-			return false
+		// At capacity, shed the least recently used bucket rather than
+		// rejecting the key: the bound exists to cap memory, and denying
+		// every previously-unseen client would 429 all new arrivals until
+		// cleanup ran — up to the 30-minute idle window.
+		if len(rl.buckets) >= maxRateLimitBuckets {
+			if coldest := rl.lru.Back(); coldest != nil {
+				evicted := coldest.Value.(*tokenBucket)
+				rl.lru.Remove(coldest)
+				delete(rl.buckets, evicted.key)
+			}
 		}
-		rl.buckets[key] = &tokenBucket{tokens: float64(rl.burst) - 1, lastTime: now}
+		b = &tokenBucket{key: key, tokens: float64(rl.burst) - 1, lastTime: now}
+		b.elem = rl.lru.PushFront(b)
+		rl.buckets[key] = b
 		return true
 	}
 
+	rl.lru.MoveToFront(b.elem)
 	elapsed := now.Sub(b.lastTime).Seconds()
 	b.tokens += elapsed * rl.rate
 	if b.tokens > float64(rl.burst) {
