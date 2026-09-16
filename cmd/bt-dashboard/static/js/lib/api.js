@@ -30,33 +30,43 @@ function getCookie(name) {
  */
 async function apiFetch(path, opts = {}, retries = 2) {
   const url = API + path;
-  
-  // Auto-inject CSRF token for state-changing requests
+
+  // Copy headers so callers can reuse options, including Headers instances.
+  const headers = new Headers(opts.headers);
   const method = (opts.method || 'GET').toUpperCase();
-  if (!['GET', 'HEAD', 'OPTIONS'].includes(method) && !opts.headers?.['Idempotency-Key']) retries = 0;
-  if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
-    opts.headers = opts.headers || {};
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+    if (!headers.has('Idempotency-Key')) retries = 0;
     const csrfToken = getCookie('_csrf_token');
-    if (csrfToken) {
-      opts.headers['X-CSRF-Token'] = csrfToken;
-    }
+    if (csrfToken) headers.set('X-CSRF-Token', csrfToken);
   }
 
   for (let attempt = 0; attempt <= retries; attempt++) {
+    let res;
     try {
-      const res = await fetch(url, opts);
-      if (!res.ok) {
-        if (res.status >= 500 && attempt < retries) {
-          await sleep(1000 * (attempt + 1));
-          continue;
-        }
-        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
-      }
-      return await res.json();
+      res = await fetch(url, { ...opts, headers });
     } catch (err) {
-      if (attempt >= retries) throw err;
+      if (err.name === 'AbortError' || opts.signal?.aborted || attempt >= retries) throw err;
       await sleep(1000 * (attempt + 1));
+      continue;
     }
+    if (res.status >= 500 && attempt < retries) {
+      await sleep(1000 * (attempt + 1));
+      continue;
+    }
+    if (!res.ok) {
+      let message = res.statusText;
+      try {
+        const body = await res.json();
+        message = body.error || body.message || message;
+      } catch (_) { /* Non-JSON error responses still retain their HTTP status. */ }
+      const error = new Error(`HTTP ${res.status}: ${message}`);
+      error.status = res.status;
+      if (res.status === 401 && path !== '/login' && path !== '/session') {
+        window.dispatchEvent(new Event('bt:unauthorized'));
+      }
+      throw error;
+    }
+    return res.status === 204 ? null : res.json();
   }
 }
 

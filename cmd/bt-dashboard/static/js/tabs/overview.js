@@ -66,6 +66,7 @@ function renderSystemStatus(data) {
 }
 
 async function pollLiveData() {
+  if (!state.authenticated) return;
   try {
     liveData = await apiFetch('/metrics/live');
     updateOverviewStats(liveData);
