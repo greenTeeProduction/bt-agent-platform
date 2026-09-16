@@ -1206,14 +1206,9 @@ func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboar
 		bb.Result = "## GOAP Superpowers Verification Failed\n\n" + err.Error()
 		return -1
 	}
-	// Auto-clean tracked main-repo state before applying: unstage and reset tracked
-	// files so stale state from interrupted previous runs cannot block apply.
-	// Do NOT clean docs/superpowers/: the current run's durable evidence lives
-	// there and hasBlockingMainRepoDirty already ignores those artifact paths.
-	cleanCtx, cleanCancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cleanCancel()
-	defaultSuperpowersCommandRunner.Run(cleanCtx, run.RepoDir, "bash", "-c",
-		"git reset HEAD 2>/dev/null; git checkout -- . 2>/dev/null; true")
+	// The shared checkout may contain operator edits or another runner's
+	// verified work. Let apply's dirty guard preserve this run as pending_patch;
+	// never reset work whose ownership this cycle cannot establish.
 	if err := applySuperpowersRunToMainRepo(c, defaultSuperpowersCommandRunner, run); err != nil {
 		finishPath := filepath.Join(run.ArtifactDir, "finish.md")
 		_ = os.WriteFile(finishPath, []byte(buildSuperpowersFinishReport(run)), 0o644)

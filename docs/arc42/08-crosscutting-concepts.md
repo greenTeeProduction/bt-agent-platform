@@ -147,6 +147,15 @@ The active repository must satisfy materialization and safe-sync
 preconditions. Worktree isolation does not authorize bypassing failing
 checks or replacing unrelated tracked edits.
 
+Applying a candidate holds a repository-specific, context-cancellable file
+lock in the shared run-artifact store through verification and commit. A
+dirty shared checkout or an expired lock wait preserves the candidate as
+`pending_patch`; the runner never resets staged or unstaged operator/sibling
+work. Lint invocations wait on the linter's shared lock through
+`run.allow-serial-runners` in [the lint configuration](../../.golangci.yml).
+[Landing regressions](../../internal/engine/superpowers_main_preservation_test.go)
+exercise real Git index/worktree preservation and cancellation under contention.
+
 Run phase/evidence persistence allows diagnosis after a failed or interrupted
 verification; some writes remain best-effort (D6). Per-task snapshots and
 explicit apply state allow eligible partial landings/carryover. Use actual

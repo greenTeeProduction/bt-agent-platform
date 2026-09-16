@@ -2,6 +2,8 @@ version: "2"
 run:
   go: 1.26.5
   tests: true
+  # GOAP worktrees and commit hooks share the linter's process lock.
+  allow-serial-runners: true
 linters:
   disable:
     - unused

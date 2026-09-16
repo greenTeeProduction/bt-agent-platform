@@ -2,11 +2,14 @@ package engine
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
 func applySuperpowersRunToMainRepo(ctx context.Context, runner CommandRunner, run *SuperpowersRun) error {
@@ -45,6 +48,16 @@ func applySuperpowersRunToMainRepo(ctx context.Context, runner CommandRunner, ru
 		return err
 	}
 	run.PatchPath = patchPath
+	// A second runner must not pass the clean-checkout check while the first
+	// is applying, verifying or committing. The shared artifact store gives
+	// daemon and MCP processes the same context-cancellable repository lock.
+	release, err := acquireSuperpowersApplyLock(ctx, run.RepoDir)
+	if err != nil {
+		run.ApplyStatus = "pending_patch"
+		_ = writeSuperpowersRunJSON(run)
+		return fmt.Errorf("pending_patch: waiting for repository landing lock: %w\npatch: %s", err, patchPath)
+	}
+	defer release()
 
 	// A bare main repo has no working tree to dirty-check, patch, verify, or
 	// commit in — land the run through its own worktree instead.
@@ -86,6 +99,21 @@ func applySuperpowersRunToMainRepo(ctx context.Context, runner CommandRunner, ru
 		return err
 	}
 	return writeSuperpowersRunJSON(run)
+}
+
+func acquireSuperpowersApplyLock(ctx context.Context, repoDir string) (func(), error) {
+	canonical, err := filepath.Abs(repoDir)
+	if err != nil {
+		return nil, err
+	}
+	if resolved, err := filepath.EvalSymlinks(canonical); err == nil {
+		canonical = resolved
+	}
+	if err := os.MkdirAll(superpowersRunsDir, 0o755); err != nil {
+		return nil, err
+	}
+	key := sha256.Sum256([]byte(canonical))
+	return reliability.AcquireFileLockWithContext(ctx, filepath.Join(superpowersRunsDir, fmt.Sprintf(".apply-%x", key)))
 }
 
 // ffRebaseMaxAttempts bounds the apply-time rebase-then-retry so a fast-moving
