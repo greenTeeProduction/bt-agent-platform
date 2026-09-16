@@ -114,6 +114,14 @@ func (ss *SessionStore) CreateSession(userID string) (string, error) {
 	defer ss.mu.Unlock()
 
 	if len(ss.sessions) >= ss.maxSessions {
+		now := time.Now()
+		for hash, session := range ss.sessions {
+			if now.After(session.ExpiresAt) {
+				delete(ss.sessions, hash)
+			}
+		}
+	}
+	if len(ss.sessions) >= ss.maxSessions {
 		return "", fmt.Errorf("session limit reached: %d sessions", ss.maxSessions)
 	}
 
@@ -136,7 +144,7 @@ func (ss *SessionStore) CreateSession(userID string) (string, error) {
 }
 
 // ValidateSession checks if a raw session token is valid (exists and not expired).
-// Updates LastUsed on successful validation. Returns the Session if valid.
+// Updates LastUsed on successful validation. Returns a detached snapshot if valid.
 func (ss *SessionStore) ValidateSession(token string) (*Session, bool) {
 	hash := sha256Hex(token)
 
@@ -154,7 +162,8 @@ func (ss *SessionStore) ValidateSession(token string) (*Session, bool) {
 	}
 
 	s.LastUsed = now
-	return s, true
+	snapshot := *s
+	return &snapshot, true
 }
 
 // DestroySession removes a session by its raw token.

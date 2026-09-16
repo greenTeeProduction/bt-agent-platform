@@ -1,5 +1,19 @@
 /* === Component Styles — Linear-Inspired === */
 
+[hidden] { display: none !important; }
+
+.login-card {
+  max-width: 420px;
+  margin: 10vh auto;
+  padding: var(--space-5);
+  border: 1px solid var(--border-standard);
+  border-radius: var(--radius-lg);
+}
+
+.login-card form { display: grid; gap: var(--space-3); }
+.login-card p { margin: var(--space-3) 0; }
+#login-error { color: var(--red); }
+
 /* ─── Stat Cards ─── */
 .stat-card {
   background: rgba(255,255,255,0.02);
