@@ -154,6 +154,7 @@ commit/apply evidence before marking a program milestone complete.
 
 Engine tests isolate `BT_SUPERPOWERS_*` settings inherited from a service;
 individual tests declare provider/model/failover inputs with `t.Setenv`.
+Explicitly enabled live-provider smoke tests retain operator configuration.
 Verification failure classification uses the executor's diagnostic, excluding
 subprocess logs: fixture messages about RED passes, quotas or pending patches
 must not refund a failed implementation or mark unfinished work complete.
