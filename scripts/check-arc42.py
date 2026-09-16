@@ -68,9 +68,10 @@ def check(root):
 
     # Local links/anchors, including source evidence and the operator runbook.
     sources = [(arc / name, body) for name, body in docs.items()]
-    runbook = root / "docs/coding-delegation.md"
-    if runbook.exists():
-        sources.append((runbook, runbook.read_text()))
+    for related in ("README.md", "docs/coding-delegation.md"):
+        path = root / related
+        if path.exists():
+            sources.append((path, path.read_text()))
     anchor_cache = {}
     for source, body in sources:
         for match in re.finditer(r"\]\(([^)\n]+)\)", prose(body)):

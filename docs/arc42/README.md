@@ -76,7 +76,7 @@ BT_SKIP_LLM_TESTS=1 go test -short -count=1 ./internal/engine -run Arc42
 
 The drift gate checks required section structure, local Markdown links and
 anchors, package/binary inventory, quality-goal/scenario references, risk IDs,
-and every ADR index/record association. It covers this directory and the
+and every ADR index/record association. It covers this directory, the repository README and the
 linked coding-delegation runbook, not arbitrary prose claims or the entire
 repository's historical plan archive. The Python checker requires Python 3
 standard library only. Regression tests deliberately break references,
