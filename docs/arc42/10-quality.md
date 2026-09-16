@@ -7,25 +7,35 @@ identifies a reproducible check; it is not a production measurement.
 
 ## 10.1 Quality Tree
 
+The project goals are classified using
+[ISO/IEC 25010:2023](https://www.iso.org/standard/78176.html):
+
 ```text
 BT Agent Platform
-├── Q1 Correctness and access control
-│   ├── Valid execution, routing and persisted state: QS5, QS20, QS22, QS23, QS26
+├── Q1 Correctness and access control (functional suitability, security)
+│   ├── Valid execution, routing and persisted state: QS5, QS20, QS22, QS23, QS26, QS37
 │   └── HTTP authentication, bounded abuse controls and exposure: QS27, QS28, QS34
-├── Q2 Evolvability
+├── Q2 Evolvability (maintainability)
 │   ├── Measured adoption and rollback: QS2, QS12, QS24
 │   └── Evidence-directed search: QS25
-├── Q3 Reliability and operability
+├── Q3 Reliability and operability (reliability, performance efficiency)
 │   ├── Recovery, dependency failure and persistence: QS1, QS6, QS7, QS8, QS19, QS32
 │   ├── Responsiveness and detection: QS3, QS4, QS18, QS21, QS35
-│   └── Provider, repository and release readiness: QS29, QS30, QS31
-├── Q4 Personalization and consent
+│   └── Provider, repository and release readiness: QS29, QS30, QS31, QS36
+├── Q4 Personalization and consent (functional suitability, security)
 │   └── Scoped execution, habits, compilation and consent: QS9, QS10, QS11, QS13
-└── Q5 Consistency and reuse
-    └── Shared owners, reusable capabilities and traceable docs: QS14–QS17, QS33
+└── Q5 Consistency and reuse (maintainability)
+    └── Shared owners, reusable capabilities and traceable docs: QS14–QS17, QS33, QS37
 ```
 
+Compatibility, interaction capability, flexibility and safety were considered
+but are deprioritized here: this section sets no separate acceptance targets
+for them.
+
 ## 10.2 Quality Scenarios
+
+**Priority:** Scenarios are architecture-critical unless listed here as
+nice-to-have: QS3, QS10, QS16 and QS25. Priority does not imply achievement.
 
 **Status:** *Tested contract* names automated behavioral evidence, sometimes
 only for one path. *Partial* means implementation covers only part of the
@@ -70,6 +80,8 @@ operator-owned measurement before promotion to an operational guarantee.
 | QS33 | Q5 | A package, binary, section, ADR, quality goal or linked evidence changes. | Documentation checks reject missing inventory entries, broken local links/anchors, duplicate IDs and untraceable goals/scenarios. Review separately verifies behavioral claims. | Automated structural contract: [checker](../../scripts/check-arc42.py), [checker regression tests](../../scripts/test_check_arc42.py), [maintenance](README.md). |
 | QS34 | Q1/Q3 | A service binds to a non-loopback address. | Require credentials where the listener helper applies; operator verifies intended reachability, public routes, firewall and TLS termination from the relevant network. | Partial: [listener tests](../../internal/security/listener_test.go); observed all-interface binds are recorded in §7. Remote isolation/TLS not verified (R25). |
 | QS35 | Q3 | A task exhausts its configured execution budget. | Cooperative nodes stop on cancellation; subprocess workflows obey their separately configured phase/cycle budgets and persist partial evidence. | Partial: [RunTask](../../internal/engine/tree.go), [coding runtime](../../internal/engine/superpowers_task_executor.go). The default 120-second tree context is not a hard process-wide wall-clock guarantee (R30). |
+| QS36 | Q3 | With `BT_SUPERPOWERS_RATE_LIMIT_FAILOVER=true`, runtime preflight encounters a valid loaded Claude or Codex backoff deadline at or before `now`. | In that preflight call, clear each expired provider's shared JSON file, legacy agent-scope blackboard key and ChainState entry before returning inactive; preserve future deadlines for the other provider. If either provider is available, return zero deadline / inactive and permit a runtime attempt. | Tested contract: `TestDelegationPreflightBackoff_ClearsExpiredState` covers both primary selections, expired primary/alternate/both, a missing primary and exact-deadline boundaries; `TestRunSuperpowersRuntime_ExpiredBackoffExecutes` pins failover on with Claude and verifies runner invocation and stale-state removal ([regressions](../../internal/engine/actions_superpowers_prod_test.go)). This establishes half-open eligibility, not provider success or recovery latency; live readiness remains R27 in [§11](11-risks-debt.md). Implementation: [§8.19](08-crosscutting-concepts.md#819-coding-provider-policy). |
+| QS37 | Q1/Q5 | A maintainer adds or changes an `AllDomainTrees()` entry selected through `domain:<name>`, including nested names such as `domain:arc42:section1`. | Every registered entry must resolve to a nonempty tree with the registered root, have a nonblank smoke task, build with the mock LLM, and return the same nonblank description as its canonical name. Every Condition must have a description and at least one guard edge with nonblank label/condition; unregistered `domain:` IDs return no description. Proposed change-cost target: add an existing-node tree's registration, metadata and smoke fixture within one developer-day. | Tested structural contract: `TestDomainPrefixedTreesHaveSmokeDescriptionsAndConditionCoverage` in [domain tests](../../internal/domains/domains_test.go), alongside the existing smoke and bare-ID resolver guards. Registration drives enumeration; condition coverage here checks metadata, not execution of every branch or end-to-end success. The effort target is unmeasured. Description/resolver ownership: [§5.1 catalog interfaces](05-building-blocks.md#catalog-and-mcp-interfaces). |
 
 The platform owner owns acceptance of targets; maintainers own regression
 evidence and operators own deployed measurements. Record workload, commit,

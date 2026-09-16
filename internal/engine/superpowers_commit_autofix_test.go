@@ -101,6 +101,19 @@ func TestCommitAutoFix_DeterministicGofmt(t *testing.T) {
 	}
 }
 
+func TestApplyDeterministicCommitFixesSerializesLint(t *testing.T) {
+	runner := &autofixScriptRunner{t: t, steps: []autofixScriptStep{
+		{match: "golangci-lint run --fix --allow-serial-runners ./..."},
+	}}
+	applied := applyDeterministicCommitFixes(context.Background(), runner, t.TempDir(), hookFailureClass{Lint: true})
+	if runner.i != len(runner.steps) {
+		t.Fatalf("lint fixer ran %d commands, want %d", runner.i, len(runner.steps))
+	}
+	if len(applied) != 1 || applied[0] != "lint-fix" {
+		t.Fatalf("applied fixes = %v, want [lint-fix]", applied)
+	}
+}
+
 // TestCommitAutoFix_ClaudeFixesTest: a failing-test rejection triggers a Claude
 // repair pass, and the retry commit lands.
 func TestCommitAutoFix_ClaudeFixesTest(t *testing.T) {

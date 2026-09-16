@@ -127,6 +127,33 @@ for a rate limit; it does not switch on authentication/model errors.
 See [coding delegation](../coding-delegation.md) and
 [§8.19](08-crosscutting-concepts.md#819-coding-provider-policy).
 
+**Implemented excerpt: resuming after a quota pause.**
+
+1. On an existing-plan run, `internal/engine` calls
+   `delegationPreflightBackoff` before creating a worktree or starting the
+   coding-attempt budget. With `BT_SUPERPOWERS_RATE_LIMIT_FAILOVER=true`,
+   preflight checks both the configured provider and its alternate.
+2. For each provider whose latest valid deadline is at or before now,
+   preflight clears its shared JSON file, legacy agent-scoped blackboard
+   key and run-local `ChainState` entry. It checks both providers before
+   returning inactive, preserving any still-active provider window.
+3. If either provider is eligible, execution proceeds to the coding runner,
+   which skips providers still in backoff and permits an eligible attempt
+   (half-open recovery). Cancellation or deadline expiry stops failover.
+   If both windows remain active, the engine returns
+   `goap_fusion_rate_limited`, preserves the plan and reports the earlier
+   deadline for a later cycle.
+
+**Source evidence:** [runtime caller](../../internal/engine/actions_superpowers_prod.go),
+[failover preflight/runner](../../internal/engine/superpowers_failover.go),
+[backoff state cleanup](../../internal/engine/goap_claude_backoff.go).
+**Tested contract:** `TestRunSuperpowersRuntime_ExpiredBackoffExecutes` and
+`TestDelegationPreflightBackoff_ClearsExpiredState` in the
+[runtime tests](../../internal/engine/actions_superpowers_prod_test.go) cover
+resumed provider invocation and cleanup of all three state locations for
+both provider orders, including equality at the deadline and preservation
+of active windows.
+
 **Budget and evidence:** the existing-plan Superpowers runtime has a
 90-minute attempt budget; scheduled jobs have their own configured timeout.
 Phase actions have additional command budgets. Persisted `run.json`,
@@ -155,11 +182,14 @@ success metric.
 1. A local wrapper may recover a panic into an error or log it.
    `SafeGo` alone does not enqueue work, open a breaker or restart the
    failed goroutine.
-2. The caller classifies the result and selects a retry policy. Policies
-   differ; there is no universal “three retries at 1, 2, 4, 8 seconds” rule.
-3. The scheduler records genuine failures in the per-agent breaker and
-   preserves exhausted work in the DLQ. Quota carryovers and documented
-   no-code outcomes follow their separate classifications.
+2. For scheduled runs, the callback passed to `globalSched.Start` in
+   [`cmd/bt-agent/main.go`](../../cmd/bt-agent/main.go) wires
+   `schedulerRetryPolicy` through `ExecuteContext` and enqueues failures
+   in the DLQ when that policy terminates with an error. GOAP cycles get
+   one attempt per scheduled slot; other agents use configured retries.
+3. `internal/agent` records genuine failures in the per-agent breaker.
+   Quota carryovers and healthy no-code outcomes terminate the callback
+   without retry or DLQ insertion.
 4. An operator can request DLQ replay. The daemon reloads shared on-disk
    replay state before scanning so dashboard/MCP requests are visible.
 5. The execution owner retries the queued item and records its new outcome.

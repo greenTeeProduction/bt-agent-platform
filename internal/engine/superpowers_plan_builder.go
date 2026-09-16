@@ -210,7 +210,9 @@ func changedPackagesLintCommand(changedFiles []string) string {
 	for i, p := range pkgs {
 		pkgs[i] = p + "/..."
 	}
-	return fmt.Sprintf("PATH=/usr/local/go/bin:$PATH %s run %s", superpowersLintBin, strings.Join(pkgs, " "))
+	// Separate worktrees share golangci-lint's lock. Wait for an active run
+	// so lock contention does not get reported as a source-code finding.
+	return fmt.Sprintf("PATH=/usr/local/go/bin:$PATH %s run --allow-serial-runners %s", superpowersLintBin, strings.Join(pkgs, " "))
 }
 
 // changedPackagesTestCommand builds the verification command that scales

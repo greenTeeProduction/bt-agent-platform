@@ -100,10 +100,17 @@ Built-in domain inventories are derived from
 [`domains/trees.go`](../../internal/domains/trees.go) and
 [`tree_resolver.go`](../../internal/domains/tree_resolver.go). Curated,
 kanban/Hermes and resolver-only trees have distinct registries;
-`DescriptionFor` is the shared description lookup. Finance/research/core
-trees and generated user trees also participate through their respective
-registrations. The dashboard overlays persisted runtime metadata on this
-catalog; it is not a separate hardcoded list.
+`DescriptionFor` is the shared description lookup. Its `domain:<name>` IDs
+use the canonical description only for entries in `AllDomainTrees`,
+including qualified names such as `domain:arc42:section1`.
+Finance/research/core trees and generated user trees also participate through
+their respective registrations. The dashboard overlays persisted runtime
+metadata on this catalog; it is not a separate hardcoded list.
+
+**Tested contract:** the [domain catalog coverage test](../../internal/domains/domains_test.go)
+checks tree construction, canonical description parity and condition/guard-edge
+descriptions for every registered `domain:` ID, and rejects description lookup
+for unregistered names in that namespace.
 
 MCP `tools/list` reflects each server's actual registrations. The agent
 surface includes execution, trees, agents, blocks, scoped blackboards, HITL,

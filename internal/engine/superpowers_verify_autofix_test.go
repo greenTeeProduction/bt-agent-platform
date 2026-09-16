@@ -93,12 +93,12 @@ func TestVerifySuperpowersRunAutofixesLintOnlyFailure(t *testing.T) {
 		{match: "go test ./internal/domains", res: CommandResult{}},
 		{match: "go build", res: CommandResult{}},
 		{match: "go test ./internal/evolution", res: CommandResult{}},
-		{match: "golangci-lint run ./internal/evolution/...", res: CommandResult{
+		{match: "golangci-lint run --allow-serial-runners ./internal/evolution/...", res: CommandResult{
 			Err:    errors.New("exit status 1"),
 			Output: "map_elites_test.go:368:13: QF1008: could remove embedded field \"Population\" from selector (staticcheck)",
 		}},
-		{match: "golangci-lint run --fix ./internal/evolution/...", res: CommandResult{}},
-		{match: "golangci-lint run ./internal/evolution/...", res: CommandResult{Output: "0 issues."}},
+		{match: "golangci-lint run --fix --allow-serial-runners ./internal/evolution/...", res: CommandResult{}},
+		{match: "golangci-lint run --allow-serial-runners ./internal/evolution/...", res: CommandResult{Output: "0 issues."}},
 	}}
 	withAutofixVerifyEnv(t, runner)
 
@@ -127,15 +127,15 @@ func TestVerifySuperpowersRunLintAutofixFailureIsFinal(t *testing.T) {
 		{match: "go test ./internal/domains", res: CommandResult{}},
 		{match: "go build", res: CommandResult{}},
 		{match: "go test ./internal/evolution", res: CommandResult{}},
-		{match: "golangci-lint run ./internal/evolution/...", res: CommandResult{
+		{match: "golangci-lint run --allow-serial-runners ./internal/evolution/...", res: CommandResult{
 			Err: errors.New("exit status 1"), Output: "foo.go:1:1: SA4006: unused value (staticcheck)"}},
-		{match: "golangci-lint run --fix ./internal/evolution/...", res: CommandResult{}},
-		{match: "golangci-lint run ./internal/evolution/...", res: CommandResult{
+		{match: "golangci-lint run --fix --allow-serial-runners ./internal/evolution/...", res: CommandResult{}},
+		{match: "golangci-lint run --allow-serial-runners ./internal/evolution/...", res: CommandResult{
 			Err: errors.New("exit status 1"), Output: "foo.go:1:1: SA4006: unused value (staticcheck)"}},
 		// Claude self-correct pass (fakeClaude, no command-runner step), then
 		// re-fix + re-lint, still failing.
-		{match: "golangci-lint run --fix ./internal/evolution/...", res: CommandResult{}},
-		{match: "golangci-lint run ./internal/evolution/...", res: CommandResult{
+		{match: "golangci-lint run --fix --allow-serial-runners ./internal/evolution/...", res: CommandResult{}},
+		{match: "golangci-lint run --allow-serial-runners ./internal/evolution/...", res: CommandResult{
 			Err: errors.New("exit status 1"), Output: "foo.go:1:1: SA4006: unused value (staticcheck)"}},
 	}}
 	withAutofixVerifyEnv(t, runner)
@@ -164,17 +164,17 @@ func TestVerifySuperpowersRunClaudeRepairsUnfixableLint(t *testing.T) {
 		{match: "go test ./internal/domains", res: CommandResult{}},
 		{match: "go build", res: CommandResult{}},
 		{match: "go test ./internal/evolution", res: CommandResult{}},
-		{match: "golangci-lint run ./internal/evolution/...", res: CommandResult{
+		{match: "golangci-lint run --allow-serial-runners ./internal/evolution/...", res: CommandResult{
 			Err:    errors.New("exit status 1"),
 			Output: "map_elites.go:12:2: Error return value is not checked (errcheck)"}},
-		{match: "golangci-lint run --fix ./internal/evolution/...", res: CommandResult{}},
-		{match: "golangci-lint run ./internal/evolution/...", res: CommandResult{
+		{match: "golangci-lint run --fix --allow-serial-runners ./internal/evolution/...", res: CommandResult{}},
+		{match: "golangci-lint run --allow-serial-runners ./internal/evolution/...", res: CommandResult{
 			Err:    errors.New("exit status 1"),
 			Output: "map_elites.go:12:2: Error return value is not checked (errcheck)"}},
 		// Claude self-correct pass (fakeClaude, no command-runner step), then
 		// re-fix + re-lint, now clean.
-		{match: "golangci-lint run --fix ./internal/evolution/...", res: CommandResult{}},
-		{match: "golangci-lint run ./internal/evolution/...", res: CommandResult{Output: "0 issues."}},
+		{match: "golangci-lint run --fix --allow-serial-runners ./internal/evolution/...", res: CommandResult{}},
+		{match: "golangci-lint run --allow-serial-runners ./internal/evolution/...", res: CommandResult{Output: "0 issues."}},
 	}}
 	withAutofixVerifyEnv(t, runner)
 	claude := &fakeClaude{output: "handled the unchecked error"}
@@ -207,15 +207,15 @@ func TestVerifySuperpowersRunClaudeRepairStillFailsIsFinal(t *testing.T) {
 		{match: "go test ./internal/domains", res: CommandResult{}},
 		{match: "go build", res: CommandResult{}},
 		{match: "go test ./internal/evolution", res: CommandResult{}},
-		{match: "golangci-lint run ./internal/evolution/...", res: CommandResult{
+		{match: "golangci-lint run --allow-serial-runners ./internal/evolution/...", res: CommandResult{
 			Err:    errors.New("exit status 1"),
 			Output: "map_elites.go:12:2: Error return value is not checked (errcheck)"}},
-		{match: "golangci-lint run --fix ./internal/evolution/...", res: CommandResult{}},
-		{match: "golangci-lint run ./internal/evolution/...", res: CommandResult{
+		{match: "golangci-lint run --fix --allow-serial-runners ./internal/evolution/...", res: CommandResult{}},
+		{match: "golangci-lint run --allow-serial-runners ./internal/evolution/...", res: CommandResult{
 			Err:    errors.New("exit status 1"),
 			Output: "map_elites.go:12:2: Error return value is not checked (errcheck)"}},
-		{match: "golangci-lint run --fix ./internal/evolution/...", res: CommandResult{}},
-		{match: "golangci-lint run ./internal/evolution/...", res: CommandResult{
+		{match: "golangci-lint run --fix --allow-serial-runners ./internal/evolution/...", res: CommandResult{}},
+		{match: "golangci-lint run --allow-serial-runners ./internal/evolution/...", res: CommandResult{
 			Err:    errors.New("exit status 1"),
 			Output: "map_elites.go:12:2: Error return value is not checked (errcheck)"}},
 	}}
@@ -242,11 +242,11 @@ func TestVerifySuperpowersRunLintRepairSkippedWhenRateLimited(t *testing.T) {
 		{match: "go test ./internal/domains", res: CommandResult{}},
 		{match: "go build", res: CommandResult{}},
 		{match: "go test ./internal/evolution", res: CommandResult{}},
-		{match: "golangci-lint run ./internal/evolution/...", res: CommandResult{
+		{match: "golangci-lint run --allow-serial-runners ./internal/evolution/...", res: CommandResult{
 			Err:    errors.New("exit status 1"),
 			Output: "map_elites.go:12:2: Error return value is not checked (errcheck)"}},
-		{match: "golangci-lint run --fix ./internal/evolution/...", res: CommandResult{}},
-		{match: "golangci-lint run ./internal/evolution/...", res: CommandResult{
+		{match: "golangci-lint run --fix --allow-serial-runners ./internal/evolution/...", res: CommandResult{}},
+		{match: "golangci-lint run --allow-serial-runners ./internal/evolution/...", res: CommandResult{
 			Err:    errors.New("exit status 1"),
 			Output: "map_elites.go:12:2: Error return value is not checked (errcheck)"}},
 	}}
@@ -275,11 +275,11 @@ func TestVerifyLintFixMaxAttemptsZeroDisablesClaude(t *testing.T) {
 		{match: "go test ./internal/domains", res: CommandResult{}},
 		{match: "go build", res: CommandResult{}},
 		{match: "go test ./internal/evolution", res: CommandResult{}},
-		{match: "golangci-lint run ./internal/evolution/...", res: CommandResult{
+		{match: "golangci-lint run --allow-serial-runners ./internal/evolution/...", res: CommandResult{
 			Err:    errors.New("exit status 1"),
 			Output: "map_elites.go:12:2: Error return value is not checked (errcheck)"}},
-		{match: "golangci-lint run --fix ./internal/evolution/...", res: CommandResult{}},
-		{match: "golangci-lint run ./internal/evolution/...", res: CommandResult{
+		{match: "golangci-lint run --fix --allow-serial-runners ./internal/evolution/...", res: CommandResult{}},
+		{match: "golangci-lint run --allow-serial-runners ./internal/evolution/...", res: CommandResult{
 			Err:    errors.New("exit status 1"),
 			Output: "map_elites.go:12:2: Error return value is not checked (errcheck)"}},
 	}}
@@ -323,7 +323,7 @@ func TestChangedPackagesLintFixCommandInsertsFixFlag(t *testing.T) {
 	t.Cleanup(func() { superpowersLintBin = oldLint })
 
 	cmd := changedPackagesLintFixCommand([]string{"internal/evolution/map_elites.go"})
-	if !strings.Contains(cmd, "golangci-lint run --fix ./internal/evolution/...") {
+	if !strings.Contains(cmd, "golangci-lint run --fix --allow-serial-runners ./internal/evolution/...") {
 		t.Fatalf("fix command = %q, want run --fix on the changed packages", cmd)
 	}
 }

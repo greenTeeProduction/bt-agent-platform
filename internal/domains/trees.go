@@ -1148,7 +1148,17 @@ var ResolverIDAliases = map[string]string{
 // registry spelling ("kanban:refiner" vs "kanban_refiner") describes as the one
 // tree it is. The alias hop is last precisely so it can only turn a miss into a
 // hit: a name any map answers for never reaches it.
+//
+// A domain:<name> ID uses the canonical name's description only when that name
+// belongs to AllDomainTrees, matching ResolveTreeID's domain namespace. Strip
+// just one prefix so qualified names such as arc42:section1 stay intact.
 func DescriptionFor(name string) (string, bool) {
+	if canonical, ok := strings.CutPrefix(name, "domain:"); ok {
+		if AllDomainTrees()[canonical] == nil {
+			return "", false
+		}
+		return describeExactName(canonical)
+	}
 	if desc, ok := describeExactName(name); ok {
 		return desc, true
 	}

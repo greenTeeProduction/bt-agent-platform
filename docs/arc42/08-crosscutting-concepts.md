@@ -3,6 +3,9 @@
 These are current shared mechanisms and their boundaries. Historical
 rationales remain in [§9](09-decisions.md); runtime examples are in
 [§6](06-runtime-view.md), acceptance evidence in [§10](10-quality.md).
+The shared tree/blackboard model is described in
+[§5.2](05-building-blocks.md#52-core-engine); canonical terms are in
+[§12](12-glossary.md).
 
 ## 8.1 Behavior Tree Execution Model
 
@@ -202,8 +205,20 @@ description cannot substitute for an executable definition.
 
 ## 8.14 Fleet-Wide Node Description Coverage
 
-Domain registries define the coverable tree set; `DescriptionFor` resolves
-curated, non-registry and resolver-only descriptions plus supported aliases.
+Domain registries define the coverable tree set;
+[`DescriptionFor`](../../internal/domains/trees.go) supplies
+[catalog consumers](05-building-blocks.md#catalog-and-mcp-interfaces) with
+curated, non-registry, resolver-only and external-package descriptions plus
+supported aliases. For `domain:<name>`, it strips exactly one prefix and
+requires `<name>` in `AllDomainTrees`. This preserves qualified names such
+as `domain:arc42:section1` without advertising unregistered domain IDs.
+
+**Tested contract:**
+[`TestDomainPrefixedTreesHaveSmokeDescriptionsAndConditionCoverage`](../../internal/domains/domains_test.go)
+derives IDs from the registry and checks resolver identity, smoke-task
+availability, sandboxed mock `BuildTree` construction, canonical-description
+parity and descriptions on Condition nodes and guard edges. It also rejects
+description lookup for unregistered domain IDs.
 Registry/AST-derived tests catch newly reachable trees omitted from coverage
 (ADR-250/251/255/258). Typed guard edges are machine data; node descriptions
 are explanatory prose. Both matter, and one does not establish the other.
@@ -271,9 +286,11 @@ wiring is authoritative.
 Decision: [ADR-259](09-decisions.md#adr-259).
 
 [`superpowers_provider.go`](../../internal/engine/superpowers_provider.go)
-is the shared implementation/review/PR-repair selector. Unset provider means
-Claude; invalid provider values fail. Codex's source default is an exact
-model pin, while explicit `auto`/`default`/`none` omits its model flag.
+is the shared implementation/review/PR-repair selector for the
+[code-improvement building blocks](05-building-blocks.md#57-research-and-code-improvement).
+Unset provider means Claude; invalid provider values fail. Codex's source
+default is an exact model pin, while explicit `auto`/`default`/`none` omits
+its model flag.
 Model entitlements must be checked with the account used by the service.
 
 Read-only review pins restrictive tools or a read-only sandbox even if an
@@ -288,6 +305,22 @@ unsupported models. If both providers are cooling down, preserve the
 earliest eligible retry time. Details and deployment precedence are in
 [coding-delegation.md](../coding-delegation.md), and QS29–QS30 test the
 contract.
+
+[`delegationPreflightBackoff`](../../internal/engine/superpowers_failover.go)
+enforces half-open eligibility: with failover enabled it examines both
+providers before returning inactive. For each provider whose latest valid
+deadline is at or before `now`, it calls
+[`clearDelegationBackoffState`](../../internal/engine/goap_claude_backoff.go)
+to remove the shared JSON file, legacy agent-scope blackboard entry and
+run-local `ChainState` key. Future deadlines remain active. With failover
+disabled, `delegationBackoffActive` applies the same cleanup to the primary.
+
+**Tested contract:** `TestDelegationPreflightBackoff_ClearsExpiredState` in
+the [runtime regression tests](../../internal/engine/actions_superpowers_prod_test.go)
+covers both provider orderings, deadlines equal to `now`, a missing primary
+and preservation of future state. `TestRunSuperpowersRuntime_ExpiredBackoffExecutes`
+pins failover on with Claude as primary and verifies that an expired window
+is cleared while execution proceeds.
 
 ## 8.20 Architecture Documentation Lifecycle
 
