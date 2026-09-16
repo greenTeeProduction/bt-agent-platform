@@ -48,6 +48,53 @@ func TestRateLimiter_PerClientIsolation(t *testing.T) {
 	}
 }
 
+// TestRateLimiter_AtCapacityAdmitsNewClient is the regression test for the
+// hard 10,000-bucket cap in Allow: once the bucket map was full, any key
+// without an existing bucket was rejected outright. Established clients kept
+// their buckets and passed, but every previously-unseen client got a 429 until
+// cleanup() ran — every 10 minutes in production, and only evicting buckets
+// idle for more than 30 minutes — so a filled map locked out all new clients
+// for up to ~30 minutes instead of shedding cold entries. The cap must stay
+// memory-safe by evicting the least-recently-used bucket, not by denying
+// service to new arrivals.
+func TestRateLimiter_AtCapacityAdmitsNewClient(t *testing.T) {
+	const maxBuckets = 10000
+
+	// Generous burst so no key is ever denied for lack of tokens — the only
+	// thing under test here is the bucket-map capacity behaviour.
+	rl := NewRateLimiter(1, 100)
+
+	for i := range maxBuckets {
+		if !rl.Allow(fmt.Sprintf("client-%d", i)) {
+			t.Fatalf("filling buckets: client-%d should be allowed (burst not exhausted)", i)
+		}
+	}
+
+	// Touch client-0 again so it is unambiguously the most recently used
+	// bucket: eviction must shed a cold entry, not an actively-used client.
+	if !rl.Allow("client-0") {
+		t.Fatal("client-0 should still be allowed (burst not exhausted)")
+	}
+
+	if !rl.Allow("fresh-client") {
+		t.Error("a previously-unseen client must be admitted while the bucket map is at capacity: " +
+			"the cap should evict the least-recently-used bucket, not 429 every new client")
+	}
+
+	rl.mu.Lock()
+	n := len(rl.buckets)
+	_, hotPresent := rl.buckets["client-0"]
+	rl.mu.Unlock()
+
+	if n > maxBuckets {
+		t.Errorf("bucket map must stay bounded at %d entries, got %d", maxBuckets, n)
+	}
+	if !hotPresent {
+		t.Error("eviction dropped the most recently used bucket (client-0); " +
+			"the least recently used bucket should be evicted instead")
+	}
+}
+
 func TestRateLimitMiddleware(t *testing.T) {
 	rl := NewRateLimiter(100, 100)
 	handler := RateLimitMiddleware(rl, nil)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
