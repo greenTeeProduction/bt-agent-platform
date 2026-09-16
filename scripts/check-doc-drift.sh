@@ -6,7 +6,7 @@
 # 2. GETTING_STARTED.md binary list matches actual cmd/ directories
 # 3. TUTORIAL.md commands reference existing files and binaries
 # 4. TROUBLESHOOTING.md references existing tool commands
-# 5. arc42 section files: presence, required headings, footers, ADR log, README paths
+# 5. arc42 sections, local evidence links, inventories, goals/scenarios, ADR index
 # 6. VIDEO_WALKTHROUGH.md commands work (syntax check)
 #
 # Returns: number of drift issues found (0 = clean)
@@ -300,6 +300,18 @@ for p in $README_PATHS; do
         ERRORS=$((ERRORS + 1))
     fi
 done
+# 5g. Source-derived inventories, local evidence links, and stable-ID traceability
+if ! command -v python3 >/dev/null 2>&1; then
+    red "  arc42 drift: python3 is required for reference/traceability checks"
+    ERRORS=$((ERRORS + 1))
+else
+    if ! python3 -B "$ROOT/scripts/test_check_arc42.py"; then
+        ERRORS=$((ERRORS + 1))
+    fi
+    if ! python3 -B "$ROOT/scripts/check-arc42.py" --root "$ROOT"; then
+        ERRORS=$((ERRORS + 1))
+    fi
+fi
 if [ "$ERRORS" -eq "$ARC42_ERRORS_BEFORE" ]; then
     green "  arc42 sections, ADR log, and README paths are consistent"
 fi
@@ -359,7 +371,7 @@ if [ "$WARNINGS" -gt 0 ]; then
     yellow "  $WARNINGS warning(s) found"
 fi
 if [ "$ERRORS" -eq 0 ] && [ "$WARNINGS" -eq 0 ]; then
-    green "  ✓ Documentation is fully in sync with codebase"
+    green "  ✓ Documentation structure and references pass; behavioral claims require evidence review"
 fi
 
 echo

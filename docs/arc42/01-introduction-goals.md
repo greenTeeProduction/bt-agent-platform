@@ -2,101 +2,68 @@
 
 ## 1.1 Requirements Overview
 
-go-bt-evolve is a Go behavior-tree agent platform: it runs AI agent workflows
-as evolvable, git-versioned behavior trees, exposes them to LLM operators
-through MCP servers, and improves both the trees and its own codebase
-autonomously over time.
+The BT Agent Platform (`go-bt-evolve`) executes AI workflows as serializable
+behavior trees. Operators invoke them through MCP, the dashboard, A2A, or
+scheduled agents. The platform can generate and evolve trees and run a
+separate research-to-code improvement pipeline.
 
-**Business goals**
+**Business goals:** automate recurring development and operations work;
+retain reviewable execution and change evidence; improve workflows without
+silently accepting regressions; control the cost of local and metered model
+calls. “Self-improving” describes a capability, not a promise that each run
+lands a change. Model availability, quotas, verification and repository
+preconditions can prevent implementation ([§6.4](06-runtime-view.md#64-self-improvement-cycle-goap-fusion-loop)).
 
-- Automate recurring development and operations work (code review, CI,
-  research, documentation sync) as auditable, git-versioned behavior trees
-  rather than ad-hoc scripts.
-- Make the platform self-improving: an unattended loop researches, plans,
-  implements, verifies, and lands its own changes.
-- Operate at near-zero cost: local LLM first (Ollama), cheap escalation
-  (DeepSeek), and quota economies for metered services (NotebookLM).
+| Requirement | Essential behavior | Architecture/evidence |
+|---|---|---|
+| FR1 | Build, validate and execute registered or persisted behavior trees; report a terminal outcome or an explicit approval/defer state. | [Engine](05-building-blocks.md#52-core-engine), [task runtime](06-runtime-view.md#61-task-execution-scenario) |
+| FR2 | Run named agents on demand or on a persisted schedule; record history and retain failed work for inspection/replay. | [Agent service](05-building-blocks.md#51-whitebox-overall-system), [recovery](06-runtime-view.md#65-error-recovery) |
+| FR3 | Research a change, create an isolated implementation worktree, collect RED/GREEN and verification evidence, and land only eligible changes. | [GOAP cycle](06-runtime-view.md#64-self-improvement-cycle-goap-fusion-loop), [delegation](../coding-delegation.md) |
+| FR4 | Propose tree improvements from observed execution and evaluate them before adoption; retain rollback evidence. | [Evolution](05-building-blocks.md#53-evolution-engine), [remaining gate differences](11-risks-debt.md) |
+| FR5 | Store per-user profiles/goals/trees, compile plans into executable trees, require approval for tracked automations, and use explicit feedback in evolution. | [Personalization](05-building-blocks.md#56-personalization-and-generated-trees), ADR-133 |
+| FR6 | Expose authenticated operator controls and observable build/run state without treating the dashboard as an end-user identity service. | [Security](08-crosscutting-concepts.md#818-security-and-trust-boundaries), [deployment](07-deployment.md) |
 
-**Essential capabilities** (detailed inventories live in [§5 Building Block View](05-building-blocks.md)):
+The source registries, rather than copied counts, define the current node,
+tree, package and MCP-tool inventories ([§5](05-building-blocks.md)). The
+dashboard includes Overview, ThinkTank, Company, Tasks, Tree View, Evolution,
+Agents, MindMap, Workflows, Scalability and DoorMate; navigation is defined by
+[`static/index.html`](../../cmd/bt-dashboard/static/index.html).
 
-- **BT Execution Engine** — builds and executes behavior trees from 35 node
-  types (composites, leaves, decorators, planning) backed by ~570 registered
-  engine actions/conditions.
-- **Tree Catalog** — ~75 built-in trees: domain (38), finance (10),
-  research (2), startup roles (6), thinktank (3), plus kanban, evolution,
-  composed-block, and core trees.
-- **Autonomous Self-Improvement Loop** — the scheduled goap-fusion daemon
-  researches, plans, implements, verifies, lands, and syncs this
-  documentation — unattended.
-- **Research Memory** — a content-hash-deduplicating knowledge store
-  (`~/.go-bt-evolve/research/knowledge.json`) records every finding, NotebookLM
-  answer, and implemented goal; a program store (`programs.json`) persists
-  multi-cycle change programs executed one milestone per cycle.
-- **3 MCP Servers** — bt-agent (79 tools), bt-evaluator (5 tools),
-  bt-langagent (3 tools), all via JSON-RPC 2.0 over stdio.
-- **Evolution Engine** — seven evolution algorithms: Stockfish-adapted mutation
-  ordering, MCTS-guided structural search (competing in the same scored
-  mutation contest as the heuristic ordering), Pareto multi-objective front,
-  MAP-Elites quality diversity, Island Model with migration, Q-Learning
-  epsilon-greedy, and Expert Knowledge.
-- **Agent Platform & Observability** — YAML-defined agents with registry,
-  scheduler, circuit breakers, dead letter queue, A2A (Agent-to-Agent)
-  protocol, memory store, and webhook publishing; dashboard on :9800 with
-  8 tabs (Overview, ThinkTank, Company, Tasks, Tree View, Evolution, Agents,
-  MindMap).
-- **Knowledge Graph & Factory** — semantic index of all trees with embeddings,
-  capabilities, and cross-tree relationships for discovery and auto-creation;
-  two factory layers: `internal/factory` compiles SKILL.md files into
-  executable trees, `knowledge.Factory` breeds trees from parent templates
-  and archetypes.
-
-### 1.1a Target Vision — Personalized Self-Evolving Agents (Roadmap)
-
-The platform is evolving from a *pre-authored tree catalog with mutation-based
-evolution* into a system where a **personalized agent** grows alongside its user
-(see [the personalization plan](../plans/2026-07-08-personalized-self-evolving-agents.md)):
-
-- **Persona layer** — per-user profile, preferences, interaction log, and habit
-  mining under `~/.go-bt-evolve/users/<user>/`.
-- **Goal Factory** — user intent and mined recurring patterns become first-class
-  GOAP goals in a persistent per-user goal queue.
-- **Tree Factory v2** — GOAP plans are compiled into persistent, validated,
-  evolvable behavior trees (plan→BT compiler); crossover uses real parent tree
-  structures.
-- **Automatic GOAP-BT creation** — while collaborating with the user, the agent
-  detects repeatedly successful plans and proposes compiled automations through
-  HITL approval, then schedules them as YAML agents.
-- **Self-evolution from user signal** — user feedback becomes a fitness dimension;
-  per-user gardener registries and experience banks evolve personal trees under
-  the existing quality-gate/rollback safety rails.
-
-Closing loop: `observe → goal → plan → tree → run → reflect → evolve`.
+**Implemented versus intended:** ADR-133's core personalization phases are
+implemented. Personalization is still limited by the quality of observed
+feedback, provider output and isolation at each caller. Implicit-feedback
+learning and adoption-rate targets are not established production guarantees.
+The [personalization plan](../plans/2026-07-08-personalized-self-evolving-agents.md)
+is historical delivery context; current behavior is in §§5–8 and remaining
+work in [§11](11-risks-debt.md).
 
 ## 1.2 Quality Goals
 
-| # | Quality Goal | Motivation |
-|---|---|---|
-| Q1 | **Correctness** | Trees must route correctly through PreGate→StrategyRouter→OutcomeSelector. All registered engine actions/conditions (§1.1) must register and invoke properly. ChainAction nodes must produce valid LLM output. |
-| Q2 | **Evolvability** | The platform must improve over time. The seven evolution algorithms (§1.1) drive mutation and selection. Git-versioned trees enable rollback. Benchmarks gate acceptance. |
-| Q3 | **Reliability** | Panic recovery (SafeGo), circuit breakers (3-state), retry with exponential backoff (full jitter), dead letter queue, and output quality validation ensure the platform degrades gracefully rather than failing silently. |
-| Q4 | **Personalization & Self-Growth** | The agent must adapt to its user: observe interactions, derive goals, generate its own GOAP behavior trees, and improve them from user feedback. Every generated tree must be executable (resolver-visible), validated, and evolvable. New automations require HITL approval. |
-| Q5 | **Consistency & Reuse** | One canonical implementation per concept: no duplicated Go functionality across packages and daemons (shared concerns like outcome classification, retry, persistence have exactly one owner package), no semantically duplicate trees in the catalog, no near-copy actions in the registry. New features must fit the framework, not a single tree — capabilities land as engine actions, decorators, or composed blocks registered in the knowledge graph so any tree can reuse them, and project conventions apply uniformly across engine, daemons, and MCP tools. Detected duplication seeds a consolidation program. |
+Stable goal IDs connect strategy (§4), acceptance scenarios (§10), and risks
+(§11). The order below expresses architectural importance; numeric service
+targets without measurements remain targets.
 
-Detailed quality scenarios refining these goals live in
-[§10 Quality Requirements](10-quality.md); the solution approaches that
-achieve them are mapped in [§4 Solution Strategy](04-solution-strategy.md).
+| # | Quality Goal | Scenario / acceptance criterion |
+|---|---|---|
+| Q1 | **Correctness and access control** | A valid tree runs the intended actions; malformed state cannot bypass validation. A protected HTTP request without valid credentials is rejected before execution. See QS5, QS20, QS22, QS26–QS28. |
+| Q2 | **Evolvability** | A candidate is adopted only through its documented acceptance path; failed gates leave or restore a usable tree. Different paths and remaining gaps are explicit. See QS2, QS12, QS24–QS25 and R23. |
+| Q3 | **Reliability and operability** | A failed, deferred or analysis-only cycle has a distinguishable outcome and evidence. Operators can compare running build identity with committed source and recover after restart. See QS1, QS6–QS8, QS19, QS21, QS29–QS32. |
+| Q4 | **Personalization and consent** | A user-attributed lookup resolves that user's generated tree; pending, rejected or flagged tracked automations do not execute. See QS9–QS13. |
+| Q5 | **Consistency and reuse** | Shared outcome, persistence and planning policies have identified owners; new capabilities reuse registered actions/blocks. Documentation traces claims to those owners. See QS14–QS17 and QS33. |
 
 ## 1.3 Stakeholders
 
-| Role | Contact | Expectations |
+Roles are used where no separate person or contact has been assigned. External
+model services are dependencies in §3, not human stakeholders.
+
+| Role | Contact / responsibility | Expectations |
 |---|---|---|
-| Platform Architect | Nico | Fast iteration, BT-first execution, reliable cron automation |
-| Personalization Consumer | End User (persona owner) | Agent that learns their habits, proposes automations, respects approval thresholds, improves from their feedback |
-| Primary Operator | Hermes Agent | MCP tools for task delegation, tree discovery, agent management |
-| Observability Consumers | Dashboard Users | Tree status, fitness scores, agent history, sprint progress |
-| Scheduled Automation | Cron Watchers | Reliable recurring execution with circuit breakers and DLQ |
-| Local LLM Provider | Ollama (qwen3.6:35b) at :11434 | Prompt→completion, 2-3 min per call |
-| Escalation LLM Provider | DeepSeek API (api.deepseek.com) | Batch/complex prompts, 5-10s per call |
+| Platform owner and architect | Nico | Prioritized improvements, explicit costs and risks, reviewable decisions. |
+| Maintainer / change reviewer | Nico; repository review workflow | Source-aligned architecture, reproducible checks, comprehensible boundaries. |
+| Service operator | Nico; systemd user-service operation | Diagnose failed GOAP runs, preserve state, deploy and roll back known builds. |
+| Dashboard / MCP operator | Authorized platform user; Hermes is an integration client | Correct results, working authentication, visible approvals and run evidence. |
+| Persona owner | User identified by the calling integration | Isolated personal learning state and control over proposed automations. |
+| Security / data custodian | Platform owner until separately assigned | Explicit network and filesystem trust boundaries, protected credentials, recovery responsibilities. |
 
 ---
 

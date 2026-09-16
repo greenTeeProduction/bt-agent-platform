@@ -123,23 +123,38 @@ failover is enabled (it does not silently fall back for missing installations).
 
 ### Deployment after safe integration
 
-`deploy/systemd/rate-limit-failover.conf` enables the opt-in and pins Codex to
-`gpt-5.3-codex-spark`. After integrating the reviewed commit into the deployed
-branch and passing its dirty-worktree preflight, install it under each of:
+`deploy/systemd/rate-limit-failover.conf` is a template that enables the
+opt-in and pins Codex to `gpt-5.3-codex-spark`. Validate that the service
+account can use the selected model before applying that pin. When the
+account does not support it, explicitly select an available model or set
+`BT_SUPERPOWERS_CODEX_MODEL=auto` to use the Codex CLI's own configuration;
+the source default itself remains unchanged.
+
+After integrating the reviewed change into a clean deployed branch,
+install the intended drop-in under each applicable service directory:
 
 - `~/.config/systemd/user/bt-agent.service.d/`
 - `~/.config/systemd/user/bt-dashboard.service.d/`
 - `~/.config/systemd/user/bt-gardener.service.d/`
 
-Check for conflicting model values in the operator-managed EnvironmentFile
-(`/mnt/ssd/bt-secrets/codex.env` on the deployed host); systemd EnvironmentFile
-values override `Environment=` settings. Keep its model exactly
-`gpt-5.3-codex-spark` and enable the flag there if it already defines it.
-Then reload/restart the three services and verify their effective non-secret
-provider/model/failover settings. Do not deploy a feature-worktree binary into
-scheduled services that still operate on a different, dirty main branch.
-**Deployment is deferred until safe integration; this template alone does not
-change running services.** Disable the flag and restart to roll back routing.
+Check effective values in the operator-managed EnvironmentFile
+(`/mnt/ssd/bt-secrets/codex.env` on the reviewed host); its values override
+`Environment=` settings. Do not print credentials while inspecting the
+provider/model/failover fields. Reload/restart affected services and verify
+those non-secret settings plus a read-only provider probe under the same
+account. An unsupported-model error requires configuration correction;
+quota failover deliberately does not conceal it.
+
+**Observed 2026-09-16:** the reviewed host uses provider `codex`, model
+`auto`, and rate-limit failover enabled after the pinned Spark model was
+rejected by the account. A successful model probe is not proof that the
+next complete GOAP cycle will verify and land work. See
+[deployment](arc42/07-deployment.md) and
+[cycle outcomes](arc42/06-runtime-view.md#64-self-improvement-cycle-goap-fusion-loop).
+
+Keep deployed binaries consistent with the intended integrated source and
+preserve in-flight work during restart. Disable failover and restart the
+affected services to roll back routing; this does not revert code or state.
 
 ## Configuring and restarting the daemon
 

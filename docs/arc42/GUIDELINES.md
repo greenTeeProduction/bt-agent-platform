@@ -1,12 +1,18 @@
 # arc42 Section Guidelines
 
 Per-section conformance checklists distilled from the official arc42 tips
-(https://docs.arc42.org, 144 tips, retrieved 2026-07-16). Consumed by the
+([official guidance](https://docs.arc42.org/), reviewed 2026-09-16). Consumed by the
 SyncArc42SectionNN nodes (each node embeds its section's block into the
 update prompt) and enforced in the checkable subset by
 scripts/check-doc-drift.sh. When editing a section file, honor its checklist.
 
 ## Section 1 — Introduction and Goals
+
+### Current-state maintenance contract
+
+- [ ] Separate implemented behavior, tested contracts, dated deployment observations and unmeasured targets. Link evidence; put unresolved gaps in §11. Keep historical narratives in §9.
+- [ ] Preserve the three-column Q1–Q5 table consumed by the GOAP loader; distinguish implemented capability from targets and persona namespaces from authenticated identity.
+- [ ] Preserve required headings/footer and pass the independent documentation checks in [README](README.md).
 
 ### Required structure (arc42 template)
 - [ ] Section contains exactly three subsections: **1.1 Requirements Overview**, **1.2 Quality Goals**, **1.3 Stakeholders**.
@@ -43,6 +49,12 @@ scripts/check-doc-drift.sh. When editing a section file, honor its checklist.
 
 ## Section 2 — Architecture Constraints
 
+### Current-state maintenance contract
+
+- [ ] Separate implemented behavior, tested contracts, dated deployment observations and unmeasured targets. Link evidence; put unresolved gaps in §11. Keep historical narratives in §9.
+- [ ] Cite the authority for each constraint. Distinguish the Go minimum from the selected toolchain, and current host observations from permanent platform requirements.
+- [ ] Preserve required headings/footer and pass the independent documentation checks in [README](README.md).
+
 ### Required content & structure
 - [ ] Section contains ONLY requirements that constrain architects' freedom in design, implementation, or development-process decisions — nothing else.
 - [ ] Constraints are presented as simple tables: one row per constraint, with columns for the constraint and a brief explanation/background.
@@ -76,6 +88,12 @@ scripts/check-doc-drift.sh. When editing a section file, honor its checklist.
 
 ## Section 3 — Context and Scope
 
+### Current-state maintenance contract
+
+- [ ] Separate implemented behavior, tested contracts, dated deployment observations and unmeasured targets. Link evidence; put unresolved gaps in §11. Keep historical narratives in §9.
+- [ ] Include coding CLIs, configured model endpoints, NotebookLM and Git/CI partners. Distinguish MCP stdio security from HTTP credentials and public routes.
+- [ ] Preserve required headings/footer and pass the independent documentation checks in [README](README.md).
+
 ### Required content & structure
 - [ ] Section contains two subsections per the arc42 template: **Business Context** (domain-level communication partners and data exchanged) and **Technical Context** (channels, protocols, transmission media) — or Business Context plus an explicit note that technical context is deferred to the Deployment View (Section 7) (Tip 3-19).
 - [ ] The system boundary is explicitly demarcated: the system appears as one discrete box, clearly separated from all external partners (users, neighbor systems, hardware) (Tip 3-1).
@@ -108,6 +126,12 @@ scripts/check-doc-drift.sh. When editing a section file, honor its checklist.
 
 ## Section 4 — Solution Strategy
 
+### Current-state maintenance contract
+
+- [ ] Separate implemented behavior, tested contracts, dated deployment observations and unmeasured targets. Link evidence; put unresolved gaps in §11. Keep historical narratives in §9.
+- [ ] Map every quality goal to concrete mechanisms and evidence; do not claim every evolution path uses the same gates or every failed run implies an open breaker.
+- [ ] Preserve required headings/footer and pass the independent documentation checks in [README](README.md).
+
 ### Required content (per arc42 template)
 - [ ] Covers the fundamental decisions and solution approaches shaping the architecture — the "cornerstones" that drive all detailed decisions.
 - [ ] Names key **technology decisions** (languages, frameworks, platforms) at cornerstone level only.
@@ -139,6 +163,12 @@ scripts/check-doc-drift.sh. When editing a section file, honor its checklist.
 ---
 
 ## Section 5 — Building Block View
+
+### Current-state maintenance contract
+
+- [ ] Separate implemented behavior, tested contracts, dated deployment observations and unmeasured targets. Link evidence; put unresolved gaps in §11. Keep historical narratives in §9.
+- [ ] Keep the complete top-level package and command inventories synchronized with source; describe interfaces/responsibilities and production wiring rather than fixed catalog/test counts.
+- [ ] Preserve required headings/footer and pass the independent documentation checks in [README](README.md).
 
 ### Required content & structure
 - [ ] Section documents the *static* decomposition of the system into building blocks (modules, packages, components, subsystems, …) and their dependencies — nothing else.
@@ -175,6 +205,12 @@ scripts/check-doc-drift.sh. When editing a section file, honor its checklist.
 
 ## Section 6 — Runtime View
 
+### Current-state maintenance contract
+
+- [ ] Separate implemented behavior, tested contracts, dated deployment observations and unmeasured targets. Link evidence; put unresolved gaps in §11. Keep historical narratives in §9.
+- [ ] Cover representative success, failure, cancellation, approval and recovery paths. Name the actual caller that wires retry/DLQ behavior; separate tree and coding-cycle budgets.
+- [ ] Preserve required headings/footer and pass the independent documentation checks in [README](README.md).
+
 ### Required content & structure
 - [ ] Section documents **concrete runtime scenarios**: how instances of building blocks interact step-by-step at runtime.
 - [ ] Scenarios cover only **architecturally relevant** cases: the most important use cases, interactions at critical external interfaces, operation/administration scenarios, and important error/exception scenarios.
@@ -207,6 +243,12 @@ scripts/check-doc-drift.sh. When editing a section file, honor its checklist.
 
 ## Section 7 — Deployment View
 
+### Current-state maintenance contract
+
+- [ ] Separate implemented behavior, tested contracts, dated deployment observations and unmeasured targets. Link evidence; put unresolved gaps in §11. Keep historical narratives in §9.
+- [ ] Separate source defaults from dated effective service configuration. Record real bind addresses, toolchain/build identity, storage, restart flags and unverified restore/network assumptions.
+- [ ] Preserve required headings/footer and pass the independent documentation checks in [README](README.md).
+
 ### Required content & structure
 - [ ] Describes the technical infrastructure the system executes on: environments, machines/VMs/containers, processors, network topology, channels, and geographic locations where relevant.
 - [ ] Explicitly maps software building blocks (from Section 5) onto infrastructure elements — every deployed building block is assigned to a node.
@@ -237,6 +279,12 @@ scripts/check-doc-drift.sh. When editing a section file, honor its checklist.
 ---
 
 ## Section 8 — Crosscutting Concepts
+
+### Current-state maintenance contract
+
+- [ ] Separate implemented behavior, tested contracts, dated deployment observations and unmeasured targets. Link evidence; put unresolved gaps in §11. Keep historical narratives in §9.
+- [ ] Describe current shared policy once, with source links. Distinguish library primitives from entrypoint enforcement, provider quota failover from other errors, and single-file atomicity from backups.
+- [ ] Preserve required headings/footer and pass the independent documentation checks in [README](README.md).
 
 ### Required content & structure
 - [ ] Section documents overall solution approaches/patterns/rules that apply across MULTIPLE building blocks (goal: conceptual integrity — consistency, homogeneity).
@@ -269,6 +317,12 @@ scripts/check-doc-drift.sh. When editing a section file, honor its checklist.
 ---
 
 ## Section 9 — Architecture Decisions
+
+### Current-state maintenance contract
+
+- [ ] Separate implemented behavior, tested contracts, dated deployment observations and unmeasured targets. Link evidence; put unresolved gaps in §11. Keep historical narratives in §9.
+- [ ] Preserve historic bodies and IDs; use explicit stable anchors and a complete linked index. Disambiguate the two legacy ADR-024 records and record reconstruction provenance. Add significant missing decisions, not routine chronological bug narratives.
+- [ ] Preserve required headings/footer and pass the independent documentation checks in [README](README.md).
 
 **Purpose (per arc42 template):** "Important, expensive, large scale or risky architecture decisions including rationales."
 
@@ -303,6 +357,12 @@ scripts/check-doc-drift.sh. When editing a section file, honor its checklist.
 
 ## Section 10 — Quality Requirements
 
+### Current-state maintenance contract
+
+- [ ] Separate implemented behavior, tested contracts, dated deployment observations and unmeasured targets. Link evidence; put unresolved gaps in §11. Keep historical narratives in §9.
+- [ ] Each scenario needs stable ID, goal, context/stimulus, measurable response and evidence/status. Mark targets as unmeasured; tests do not prove production latency, coverage, availability or end-to-end success rates.
+- [ ] Preserve required headings/footer and pass the independent documentation checks in [README](README.md).
+
 ### Required content & structure
 - [ ] Section is titled/numbered as arc42 section 10 "Quality Requirements" and contains two parts: **10.1 Quality overview/tree** and **10.2 Quality scenarios**.
 - [ ] 10.1 gives an overview of quality categories as a table or mind-map (a "quality tree"), classified against an established model (ISO 25010:2023 or arc42's Q42) — not free-form prose.
@@ -333,6 +393,12 @@ scripts/check-doc-drift.sh. When editing a section file, honor its checklist.
 ---
 
 ## Section 11 — Risks and Technical Debt
+
+### Current-state maintenance contract
+
+- [ ] Separate implemented behavior, tested contracts, dated deployment observations and unmeasured targets. Link evidence; put unresolved gaps in §11. Keep historical narratives in §9.
+- [ ] Retain stable risk IDs and specify priority, current status, owner and concrete closure evidence. Re-check both fixed and open claims against current source; never close a broad risk because one path was fixed.
+- [ ] Preserve required headings/footer and pass the independent documentation checks in [README](README.md).
 
 ### Required content & structure
 - [ ] Section contains a list of identified **technical risks AND technical debts** — both categories, not just one.
@@ -367,6 +433,12 @@ scripts/check-doc-drift.sh. When editing a section file, honor its checklist.
 ---
 
 ## Section 12 — Glossary
+
+### Current-state maintenance contract
+
+- [ ] Separate implemented behavior, tested contracts, dated deployment observations and unmeasured targets. Link evidence; put unresolved gaps in §11. Keep historical narratives in §9.
+- [ ] Define each term concisely and consistently; link to its current concept owner. Distinguish runtime KG from Graphify, factories, authentication from approval/persona, and healthy outcomes from landed work.
+- [ ] Preserve required headings/footer and pass the independent documentation checks in [README](README.md).
 
 ### Required content & structure
 - [ ] Section exists as "Glossary" (arc42 section 12) and contains the most important domain and technical terms stakeholders use when discussing the system.

@@ -1,96 +1,81 @@
 # 10. Quality Requirements
 
-Refines the top-level quality goals Q1–Q5 in
-[§1.2](01-introduction-goals.md); how each goal is achieved is in
-[§4](04-solution-strategy.md).
+The goals in [§1.2](01-introduction-goals.md#12-quality-goals) are realized by
+[§4](04-solution-strategy.md) and refined below. These are acceptance
+contracts, with evidence and limitations stated separately. A test reference
+identifies a reproducible check; it is not a production measurement.
 
 ## 10.1 Quality Tree
 
-```
-go-bt-evolve
-├── #reliable
-│   ├── Panic recovery: SafeGo on all goroutines, tree-level defer/recover
-│   ├── Untrusted persisted state: cross-tick ChainState resume cursors range-checked before indexing (→ QS26, ADR-252)
-│   ├── Circuit breaker: 3-state (closed/open/half-open), per-agent, configurable threshold
-│   ├── Retry with backoff: Full jitter, 3 classes (standard, LLM, unknown), max 3 retries
-│   └── Dead letter queue: Persistent JSON, exhausted retries preserved
-├── #evolvable
-│   ├── Seven evolution algorithms (§1.1): Stockfish, MCTS structural search, Pareto, MAP-Elites, Island, Q-Learning, Expert
-│   ├── Two structural-mutation generators, one scored competition: heuristic ordering + MCTS search (→ QS24, ADR-247)
-│   ├── Git-versioned trees: Every accepted mutation is a commit
-│   ├── Benchmark gating: Pre/post fitness comparison with rollback
-│   └── Mutation operators: add_before, add_after, wrap_retry, prune, swap_children, … (§12 Glossary)
-├── #secure
-│   ├── Rate limiting: Token bucket, configurable rate
-│   ├── API key auth: Bearer token validation on MCP and HTTP
-│   ├── IP filtering: Allowlist/blocklist with CIDR support
-│   ├── CSRF protection: Double-submit cookie pattern
-│   ├── Security headers: X-Content-Type-Options, X-Frame-Options, etc.
-│   ├── Audit logging: Request/response logging with dedup
-│   └── Key rotation: Periodic API key refresh
-├── #testable
-│   ├── 295 test files across all packages
-│   ├── 24+ passing packages (go test ./...)
-│   ├── 78% average coverage (aspirational target: 85%)
-│   ├── Test Watchdog cron: Detects new failures within 4h
-│   └── Benchmark suite: BFCL, BTPG, ToolBench, SWE-bench integrations
-├── #operable
-│   ├── slog structured logging: JSON format, levels (debug/info/warn/error)
-│   ├── Prometheus metrics: counters, gauges, full histogram series (_bucket/_sum/_count) + bt_build_info on /metrics
-│   ├── Health endpoint: LLM availability check via bt_health
-│   ├── Trace reader: OpenTelemetry spans with console tracer
-│   └── Dashboard: 8-tab web UI on :9800
-├── #flexible
-│   ├── Tree catalog across 8+ categories (inventory in §5.1)
-│   ├── 21-path merged main tree
-│   ├── Declarative chain types (inventory in §5.5)
-│   └── YAML-defined agents: Easy creation, templating, import/export
-├── #personalized (→ ADR-133)
-│   ├── Persona layer: per-user profile, interaction log, habit mining
-│   ├── Goal factory: intent/pattern → grounded goap.Goal, persistent GoalQueue
-│   ├── Tree factory v2: plan→BT compiler, real structural crossover
-│   ├── Executable-by-construction: dynamic resolver + KG registration for every generated tree
-│   ├── HITL automation proposals: approval before scheduling auto-created agents
-│   └── Feedback-as-fitness: user_satisfaction dimension, per-user gardener + experience bank
-└── #reusable-consistent (→ Q5)
-    ├── One owner per concept: canonical outcome classifier, single retry/backoff, single persistence path
-    ├── Framework-first features: new capabilities become engine actions/composed blocks (KG-registered), not tree-local logic
-    ├── Tree catalog hygiene: knowledge-graph similarity flags semantic duplicates for merge or explicit distinction
-    ├── Action registry hygiene: self-extension grafts get promoted into the canonical registry or pruned
-    ├── Convention uniformity: project-conventions rules enforced on every autonomous merge (go-conventions-reviewer)
-    └── Graphify-anchored planning: GOAP runners consult the graphify knowledge graph before proposing work, so proposals reuse existing components instead of duplicating them
+```text
+BT Agent Platform
+├── Q1 Correctness and access control
+│   ├── Valid execution, routing and persisted state: QS5, QS20, QS22, QS23, QS26
+│   └── HTTP authentication, bounded abuse controls and exposure: QS27, QS28, QS34
+├── Q2 Evolvability
+│   ├── Measured adoption and rollback: QS2, QS12, QS24
+│   └── Evidence-directed search: QS25
+├── Q3 Reliability and operability
+│   ├── Recovery, dependency failure and persistence: QS1, QS6, QS7, QS8, QS19, QS32
+│   ├── Responsiveness and detection: QS3, QS4, QS18, QS21, QS35
+│   └── Provider, repository and release readiness: QS29, QS30, QS31
+├── Q4 Personalization and consent
+│   └── Scoped execution, habits, compilation and consent: QS9, QS10, QS11, QS13
+└── Q5 Consistency and reuse
+    └── Shared owners, reusable capabilities and traceable docs: QS14–QS17, QS33
 ```
 
 ## 10.2 Quality Scenarios
 
-| # | Scenario | Stimulus | Response | Measure |
+**Status:** *Tested contract* names automated behavioral evidence, sometimes
+only for one path. *Partial* means implementation covers only part of the
+acceptance criterion. *Target* is a proposed acceptance measure, not an
+achieved SLO. Numeric targets retained from earlier specifications need an
+operator-owned measurement before promotion to an operational guarantee.
+
+| ID | Goal | Context and stimulus | Required response and measure | Evidence / status |
 |---|---|---|---|---|
-| QS1 | Agent process crash | Goroutine panic in ChainAction | SafeGo recovers in <1s, DLQ persists task, circuit breaker opens for agent | Recovery <1s, no process restart needed |
-| QS2 | 100 consecutive evolutions | bt-gardener runs evolution cycle | No fitness drop >20% from baseline. `hashTree` fingerprints the full subtree (Children/Edges/Metadata, not just the root), so `Population.Diversity()`'s `diversity_collapse` signal can't be corrupted by root-only hash collisions (→ ADR-234) | Fitness delta tracked per-mutation (aspirational) |
-| QS3 | Dashboard tree listing | GET /api/tree over the full tree catalog ([§5.1](05-building-blocks.md)) | Returns all trees with metadata | Response <500ms |
-| QS4 | Test regression detection | New test failure introduced | Test Watchdog cron detects within 4h | Detection latency <4h |
-| QS5 | Concurrent MCP calls | 3 simultaneous bt_run_task | bt-agent handles all 3 without deadlock | All 3 complete within timeout. **Since 2026-07-16 (ADR-123, milestone 1/5):** each response's task/result also stays correctly attributed to its own caller — `bbMu` serializes `bt_run_task`'s Task-assign → RunTask → response-read critical section on the shared `deps.bb`, pinned by `TestBTRunTaskConcurrentCallsDoNotRaceOnSharedBlackboard` under `-race`. **Since 2026-07-16 (ADR-123, milestone 4/5):** `bt_blocks_compose(save:true)`, `bt_hitl_compose_task(save:true)`, and `injectPersonaContext` also serialize on `bbMu`. Other `deps.bb`-touching tools (`bt_delegate_to_tree`, `bt_use_*_tree`) remain unguarded. **Since 2026-07-16 (ADR-123, milestone 5/5):** `internal/engine`'s `Server` itself gained an analogous `bbMu`/`RegisterBlackboardTool` registration-time locking primitive, proven race-free under `-race` by `TestServer_Run_MixedToolConcurrentCallsDoNotRaceOnSharedBlackboard`. **Since 2026-07-16 (ADR-124):** `cmd/bt-agent` migrated `bt_run_task`, `bt_use_*_tree`, and `bt_delegate_to_tree` (plus `bt_blocks_compose`/`bt_hitl_compose_task`) onto that primitive and removed `mcpDeps.bbMu`/`lockBB`/`unlockBB` entirely, so all previously-unguarded tools are now covered. |
-| QS6 | Ollama outage | LLM health check fails | All LLM-dependent tools return degraded error, non-LLM tools continue | Graceful degradation, no crashes |
-| QS7 | Disk full during persistence | writeFile fails with ENOSPC | Error logged, operation returns failure, no corruption (atomic write aborted) | No partial/corrupt files |
-| QS8 | Config validation | Invalid config.yaml on startup | Load fails with clear error message, defaults used as fallback | Config validation error reported |
-| QS9 | Generated tree executability (personalization — ADR-133) | `bt_kg_auto_create` / plan→BT compile produces a tree | Tree is resolvable via `ResolveTreeID`, validates, and executes (not `DefaultTree` fallback) | ≥90% of auto-created trees run end-to-end |
-| QS10 | Habit detection (personalization — ADR-133) | User issues a similar task for the 3rd time in 14 days | HabitMiner emits RecurringPattern; automation proposal appears in HITL queue next session | Proposal latency ≤1 session |
-| QS11 | Plan compilation quality (personalization — ADR-133) | Goal Factory goal → A* plan → CompilePlanToTree | Compiled tree passes ValidateTreeFull + benchmark.QuickValidate on first compile | ≥80% first-compile pass rate |
-| QS12 | Personal tree evolution safety (personalization — ADR-133) | 10 gardener cycles on a personal tree with user feedback | `user_satisfaction` fitness non-decreasing; regressions roll back from snapshots | Quality gate: ≤20% regression, floor 30 |
-| QS13 | Automation spam guard (personalization — ADR-133) | Agent detects many candidate patterns | Only patterns ≥3 occurrences proposed; per-user cap on active auto-created agents; HITL default-on | 0 unapproved scheduled automations |
-| QS14 | Duplicated functionality (reuse — Q5) | A concern gains a second implementation (e.g. a daemon re-implements outcome classification) | Fleet review or lint flags it; a consolidation program is seeded within one review cycle | Zero concepts with more than one owner package; no "same bug fixed twice" recurrences |
-| QS15 | Tree-specific one-off (consistency — Q5) | A capability needed by ≥2 trees is proposed inline in one tree | Proposal is reframed as an engine action/composed block and registered in the knowledge graph | KG capability query returns exactly one canonical provider |
-| QS16 | Duplicate tree (reuse — Q5) | Factory/breeding/auto-create produces a tree semantically matching an existing catalog tree | Creation blocked or a merge proposal raised via KG similarity check | No catalog pairs above the similarity threshold without a documented distinction |
-| QS17 | Code clones (reuse — Q5) | New Go code introduces a clone of existing code | Pre-commit/verify gate fails; the clone is consolidated before landing | No new clone groups above the lint threshold land |
-| QS18 | Concurrent dashboard requests share company state | Two `*Workflow` instances (one per HTTP request) or a `*Workflow` and a `*CompanyOrchestrator` mutate the same shared `*CompanyState` pointer concurrently | `CompanyState`'s own mutex — not each wrapper's private `w.mu` — serializes every field read/write; `ExecuteSprint` releases `w.mu` before calling `orch.RunSprint()` to avoid a non-reentrant deadlock (→ ADR-236, amended by ADR-239 for QS21's lock-duration fix) | `go test -race` clean via `TestExecuteSprint_ConcurrentWorkflowsShareCompanyState` |
-| QS19 | Gardener records an evolved-tree run | `evolveTreeV2` → `recordEvolvedRun` calls `KnowledgeGraph.RecordRun` with `Outcome: "evolved"` | `RecordRun` marks the feedback graph dirty for every caller by construction (genuine or evolved), so a later `FlushFeedback`/restart persists `EvolvedCount`/`StructuralFitness` instead of silently dropping it (→ ADR-235, §8.4) | Pinned by `TestRecordRun_MarksFeedbackDirty`, `TestRecordRun_Evolved_MarksFeedbackDirty` |
-| QS20 | Malformed dashboard HITL request | POST to `/api/hitl/{id}/approve\|reject\|escalate` with an unparseable JSON body, or `encodeJSON` asked to marshal a non-encodable value | Malformed body returns 400 instead of being silently ignored and applied as an empty/zero-value body; on an encode failure, `encodeJSON` buffers first so it reports 500 instead of writing a success status then a superfluous second `WriteHeader` | Pinned by `TestHandleHITL_MalformedBody_ReturnsBadRequest`, `TestEncodeJSON_EncodeFailure_DoesNotDoubleWriteHeader` |
-| QS21 | Dashboard page load during an in-flight sprint | `CompanyOrchestrator.RunSprint`'s three sequential `runTree()` calls run against a real LLM, each with a 120s timeout (up to ~6 min worst case per sprint), while a concurrent `state.Lock()` caller (`handleDefaultCompany`'s `GET /api/company/default`, fetched on every dashboard page load, or `Summary()`) needs the same `CompanyState` lock | `RunSprint` holds `CompanyState`'s lock only for two short snapshot/apply windows immediately before and after the three `runTree()` calls, not across them, so concurrent readers no longer stall for the sprint duration (→ ADR-239, [§6](06-runtime-view.md)) | Concurrent `state.Lock()`/`Unlock()` completes within a 250ms budget regardless of in-flight sprint duration; pinned by `TestRunSprint_DoesNotHoldStateLockAcrossTreeExecution` |
-| QS22 | Task-batch index check on JSON-decoded chain state (Q1 correctness) | `CheckIndexInRange` condition evaluates `current_task_index` against a `task_batch` stored as `[]interface{}` (e.g. decoded from JSON rather than constructed in-process as `[]map[string]string`) | Condition compares the index against the batch's real length instead of silently falling through to `task_batch_size`; the fallback previously re-checked `[]map[string]string` instead of `[]interface{}`, so JSON-decoded batches never hit their intended branch | Fixed in `internal/engine/conditions_superpowers.go`; pinned by `TestConditionsSuperpowers_CheckIndexInRange/interface_slice_in_range` |
-| QS23 | StrategyRouter keyword gaps on realistic phrasing (Q1 correctness) | `AlertRouterTree`'s `IsCritical`/`IsHealthAlert` and `IsTAPath` conditions evaluate task phrasing declared by their own benchmark suites (`AlertRouterSuite`, `TradingSignalSuite`) | `IsCritical`/`IsHealthAlert` keyword sets widened (`p0`, `incident`, `escalate`, `memory`, `warning`) so realistic phrasing like "escalate the P0 incident" no longer falls through to `GeneralAlert`; `IsTAPath`'s ambiguous short keywords (`rsi`, `sma`) are now word-bounded via regex so they stop colliding with unrelated words (e.g. "rsi" inside "reversion"), which previously misrouted the deliberately keyword-free `ExecutionPath` task into `TechnicalAnalysis` | Fixed in `internal/engine/registry.go`, `internal/engine/conditions_domain.go`; pinned by `TestAlertRouterSuiteReachesDeclaredPaths`, `TestTradingSignalSuiteReachesDeclaredPaths` |
-| QS24 | Speculative structural search competes for a mutation slot (Q2 evolvability, architecture-critical) | `evolveTreeV2` evolves a tree for which `evolution.SelectStructuralStrategy` returns `StrategyMCTSAugmented`, so `MCTSMutator.Candidates` proposes root-level mutations the heuristic `evaluator.OrderMutations` ordering never generated | Both generators are merged by `MergeScoredMutations` into ONE descending-score list feeding the unchanged per-candidate loop, so an MCTS candidate is applied only by out-scoring the heuristic ones and then clearing the identical `QuickValidate` → pre-score → `QualityGate` → `MetaValidator` → snapshot/rollback sequence — no second, weaker acceptance path (→ ADR-247, [§8.5](08-crosscutting-concepts.md)) | Search cost bounded to `MCTSIterations` (default 12) `evaluator.EvaluateTree` calls per tree per cycle — zero benchmark runs and zero LLM calls per *proposed* candidate; every emitted candidate is replayable against the untouched parent; an empty MCTS side leaves the heuristic ordering unchanged. Pinned by `TestMCTSMutator_Candidates_ScoredSortedAndApplicable`, `_OnlyImprovingVariants`, `_NoEvaluatorOrNilParent`, `TestMergeScoredMutations_OneCompetition`, `TestAugmentWithMCTSCandidates_MergesSearchIntoOneCompetition`, `_RespectsStrategySelection`. Unmet: no `CycleMetrics` field attributes a fitness change to this pass, and the search is not replayable (process-global RNG) → [§11](11-risks-debt.md) |
-| QS25 | Proven trees are not gambled on (Q2 evolvability) | A tree whose shape signature matches a preserved specialist archetype and whose named `Selector` nodes are fully telemetered is selected for evolution | `SelectStructuralStrategy` averages `SpecialistRegistry.MCTSAffinity` and `SelectorOptimizer.MCTSAffinity` and keeps heuristic-only ordering below the 0.5 threshold, so the speculative search is skipped exactly where cheap evidence-backed reordering already covers the decision points (→ ADR-247) | Per-tree decision costs one shape comparison + one read-only `LoadSelectorStats`; archetype match ⇒ affinity 0.0, nil registry/optimizer ⇒ 1.0. Pinned by `TestSpecialistRegistry_MCTSAffinity`, `TestSelectorOptimizer_MCTSAffinity`, `TestSelectStructuralStrategy`. Known asymmetry (non-archetype trees always augment) → [§11](11-risks-debt.md) |
-| QS26 | Corrupted resume cursor in persisted `ChainState` (Q1 correctness / reliability) | A `MemSelector` tick reads its `ChainState["memsel/<name>"]` cursor back as a negative value — the map round-trips through JSON persistence and is writable by out-of-tree callers, so a cursor read back is untrusted input ([§8.1](08-crosscutting-concepts.md)) | `BuildMemSelector` clamps `start < 0` to a fresh pass instead of evaluating `children[-1]` and panicking mid-tick, adopting the `idx >= 0 && idx < len(children)` guard `BuildBanditSelector` already applies to its own resume cursor (→ ADR-252); a cursor at or past the last child needs no clamp — the loop falls through to FAILURE and clears the key | No panic, and SUCCESS from child 0, for `int`/`int64`/`float64` negative cursors; pinned by `TestBuildMemSelector_NegativePersistedCursorRestartsInsteadOfPanicking`, with the rest of the node's contract (single-tick outcomes, per-name key, resume, stale-cursor-past-end, failed-child skipping) pinned by the sibling characterization tests in `internal/engine/mem_selector_test.go`. Unmet: `BuildPersistentMemSequence` and `BuildForEachTask` still loop from an unchecked cursor → [§11](11-risks-debt.md) |
+| QS1 | Q3 | A goroutine launched through SafeGo panics. | Recover at that boundary and invoke its configured error callback; the process survives. Retry, breaker updates and DLQ insertion occur only where the caller wires them. | Tested contract: [panic-handler tests](../../internal/reliability/panic_handler_test.go). No universal recovery-latency or automatic-DLQ guarantee; [§6.5](06-runtime-view.md#65-error-recovery). |
+| QS2 | Q2 | An operator evaluates 100 evolution cycles against a fixed benchmark baseline. | Record before/after fitness for every accepted candidate; reject candidates outside the configured regression threshold and retain rollback evidence. | Partial: [gardener tests](../../internal/gardener/evolve_v2_test.go). The old “no drop >20%” is a benchmark target, not a measured fleet result; island-adoption gap R23 remains. |
+| QS3 | Q3 | An authenticated client lists the full catalog with GET /api/trees on the deployed host. | Return the catalog and metadata; proposed p95 latency <500 ms over 100 requests at concurrency 1, with catalog size and hardware recorded. | Target: no current production latency series establishes this. Route and payload: [dashboard](../../cmd/bt-dashboard/main.go). |
+| QS4 | Q3 | A committed regression becomes visible to the scheduled test watchdog. | Detect and report it within 4 hours, measured from commit to alert. | Target: check schedule, enabled state and recent successful history; a declared cron alone is insufficient. See [operations](07-deployment.md#73-release-recovery-and-operational-checks). |
+| QS5 | Q1 | Three concurrent MCP tools mutate the server's shared blackboard. | Serialize each registered blackboard tool's write/run/read region; return each caller's own task/result without races or deadlock. | Tested contract: [server concurrency tests](../../internal/engine/mcp_server_test.go). Serialization does not guarantee all calls finish inside one tree's timeout. |
+| QS6 | Q3 | Ollama is unreachable during a local-model request. | Surface provider failure or use a configured fallback; unrelated non-LLM operations remain usable. | Partial: [LLM adapters](../../internal/llm). Fallback also depends on its credentials/network; no “always available” provider is assumed. |
+| QS7 | Q3 | A durable store write fails, including disk exhaustion. | Propagate the error and preserve the previous complete file on atomic-replace paths; no successful acknowledgement of a failed write. | Partial: [storage helpers](../../internal/reliability), [storage security tests](../../internal/agent/storage_security_test.go). Fleet-wide ENOSPC/crash injection is not established; JSONL appenders have different recovery semantics. |
+| QS8 | Q3 | Configuration loading receives malformed or unsupported settings. | Report validation/load failure clearly; use defaults only for documented optional/missing settings, without silently widening permissions. | Tested contracts: [config tests](../../internal/config/config_test.go), [listener tests](../../internal/security/listener_test.go). Entrypoint response is part of its startup contract. |
+| QS9 | Q4 | Two users have generated trees with the same local ID. | Resolve the requesting user's tree and block execution of disallowed tracked automations; never silently select another user's tree. | Tested contract: [resolver tests](../../internal/agentexec/wiring_test.go). The historic ≥90% end-to-end success goal remains an unmeasured target, separate from resolution correctness. |
+| QS10 | Q4 | A user's interactions meet the configured recurrence count/window and confidence rules. | Emit a recurring pattern eligible for consideration; with default policy, create a proposal by the next eligible consideration pass. | Tested pattern detection: [persona tests](../../internal/persona/persona_test.go). “3 in 14 days” depends on miner configuration; next-session latency is a target, not a timer guarantee. |
+| QS11 | Q4 | Goal factory produces a grounded plan for compilation. | Produce a resolvable tree with executable actions, precondition/effect guards and provenance; reject invalid plans before registration. | Tested contract: [compiler tests](../../internal/goap/compile_test.go). ≥80% first-compile benchmark success remains a workload target; compilation tests do not establish that rate. |
+| QS12 | Q2/Q4 | A personal tree receives explicit satisfaction feedback across ten evolution cycles. | Apply its configured quality/evidence gates and preserve attribution; reject unacceptable fitness regressions. | Partial: [personalization integration](../../cmd/bt-agent/feedback_tools_test.go), [gardener](../../internal/gardener/evolve_v2.go). Non-decreasing satisfaction and a universal “floor 30 / 20%” are not established for every adoption path; R23. |
+| QS13 | Q4 | Many patterns are considered, including pending/rejected/flagged automations. | Respect per-user caps and configured approval policy; execute zero disallowed tracked automations. Policy-approved auto-approval is permitted. | Tested contract: [autopilot tests](../../cmd/bt-agent/autopilot_test.go), [resolver tests](../../internal/agentexec/wiring_test.go). Untracked manual trees are outside this automation-status gate. |
+| QS14 | Q5 | A change introduces a second owner for outcome, retry, planning or persistence policy. | Review identifies the owner in §5/§8 and consolidates or records a justified distinction before acceptance. | Target/process rule: [building blocks](05-building-blocks.md); no general automatic semantic-duplication detector is claimed. |
+| QS15 | Q5 | At least two trees need a new capability. | Reuse or add a registered action/block with one documented implementation and tests. | Target/process rule: [block registry](../../internal/blocks), [engine registry](../../internal/engine/registry.go). A KG query is supporting evidence, not proof of uniqueness. |
+| QS16 | Q5 | Factory/breeding proposes a tree similar to the catalog. | Inspect capability/structural similarity and either reuse, merge, or record a meaningful distinction before broad adoption. | Partial: [knowledge factory](../../internal/knowledge/factory.go). Universal creation blocking at one similarity threshold is not enforced. |
+| QS17 | Q5 | A change duplicates existing Go logic. | Run configured lint/review gates and consolidate detected duplication before landing. | Partial: [pre-commit checks](../../scripts/git-hooks/pre-commit). Lint coverage does not imply zero semantic clones. |
+| QS18 | Q3 | Concurrent workflow wrappers share one CompanyState. | Synchronize shared fields through the state's mutex and avoid holding a wrapper lock while re-entering orchestration. | Tested contract: [workflow tests](../../internal/dashboard/workflow_engine_test.go), race-enabled. |
+| QS19 | Q3 | A genuine or evolved run updates KG feedback, followed by flush and reload. | Mark feedback dirty and preserve counters, structural fitness and recent-run data. | Tested contracts: [feedback tests](../../internal/knowledge/feedback_test.go), [snapshot tests](../../internal/knowledge/feedback_persist_test.go); ADR-105, ADR-235. |
+| QS20 | Q1 | HITL mutation receives malformed JSON, or a response cannot be encoded. | Reject malformed input with 400; encoding failure produces one 500 response before success headers/body are written. | Tested contract: [dashboard tests](../../cmd/bt-dashboard/main_test.go). |
+| QS21 | Q3 | A company-state reader runs while a sprint is waiting for tree execution. | Acquire/release the state lock within the test's 250 ms budget; tree work occurs outside the state lock. | Tested contract: [orchestrator tests](../../internal/startup/orchestrator_test.go). This is a lock-duration check, not a production HTTP-latency SLO. |
+| QS22 | Q1 | CheckIndexInRange receives a JSON-decoded task batch. | Compare the index against the actual interface-slice length, without silently using an unrelated fallback size. | Tested contract: [condition tests](../../internal/engine/conditions_superpowers_test.go). |
+| QS23 | Q1 | Alert/trading tasks include realistic phrases and words containing short indicator substrings. | Reach the declared alert/trading path; word-bound short indicators to avoid accidental substring matches. | Tested contracts: [domain tests](../../internal/domains/domains_test.go). |
+| QS24 | Q2 | MCTS is enabled and structural strategy selects augmentation. | Merge its candidates with heuristic candidates into one scored competition and use the ordinary acceptance gates; search stays within configured iteration budget. | Tested contracts: [MCTS tests](../../internal/evolution/mcts_mutate_test.go), [gardener tests](../../internal/gardener/evolve_v2_test.go). Default budget 12 evaluations; reproducibility/provenance gap R20. |
+| QS25 | Q2 | A specialist archetype with strong selector evidence is evaluated for speculative search. | Use the affinity threshold to select heuristic-only or augmented search; preserve deterministic decision logic for fixed inputs. | Tested contract: [strategy selector](../../internal/evolution). Non-archetype selection asymmetry remains R21. |
+| QS26 | Q1/Q3 | A MemSelector reads a negative persisted cursor. | Restart from child zero without panic; out-of-range high cursors exhaust and clear normally. | Tested contract: [MemSelector tests](../../internal/engine/mem_selector_test.go). PersistentMemSequence and ForEachTask still need equivalent negative-cursor defenses (R22). |
+| QS27 | Q1 | Browser starts without credentials, logs in, expires, or logs out. | Protected requests return 401 without valid key/session; successful login establishes an HttpOnly cookie; logout/expiry removes protected UI state. Session validation returns a detached snapshot. | Tested contracts: [HTTP security](../../cmd/bt-dashboard/security_test.go), [session regressions](../../internal/security/session_review_test.go), [browser flow](../../tests/e2e/auth.test.js). Shared operator credential is not user identity. |
+| QS28 | Q1/Q3 | Session or rate-limit state reaches its configured capacity. | Reclaim expired sessions before refusing new ones; evict a cold client bucket to admit a new client while retaining active-client throttling. | Tested contracts: [session regressions](../../internal/security/session_review_test.go), [rate-limiter tests](../../internal/security/security_test.go). Current dashboard cap 100 sessions; bucket cap 10,000. |
+| QS29 | Q3 | Selected coding CLI returns quota, authentication, unsupported-model, or cancellation errors. | With failover enabled, try at most one alternate on quota only; preserve read-only/write policy and separate cooldowns. Other failures remain explicit. | Tested contracts: [provider tests](../../internal/engine/superpowers_provider_test.go), [failover tests](../../internal/engine/superpowers_failover_contract_test.go), [delegation](../coding-delegation.md). Account/model availability requires a live probe; R27. |
+| QS30 | Q3 | GOAP attempts implementation with a dirty/diverged checkout or missing runtime prerequisite. | Refuse unsafe implementation and retain a precise preflight/phase artifact. Report degraded/no-change/deferred distinctly from verified landed work. | Tested contract: [runtime preflight tests](../../internal/engine/superpowers_runtime_contract_test.go); [§6.4](06-runtime-view.md#64-self-improvement-cycle-goap-fusion-loop). Closed breaker alone is insufficient evidence. |
+| QS31 | Q3 | A service binary differs from intended source, with work in flight. | Report drift; rebuild/restart only under configured policy, defer restart while guarded work runs, and preserve rollback binary. | Tested contracts: [deploy-drift tests](../../internal/agent/deploy_drift_test.go), [restart tests](../../internal/agent/deploy_drift_restart_test.go), [rebuild tests](../../internal/agent/rebuild_test.go). Current auto-rebuild/restart disabled; [§7.3](07-deployment.md#73-release-recovery-and-operational-checks). |
+| QS32 | Q3 | The host/state volume is lost and recovery is attempted. | Restore a consistent backup and committed source; validate representative tasks and state. Record measured recovery time and data loss before agreeing RTO/RPO. | Target: no verified restore drill or numeric RTO/RPO is recorded (R26). [Recovery procedure](07-deployment.md#73-release-recovery-and-operational-checks). |
+| QS33 | Q5 | A package, binary, section, ADR, quality goal or linked evidence changes. | Documentation checks reject missing inventory entries, broken local links/anchors, duplicate IDs and untraceable goals/scenarios. Review separately verifies behavioral claims. | Automated structural contract: [checker](../../scripts/check-arc42.py), [checker regression tests](../../scripts/test_check_arc42.py), [maintenance](README.md). |
+| QS34 | Q1/Q3 | A service binds to a non-loopback address. | Require credentials where the listener helper applies; operator verifies intended reachability, public routes, firewall and TLS termination from the relevant network. | Partial: [listener tests](../../internal/security/listener_test.go); observed all-interface binds are recorded in §7. Remote isolation/TLS not verified (R25). |
+| QS35 | Q3 | A task exhausts its configured execution budget. | Cooperative nodes stop on cancellation; subprocess workflows obey their separately configured phase/cycle budgets and persist partial evidence. | Partial: [RunTask](../../internal/engine/tree.go), [coding runtime](../../internal/engine/superpowers_task_executor.go). The default 120-second tree context is not a hard process-wide wall-clock guarantee (R30). |
+
+The platform owner owns acceptance of targets; maintainers own regression
+evidence and operators own deployed measurements. Record workload, commit,
+configuration, host and date with measurements. Current test/file counts,
+coverage percentages and benchmark scores belong in generated CI artifacts,
+not copied into this specification.
 
 ---
 

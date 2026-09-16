@@ -1,44 +1,47 @@
 # 4. Solution Strategy
 
-Quality goals Q1-Q4 are defined in [§1.2](01-introduction-goals.md); some rows
-trace to a [§2](02-constraints.md) constraint instead of, or in addition to, a
-quality goal.
+The strategy connects all five quality goals in
+[§1.2](01-introduction-goals.md#12-quality-goals) to concrete mechanisms.
+Implementation details have one home in §§5–8; decisions and trade-offs are
+retained in [§9](09-decisions.md).
 
 ## Quality Goals → Solution Approaches
 
-| Goal / Constraint | Scenario | Solution Approach | Details |
+| Goal / Constraint | Scenario | Solution approach | Details |
 |---|---|---|---|
-| Q1 | Tree routes through PreGate→StrategyRouter→OutcomeSelector correctly | **Behavior Trees as Execution Model** (→ ADR-001) | Sequence/Selector/Action/Condition/ChainAction nodes backed by the registered engine actions/conditions (inventory in [§1.1](01-introduction-goals.md)); tree validation before execution ([§5](05-building-blocks.md), [§8](08-crosscutting-concepts.md)) |
-| Q1 | LLM produces valid structured output | **Output Quality Validation** | `validateOutputQuality()` applies length/pattern/structure checks yielding a QualityScore — [§8](08-crosscutting-concepts.md) Quality Gates |
-| Q2 | Tree improves over successive mutations | **Stockfish-Adapted Evolution** (→ ADR-005) | Transposition table with move ordering; multi-dimensional fitness evaluation; mutation ordering by predicted fitness delta — one of two structural-mutation generators feeding the daemon's scored competition (see next row) ([§5](05-building-blocks.md), [§8](08-crosscutting-concepts.md)) |
-| Q2 | Hand-written mutation rules cannot propose what they don't encode | **MCTS-Guided Structural Search** (→ ADR-246) | Bounded per-tree MCTS scores candidate mutations against the tree's own records (no benchmark, no LLM) and merges them with the heuristic ordering into one descending-score competition; a per-tree affinity check (specialist archetype + Selector telemetry) decides whether the search runs, and every candidate still clears the same benchmark/quality gate before it is applied ([§5](05-building-blocks.md), [§8](08-crosscutting-concepts.md)) |
-| Q2 | Multiple fitness dimensions must be balanced | **Pareto Front + MAP-Elites** | MultiFitness across correctness, completeness, conciseness, actionability; ParetoFront tracks non-dominated solutions; MAP-Elites maintains quality diversity ([§5](05-building-blocks.md)) |
-| Q2 | Evolution must not regress | **Git-Versioned + Benchmark Gating** (→ ADR-005) | Every mutation creates a git commit; benchmarks compare before/after; rollback on regression ([§8](08-crosscutting-concepts.md) Quality Gates) |
-| Q3 | Goroutine panics don't crash the process | **SafeGo + Panic Recovery** (→ ADR-007) | All goroutines wrapped in SafeGo; tree-level panic recovery in RunTask(); circuit breakers prevent cascading failures ([§8](08-crosscutting-concepts.md) Error Resiliency) |
-| Q3 | Transient LLM errors self-heal | **Retry with Exponential Backoff** (→ ADR-007) | Full jitter retry: 1s→2s→4s→8s (base 500ms, max 30s); 3 retry classes: standard, LLM-specific, unknown ([§8](08-crosscutting-concepts.md)) |
-| Q3 | Exhausted retries don't lose work | **Dead Letter Queue** (→ ADR-007) | Persistent JSON file at `~/.go-bt-evolve/dead_letter_queue.json`; failed tasks preserved for manual inspection/replay |
-| Q3 | Concurrent persistence writers must preserve writes under ordinary contention | **Compatible Context-Aware File Locks** | `internal/reliability` uses non-blocking `flock` retries with explicit `AcquireFileLockWithContext` deadline/cancel support. Legacy `AcquireFileLock` waits without a deadline because existing persistence callers do not uniformly retain/retry failed writes. Bounded callers must supply a context and handle acquisition failure; this does not claim to eliminate deadlocks or bound filesystem operations ([§8](08-crosscutting-concepts.md), [§9](09-decisions.md)) |
-| Q3 | Runaway or stuck trees must not hang the platform | **Bounded Execution Guardrails** | `RunTask()` applies `context.WithTimeout(120s)`; a 1000-tick safety limit terminates non-terminal trees as partial; longer work uses checkpoint/resume ([§6](06-runtime-view.md)) |
-| Q2/Q4 | Task→tree mapping must be automatic | **Knowledge Graph + Factory** | Semantic discovery via embeddings; tree breeding via crossover (PreGate from A × StrategyRouter from B); 7 categories with capability edges ([§5](05-building-blocks.md)) |
-| [§2](02-constraints.md) stdio constraint | External tools must be accessible | **MCP Protocol Layer** (→ ADR-002) | JSON-RPC 2.0 over stdio; 3 servers (per-server tool inventory in [§3.2](03-context-scope.md)); Hermes gateway manages lifecycle |
-| Q3 + [§2](02-constraints.md) git-versioning policy | Agent state must survive restarts | **File-Based Persistence** (→ ADR-003) | Atomic writes (write .tmp → rename); YAML for agent definitions, JSON for scheduler/history/reflections; no SQL database — state under `~/.go-bt-evolve/`; git-friendly ([§8](08-crosscutting-concepts.md)) |
-| Q1/Q3 | LLM must be integrated into BT nodes | **ChainAction Architecture** (→ ADR-006) | Declarative chain types with template variables — inventory in [§5.5](05-building-blocks.md) |
-| Q4 (personalization) | Agent knows who it works with and what they do repeatedly | **Persona Layer** (`internal/persona`, planned — → ADR-133) | Per-user profile + interaction log + HabitMiner (embedding clustering with keyword fallback); workspace: `~/.go-bt-evolve/users/<user>/{trees,goals,memory,reflections,experience}` |
-| Q4 (personalization) | User intent and habits become plannable goals | **Goal Factory** (planned — → ADR-133) | LLM structured extraction of `goap.Goal` grounded in a world-state vocabulary registry; goal archetypes; activates the existing `goap.GoalQueue` per user |
-| Q4 (personalization) | Successful plans become durable automations | **Plan→BT Compiler / Tree Factory v2** (planned — → ADR-133) | `goap.CompilePlanToTree` emits precondition guards → registered actions/ChainActions → effect writes, wrapped in the standard PreGate/Reflect scaffold with a dynamic-replan fallback; real structural crossover from parent tree JSON |
-| Q4 (personalization) | Generated trees must actually run | **Dynamic Tree Resolver** (planned — → ADR-133) | `domains.ResolveTreeID` fallback hook loads `tree-<id>.json` from tree store / user workspace, then `BuildAndValidate`; generated trees auto-register in the knowledge graph |
-| Q4 (personalization) | Personal trees improve from user signal | **Feedback-as-Fitness** (implemented — → ADR-133 Phase 5) | `user_satisfaction` dimension in the evaluator's FitnessScore fed by `bt_feedback` (explicit 👍/👎 + correction; implicit signals planned); per-user gardener registry scan, strict per-tree evidence, compile-time seed reflections, and per-user experience banks under the existing quality-gate/rollback rails |
-| Q4 (personalization) | Autonomy must stay safe | **HITL Automation Proposals** (planned — → ADR-133) | Auto-compiled automations enter the existing HITL queue; on approval an agent YAML with schedule is written; pattern thresholds and per-user caps prevent automation spam |
+| Q1 | A tree must execute its intended route and reject invalid structure/state | Serializable IR, build-time validation, registered actions/conditions and runtime outcome checks | [§5.2](05-building-blocks.md#52-core-engine), [§8.1](08-crosscutting-concepts.md#81-behavior-tree-execution-model), ADR-001, ADR-130 |
+| Q1/Q3 | Operator controls must reject unauthenticated calls and support browser sessions | Shared security primitives, explicit route protection, CSRF checks, bounded session/rate-limiter state | [§8.18](08-crosscutting-concepts.md#818-security-and-trust-boundaries), QS27–QS28 |
+| Q2 | Tree improvements must be evaluated before adoption | Competing mutation generators, per-tree evidence, quality/validation gates, snapshots and rollback; record remaining differences between paths | [§5.3](05-building-blocks.md#53-evolution-engine), [§8.5](08-crosscutting-concepts.md#85-evolution-pipeline), ADR-247–253, R23 |
+| Q3 | A failed dependency must not masquerade as successful implementation | Explicit outcome classification, retry/circuit policy, durable quota deferral, phase artifacts and DLQ | [§6.4–6.5](06-runtime-view.md), [§8.6](08-crosscutting-concepts.md#86-error-resiliency) |
+| Q3 | A code change must be reviewable and deployable without corrupting live work | Clean-checkout preflight, isolated worktrees, verification/apply gates, build identity, out-of-place replacement and controlled restart | [§7.3](07-deployment.md#73-release-recovery-and-operational-checks), [§8.10](08-crosscutting-concepts.md#810-autonomous-landing-pipeline) |
+| Q3 | Coding-provider quotas vary independently | One delegation seam, provider-specific cooldown state, opt-in one-alternate rate-limit failover preserving the same permission policy | [Delegation](../coding-delegation.md), [§8.19](08-crosscutting-concepts.md#819-coding-provider-policy) |
+| Q4 | Intent becomes an approved, executable personal automation | Persona store → goal factory → the canonical GOAP planner → plan compiler → scoped resolver → HITL finalization and feedback | [§5.6](05-building-blocks.md#56-personalization-and-generated-trees), [§6.7](06-runtime-view.md#67-personal-automation-and-feedback), ADR-133, ADR-173, ADR-175 |
+| Q5 | New features and fixes must apply consistently across entrypoints | Shared owner packages, dependency-injection seams, reusable blocks, registry-derived inventories and evidence-linked docs | [§5.1](05-building-blocks.md#51-whitebox-overall-system), [documentation maintenance](README.md), QS33 |
+| Local storage / small team | Preserve state with inspectable operating cost | File stores with explicit scope, atomic replace and lock-protected read-modify-write where required; document unsupported distributed guarantees | [§8.4](08-crosscutting-concepts.md#84-file-based-persistence), ADR-003, ADR-183 |
 
 ## Key Technology Decisions
 
-1. **go-bt library** (`github.com/rvitorper/go-bt`) — mature Go behavior tree implementation; `Run(ctx)` not `Execute` (serves Q1: proven BT semantics; conventions in [§2](02-constraints.md)).
-2. **SerializableNode** — JSON-serializable intermediate representation between YAML definitions and go-bt runtime trees (serves Q2: mutation operates on the IR; [§5](05-building-blocks.md)).
-3. **Blackboard pattern** — shared state object passed through tree ticks; carries Task, Plan, Result, Outcome, ChainState, ChainTools, Reflections, TreeStore (serves Q1; contract in [§2](02-constraints.md) Conventions).
-4. **ChainAction as BT node** — LLM calls are first-class behavior tree nodes, enabling PreGate gating, retry wrapping, and StrategyRouter selection (serves Q1/Q3; → ADR-006).
-5. **Single GOAP planner** — the `internal/goap` A* planner is the single search implementation (→ ADR-133 Phase 6): engine planning actions and `engine.PlannerNode` delegate to it, and plan→tree compilation reuses it (mechanics in the Plan→BT Compiler row above) — serves Q4/Q1: one planner, no divergent plan semantics.
-6. **Reuse over rebuild** — the personalization roadmap activates existing idle assets (`goap.Agent`, `goap.GoalQueue`, `BlackboardBridge`, `HumanApprovalGate`, `ExperienceBank`) instead of introducing parallel systems (serves Q4 under the [§2](02-constraints.md) single-developer constraint).
-7. **Per-user workspaces** — all personalization state is kept per user with ADR-003 atomic file writes; no databases (workspace layout in the Persona Layer row above; serves Q4; → ADR-003).
+1. **Behavior trees and serializable definitions.** `go-bt` supplies execution
+   semantics; `evolution.SerializableNode` is the editable/persistable model.
+   Actions and declarative chains provide reusable capabilities (Q1/Q2).
+2. **Cooperating binaries and shared Go packages.** Entrypoints wire engine,
+   agent, domain, evolution and infrastructure services together. This is a
+   conceptual decomposition, not a strictly enforced one-way layered graph;
+   injection hooks avoid particular import cycles (Q5).
+3. **One GOAP search implementation.** Engine planning and generated-tree
+   compilation use `internal/goap`; goals, compiled trees and run evidence
+   are separate artifacts (Q1/Q4, ADR-133).
+4. **Separate model roles.** Node inference uses configured LLM adapters;
+   code implementation/review uses Claude Code or Codex subprocesses.
+   NotebookLM supplies optional grounded research. These are separate
+   availability, cost and permission domains (Q3).
+5. **Evidence before adoption.** Tests, benchmarks, gates and build identity
+   support acceptance. Passing a structural documentation check or receiving
+   a healthy scheduler outcome alone does not establish functional success
+   (Q1/Q2/Q3).
+6. **Per-user learning with explicit consent.** User workspaces and approved
+   automation records support personalization; they do not provide account
+   authentication or an independent security boundary (Q4).
 
 ---
 
