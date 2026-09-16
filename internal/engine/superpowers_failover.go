@@ -123,11 +123,14 @@ func delegationPreflightBackoff(bb *Blackboard, p DelegationProvider, now time.T
 	}
 	// Promote legacy run/agent stamps so the shared runner observes the same
 	// eligibility decision as this preflight (its interface has no Blackboard).
+	// Clear expired state for both providers before either inactive return.
 	for _, candidate := range delegationRuntimeBinaries(p) {
 		if stamp, valid := loadDelegationBackoffState(bb, candidate); valid && stamp.After(now) {
 			if shared, exists := readSharedBackoff(backoffPathFor(candidate)); !exists || stamp.After(shared) {
 				writeSharedBackoff(backoffPathFor(candidate), stamp, "legacy-preflight")
 			}
+		} else if valid {
+			clearDelegationBackoffState(bb, candidate)
 		}
 	}
 	until, ok := loadDelegationBackoffState(bb, p)

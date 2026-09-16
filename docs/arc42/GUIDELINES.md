@@ -361,6 +361,7 @@ scripts/check-doc-drift.sh. When editing a section file, honor its checklist.
 
 - [ ] Separate implemented behavior, tested contracts, dated deployment observations and unmeasured targets. Link evidence; put unresolved gaps in §11. Keep historical narratives in §9.
 - [ ] Each scenario needs stable ID, goal, context/stimulus, measurable response and evidence/status. Mark targets as unmeasured; tests do not prove production latency, coverage, availability or end-to-end success rates.
+- [ ] Ground scenario priorities and numeric targets in recorded stakeholder requirements. If absent, mark them unassigned or explicitly proposed with an owner; do not invent a priority or effort target solely to fill the template.
 - [ ] Preserve required headings/footer and pass the independent documentation checks in [README](README.md).
 
 ### Required content & structure
@@ -467,5 +468,4 @@ scripts/check-doc-drift.sh. When editing a section file, honor its checklist.
 - [ ] No component, interface, or building-block descriptions → sections 5–7 (a glossary entry may name a concept, not document its design).
 - [ ] No risks, technical debt, or open issues → section 11.
 - [ ] No cross-cutting concept explanations (patterns, frameworks, conventions) → section 8; the glossary only defines the term, not the mechanism.
-
 

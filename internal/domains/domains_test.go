@@ -2332,6 +2332,73 @@ func TestEveryResolverReachableDomainTreeIsCovered(t *testing.T) {
 	}
 }
 
+// The bare-ID resolver sweep above does not visit the domain:<name> branch.
+// Exercise that production selection path for every registered tree, including
+// nested IDs such as domain:arc42:section1, and require its canonical description.
+func TestDomainPrefixedTreesHaveSmokeDescriptionsAndConditionCoverage(t *testing.T) {
+	registered := AllDomainTrees()
+	if len(registered) == 0 {
+		t.Fatal("AllDomainTrees() is empty; no domain-prefixed trees would be covered")
+	}
+	tasks := tasksForTree()
+
+	for _, id := range ExpectedDomainIDs(registered) {
+		t.Run(id, func(t *testing.T) {
+			name := strings.TrimPrefix(id, "domain:")
+			tree := ResolveTreeID(id)
+			if tree == nil || len(tree.Children) == 0 {
+				t.Fatalf("ResolveTreeID(%q) returned a nil or childless tree", id)
+			}
+			if got, want := coverageRootName(tree), coverageRootName(registered[name]); got != want {
+				t.Fatalf("ResolveTreeID(%q) returned root %q, want registered root %q", id, got, want)
+			}
+
+			task, ok := tasks[name]
+			if !ok || strings.TrimSpace(task) == "" {
+				t.Fatalf("no smoke task defined for domain tree %q", name)
+			}
+			bb := &engine.Blackboard{Task: task, LLM: benchmark.DefaultMock(), Sandbox: true}
+			if engine.BuildTree(tree, bb) == nil {
+				t.Errorf("ResolveTreeID(%q): BuildTree returned nil", id)
+			}
+			for _, gap := range conditionDescriptionGaps(*tree) {
+				t.Errorf("ResolveTreeID(%q): Condition node %q has no description", id, gap)
+			}
+			for _, gap := range conditionGuardEdgeGaps(*tree) {
+				t.Errorf("ResolveTreeID(%q): Condition node %q has no described guard edge", id, gap)
+			}
+
+			want, ok := DescriptionFor(name)
+			if !ok || strings.TrimSpace(want) == "" {
+				t.Fatalf("registered tree %q has no canonical description", name)
+			}
+			if got, ok := DescriptionFor(id); !ok || got != want {
+				t.Errorf("DescriptionFor(%q) = (%q, %v), want (%q, true): the resolver ID must describe the same registered tree", id, got, ok, want)
+			}
+		})
+	}
+
+	// The domain: namespace only selects AllDomainTrees entries. Stripping it
+	// from every describable name would advertise trees that do not resolve there.
+	t.Run("reject-unregistered-domain-IDs", func(t *testing.T) {
+		for _, id := range []string{
+			"domain:",
+			"domain:no_such_tree",
+			"domain:domain:code_review",
+			"domain:kanban_qa",
+			"domain:kanban:qa",
+			"domain:hermes_evolve",
+			"domain:superpowers_pipeline",
+			"domain:vault_manager",
+			"domain:notebooklm-consumer",
+		} {
+			if desc, ok := DescriptionFor(id); ok || desc != "" {
+				t.Errorf("DescriptionFor(%q) = (%q, %v), want (\"\", false) for an unregistered domain ID", id, desc, ok)
+			}
+		}
+	})
+}
+
 // TestResolverIDAliasesHaveNoOrphans is the reverse guard to the description leg
 // of TestEveryResolverReachableDomainTreeIsCovered, and the alias-map sibling of
 // the three HaveNoOrphans guards above. The forward test only proves each alias

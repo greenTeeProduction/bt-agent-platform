@@ -119,7 +119,7 @@ func applyDeterministicCommitFixes(ctx context.Context, runner CommandRunner, di
 	}
 	if class.Lint {
 		// --fix applies the auto-fixable subset; anything left routes to Claude.
-		_ = runShellCommand(ctx, runner, dir, withToolPath("golangci-lint run --fix ./... 2>/dev/null || true"))
+		_ = runShellCommand(ctx, runner, dir, withToolPath("golangci-lint run --fix --allow-serial-runners ./... 2>/dev/null || true"))
 		applied = append(applied, "lint-fix")
 	}
 	return applied

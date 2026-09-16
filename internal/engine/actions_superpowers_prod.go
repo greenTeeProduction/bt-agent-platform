@@ -1098,7 +1098,7 @@ func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboar
 	// run doomed, so degrade to ScheduledAnalysisPath instantly with the exact
 	// rate-limited Result/Outcome shape — the deferred clearSuperpowersPlanState
 	// guard then preserves the plan carryover for the tick after the window
-	// expires. delegationBackoffActive self-clears an elapsed window (half-open),
+	// expires. delegationPreflightBackoff clears elapsed windows (half-open),
 	// so a stale deadline can never wedge the loop into skipping the provider
 	// forever. The backoff state is namespaced by provider — a Codex rate limit
 	// never closes Claude and vice versa.
