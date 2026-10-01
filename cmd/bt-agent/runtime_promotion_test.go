@@ -14,6 +14,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/gardener"
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 func TestLiveFactoryEvolutionPromotesAndRollsBackMeasuredVersion(t *testing.T) {
@@ -140,6 +141,13 @@ func TestLiveFactoryEvolutionPromotesAndRollsBackMeasuredVersion(t *testing.T) {
 	if len(adoption) != 1 || len(adoption[0].ResultChecks) != 2 {
 		t.Fatalf("missing actual adoption/gateway evidence: %+v", adoption)
 	}
+	observed := adoption[0]
+	if observed.Build != util.CurrentBuildProvenance() {
+		t.Fatalf("execution did not retain native binary provenance: %+v", observed.Build)
+	}
+	if !observed.VerifiedFinalResult() || observed.Publication == nil || observed.Publication.Version != release.Version || observed.Publication.Qualification != release.Qualification {
+		t.Fatalf("missing independently verifiable execution/publication snapshot: %+v", observed)
+	}
 	restarted := gardener.NewRegistryWithUsers(deps.treeStore.Dir(), deps.personaStore.Root())
 	var restartVersion string
 	for _, entry := range restarted.List() {
@@ -160,6 +168,9 @@ func TestLiveFactoryEvolutionPromotesAndRollsBackMeasuredVersion(t *testing.T) {
 	_, rollback, err := store.Resolve(id, user)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if q, err := store.PublicationQualification(observed.Publication); err != nil || q == nil || q.CandidateVersion != observed.TreeVersion {
+		t.Fatalf("rollback lost the executed publication proof: %+v %v", q, err)
 	}
 	if path := os.Getenv("BT_PROMOTION_REPORT"); path != "" {
 		data, err := json.MarshalIndent(map[string]any{"controlled_fault": "worker returns wrong_total; no mocked model outputs", "tree_id": id, "user": user, "baseline": base, "candidate": active, "qualification": qualification, "cycle": measured, "release": release, "before": before, "after": after, "adoption": adoption, "rollback": rollback, "after_rollback": rolled, "independent_contract_passed": true}, "", "  ")

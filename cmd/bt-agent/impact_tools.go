@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/nico/go-bt-evolve/internal/engine"
+	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/knowledge"
 )
 
@@ -30,13 +33,17 @@ func impactTests(root, source string) map[string]any {
 
 // registerImpactTools registers the change-impact-analysis MCP surface.
 func registerImpactTools(server *engine.Server, deps *mcpDeps) {
-	server.RegisterBlackboardTool("bt_research_status", "Report this user's research sources, verified code deliveries, and goals needing review. Delivery does not imply runtime adoption or measured impact.",
+	server.RegisterBlackboardTool("bt_research_status", "Report this user's research sources, verified code deliveries, observed runtime builds and independently checked results. Observed adoption does not prove causal research impact.",
 		map[string]engine.Property{}, nil, func(_ json.RawMessage) *engine.ToolResult {
 			user := ""
 			if deps.bb != nil {
 				user = deps.bb.User
 			}
-			result, err := engine.ResearchDeliveryStatus(user)
+			var releases *evolution.RuntimeReleaseStore
+			if deps.treeStore != nil {
+				releases = evolution.NewRuntimeReleaseStore(filepath.Join(deps.treeStore.Dir(), "runtime-versions"))
+			}
+			result, err := engine.ResearchRuntimeStatus(context.Background(), user, deps.refStore, releases)
 			if err != nil {
 				result = map[string]any{"error": err.Error()}
 			}

@@ -247,33 +247,89 @@ func (s *RuntimeReleaseStore) Resolve(id, user string) (*SerializableNode, *Runt
 		}
 	}
 	if err == nil && release.Action == "promote" {
-		if len(release.Qualification) != 64 {
-			return nil, release, fmt.Errorf("qualification reference missing")
-		}
-		if _, err := hex.DecodeString(release.Qualification); err != nil {
-			return nil, release, err
-		}
-		data, readErr := util.ReadPersistenceFile(filepath.Join(dir, "qualifications", release.Qualification+".json"))
-		if readErr != nil {
-			return nil, release, readErr
-		}
-		var q RuntimeQualification
-		if err := json.Unmarshal(data, &q); err != nil {
-			return nil, release, err
-		}
-		canonical, marshalErr := json.Marshal(&q)
-		if marshalErr != nil || fmt.Sprintf("%x", sha256.Sum256(canonical)) != release.Qualification || q.TreeID != id || q.User != user || q.CandidateVersion != release.Version {
-			return nil, release, fmt.Errorf("qualification integrity check failed")
-		}
-		base, baseErr := readVersion(dir, q.BaselineVersion)
-		if baseErr != nil {
-			return nil, release, baseErr
-		}
-		if err := q.validate(base, tree, false); err != nil {
-			return nil, release, err
-		}
+		_, err = readPublicationQualification(dir, release, tree)
+	}
+	if err == nil {
+		tree.runtimePublication = cloneRuntimeRelease(release)
 	}
 	return tree, release, err
+}
+
+func cloneRuntimeRelease(release *RuntimeRelease) *RuntimeRelease {
+	if release == nil {
+		return nil
+	}
+	snapshot := *release
+	snapshot.Ancestors = append([]string(nil), release.Ancestors...)
+	return &snapshot
+}
+
+// PublicationQualification verifies immutable historical evidence even after
+// the active pointer moves. It does not claim the version remains active now.
+func (s *RuntimeReleaseStore) PublicationQualification(release *RuntimeRelease) (*RuntimeQualification, error) {
+	if release == nil {
+		return nil, fmt.Errorf("publication snapshot missing")
+	}
+	dir, err := s.directory(release.TreeID, release.User)
+	if err != nil {
+		return nil, err
+	}
+	tree, err := readVersion(dir, release.Version)
+	if err != nil {
+		return nil, err
+	}
+	if release.Action == "rollback" {
+		return nil, nil
+	}
+	if release.Action != "promote" {
+		return nil, fmt.Errorf("unknown publication action")
+	}
+	return readPublicationQualification(dir, release, tree)
+}
+
+func readPublicationQualification(dir string, release *RuntimeRelease, tree *SerializableNode) (*RuntimeQualification, error) {
+	if len(release.Qualification) != 64 {
+		return nil, fmt.Errorf("qualification reference missing")
+	}
+	if _, err := hex.DecodeString(release.Qualification); err != nil {
+		return nil, err
+	}
+	data, err := util.ReadPersistenceFile(filepath.Join(dir, "qualifications", release.Qualification+".json"))
+	if err != nil {
+		return nil, err
+	}
+	var q RuntimeQualification
+	if err := json.Unmarshal(data, &q); err != nil {
+		return nil, err
+	}
+	canonical, err := json.Marshal(&q)
+	if err != nil || fmt.Sprintf("%x", sha256.Sum256(canonical)) != release.Qualification || q.TreeID != release.TreeID || q.User != release.User || q.CandidateVersion != release.Version {
+		return nil, fmt.Errorf("qualification integrity check failed")
+	}
+	base, err := readVersion(dir, q.BaselineVersion)
+	if err != nil {
+		return nil, err
+	}
+	if err := q.validate(base, tree, false); err != nil {
+		return nil, err
+	}
+	return &q, nil
+}
+
+// RuntimePublication returns the verified resolution snapshot, including after
+// a concurrent promotion/rollback. A later mutation cannot retain its admission.
+func (n *SerializableNode) RuntimePublication() (*RuntimeRelease, error) {
+	if n == nil || n.runtimePublication == nil {
+		return nil, nil
+	}
+	version, err := TreeVersion(n)
+	if err != nil {
+		return nil, err
+	}
+	if version != n.runtimePublication.Version {
+		return nil, fmt.Errorf("resolved runtime definition changed before execution")
+	}
+	return cloneRuntimeRelease(n.runtimePublication), nil
 }
 
 // Promote commits only if the currently active definition is the measured

@@ -61,6 +61,51 @@ func TestRuntimeReleasePreservesDefinitionsAndRollsBack(t *testing.T) {
 	}
 }
 
+func TestRuntimePublicationSnapshotCannotBeBorrowedOrMutated(t *testing.T) {
+	base, candidate, q := releaseFixture(t)
+	store := NewRuntimeReleaseStore(t.TempDir())
+	release, err := store.Promote(t.Context(), base, candidate, q)
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded, _, err := store.Resolve(q.TreeID, q.User)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := loaded.RuntimePublication()
+	if err != nil || snapshot == nil || snapshot.Version != release.Version {
+		t.Fatalf("missing snapshot: %+v %v", snapshot, err)
+	}
+	snapshot.Version = "tampered"
+	if snapshot, err = loaded.RuntimePublication(); err != nil || snapshot.Version != release.Version {
+		t.Fatal("caller mutated the resolution snapshot")
+	}
+	data, err := json.Marshal(loaded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var proposal SerializableNode
+	if err = json.Unmarshal(data, &proposal); err != nil {
+		t.Fatal(err)
+	}
+	if borrowed, err := proposal.RuntimePublication(); err != nil || borrowed != nil {
+		t.Fatal("serialized proposal borrowed runtime admission")
+	}
+	if _, err = store.Rollback(t.Context(), q.TreeID, q.User, release.Version, "test historical evidence"); err != nil {
+		t.Fatal(err)
+	}
+	if snapshot, err = loaded.RuntimePublication(); err != nil || snapshot.Version != release.Version {
+		t.Fatal("active pointer rewrote the resolved execution")
+	}
+	if proof, err := store.PublicationQualification(snapshot); err != nil || proof == nil || proof.CandidateVersion != release.Version {
+		t.Fatalf("historical qualification unavailable: %+v %v", proof, err)
+	}
+	loaded.Children[0].Name = "different-condition"
+	if _, err := loaded.RuntimePublication(); err == nil {
+		t.Fatal("changed definition retained its runtime admission")
+	}
+}
+
 func TestRuntimeReleaseRejectsInvalidEvidenceAndTampering(t *testing.T) {
 	for _, change := range []func(*RuntimeQualification){
 		func(q *RuntimeQualification) { q.BaselineVersion = "wrong" },

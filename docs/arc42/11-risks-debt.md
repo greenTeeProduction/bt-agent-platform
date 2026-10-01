@@ -119,11 +119,15 @@ unreceipted external effects and cross-process retry recovery remain unqualified
 
 Research attribution is partial after ADR-287: current research goals can retain
 source-to-delivery receipts, false legacy/RED-pass delivery credit is removed, and
-pending receipt repair precedes new planning. Adoption of the exact running build
-and tree, measured task outcome links, semantic goal fulfillment, program lineage,
+pending receipt repair precedes new planning. ADR-288 links clean native builds,
+exact executed trees and recomputable result contracts where evidence exists.
+This observes code presence and checked output, not execution of changed functions
+or a causal research benefit. Dirty/unknown builds and changed delivered files
+cannot earn adoption credit; stored metadata assumes trusted local build/storage.
+Paired code-change experiments, semantic goal fulfillment, program lineage,
 legacy milestone RED-precheck completion and historical backfill remain open.
 Exact matching intentionally leaves rewritten/automatically scoped goals unlinked.
-The new status tool reports those missing adoption/impact links explicitly.
+No production deployment is claimed by local protocol or live model tests.
 
 ---
 

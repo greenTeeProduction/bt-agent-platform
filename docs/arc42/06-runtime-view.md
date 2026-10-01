@@ -629,7 +629,14 @@ Repeated research-goal RED passes hold the goal for review without delivery cred
 Pending attribution is journaled before apply. On a later cycle, preflight repairs
 receipts from committed run artifacts before planning; an unresolved repair holds
 new planning without repeating code. `bt_research_status` exposes the current
-owner's evidence and reports runtime adoption/measured impact as unlinked (ADR-287).
+owner's evidence (ADR-287). Terminal records now retain the running binary's native
+VCS metadata, start time, exact resolved publication and the executed result
+contract (ADR-288). Status joins clean builds containing unchanged delivered files
+to the owner's exact executions, then recomputes value contracts over final output.
+Historical publication trials remain inspectable after rollback. Observed code
+presence and checked results do not establish causal research impact; the report
+states that limitation explicitly. Missing metadata yields no adoption credit,
+and corrupt records fail reporting instead of silently reducing the sample.
 
 ---
 

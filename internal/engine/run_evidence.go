@@ -8,10 +8,14 @@ import (
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
+	"github.com/nico/go-bt-evolve/internal/util"
 	btcore "github.com/rvitorper/go-bt/core"
 )
 
-type treeDefinition struct{ id, version, expandedVersion string }
+type treeDefinition struct {
+	id, version, expandedVersion string
+	publication                  *evolution.RuntimeRelease
+}
 type definitionCommand struct {
 	inner      btcore.Command[Blackboard]
 	definition treeDefinition
@@ -39,8 +43,15 @@ func bindTreeDefinition(command btcore.Command[Blackboard], source, expanded *ev
 	if treeID == "" {
 		treeID = source.Name
 	}
+	publication, err := source.RuntimePublication()
+	if err != nil {
+		return nil, err
+	}
+	if publication != nil && publication.TreeID != treeID {
+		return nil, fmt.Errorf("runtime publication tree identity mismatch")
+	}
 	owner, _ := source.Metadata["user"].(string)
-	return &definitionCommand{inner: command, definition: treeDefinition{treeID, version, expandedVersion}, owner: owner}, nil
+	return &definitionCommand{inner: command, definition: treeDefinition{treeID, version, expandedVersion, publication}, owner: owner}, nil
 }
 
 // Shared only to collect a reflection request from parallel branches. Final
@@ -129,6 +140,7 @@ func FinalizeRunEvidence(bb *Blackboard, diagnostics ...error) error {
 		return nil
 	}
 	record := &evolution.Record{
+		Build: util.CurrentBuildProvenance(), StartedAt: e.started, Publication: e.definition.publication,
 		TaskID: e.id, RunID: bb.RunID, TreeName: e.definition.id,
 		TreeVersion: e.definition.version, ExecutionVersions: append([]string(nil), e.versions...),
 		EvidenceKind: evolution.EvidenceExecution, User: bb.User,

@@ -396,8 +396,12 @@ Git tree, changed files, commands/output digests, run/task identity and times.
 Only sources observed before the run began receive links in its delivery receipt.
 
 `bt_research_status` reads the current blackboard owner's ledger. It distinguishes
-observed goals, deliveries, source-linked deliveries and goals needing review;
-runtime adoption and measured impact explicitly remain `not_linked`. Legacy
+observed goals, deliveries, source-linked deliveries and goals needing review.
+ADR-288 adds observed clean-build execution, publication qualification and
+recomputed final-result counts. Code containment is checked with actual Git
+ancestry and unchanged delivered files; native build metadata never borrows the
+checkout HEAD or a display-only stamp. Corrupt records fail the evidence report.
+Causal research impact explicitly remains unestablished. Legacy
 `goap:implemented` labels, mere knowledge deduplication, dry runs, no-op applies and
 repeated passing RED tests do not establish delivery. A research goal with repeated
 passing RED commands is held for review rather than awarded completion credit.

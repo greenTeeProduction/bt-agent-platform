@@ -313,6 +313,7 @@ Navigation and provenance:
 | ADR-285 | [Executable Personal File Tasks and Version-Bound Consent](#adr-285) | Accepted — real file fixture; broader capabilities/rollout open | 2026-10-01 |
 | ADR-286 | [Typed Checkpoints and Observed GOAP Agent State](#adr-286) | Accepted — verification boundary; generic effect observers open | 2026-10-01 |
 | ADR-287 | [Research Sources and Verified Code Delivery Are Separate Evidence](#adr-287) | Accepted — adoption and measured impact links open | 2026-10-01 |
+| ADR-288 | [Runtime Build, Publication and Recomputable Result Evidence](#adr-288) | Accepted — causal research impact open | 2026-10-01 |
 
 <a id="adr-001"></a>
 
@@ -6806,6 +6807,53 @@ build. Legacy program milestone completion on RED prechecks remains separate deb
 Automatically scoped/rewritten goals can lack exact source links rather than being
 matched speculatively. Historical backfill, program lineage, active build/tree
 adoption, measured task outcomes and deployed rollout remain open.
+
+
+<a id="adr-288"></a>
+
+## ADR-288: Runtime Build, Publication and Recomputable Result Evidence
+
+**Status:** Accepted (2026-10-01); causal research impact and deployed rollout remain open.
+
+**Context:** A code-delivery receipt identifies landed source, but the executing
+binary could be older, dirty or unrelated. A current release pointer can move
+after resolution. Boolean gate results cannot independently establish correctness
+of the final retained output.
+
+**Decision:** Terminal execution records retain native Go VCS metadata from the
+running binary, execution start time and the validated publication selected at
+resolution. A private, nonserialized node snapshot prevents JSON proposals from
+claiming runtime admission; changed resolved definitions are rejected. Historical
+qualification is revalidated from immutable definitions and content-addressed
+paired evidence even after rollback. Result checks retain detached contracts.
+A successful final result requires a matching output digest and an executed value
+oracle that can be recomputed, with no dropped checks or uncertain committed effect.
+
+`bt_research_status` joins the current owner's exact executions to delivery receipts
+only when the clean native build contains the delivered commit and its changed
+files remain identical. Missing native metadata, display-only revision stamps,
+local dependency replacements, feedback, mixed versions and runs predating delivery
+are excluded. Corrupt reflection files fail the report instead of silently
+vanishing. Failed runs may establish code presence but earn no verified-result
+credit. Publication qualification remains separate from final task correctness.
+
+**Validation:** [Real Git attribution protocol tests](../../internal/engine/research_runtime_test.go),
+[real executable metadata tests](../../internal/util/build_provenance_test.go),
+[final-oracle tests](../../internal/evolution/execution_proof_test.go), and
+[publication snapshot tests](../../internal/evolution/runtime_release_test.go)
+check evidence boundaries without claiming model performance. The
+[live factory evolution test](../../cmd/bt-agent/runtime_promotion_test.go) uses
+actual model calls, independently checks the adopted result, retains the executed
+publication and revalidates its evidence after rollback.
+
+**Limits:** Native VCS metadata is provenance under trusted local build/storage,
+not a cryptographic build attestation. Code inclusion does not prove that changed
+functions ran or that research caused an improvement. Changed delivered files
+lose attribution even when later changes preserve semantics. Test executables
+without native VCS metadata remain unqualified for code adoption. Publication
+trials qualify their stated tree corpus, not arbitrary research changes. Broad
+semantic goal fulfillment, paired code-change experiments, historical backfill,
+program lineage and production deployment remain open.
 
 ---
 

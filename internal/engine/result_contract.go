@@ -2,6 +2,7 @@ package engine
 
 import (
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
@@ -20,6 +21,14 @@ func resultContractVerifier(node *evolution.SerializableNode, contract *evolutio
 		}
 		qualityOK := validateOutputQuality(bb)
 		check := evolution.ResultCheck{Gate: node.Name, Passed: err == nil && qualityOK, OutputDigest: fmt.Sprintf("sha256:%x", sha256.Sum256([]byte(resolvedResult(bb))))}
+		// Retain a detached oracle so later reports recompute the verdict over
+		// the actual final result rather than trusting a stored boolean.
+		if data, marshalErr := json.Marshal(contract); marshalErr == nil {
+			var retained evolution.ResultContract
+			if json.Unmarshal(data, &retained) == nil {
+				check.Contract = &retained
+			}
+		}
 		if err != nil {
 			check.Reason = err.Error()
 		} else if !qualityOK {
