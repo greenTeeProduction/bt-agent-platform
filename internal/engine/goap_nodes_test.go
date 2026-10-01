@@ -2,6 +2,8 @@ package engine
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -116,8 +118,8 @@ func TestAction_PlanGoapActions_JSONActionsInvalidEntry(t *testing.T) {
 	}
 	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
 	result := fn(ctx)
-	if result != 1 {
-		t.Errorf("expected 1 despite invalid entry, got %d: %s", result, bb.Result)
+	if result != -1 || bb.ChainState["goap_plan_found"] != false {
+		t.Fatal("malformed capability list was partially accepted")
 	}
 }
 
@@ -140,8 +142,8 @@ func TestAction_PlanGoapActions_JSONActionsEmptyAfterFilter(t *testing.T) {
 	if result != -1 {
 		t.Errorf("expected -1 for all-invalid JSON actions, got %d", result)
 	}
-	if !stringContains(bb.Result, "no valid actions") {
-		t.Error("result should mention no valid actions")
+	if !stringContains(bb.Result, "invalid GOAP actions") {
+		t.Error("result should identify invalid action input")
 	}
 }
 
@@ -273,8 +275,8 @@ func TestAction_PlanGoapActions_WrongActionsType(t *testing.T) {
 	if result != -1 {
 		t.Errorf("expected -1 for wrong actions type, got %d", result)
 	}
-	if !stringContains(bb.Result, "no valid actions") {
-		t.Error("result should mention no valid actions")
+	if !stringContains(bb.Result, "invalid GOAP actions") {
+		t.Error("result should identify invalid action input")
 	}
 }
 
@@ -325,67 +327,11 @@ func TestAction_PlanGoapActions_WithGoapConfig(t *testing.T) {
 
 // ─── ExecuteGoapStep — LLM and world-state paths ──────────────────────────
 
-func TestAction_ExecuteGoapStep_WithLLM(t *testing.T) {
-	fn := GetAction("ExecuteGoapStep")
-	if fn == nil {
-		t.Fatal("ExecuteGoapStep action not registered")
-	}
-	stepPlan := &goap.Plan{
-		Goal: goap.NewGoal("task_completed", 1.0,
-			goap.WorldState{"task_status": "completed"}),
-		Steps: []goap.Action{
-			{
-				Name:    "analyze_requirements",
-				Effects: goap.WorldState{"has_analysis": true},
-			},
-			{
-				Name:    "execute_build",
-				Effects: goap.WorldState{"has_result": true, "task_status": "completed"},
-			},
-		},
-	}
-	bb := &Blackboard{
-		Task: "build a pipeline",
-		LLM:  &MockLLM{},
-		ChainState: map[string]any{
-			"goap_step_index": 0,
-			"goap_steps":      []string{"analyze_requirements", "execute_build"},
-			"goap_plan":       stepPlan,
-			"goap_world_state": goap.WorldState{
-				"task":        "build a pipeline",
-				"has_result":  false,
-				"task_status": "pending",
-			},
-		},
-	}
-	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
-	result := fn(ctx)
-	if result != 1 {
-		t.Errorf("expected 1 for LLM-based step execution, got %d", result)
-	}
-	if bb.Outcome != "running" {
-		t.Errorf("expected outcome 'running', got %q", bb.Outcome)
-	}
-	// Should have incremented step index
-	idx, ok := bb.ChainState["goap_step_index"].(int)
-	if !ok {
-		t.Fatal("goap_step_index should be an int")
-	}
-	if idx != 1 {
-		t.Errorf("expected step index 1, got %d", idx)
-	}
-	// Should have updated world state with step effects
-	ws, ok := bb.ChainState["goap_world_state"].(goap.WorldState)
-	if !ok {
-		t.Fatal("goap_world_state should exist")
-	}
-	if v, ok := ws["has_analysis"]; !ok || v != true {
-		t.Error("world state should reflect step effects (has_analysis=true)")
-	}
-	// Should track executed steps
-	executed, ok := bb.ChainState["goap_executed_steps"].([]string)
-	if !ok || len(executed) != 1 || executed[0] != "analyze_requirements" {
-		t.Errorf("expected executed_steps [analyze_requirements], got %v", executed)
+func TestAction_ExecuteGoapStepRejectsUnobservedText(t *testing.T) {
+	plan := &goap.Plan{Goal: goap.NewGoal("done", 1, goap.WorldState{"deployed": true}), Steps: []goap.Action{{Name: "deploy", Effects: goap.WorldState{"deployed": true}}}}
+	bb := &Blackboard{Task: "deploy", LLM: &MockLLM{GenerateResp: "deployment succeeded"}, ChainState: map[string]any{"goap_plan": plan, "goap_step_index": 0, "goap_world_state": goap.WorldState{}}}
+	if status := GetAction("ExecuteGoapStep")(&btcore.BTContext[Blackboard]{Blackboard: bb}); status != -1 || bb.ChainState["goap_step_index"] != 0 || goapWorldStateFrom(bb)["deployed"] != nil {
+		t.Fatal("model text advanced planned effects")
 	}
 }
 
@@ -405,11 +351,11 @@ func TestAction_ExecuteGoapStep_WithNoPlan(t *testing.T) {
 	}
 	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
 	result := fn(ctx)
-	if result != 1 {
-		t.Errorf("expected 1 even without plan, got %d", result)
+	if result != -1 {
+		t.Errorf("expected rejection without full plan, got %d", result)
 	}
-	if bb.Outcome != "running" {
-		t.Errorf("expected outcome 'running', got %q", bb.Outcome)
+	if bb.Outcome != "failure" {
+		t.Errorf("expected outcome 'failure', got %q", bb.Outcome)
 	}
 }
 
@@ -529,96 +475,61 @@ func TestBuildGoapStepPrompt_NoPriorResults(t *testing.T) {
 
 // ─── ExecuteGoapStep — accumulation and synthesis ──────────────────────────
 
-func TestAction_ExecuteGoapStep_AccumulatesAndSynthesizes(t *testing.T) {
-	// Build a plan with 2 steps
-	stepPlan := &goap.Plan{
-		Goal: goap.NewGoal("task_completed", 1.0,
-			goap.WorldState{"task_status": "completed"}),
-		Steps: []goap.Action{
-			{
-				Name:    "analyze_requirements",
-				Effects: goap.WorldState{"has_analysis": true},
-			},
-			{
-				Name:    "execute_build",
-				Effects: goap.WorldState{"has_result": true, "task_status": "completed"},
-			},
-		},
+// This protocol test uses a real filesystem capability, not model inference.
+func TestAction_ExecuteGoapStepAccumulatesObservedCapabilities(t *testing.T) {
+	root := t.TempDir()
+	calls := map[string]int{}
+	names := []string{"ObservedFirstFile", "ObservedSecondFile"}
+	steps := make([]goap.Action, 0, 2)
+	for i, name := range names {
+		key := []string{"first_written", "second_written"}[i]
+		file := filepath.Join(root, name)
+		previous := actionRegistry[name]
+		actionRegistry[name] = func(ctx *btcore.BTContext[Blackboard]) int {
+			calls[name]++
+			if err := os.WriteFile(file, []byte(name), 0600); err != nil {
+				t.Error(err)
+				return -1
+			}
+			actual, err := os.ReadFile(file)
+			if err != nil {
+				t.Error(err)
+				return -1
+			}
+			ctx.Blackboard.Result = name
+			if err := ctx.Blackboard.ObserveGoapFacts("filesystem readback", map[string]any{key: string(actual) == name}); err != nil {
+				t.Error(err)
+				return -1
+			}
+			return 1
+		}
+		t.Cleanup(func() {
+			if previous == nil {
+				delete(actionRegistry, name)
+			} else {
+				actionRegistry[name] = previous
+			}
+		})
+		steps = append(steps, goap.Action{Name: name, Effects: goap.WorldState{key: true}})
 	}
-
-	bb := &Blackboard{
-		Task: "build a pipeline",
-		LLM:  &MockLLM{GenerateResp: "mock step output"},
-		ChainState: map[string]any{
-			"goap_step_index": 0,
-			"goap_steps":      []string{"analyze_requirements", "execute_build"},
-			"goap_plan":       stepPlan,
-			"goap_plan_found": true,
-			"goap_world_state": goap.WorldState{
-				"task":        "build a pipeline",
-				"has_result":  false,
-				"task_status": "pending",
-			},
-		},
-	}
-
-	// Execute step 0
+	plan := &goap.Plan{Goal: goap.NewGoal("files written", 1, goap.WorldState{"first_written": true, "second_written": true}), Steps: steps}
+	bb := &Blackboard{Task: "write both files", ChainState: map[string]any{"goap_plan": plan, "goap_step_index": 0, "goap_world_state": goap.WorldState{}}}
 	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
 	fn := GetAction("ExecuteGoapStep")
-	if fn == nil {
-		t.Fatal("ExecuteGoapStep action not registered")
+	if status := fn(ctx); status != 0 || bb.ChainState["goap_step_index"] != 1 {
+		t.Fatalf("first step did not retain progress: %d %+v", status, bb)
 	}
-	res := fn(ctx)
-	if res != 1 {
-		t.Fatalf("step 0 failed: %d, %s", res, bb.Result)
+	if status := fn(ctx); status != 1 || bb.Outcome != "success" {
+		t.Fatalf("goal not observed: %d %+v", status, bb)
 	}
-
-	// Verify first step accumulated
-	results := getStepResults(bb.ChainState)
-	if len(results) != 1 {
-		t.Fatalf("expected 1 step result after step 0, got %d", len(results))
+	if len(getStepResults(bb.ChainState)) != 2 || !goapWorldStateFrom(bb).Satisfies(plan.Goal.Conditions) {
+		t.Fatal("missing observations")
 	}
-	if results[0].Step != 1 || results[0].Result != "mock step output" {
-		t.Errorf("unexpected step 0 result: %+v", results[0])
+	if status := fn(ctx); status != 1 || calls[names[0]] != 1 || calls[names[1]] != 1 {
+		t.Fatal("completed work replayed")
 	}
-
-	// Execute step 1
-	bb.LLM = &MockLLM{GenerateResp: "second step output"}
-	res = fn(ctx)
-	if res != 1 {
-		t.Fatalf("step 1 failed: %d, %s", res, bb.Result)
-	}
-
-	// Verify both steps accumulated
-	results = getStepResults(bb.ChainState)
-	if len(results) != 2 {
-		t.Fatalf("expected 2 step results after step 1, got %d", len(results))
-	}
-	if results[1].Step != 2 || results[1].Result != "second step output" {
-		t.Errorf("unexpected step 1 result: %+v", results[1])
-	}
-
-	// Now test ReflectGoapOutcome synthesis
-	bb.Outcome = "success"
-	reflectFn := GetAction("ReflectGoapOutcome")
-	if reflectFn == nil {
-		t.Fatal("ReflectGoapOutcome action not registered")
-	}
-	res = reflectFn(&btcore.BTContext[Blackboard]{Blackboard: bb})
-	if res != 1 {
-		t.Errorf("ReflectGoapOutcome failed: %d", res)
-	}
-	if !stringContains(bb.Result, "Step 1: mock step output") {
-		t.Errorf("synthesized result should contain step 1: %q", bb.Result)
-	}
-	if !stringContains(bb.Result, "Step 2: second step output") {
-		t.Errorf("synthesized result should contain step 2: %q", bb.Result)
-	}
-
-	// Verify backward compatibility: goap_last_step_result still set
-	lastResult, ok := bb.ChainState["goap_last_step_result"].(string)
-	if !ok || lastResult != "second step output" {
-		t.Errorf("goap_last_step_result should still be set: %q", lastResult)
+	if GetAction("ReflectGoapOutcome")(ctx) != 1 || bb.Result != names[1] {
+		t.Fatal("reflection rewrote the final checked result")
 	}
 }
 
@@ -637,7 +548,7 @@ func TestAction_ReflectGoapOutcome_NoResultsFallsBack(t *testing.T) {
 	if res != 1 {
 		t.Errorf("expected 1, got %d", res)
 	}
-	if !stringContains(bb.Result, "no step results") {
-		t.Errorf("expected fallback message, got %q", bb.Result)
+	if bb.Result != "" {
+		t.Errorf("reflection fabricated output: %q", bb.Result)
 	}
 }

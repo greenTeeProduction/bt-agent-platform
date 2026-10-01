@@ -42,6 +42,7 @@ runtime details in §§5–8 and decision history in [§9](09-decisions.md).
 | **Fitness Score** | An evaluation measure for a tree. Runtime-success EMA, structural fitness, benchmark score and user satisfaction are different signals, not interchangeable percentages. |
 | **Gardener** | The service that observes registered trees and orchestrates configured evolution passes, validation and persistence. |
 | **GOAP** | Goal-Oriented Action Planning. `internal/goap` owns the canonical planner and world-state/goal model; engine nodes adapt it to tree execution. |
+| **GoapStep** | A per-step gate that checks preconditions and accepts expected effects only from fresh verified result fields, file receipts or capability observations (ADR-289). |
 | **GOAP Fusion Loop** | The scheduled research-to-code workflow that gathers goals, plans work, delegates implementation, verifies and attempts landing. Schedule is deployment configuration. |
 | **Graphify Graph** | The repository analysis graph under `graphify-out/`, used to navigate source relationships. It is distinct from the runtime Knowledge Graph and may require regeneration. |
 | **Grill** | Iterative critical review of research, commonly through NotebookLM. Research evidence can inform goals without authorizing code changes by itself. |

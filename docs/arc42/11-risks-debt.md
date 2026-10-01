@@ -105,17 +105,21 @@ ledgers and keeps personal descriptions out of shared discovery (ADR-284).
 ADR-285 replaces autopilot administrative plans with exact governed task reuse,
 adds immutable version consent and missing-ledger holds for marked definitions,
 and verifies one real file-task fixture including rejection without overwrite.
-General GOAP effect assertions, additional external capabilities, dynamic semantic
+Additional external capabilities, dynamic semantic
 oracles, file-task evolution corpora, actual cron dispatch, incomplete-reservation
 recovery and stale feedback-review IDs remain open. These changes are not deployed
 and do not qualify broad personal assistant behavior.
 
 Typed checkpoint/source mismatches, retry state loss across ticks and standalone
 GOAP agent prediction-to-observation conflation are repaired by ADR-286. The
-compiled/dynamic model paths still assert planned effects without independent
-observation, so matching GOAP state is not sufficient proof of external impact.
-Persisted legacy wrappers require reviewed regeneration/version adoption; generic
-unreceipted external effects and cross-process retry recovery remain unqualified.
+compiled/dynamic paths now require observed effects (ADR-289); matching public
+GOAP state alone cannot qualify an executed step. Built-in research/DevOps action
+lists still need actual capability adapters and declared effect bindings. Persisted
+legacy effect writers and checkpoint wrappers require reviewed regeneration/version
+adoption. Compiled replanning retains only the original plan's capabilities.
+Generic unreceipted external effects, broad semantic planning, complete GOAP
+configuration preservation under mutation and cross-process retry recovery remain
+unqualified. The real dependent-file fixture is local proof, not service rollout.
 
 Research attribution is partial after ADR-287: current research goals can retain
 source-to-delivery receipts, false legacy/RED-pass delivery credit is removed, and

@@ -1,0 +1,10 @@
+=== RUN   TestLiveGoapPlansObserveActualPersonalFileEffects
+=== RUN   TestLiveGoapPlansObserveActualPersonalFileEffects/compiled
+    live_goap_test.go:115: compiled: two observed file effects, total=25, double_total=50, real calls=3
+=== RUN   TestLiveGoapPlansObserveActualPersonalFileEffects/dynamic
+    live_goap_test.go:115: dynamic: two observed file effects, total=25, double_total=50, real calls=2
+--- PASS: TestLiveGoapPlansObserveActualPersonalFileEffects (41.79s)
+    --- PASS: TestLiveGoapPlansObserveActualPersonalFileEffects/compiled (28.80s)
+    --- PASS: TestLiveGoapPlansObserveActualPersonalFileEffects/dynamic (12.99s)
+PASS
+ok  	github.com/nico/go-bt-evolve/internal/benchmark	41.816s

@@ -220,7 +220,11 @@ func buildFileTask(node *evolution.SerializableNode, bb *Blackboard) btcore.Comm
 		receipt.Verified = true
 		b.recordEffect(receipt)
 		b.Result, b.CachedResult = string(data), string(data)
-		b.contractValidatedResult = b.Result
+		// The committed/read-back JSON has been normalized. Bind a check to
+		// these exact final bytes, not just to the worker's earlier formatting.
+		if !resultContractVerifier(node, contract)(b) {
+			return fail(fmt.Errorf("committed artifact failed its final result contract"), true)
+		}
 		b.Outcome = "success"
 		terminal = 1
 		return terminal
@@ -228,6 +232,7 @@ func buildFileTask(node *evolution.SerializableNode, bb *Blackboard) btcore.Comm
 }
 
 func (b *Blackboard) recordEffect(receipt evolution.EffectReceipt) {
+	receipt.Scope = b.goapEffectScope
 	if b.runEvidence == nil {
 		return
 	}

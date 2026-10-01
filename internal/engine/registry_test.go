@@ -965,14 +965,8 @@ func TestAction_GoapFallback(t *testing.T) {
 	bb := &Blackboard{Task: "complex planning task"}
 	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
 	result := fn(ctx)
-	if result != 1 {
-		t.Errorf("expected 1, got %d", result)
-	}
-	if bb.Outcome != "partial" {
-		t.Errorf("expected outcome 'partial', got %q", bb.Outcome)
-	}
-	if !stringContains(bb.Result, "falling back") {
-		t.Error("result should mention falling back")
+	if result != -1 || bb.Outcome != "failure" {
+		t.Fatal("failed GOAP execution was masked by a successful fallback")
 	}
 }
 
@@ -1010,8 +1004,8 @@ func TestAction_ReflectGoapOutcome_NoPlan(t *testing.T) {
 	}
 	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
 	result := fn(ctx)
-	if result != 1 {
-		t.Errorf("expected 1, got %d", result)
+	if result != -1 {
+		t.Errorf("expected rejection, got %d", result)
 	}
 	// Should preserve original outcome when no plan found
 	if bb.Outcome != "failure" {
@@ -1030,8 +1024,8 @@ func TestAction_ReflectGoapOutcome_NilChainState(t *testing.T) {
 	}
 	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
 	result := fn(ctx)
-	if result != 1 {
-		t.Errorf("expected 1, got %d", result)
+	if result != -1 {
+		t.Errorf("expected rejection, got %d", result)
 	}
 	// Should not panic with nil ChainState
 	if bb.Outcome != "running" {
@@ -1107,14 +1101,8 @@ func TestAction_ExecuteGoapStep_PastEnd(t *testing.T) {
 	}
 	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
 	result := fn(ctx)
-	if result != 1 {
-		t.Errorf("expected 1 for past-end, got %d", result)
-	}
-	if bb.Outcome != "success" {
-		t.Errorf("expected success outcome, got %q", bb.Outcome)
-	}
-	if !stringContains(bb.Result, "all GOAP steps completed") {
-		t.Error("result should indicate completion")
+	if result != -1 || bb.Outcome != "failure" {
+		t.Fatal("corrupt cursor received completion credit")
 	}
 }
 

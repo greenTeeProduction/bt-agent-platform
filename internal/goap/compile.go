@@ -1,6 +1,8 @@
 package goap
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"hash/fnv"
 	"maps"
@@ -37,18 +39,11 @@ type CompileOptions struct {
 }
 
 // CompilePlanToTree compiles a GOAP plan into a persistent, evolvable
-// behavior tree. Each plan step becomes a guarded sequence
-//
-//	Sequence: Step_<i>_<action>
-//	  Condition: GoapStateMatches:<preconditions>   (world-state guard)
-//	  <executable node>                             (engine Action | ChainAction)
-//	  Action: ApplyGoapEffects:<effects>            (world-state write)
-//
-// wrapped in the platform's standard scaffold (PreGate → StrategyRouter →
-// ReflectOnOutcome → OutcomeSelector) so gardener mutations and reflections
-// operate on it unmodified. The StrategyRouter's last branch is a dynamic
-// GOAP replan path: when a compiled step fails mid-plan, the planner replans
-// from the world state the executed steps actually produced.
+// behavior tree. Each GoapStep checks preconditions, executes its child, and
+// advances runtime state only after fresh observations satisfy expected effects.
+// A final goal check precedes the standard reflection/output scaffold. The
+// optional replan path retains the original plan's capabilities and observed
+// state; it cannot introduce alternate capabilities absent from that plan.
 func CompilePlanToTree(plan *Plan, opts CompileOptions) (*SerializableNode, error) {
 	if plan == nil || plan.Goal == nil {
 		return nil, fmt.Errorf("goap: compile requires a plan with a goal")
@@ -73,6 +68,7 @@ func CompilePlanToTree(plan *Plan, opts CompileOptions) (*SerializableNode, erro
 	for i, step := range plan.Steps {
 		planPath.Children = append(planPath.Children, compileStep(i, step, opts))
 	}
+	planPath.Children = append(planPath.Children, SerializableNode{Type: "Action", Name: "VerifyGoapGoal", Metadata: map[string]any{"goap_final_goal": plan.Goal}})
 
 	router := SerializableNode{
 		Type:     "Selector",
@@ -80,7 +76,7 @@ func CompilePlanToTree(plan *Plan, opts CompileOptions) (*SerializableNode, erro
 		Children: []SerializableNode{planPath},
 	}
 	if !opts.DisableReplan {
-		router.Children = append(router.Children, replanPath())
+		router.Children = append(router.Children, replanPath(plan, opts))
 	}
 
 	root := &SerializableNode{
@@ -97,32 +93,42 @@ func CompilePlanToTree(plan *Plan, opts CompileOptions) (*SerializableNode, erro
 	return root, nil
 }
 
-// compileStep turns one plan step into a guarded step sequence.
+// compileStep wraps an executable in a gate that observes effects. Predicted
+// planner effects remain expectations, never unconditional runtime state writes.
 func compileStep(index int, step Action, opts CompileOptions) SerializableNode {
-	seq := SerializableNode{
-		Type: "Sequence",
-		Name: fmt.Sprintf("Step_%d_%s", index+1, step.Name),
+	executable := executableNode(step, opts)
+	metadata := map[string]any{"preconditions": step.Preconditions, "effects": step.Effects}
+	for _, key := range []string{"effect_source", "effect_bindings"} {
+		if value, ok := step.Metadata[key]; ok {
+			metadata[key] = value
+		}
 	}
-	if spec := encodePairs(step.Preconditions); spec != "" {
-		seq.Children = append(seq.Children, SerializableNode{
-			Type: "Condition",
-			Name: "GoapStateMatches:" + spec,
-		})
-	}
-	seq.Children = append(seq.Children, executableNode(step, opts))
-	if spec := encodePairs(step.Effects); spec != "" {
-		seq.Children = append(seq.Children, SerializableNode{
-			Type: "Action",
-			Name: "ApplyGoapEffects:" + spec,
-		})
-	}
-	return seq
+	return SerializableNode{Type: "GoapStep", Name: fmt.Sprintf("Step_%d_%s", index+1, step.Name), Metadata: metadata, Children: []SerializableNode{executable}}
+}
+
+// CompileActionStep uses the same execution/effect boundary for dynamic plans.
+func CompileActionStep(index int, step Action, opts CompileOptions) SerializableNode {
+	return compileStep(index, step, opts)
 }
 
 // executableNode picks the execution strategy for a step: a registered
 // engine action when one matches, an explicit LLM prompt when configured,
 // else a generated prompt shaped by the step's semantics and style hints.
 func executableNode(step Action, opts CompileOptions) SerializableNode {
+	if raw, ok := step.Metadata["execution"]; ok {
+		data, err := json.Marshal(raw)
+		var node SerializableNode
+		if err == nil {
+			decoder := json.NewDecoder(bytes.NewReader(data))
+			decoder.UseNumber()
+			err = decoder.Decode(&node)
+		}
+		if err != nil {
+			return SerializableNode{Type: "InvalidGOAPExecutor", Name: step.Name}
+		}
+		return node
+	}
+
 	if opts.KnownAction != nil && opts.KnownAction(step.Name) {
 		return SerializableNode{Type: "Action", Name: step.Name}
 	}
@@ -166,54 +172,22 @@ func stepPrompt(step Action, styleHints string) string {
 	return b.String()
 }
 
-// preGate is the standard input gate plus the world-state seed that makes
-// the compiled guards sound: initial state + step effects reproduce exactly
-// the state trajectory the planner verified.
+// preGate validates input and seeds only facts absent from runtime state.
+// Existing observations take precedence over the declared starting assumptions.
 func preGate(initial WorldState) SerializableNode {
-	gate := SerializableNode{
-		Type: "Sequence",
-		Name: "PreGate",
-		Children: []SerializableNode{
-			{Type: "Condition", Name: "ValidateInput"},
-			{Type: "Action", Name: "SetupDefaultTools"},
-		},
-	}
-	if spec := encodePairs(initial); spec != "" {
-		gate.Children = append(gate.Children, SerializableNode{
-			Type: "Action",
-			Name: "ApplyGoapEffects:" + spec,
-		})
-	}
-	return gate
+	return SerializableNode{Type: "Sequence", Name: "PreGate", Children: []SerializableNode{
+		{Type: "Condition", Name: "ValidateInput"}, {Type: "Action", Name: "SetupDefaultTools"},
+		{Type: "Action", Name: "SeedGoapState", Metadata: map[string]any{"goap_initial_state": initial}},
+	}}
 }
 
-// replanPath is the dynamic fallback: seed GOAP state (idempotent), replan
-// from the current world state, and execute via the engine's dynamic GOAP
-// nodes — the same proven shape as goap.BuildSerializableTree.
-func replanPath() SerializableNode {
-	return SerializableNode{
-		Type: "Sequence",
-		Name: "GoapReplanPath",
-		Children: []SerializableNode{
-			{Type: "Action", Name: "SetupGoapTools"},
-			{Type: "Action", Name: "PlanGoapActions"},
-			{
-				Type: "Selector",
-				Name: "GoapReplanRouter",
-				Children: []SerializableNode{
-					{
-						Type: "Sequence",
-						Name: "GoapReplanExecute",
-						Children: []SerializableNode{
-							{Type: "Action", Name: "ExecuteGoapStep"},
-							{Type: "Condition", Name: "HasMoreGoapSteps"},
-						},
-					},
-					{Type: "Action", Name: "GoapFallback"},
-				},
-			},
-		},
-	}
+// Replanning retains the original capabilities and goal and seeds only absent
+// initial facts. A memory sequence prevents planning from restarting on a tick.
+func replanPath(plan *Plan, opts CompileOptions) SerializableNode {
+	return SerializableNode{Type: "MemSequence", Name: "GoapReplanPath", Children: []SerializableNode{
+		{Type: "Action", Name: "SetupGoapTools", Metadata: map[string]any{"goap_actions": plan.Steps, "goap_goals": []*Goal{plan.Goal}, "goap_llm_prompts": opts.LLMPrompts}},
+		{Type: "Action", Name: "PlanGoapActions"}, {Type: "Action", Name: "ExecuteGoapStep"},
+	}}
 }
 
 // outcomeSelector mirrors the platform's standard self-correction tail.

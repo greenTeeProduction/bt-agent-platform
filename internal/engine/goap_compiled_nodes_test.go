@@ -10,7 +10,7 @@ import (
 
 func TestParseGoapPairs(t *testing.T) {
 	pairs := parseGoapPairs("has_result=false,task_type=general,count=3")
-	if pairs["has_result"] != false || pairs["task_type"] != "general" || pairs["count"] != 3.0 {
+	if pairs["has_result"] != false || pairs["task_type"] != "general" || !goap.ValuesEqual(pairs["count"], 3) {
 		t.Fatalf("pairs = %v", pairs)
 	}
 	if len(parseGoapPairs("garbage")) != 0 {
@@ -56,36 +56,18 @@ func TestCompiledGoapCondition(t *testing.T) {
 	}
 }
 
-func TestCompiledGoapAction_AppliesEffects(t *testing.T) {
+func TestCompiledGoapActionRejectsUnobservedEffects(t *testing.T) {
 	fn := compiledGoapActionFor("ApplyGoapEffects:has_result=true,task_status=completed")
-	if fn == nil {
-		t.Fatal("expected action")
-	}
 	bb := &Blackboard{}
-	if status := fn(&btcore.BTContext[Blackboard]{Blackboard: bb}); status != 1 {
-		t.Fatalf("status = %d", status)
-	}
-	ws := goapWorldStateFrom(bb)
-	if ws["has_result"] != true || ws["task_status"] != "completed" {
-		t.Fatalf("world state = %v", ws)
-	}
-
-	// Effects merge into an existing world state without clobbering it.
-	fn2 := compiledGoapActionFor("ApplyGoapEffects:linted=true")
-	fn2(&btcore.BTContext[Blackboard]{Blackboard: bb})
-	ws = goapWorldStateFrom(bb)
-	if ws["has_result"] != true || ws["linted"] != true {
-		t.Fatalf("merge lost keys: %v", ws)
+	if fn(&btcore.BTContext[Blackboard]{Blackboard: bb}) != -1 || goapWorldStateFrom(bb) != nil {
+		t.Fatal("legacy prediction became an observed fact")
 	}
 }
 
-func TestCompiledGoapNodes_NumericEquality(t *testing.T) {
-	apply := compiledGoapActionFor("ApplyGoapEffects:count=3")
-	bb := &Blackboard{}
-	apply(&btcore.BTContext[Blackboard]{Blackboard: bb})
-	guard := compiledGoapConditionFor("GoapStateMatches:count=3")
-	if !guard(bb) {
-		t.Fatal("numeric values should compare equal after parse")
+func TestCompiledGoapNodesNumericEquality(t *testing.T) {
+	bb := &Blackboard{ChainState: map[string]any{"goap_world_state": goap.WorldState{"count": 3}}}
+	if !compiledGoapConditionFor("GoapStateMatches:count=3")(bb) {
+		t.Fatal("typed numeric equality failed")
 	}
 }
 

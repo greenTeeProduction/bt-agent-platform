@@ -35,6 +35,7 @@ type ResultCheck struct {
 
 // Record captures evidence with its origin and execution identity.
 type Record struct {
+	GoapChecks          []GoapCheck          `json:"goap_checks,omitempty"`
 	Build               util.BuildProvenance `json:"build"`
 	StartedAt           time.Time            `json:"started_at,omitzero"`
 	Publication         *RuntimeRelease      `json:"publication,omitempty"`

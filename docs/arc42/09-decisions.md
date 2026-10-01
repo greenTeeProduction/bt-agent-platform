@@ -314,6 +314,7 @@ Navigation and provenance:
 | ADR-286 | [Typed Checkpoints and Observed GOAP Agent State](#adr-286) | Accepted — verification boundary; generic effect observers open | 2026-10-01 |
 | ADR-287 | [Research Sources and Verified Code Delivery Are Separate Evidence](#adr-287) | Accepted — adoption and measured impact links open | 2026-10-01 |
 | ADR-288 | [Runtime Build, Publication and Recomputable Result Evidence](#adr-288) | Accepted — causal research impact open | 2026-10-01 |
+| ADR-289 | [Observed Effects for Compiled and Dynamic GOAP](#adr-289) | Accepted — built-in adapters and rollout open | 2026-10-02 |
 
 <a id="adr-001"></a>
 
@@ -6854,6 +6855,53 @@ without native VCS metadata remain unqualified for code adoption. Publication
 trials qualify their stated tree corpus, not arbitrary research changes. Broad
 semantic goal fulfillment, paired code-change experiments, historical backfill,
 program lineage and production deployment remain open.
+
+<a id="adr-289"></a>
+
+## ADR-289: Observed Effects for Compiled and Dynamic GOAP
+
+**Context:** Both generic runtime planning paths copied predicted effects after
+producing text. Dynamic tree metadata did not reliably reach its handlers, setup
+could replace observed state, and re-ticking could reset planning. Step completion
+therefore did not establish external work or satisfaction of the complete goal.
+
+**Decision:** Compile each action to a `GoapStep` containing one executable child,
+typed preconditions/effects and an explicit observation source/binding. Compiled
+and dynamic plans execute the same gate. Model JSON may establish only
+`result.*` facts against an exact value oracle. External completion requires a
+scoped FileTask write/readback receipt or a trusted native adapter's observation.
+Missing, stale, wrong or failed observations cannot advance world state. Preserve
+step state across Running, cache terminal disposition and stop as uncertain when
+verification fails after a committed effect. Unconditional legacy effect writers
+fail explicitly and require regeneration.
+
+Apply whitelisted GOAP configuration when its node executes. Preserve observations,
+full executor definitions, exact fact numbers, budgets and typed edges. A dynamic
+memory sequence keeps its cursor across ticks. Replanning clears stale executable
+state and retains the original capabilities/goal; it does not introduce unselected
+capabilities. Both paths require satisfaction of the complete goal. Terminal
+records retain recomputable GoapChecks and scoped effect receipts. FileTask checks
+the exact normalized bytes written and read back before reporting success.
+
+**Alternatives:** Copying effects after nonempty prose preserves false completion.
+Using public blackboard flags as receipts merely relocates that assertion. Accepting
+partial-plan progress as success hides an unmet goal. These alternatives are rejected.
+
+**Status:** Accepted (2026-10-02); implemented observation boundary, bounded live
+fixtures, built-in capability migration and production adoption remain open.
+
+**Evidence:** [Live dependent-file and exact-result tests](../../internal/benchmark/live_goap_test.go),
+[execution regressions](../../internal/engine/goap_observation_test.go),
+[oracle persistence/governance](../../internal/evolution/goap_step_test.go), and
+[retained run evidence](../verification/2026-10-02-goap-observations/README.md).
+
+**Limits:** Observations trust local native capability adapters and storage. A
+verified model value is not external delivery. Built-in research/DevOps declarations
+lack these adapters; legacy persisted wrappers need reviewed regeneration and
+version adoption. Full GOAP configuration mutation preservation, broader semantic
+oracles, alternate-capability replanning, durable external retry recovery and
+production rollout remain open. The tests prove the stated file/value tasks;
+they do not establish general personal-assistant competence or causal research impact.
 
 ---
 

@@ -64,6 +64,7 @@ func ParseFileTask(node *SerializableNode) (*FileTaskSpec, error) {
 // EffectReceipt records observed file state, distinct from model-generated text.
 // Owner, task, version and run identity come from the enclosing execution record.
 type EffectReceipt struct {
+	Scope          string `json:"scope,omitempty"`
 	Kind           string `json:"kind"`
 	Input          string `json:"input,omitempty"`
 	InputDigest    string `json:"input_digest,omitempty"`

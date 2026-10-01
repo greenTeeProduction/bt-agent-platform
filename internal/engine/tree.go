@@ -167,6 +167,9 @@ type Blackboard struct {
 	executionLocalError error
 	executionBlocked    bool
 	executionForced     bool
+	goapEffectScope     string
+	goapObserved        []goapCapabilityObservation
+	goapStepRuntime     *goapRuntimeStep
 
 	// liveRun and buildCapture support runtime tree mutation
 	// (tree_mutation.go / live_run.go). Pointer + map so forkBlackboard's
@@ -340,6 +343,8 @@ func buildNodeInner(node *evolution.SerializableNode, bb *Blackboard, parentName
 		return BuildMonitor(node, bb)
 	case "FileTask":
 		return buildFileTask(node, bb)
+	case "GoapStep":
+		return buildGoapStep(node, bb)
 	case "QualityGate":
 		return BuildQualityGate(node, bb)
 	case "Retry":
@@ -353,13 +358,32 @@ func buildNodeInner(node *evolution.SerializableNode, bb *Blackboard, parentName
 		}
 		return boundedRetry(child, times)
 	case "Action":
-		return btleaf.NewAction(bb.actionForName(node.Name))
+		fn := bb.actionForName(node.Name)
+		if goapNodeHasMetadata(node) {
+			return btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int {
+				if err := applyGoapMetadata(ctx.Blackboard, node); err != nil {
+					return failGoapExecution(ctx.Blackboard, err)
+				}
+				return fn(ctx)
+			})
+		}
+		return btleaf.NewAction(fn)
 	case "ChainAction":
 		// Langchain chain node — reads ChainConfig from node metadata
 		cfg := parseChainConfig(node)
 		return BuildChainAction(cfg, bb)
 	case "Condition":
-		return btleaf.NewCondition(bb.conditionForName(node.Name))
+		fn := bb.conditionForName(node.Name)
+		if goapNodeHasMetadata(node) {
+			return btleaf.NewCondition(func(b *Blackboard) bool {
+				if err := applyGoapMetadata(b, node); err != nil {
+					failGoapExecution(b, err)
+					return false
+				}
+				return fn(b)
+			})
+		}
+		return btleaf.NewCondition(fn)
 	case "UtilitySelector":
 		return BuildUtilitySelector(node, bb)
 	case "DecisionTree":

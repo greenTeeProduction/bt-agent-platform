@@ -160,7 +160,11 @@ tree pattern, not a mandatory shape of every valid tree.
 checkpoint decorator. The GOAP wrapper explicitly selects `goap_world_state`;
 legacy boolean callers select `world_state`. The standalone `goap.Agent` exposes
 observed executor state and rejects unobserved effects before success callbacks.
-These checks do not supply generic GOAP effect observers (ADR-286).
+Compiled and dynamic plans now share `evolution.GoapStepSpec` and the engine's
+[observation gate](../../internal/engine/goap_step.go). The gate accepts a fresh
+value-checked model result in the `result.*` namespace, a scoped verified FileTask
+receipt, or a trusted capability adapter's actual observation. Predicted effects
+are expectations. They cannot directly update runtime state (ADR-289).
 
 ## 5.3 Evolution Engine
 

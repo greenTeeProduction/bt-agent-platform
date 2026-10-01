@@ -97,6 +97,7 @@ var KnownNodeTypes = map[string]bool{
 	"QualityGate":        true,
 	"FileTask":           true,
 	"CheckpointVerifier": true,
+	"GoapStep":           true,
 	// ClaudeErrorHandler — self-extending recovery decorator: child 0 is the
 	// protected subtree; further children are Claude-proposed recovery nodes
 	// grafted at build time (engine/error_handler_node.go).

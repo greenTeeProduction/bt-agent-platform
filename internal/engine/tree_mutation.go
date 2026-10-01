@@ -126,7 +126,7 @@ func maxChildrenForType(t string) int {
 		return 2 // primary child + recovery child
 	case "Retry", "Inverter", "Succeeder", "Repeater", "Runner", "Timeout",
 		"Budget", "RateLimit", "CircuitBreaker", "Monitor",
-		"CheckpointVerifier", "SemaphoreGuard", "CachedCondition",
+		"CheckpointVerifier", "GoapStep", "SemaphoreGuard", "CachedCondition",
 		"ClaudeErrorHandler", "ForEachTask", "ReviewCycle", "AbortOnEvent":
 		return 1
 	default:

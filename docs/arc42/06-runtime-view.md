@@ -410,7 +410,14 @@ mismatched fact fails verification; a completed file write followed by a failed
 checkpoint stops as uncertain instead of treating state restoration as undo.
 The standalone GOAP agent publishes returned observations before callbacks and
 rejects unestablished effects; dynamic GOAP without an executor cannot advance.
-Generic model-driven effect assertion remains open (ADR-286).
+Compiled and dynamic steps now require fresh observations (ADR-289). Each step
+checks preconditions, retains one observation scope across `Running` ticks, and
+updates state only from fields that satisfy its effect oracle. A failed observation
+after a committed file write stops as uncertain; terminal steps do not replay.
+Setup applies declared capabilities/goals/prompts when selected and preserves
+observed facts. The dynamic memory sequence retains its plan across ticks; a
+failed replan clears the previous plan. The full declared goal must hold before
+completion. Legacy `ApplyGoapEffects` fails with a regeneration diagnostic.
 
 ## 6.6 Browser Authentication and Session Expiry
 
@@ -480,8 +487,11 @@ The retained real Ollama trial used `Scheduler.RunNow` and the production runner
 an expenses file totaling 25 across three entries produced a verified report; an
 inconsistent expected total failed without replacing it. This qualifies that file
 fixture, not cron wall-clock dispatch, other integrations or general assistant
-performance. Ordinary operations still use Sol 6.1. Legacy general GOAP compilation
-continues to assert world state without proving external effects and remains open.
+performance. Ordinary operations still use Sol 6.1. The compiled and dynamic GOAP
+paths also have a live dependent file fixture: expense total 25 is saved, read by
+the next step, and doubled to 50. Independent readback and scoped terminal receipts
+establish both effects. Built-in research/DevOps declarations still need concrete
+capability observers; their prose cannot establish task completion (ADR-289).
 
 Explicit-feedback totals and review thresholds are scoped to the exact
 tree/user pair. Another user's same-ID tree and unowned legacy feedback do

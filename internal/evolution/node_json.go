@@ -1,8 +1,12 @@
 package evolution
 
-import "encoding/json"
+import (
+	"bytes"
+	"encoding/json"
+	"strings"
+)
 
-// UnmarshalJSON preserves result/checkpoint contract numbers exactly across persistence.
+// UnmarshalJSON preserves contract and GOAP fact numbers exactly across persistence.
 // Other metadata keeps its existing float64 representation for compatibility.
 func (n *SerializableNode) UnmarshalJSON(data []byte) error {
 	type plainNode SerializableNode
@@ -23,7 +27,11 @@ func (n *SerializableNode) UnmarshalJSON(data []byte) error {
 				continue
 			}
 			var value any
-			if err := json.Unmarshal(raw, &value); err != nil {
+			decoder := json.NewDecoder(bytes.NewReader(raw))
+			if key == "effects" || key == "preconditions" || strings.HasPrefix(key, "goap_") {
+				decoder.UseNumber()
+			}
+			if err := decoder.Decode(&value); err != nil {
 				return err
 			}
 			decoded.Metadata[key] = value

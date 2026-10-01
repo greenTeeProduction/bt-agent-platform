@@ -1,0 +1,304 @@
+ok  	github.com/nico/go-bt-evolve/internal/goap	0.111s
+ok  	github.com/nico/go-bt-evolve/internal/evolution	7.457s
+time=2026-10-02T00:12:57.324+02:00 level=WARN msg="bt fusion: codebase-fit probe exited nonzero (best-effort evidence, continuing)" exit_code=1
+time=2026-10-02T00:12:58.817+02:00 level=INFO msg="goap fusion: research goals abandoned after repeated implementation failures" count=1
+time=2026-10-02T00:12:58.825+02:00 level=WARN msg="goap fusion: implementation degraded — Claude path failed, no code landed; fell back to deterministic analysis" outcome="" reason="## GOAP Superpowers Runtime Failed\n\nNo existing plan path found."
+time=2026-10-02T00:12:58.826+02:00 level=WARN msg="goap fusion: implementation degraded — Claude path failed, no code landed; fell back to deterministic analysis" outcome=goap_fusion_impl_failed reason="## GOAP Superpowers Runtime Failed\n\nopenat nonexistent-plan.md: no such file or directory"
+time=2026-10-02T00:13:03.241+02:00 level=INFO msg="goap fusion: red-pass rejected, named deliverable missing at HEAD" milestone=d779e16d838e52f9:0
+time=2026-10-02T00:13:03.247+02:00 level=INFO msg="goap fusion: red-pass rejected, named deliverable missing at HEAD" milestone=d779e16d838e52f9:0
+time=2026-10-02T00:13:03.248+02:00 level=INFO msg="goap fusion: red-pass rejected, named deliverable missing at HEAD" milestone=d779e16d838e52f9:0
+time=2026-10-02T00:13:03.249+02:00 level=INFO msg="goap fusion: red-pass rejected, named deliverable missing at HEAD" milestone=d779e16d838e52f9:0
+time=2026-10-02T00:13:03.254+02:00 level=INFO msg="goap fusion: red-pass recorded, milestone attempt refunded" milestone=d779e16d838e52f9:0 streak=1
+time=2026-10-02T00:13:03.256+02:00 level=INFO msg="goap fusion: milestone completed on repeated red-pass evidence" milestone=d779e16d838e52f9:0 streak=2
+time=2026-10-02T00:13:03.258+02:00 level=INFO msg="goap fusion: red-pass recorded, completion withheld — deliverable probe unavailable" milestone=d779e16d838e52f9:0 streak=1
+time=2026-10-02T00:13:03.259+02:00 level=INFO msg="goap fusion: red-pass recorded, completion withheld — deliverable probe unavailable" milestone=d779e16d838e52f9:0 streak=2
+time=2026-10-02T00:13:03.260+02:00 level=INFO msg="goap fusion: red-pass recorded, completion withheld — deliverable probe unavailable" milestone=d779e16d838e52f9:0 streak=3
+time=2026-10-02T00:13:03.261+02:00 level=INFO msg="goap fusion: red-pass rejected, named deliverable missing at HEAD" milestone=d779e16d838e52f9:0
+time=2026-10-02T00:13:03.264+02:00 level=INFO msg="goap fusion: red-pass rejected, named deliverable missing at HEAD" milestone=d779e16d838e52f9:0
+time=2026-10-02T00:13:03.265+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=d779e16d838e52f9:0
+time=2026-10-02T00:13:03.266+02:00 level=INFO msg="goap fusion: red-pass recorded, completion withheld — deliverable probe unavailable" milestone=d779e16d838e52f9:0 streak=1
+time=2026-10-02T00:13:03.268+02:00 level=INFO msg="goap fusion: red-pass recorded, milestone attempt refunded" milestone=d779e16d838e52f9:0 streak=1
+time=2026-10-02T00:13:03.269+02:00 level=INFO msg="goap fusion: milestone completed on repeated red-pass evidence" milestone=d779e16d838e52f9:0 streak=2
+time=2026-10-02T00:13:03.271+02:00 level=INFO msg="goap fusion: red pre-check hypothesis discarded — named deliverable missing at HEAD" milestone=d779e16d838e52f9:0 red_cmd="go test ./internal/engine -short"
+time=2026-10-02T00:13:03.272+02:00 level=INFO msg="goap fusion: milestone completed on red pre-check — recorded RED passed again at HEAD, no plan phase needed" milestone=ac9d79614027c9cd:0 streak=2
+time=2026-10-02T00:13:03.275+02:00 level=INFO msg="goap fusion: red pre-check still fails — milestone needs real work" milestone=ac9d79614027c9cd:0 red_cmd="go test ./internal/foo -run TestBar"
+time=2026-10-02T00:13:03.276+02:00 level=INFO msg="goap fusion: red pre-check produced no verdict — evidence left untouched" milestone=ac9d79614027c9cd:0 red_cmd="go test ./internal/foo -run TestBar" err="goap red pre-check unavailable"
+time=2026-10-02T00:13:03.278+02:00 level=INFO msg="goap fusion: milestone completed on red pre-check — recorded RED passed again at HEAD, no plan phase needed" milestone=ac9d79614027c9cd:0 streak=2
+time=2026-10-02T00:13:03.280+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=2f0333b936080390:0
+time=2026-10-02T00:13:03.281+02:00 level=INFO msg="goap fusion: red-pass recorded, milestone attempt refunded" milestone=2f0333b936080390:0 streak=1
+time=2026-10-02T00:13:03.282+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=2f0333b936080390:0
+time=2026-10-02T00:13:03.282+02:00 level=INFO msg="goap fusion: milestone completed on repeated red-pass evidence" milestone=2f0333b936080390:0 streak=2
+time=2026-10-02T00:13:03.284+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=2f0333b936080390:0
+time=2026-10-02T00:13:03.284+02:00 level=INFO msg="goap fusion: red-pass recorded, milestone attempt refunded" milestone=2f0333b936080390:0 streak=1
+time=2026-10-02T00:13:03.286+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=2f0333b936080390:0
+time=2026-10-02T00:13:03.286+02:00 level=INFO msg="goap fusion: red-pass recorded, milestone attempt refunded" milestone=2f0333b936080390:0 streak=1
+time=2026-10-02T00:13:03.290+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=2f0333b936080390:0
+time=2026-10-02T00:13:03.291+02:00 level=INFO msg="goap fusion: red-pass recorded, milestone attempt refunded" milestone=2f0333b936080390:0 streak=1
+time=2026-10-02T00:13:03.296+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=472abaeb455e911b:0
+time=2026-10-02T00:13:03.297+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=472abaeb455e911b:0
+time=2026-10-02T00:13:03.298+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=472abaeb455e911b:0
+time=2026-10-02T00:13:03.300+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=472abaeb455e911b:0
+time=2026-10-02T00:13:03.302+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=472abaeb455e911b:0
+time=2026-10-02T00:13:03.309+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=861a583d0f641be7:0
+time=2026-10-02T00:13:03.320+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=01cf6a9ce85140d3:0
+time=2026-10-02T00:13:03.331+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=0575679200025d82:0
+time=2026-10-02T00:13:03.339+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=6892eb28ff660b40:0
+time=2026-10-02T00:13:03.350+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=59e52ffa00908b9e:0
+time=2026-10-02T00:13:03.360+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=e12c8f4e6c077e9b:0
+time=2026-10-02T00:13:03.369+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=395446fa0b837c83:0
+time=2026-10-02T00:13:03.370+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=38c47f87eee70ced:0
+time=2026-10-02T00:13:03.380+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=4b97555d1d6de94b:0
+time=2026-10-02T00:13:03.389+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=fe0211779a5b9d61:0
+time=2026-10-02T00:13:03.391+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=590db9d50efe5d04:0
+time=2026-10-02T00:13:03.392+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=7fa4c1af742fdac9:0
+time=2026-10-02T00:13:03.400+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=ba9c4c43d15122f8:0
+time=2026-10-02T00:13:03.409+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=32df1413ab6304b8:0
+time=2026-10-02T00:13:03.410+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=1e3974de6930a8ce:0
+time=2026-10-02T00:13:03.420+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=f998ca1db162fe62:0
+time=2026-10-02T00:13:03.429+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=4e1d92953e9a2b80:0
+time=2026-10-02T00:13:03.430+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=9e4c67828188cfa5:0
+time=2026-10-02T00:13:03.440+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=f2d23a5b7e7e8166:0
+time=2026-10-02T00:13:03.442+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=aa35af50f6fbabc6:0
+time=2026-10-02T00:13:03.444+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=70ac4b90fe6853f5:0
+time=2026-10-02T00:13:03.445+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=11ec922e6e76c7de:0
+time=2026-10-02T00:13:03.450+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=458668245f534e81:0
+time=2026-10-02T00:13:03.451+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=710ede2a2cf08523:0
+time=2026-10-02T00:13:03.453+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=4504c8d7de464dd7:0
+time=2026-10-02T00:13:03.460+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=8529f79fa4d9dc15:0
+time=2026-10-02T00:13:03.470+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=a8822f74b83e6459:0
+time=2026-10-02T00:13:03.480+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=e9dd4098e735d1b1:0
+time=2026-10-02T00:13:03.490+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=32fd4a80103aee6e:0
+time=2026-10-02T00:13:03.500+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=c7c4907f5ded6124:0
+time=2026-10-02T00:13:03.505+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=472abaeb455e911b:0
+time=2026-10-02T00:13:03.826+02:00 level=WARN msg="notebooklm pipeline degraded" reasons="source count 3 is far below the producer's own target 40"
+time=2026-10-02T00:13:03.827+02:00 level=WARN msg="notebooklm pipeline degraded" reasons="newest research self-reports \"LOCK_TIMEOUT\"; newest research self-reports \"import blocked\"; newest research self-reports \"Status: STALE\""
+time=2026-10-02T00:13:03.827+02:00 level=WARN msg="notebooklm pipeline degraded" reasons="newest research nlm-research-2026-07-20T021152.md is 72h0m0s old (stale after 48h0m0s)"
+time=2026-10-02T00:13:03.828+02:00 level=WARN msg="notebooklm pipeline degraded" reasons="no nlm-research-*.md synthesis exists — the producer has never written output here"
+time=2026-10-02T00:13:03.829+02:00 level=WARN msg="notebooklm pipeline degraded" reasons="newest research nlm-research-2026-07-20T021152.md is 72h0m0s old (stale after 48h0m0s)"
+time=2026-10-02T00:13:03.857+02:00 level=INFO msg="pr shepherd: pass complete" outcome=pr_shepherd_pr_opened
+time=2026-10-02T00:13:03.866+02:00 level=INFO msg="pr shepherd: pass complete" outcome=pr_shepherd_pr_opened
+time=2026-10-02T00:13:03.868+02:00 level=WARN msg="pr shepherd: pass needs attention" outcome=pr_shepherd_no_token detail="## PR Shepherd Skipped\n\nno GitHub token in env (checked BT_GITHUB_TOKEN, GITHUB_TOKEN, GH_TOKEN) and no github.com entry in the git credential store — add one of BT_GITHUB_TOKEN, GITHUB_TOKEN, GH_TOKEN to the daemon environment (unit EnvironmentFile)."
+time=2026-10-02T00:13:03.869+02:00 level=INFO msg="pr shepherd: pass complete" outcome=pr_shepherd_idle
+time=2026-10-02T00:13:03.870+02:00 level=INFO msg="pr shepherd: pass complete" outcome=pr_shepherd_idle
+time=2026-10-02T00:13:03.871+02:00 level=WARN msg="pr shepherd: pass needs attention" outcome=pr_shepherd_fetch_failed detail="## PR Shepherd Skipped\n\ngit fetch origin failed twice (offline?):\n```\nfatal: No route to host\n```"
+time=2026-10-02T00:13:03.874+02:00 level=INFO msg="pr shepherd: pass complete" outcome=pr_shepherd_synced_master
+time=2026-10-02T00:13:03.875+02:00 level=WARN msg="pr shepherd: pass needs attention" outcome=pr_shepherd_diverged detail="## PR Shepherd Needs Operator\n\nLocal master (localsha) and origin/master (originsha) have DIVERGED; refusing any autonomous rewrite. Reconcile manually."
+time=2026-10-02T00:13:03.920+02:00 level=INFO msg="pr shepherd: pass complete" outcome=pr_shepherd_pr_opened
+time=2026-10-02T00:13:03.923+02:00 level=INFO msg="pr shepherd: pass complete" outcome=pr_shepherd_ci_pending
+time=2026-10-02T00:13:03.926+02:00 level=INFO msg="pr shepherd: pass complete" outcome=pr_shepherd_ci_pending
+time=2026-10-02T00:13:03.930+02:00 level=INFO msg="pr shepherd: pass complete" outcome=pr_shepherd_merged
+time=2026-10-02T00:13:03.933+02:00 level=WARN msg="pr shepherd: pass needs attention" outcome=pr_shepherd_merge_blocked detail="## PR Shepherd Merge Blocked\n\nPR #77 is green but the merge was refused: github api PUT /repos/greenTeeProduction/bt-agent-platform/pulls/77/merge: HTTP 405: At least 1 approving review is required"
+time=2026-10-02T00:13:03.936+02:00 level=WARN msg="pr shepherd: pass needs attention" outcome=pr_shepherd_merge_blocked detail="## PR Shepherd Merge Blocked\n\nPR #77 check runs are green but branch protection cannot admit it: 1 of 2 required status check(s) never reported on the pinned head: Build — the context names must match what CI publishes.\n\nNo merge was attempted; this needs an operator."
+time=2026-10-02T00:13:03.949+02:00 level=INFO msg="pr shepherd: pass complete" outcome=pr_shepherd_merged
+time=2026-10-02T00:13:03.957+02:00 level=INFO msg="pr shepherd: pass complete" outcome=pr_shepherd_merged
+time=2026-10-02T00:13:03.961+02:00 level=WARN msg="pr shepherd: pass needs attention" outcome=pr_shepherd_merge_blocked detail="## PR Shepherd Merge Blocked\n\nPR #77 check runs are green but branch protection cannot admit it: branch protection is strict (branches must be up to date) and the pinned head is out of date with master — the required checks can never report against the current base.\n\nNo merge was attempted; this n\n...<truncated>"
+time=2026-10-02T00:13:03.965+02:00 level=WARN msg="pr shepherd: required-status-checks query failed, merging unguarded" err="github api GET /repos/greenTeeProduction/bt-agent-platform/branches/master/protection/required_status_checks: HTTP 403: no"
+time=2026-10-02T00:13:03.966+02:00 level=INFO msg="pr shepherd: pass complete" outcome=pr_shepherd_merged
+time=2026-10-02T00:13:03.970+02:00 level=INFO msg="pr shepherd: pass complete" outcome=pr_shepherd_fix_pushed
+time=2026-10-02T00:13:03.975+02:00 level=WARN msg="pr shepherd: pass needs attention" outcome=pr_shepherd_fix_exhausted detail="## PR Shepherd Fix Budget Exhausted\n\nPR #77 head localsha: 3/3 attempts for this head, 0 total since the last merge. Operator attention needed."
+time=2026-10-02T00:13:04.161+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=704ab535ad74e7e0 title="Fleet-PR branch/state writes race outside prShepherdMu" source=self-fix:self-review:704ab535ad74e7e0 program=bb6c8112c8c3e239
+time=2026-10-02T00:13:04.161+02:00 level=INFO msg="self-review: seed result" sig=race-1 canonical_sig=704ab535ad74e7e0 seeded=true reason="seeded program bb6c8112c8c3e239"
+time=2026-10-02T00:13:04.164+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=704ab535ad74e7e0 title="Fleet-PR branch/state writes race outside prShepherdMu" source=self-fix:self-review:704ab535ad74e7e0 program=bb6c8112c8c3e239
+time=2026-10-02T00:13:04.164+02:00 level=INFO msg="self-review: seed result" sig=race-1 canonical_sig=704ab535ad74e7e0 seeded=true reason="seeded program bb6c8112c8c3e239"
+time=2026-10-02T00:13:04.167+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=4ed40cd634b75301 title="Fix nil deref" source=self-fix:self-review:4ed40cd634b75301 program=555ff1c7270e953b
+time=2026-10-02T00:13:04.167+02:00 level=INFO msg="self-review: seed result" sig=foo-bar-nil-deref canonical_sig=4ed40cd634b75301 seeded=true reason="seeded program 555ff1c7270e953b"
+time=2026-10-02T00:13:04.175+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=bf22dc778e4153d9 title="Fix leaked handle" source=self-fix:self-review:bf22dc778e4153d9 program=ce69a009b81abe73
+time=2026-10-02T00:13:04.175+02:00 level=INFO msg="self-review: seed result" sig=foo-baz-leak canonical_sig=bf22dc778e4153d9 seeded=true reason="seeded program ce69a009b81abe73"
+time=2026-10-02T00:13:04.178+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=4ed40cd634b75301 title="Fix nil deref" source=self-fix:self-review:4ed40cd634b75301 program=555ff1c7270e953b
+time=2026-10-02T00:13:04.178+02:00 level=INFO msg="self-review: seed result" sig=foo-bar-nil-deref canonical_sig=4ed40cd634b75301 seeded=true reason="seeded program 555ff1c7270e953b"
+time=2026-10-02T00:13:04.181+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=4ed40cd634b75301 title="Fix nil deref" source=self-fix:self-review:4ed40cd634b75301 program=555ff1c7270e953b
+time=2026-10-02T00:13:04.182+02:00 level=INFO msg="self-review: seed result" sig=foo-bar-nil-deref canonical_sig=4ed40cd634b75301 seeded=true reason="seeded program 555ff1c7270e953b"
+time=2026-10-02T00:13:04.184+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=117832f0fc260f11 title="Fix X" source=self-fix:self-review:117832f0fc260f11 program=45045a5297cb9415
+time=2026-10-02T00:13:04.184+02:00 level=INFO msg="self-review: seed result" sig=dup-sig canonical_sig=117832f0fc260f11 seeded=true reason="seeded program 45045a5297cb9415"
+time=2026-10-02T00:13:04.184+02:00 level=INFO msg="self-review: seed result" sig=dup-sig canonical_sig=117832f0fc260f11 seeded=false reason="within cooldown"
+time=2026-10-02T00:13:04.187+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=4ed40cd634b75301 title="Fix nil deref" source=self-fix:self-review:4ed40cd634b75301 program=555ff1c7270e953b
+time=2026-10-02T00:13:04.187+02:00 level=INFO msg="self-review: seed result" sig=llm-slug-one canonical_sig=4ed40cd634b75301 seeded=true reason="seeded program 555ff1c7270e953b"
+time=2026-10-02T00:13:04.187+02:00 level=INFO msg="self-review: seed result" sig=llm-slug-two-totally-different canonical_sig=4ed40cd634b75301 seeded=false reason="within cooldown"
+time=2026-10-02T00:13:04.197+02:00 level=INFO msg="self-review: seed result" sig=killed-sig canonical_sig=117832f0fc260f11 seeded=false reason="self-fix disabled"
+time=2026-10-02T00:13:04.272+02:00 level=WARN msg="goap fusion: implementation degraded — Claude path failed, no code landed; fell back to deterministic analysis" outcome="" reason="## GOAP Superpowers Execution Failed\n\nRED command unexpectedly passed; refusing to run GREEN without failing regression evidence: /usr/local/go/bin/go test ./internal/engine -count=1 -run TestSuperpowersRuntime_ActionsRegistered -timeout 120s"
+time=2026-10-02T00:13:04.283+02:00 level=WARN msg="goap fusion: implementation degraded — Claude path failed, no code landed; fell back to deterministic analysis" outcome="" reason="## GOAP Superpowers Execution Failed\n\nRED command unexpectedly passed; refusing to run GREEN without failing regression evidence: /usr/local/go/bin/go test ./internal/engine -count=1 -run TestSuperpowersRuntime_ActionsRegistered -timeout 120s"
+time=2026-10-02T00:13:04.287+02:00 level=WARN msg="goap fusion: implementation degraded — Claude path failed, no code landed; fell back to deterministic analysis" outcome="" reason="## GOAP Superpowers Execution Failed\n\nRED command unexpectedly passed; refusing to run GREEN without failing regression evidence: /usr/local/go/bin/go test ./internal/engine -count=1 -run TestSuperpowersRuntime_ActionsRegistered -timeout 120s"
+time=2026-10-02T00:13:04.302+02:00 level=WARN msg="goap fusion: implementation degraded — Claude path failed, no code landed; fell back to deterministic analysis" outcome="" reason="## GOAP Superpowers Execution Failed\n\nRED command unexpectedly passed; refusing to run GREEN without failing regression evidence: /usr/local/go/bin/go test ./internal/engine -count=1 -run TestSuperpowersRuntime_ActionsRegistered -timeout 120s"
+time=2026-10-02T00:13:05.503+02:00 level=WARN msg="goap fusion: parked run run-x abandoned — pending-patch recovery attempts exhausted" attempts=2
+time=2026-10-02T00:13:05.508+02:00 level=WARN msg="goap fusion: parked run run-abandon abandoned — pending-patch recovery attempts exhausted" attempts=2
+time=2026-10-02T00:13:05.511+02:00 level=WARN msg="goap fusion: parked run run-durable-abandon abandoned — pending-patch recovery attempts exhausted" attempts=2
+time=2026-10-02T00:13:05.513+02:00 level=WARN msg="goap fusion: force-reaped orphaned branch superpowers/reap-log-1 (diff archived before delete)"
+time=2026-10-02T00:13:05.657+02:00 level=INFO msg="app_logger_test: rebuild-follow probe"
+time=2026-10-02T00:13:05.657+02:00 level=INFO msg="app_logger_test: package-level probe"
+time=2026-10-02T00:13:05.657+02:00 level=INFO msg="app_logger_test: under-test probe"
+time=2026-10-02T00:13:09.610+02:00 level=WARN msg="claude error handler: error judged unresolvable with registered vocabulary" handler=h signature=sig-unres reason=r verdict=unresolvable
+time=2026-10-02T00:13:09.614+02:00 level=WARN msg="claude error handler: skipping persisted extension that fails current policy" handler=eh_test_tree_ErrorHandler node=Handle_stale_policy err="action \"eh_test_recover_action\" is not in the recovery-safe allowlist"
+time=2026-10-02T00:13:09.616+02:00 level=INFO msg="claude error handler: tree extended with generated recovery node" handler=eh_test_tree_ErrorHandler node=Handle_testcat signature=294e5629fcef reason="guarded recovery"
+time=2026-10-02T00:13:09.616+02:00 level=INFO msg="claude error handler: recovered" handler=eh_test_tree_ErrorHandler node=Handle_testcat signature=294e5629fcef
+time=2026-10-02T00:13:09.618+02:00 level=INFO msg="claude error handler: tree extended with generated recovery node" handler=eh_test_tree_ErrorHandler node=Handle_testcat signature=294e5629fcef reason="guarded recovery"
+time=2026-10-02T00:13:09.618+02:00 level=INFO msg="claude error handler: recovered" handler=eh_test_tree_ErrorHandler node=Handle_testcat signature=294e5629fcef
+time=2026-10-02T00:13:09.619+02:00 level=INFO msg="claude error handler: recovered" handler=eh_test_tree_ErrorHandler node=Handle_testcat signature=294e5629fcef
+time=2026-10-02T00:13:09.620+02:00 level=WARN msg="claude error handler: error judged unresolvable with registered vocabulary" handler=eh_test_tree_ErrorHandler signature=294e5629fcef reason="needs new Go action" verdict=unresolvable
+time=2026-10-02T00:13:09.621+02:00 level=WARN msg="claude error handler: proposal rejected" handler=eh_test_tree_ErrorHandler signature=294e5629fcef err="proposal's first-ticked leaf must be a Condition guard"
+time=2026-10-02T00:13:09.625+02:00 level=INFO msg="claude error handler: tree extended with generated recovery node" handler=eh_dirty_tree_ErrorHandler node=Handle_testcat signature=457182955ea7 reason="guarded recovery"
+time=2026-10-02T00:13:09.626+02:00 level=INFO msg="claude error handler: recovered" handler=eh_dirty_tree_ErrorHandler node=Handle_testcat signature=457182955ea7
+time=2026-10-02T00:13:09.627+02:00 level=INFO msg="claude error handler: tree extended with generated recovery node" handler=eh_inner_fence_tree_ErrorHandler node=Handle_testcat signature=0bbfc2fbed65 reason="guarded recovery"
+time=2026-10-02T00:13:09.628+02:00 level=INFO msg="claude error handler: recovered" handler=eh_inner_fence_tree_ErrorHandler node=Handle_testcat signature=0bbfc2fbed65
+time=2026-10-02T00:13:09.629+02:00 level=INFO msg="claude error handler: tree extended with generated recovery node" handler=eh_test_tree_ErrorHandler node=Handle_running signature=294e5629fcef reason=r
+time=2026-10-02T00:13:09.631+02:00 level=WARN msg="claude error handler: error judged unresolvable; code_fix pending seed" handler=eh_test_tree_ErrorHandler signature=294e5629fcef reason="genuine source bug"
+time=2026-10-02T00:13:09.631+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=294e5629fcef title="Fix eh_test defect" source=self-fix:error-handler:294e5629fcef program=c0074555d9125e57
+time=2026-10-02T00:13:09.632+02:00 level=INFO msg="claude error handler: escalated unresolvable failure to a code-fix program" handler=eh_test_tree_ErrorHandler signature=294e5629fcef title="Fix eh_test defect" seeded=true reason="seeded program c0074555d9125e57"
+time=2026-10-02T00:13:09.633+02:00 level=WARN msg="claude error handler: error judged unresolvable; code_fix pending seed" handler=eh_test_tree_ErrorHandler signature=294e5629fcef reason="genuine source bug"
+time=2026-10-02T00:13:09.633+02:00 level=WARN msg="claude error handler: code_fix seed deferred by policy" handler=eh_test_tree_ErrorHandler signature=294e5629fcef title="Fix eh_test defect" reason="self-fix disabled"
+time=2026-10-02T00:13:09.634+02:00 level=WARN msg="claude error handler: error judged unresolvable; code_fix pending seed" handler=eh_test_tree_ErrorHandler signature=294e5629fcef reason="genuine source bug"
+time=2026-10-02T00:13:09.635+02:00 level=WARN msg="claude error handler: code_fix seed failed; will retry on next firing" handler=eh_test_tree_ErrorHandler signature=294e5629fcef title="Fix eh_test defect" reason="self-fix store busy"
+time=2026-10-02T00:13:09.635+02:00 level=WARN msg="claude error handler: error judged unresolvable; code_fix pending seed" handler=eh_test_tree_ErrorHandler signature=294e5629fcef reason="genuine source bug"
+time=2026-10-02T00:13:09.636+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=294e5629fcef title="Fix eh_test defect" source=self-fix:error-handler:294e5629fcef program=c0074555d9125e57
+time=2026-10-02T00:13:09.636+02:00 level=INFO msg="claude error handler: escalated unresolvable failure to a code-fix program" handler=eh_test_tree_ErrorHandler signature=294e5629fcef title="Fix eh_test defect" seeded=true reason="seeded program c0074555d9125e57"
+time=2026-10-02T00:13:09.638+02:00 level=WARN msg="claude error handler: error judged unresolvable; code_fix pending seed" handler=eh_test_tree_ErrorHandler signature=294e5629fcef reason="genuine source bug"
+time=2026-10-02T00:13:09.638+02:00 level=WARN msg="claude error handler: code_fix seed failed; will retry on next firing" handler=eh_test_tree_ErrorHandler signature=294e5629fcef title="Fix eh_test defect" reason="self-fix store busy"
+time=2026-10-02T00:13:09.638+02:00 level=WARN msg="claude error handler: error judged unresolvable; code_fix pending seed" handler=eh_test_tree_ErrorHandler signature=294e5629fcef reason="genuine source bug"
+time=2026-10-02T00:13:09.639+02:00 level=WARN msg="claude error handler: code_fix seed failed; will retry on next firing" handler=eh_test_tree_ErrorHandler signature=294e5629fcef title="Fix eh_test defect" reason="self-fix store busy"
+time=2026-10-02T00:13:09.639+02:00 level=WARN msg="claude error handler: error judged unresolvable; code_fix pending seed" handler=eh_test_tree_ErrorHandler signature=294e5629fcef reason="genuine source bug"
+time=2026-10-02T00:13:09.640+02:00 level=WARN msg="claude error handler: code_fix seed failed; will retry on next firing" handler=eh_test_tree_ErrorHandler signature=294e5629fcef title="Fix eh_test defect" reason="self-fix store busy"
+time=2026-10-02T00:13:09.641+02:00 level=WARN msg="claude error handler: error judged unresolvable with registered vocabulary" handler=eh_test_tree_ErrorHandler signature=294e5629fcef reason="transient rate limit" verdict=unresolvable
+time=2026-10-02T00:13:09.643+02:00 level=WARN msg="claude error handler: error judged unresolvable with registered vocabulary" handler=eh_test_tree_ErrorHandler signature=294e5629fcef reason=r verdict=unresolvable
+time=2026-10-02T00:13:09.647+02:00 level=WARN msg="claude error handler: extension disabled after consecutive failures" handler=h node=n1 failures=3
+time=2026-10-02T00:13:10.261+02:00 level=WARN msg="claude error handler: store unreadable, skipping counter update" path=/tmp/TestErrorHandlerStore_CorruptFileIsNeverOverwritten3354795842/001/extensions.json err="unmarshal /tmp/TestErrorHandlerStore_CorruptFileIsNeverOverwritten3354795842/001/extensions.json: invalid character 'b' looking for beginning of object key string"
+time=2026-10-02T00:13:10.262+02:00 level=WARN msg="claude error handler: ledger unreadable, skipping stamp" err="unmarshal /tmp/TestErrorHandlerStore_CorruptFileIsNeverOverwritten3354795842/001/ledger.json: invalid character 'b' looking for beginning of object key string"
+time=2026-10-02T00:13:10.266+02:00 level=WARN msg="claude error handler: extension disabled after consecutive failures" handler=h node=n1 failures=3
+time=2026-10-02T00:13:10.267+02:00 level=WARN msg="claude error handler: extension disabled after consecutive failures" handler=h node=n1 failures=4
+time=2026-10-02T00:13:10.267+02:00 level=WARN msg="claude error handler: extension disabled after consecutive failures" handler=h node=n1 failures=5
+time=2026-10-02T00:13:10.268+02:00 level=WARN msg="claude error handler: extension disabled after consecutive failures" handler=h node=n1 failures=6
+time=2026-10-02T00:13:10.268+02:00 level=WARN msg="claude error handler: extension disabled after consecutive failures" handler=h node=n1 failures=7
+time=2026-10-02T00:13:10.269+02:00 level=WARN msg="claude error handler: extension disabled after consecutive failures" handler=h node=n1 failures=8
+time=2026-10-02T00:13:10.269+02:00 level=WARN msg="claude error handler: extension disabled after consecutive failures" handler=h node=n1 failures=9
+time=2026-10-02T00:13:10.270+02:00 level=WARN msg="claude error handler: extension disabled after consecutive failures" handler=h node=n1 failures=10
+time=2026-10-02T00:13:10.270+02:00 level=WARN msg="claude error handler: extension disabled after consecutive failures" handler=h node=n1 failures=11
+time=2026-10-02T00:13:10.270+02:00 level=WARN msg="claude error handler: extension disabled after consecutive failures" handler=h node=n1 failures=12
+time=2026-10-02T00:13:10.272+02:00 level=WARN msg="claude error handler: external repair required" handler=runtime_policy category=resource_exhausted
+time=2026-10-02T00:13:10.273+02:00 level=WARN msg="claude error handler: external repair required" handler=runtime_policy category=auth
+time=2026-10-02T00:13:10.274+02:00 level=WARN msg="claude error handler: external repair required" handler=runtime_policy category=working_tree_drift
+time=2026-10-02T00:13:10.275+02:00 level=WARN msg="claude error handler: external repair required" handler=runtime_policy category=""
+time=2026-10-02T00:13:10.279+02:00 level=INFO msg="ERROR panic recovered context=\"parallel child\" panic=\"sibling fault\""
+time=2026-10-02T00:13:10.280+02:00 level=INFO msg="ERROR panic recovered context=\"parallel child\" panic=\"sibling fault\""
+time=2026-10-02T00:13:10.282+02:00 level=INFO msg="ERROR panic recovered context=\"parallel child\" panic=\"sibling fault\""
+--- FAIL: TestAction_PlanGoapActions_JSONActionsInvalidEntry (0.00s)
+    goap_nodes_test.go:122: expected 1 despite invalid entry, got -1: json: cannot unmarshal string into Go value of type goap.Action
+--- FAIL: TestAction_PlanGoapActions_JSONActionsEmptyAfterFilter (0.00s)
+    goap_nodes_test.go:146: result should mention no valid actions
+--- FAIL: TestAction_PlanGoapActions_WrongActionsType (0.00s)
+    goap_nodes_test.go:279: result should mention no valid actions
+time=2026-10-02T00:13:10.322+02:00 level=INFO msg="goap fusion: red pre-check hypothesis discarded — named deliverable missing at HEAD" milestone=a33c7080aa5d3a4b:0 red_cmd="go test ./internal/engine -short -count=1"
+time=2026-10-02T00:13:10.329+02:00 level=INFO msg="goap fusion: red pre-check produced no verdict — evidence left untouched" milestone=a33c7080aa5d3a4b:0 red_cmd="go test ./internal/engine -short -count=1" err="command killed by 8m0s shell timeout: context deadline exceeded"
+time=2026-10-02T00:13:10.330+02:00 level=INFO msg="goap fusion: red pre-check produced no verdict — evidence left untouched" milestone=a33c7080aa5d3a4b:0 red_cmd="go test ./internal/engine -short -count=1" err="fork/exec /bin/bash: cannot allocate memory"
+time=2026-10-02T00:13:10.331+02:00 level=INFO msg="goap fusion: red pre-check still fails — milestone needs real work" milestone=a33c7080aa5d3a4b:0 red_cmd="go test ./internal/engine -short -count=1"
+time=2026-10-02T00:13:10.333+02:00 level=INFO msg="goap fusion: milestone completed on red pre-check — recorded RED passed again at HEAD, no plan phase needed" milestone=a33c7080aa5d3a4b:0 streak=2
+time=2026-10-02T00:13:10.335+02:00 level=INFO msg="goap fusion: milestone completed on red pre-check — recorded RED passed again at HEAD, no plan phase needed" milestone=a33c7080aa5d3a4b:0 streak=2
+time=2026-10-02T00:13:10.336+02:00 level=INFO msg="goap fusion: milestone completed on red pre-check — recorded RED passed again at HEAD, no plan phase needed" milestone=a33c7080aa5d3a4b:0 streak=2
+time=2026-10-02T00:13:12.743+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=cross-sig-0 title="Cross fix 0" source=self-fix:test:cross-sig-0 program=3aa72b85877f243e
+time=2026-10-02T00:13:12.744+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=cross-sig-8 title="Cross fix 8" source=self-fix:test:cross-sig-8 program=43117875be5e7353
+time=2026-10-02T00:13:12.746+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=cross-sig-1 title="Cross fix 1" source=self-fix:test:cross-sig-1 program=e4e3e8b9facaecd7
+time=2026-10-02T00:13:12.747+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=cross-sig-5 title="Cross fix 5" source=self-fix:test:cross-sig-5 program=5d3b4703e4a0a6e1
+time=2026-10-02T00:13:12.748+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=cross-sig-2 title="Cross fix 2" source=self-fix:test:cross-sig-2 program=d641449a3c9a25c5
+time=2026-10-02T00:13:12.750+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=cross-sig-3 title="Cross fix 3" source=self-fix:test:cross-sig-3 program=8609c360f252649b
+time=2026-10-02T00:13:12.751+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=cross-sig-6 title="Cross fix 6" source=self-fix:test:cross-sig-6 program=937581cb86433148
+time=2026-10-02T00:13:12.753+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=cross-sig-7 title="Cross fix 7" source=self-fix:test:cross-sig-7 program=929d962b3467e7de
+time=2026-10-02T00:13:12.754+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=cross-sig-4 title="Cross fix 4" source=self-fix:test:cross-sig-4 program=6fdfed9b19da2cbe
+time=2026-10-02T00:13:12.756+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=cross-sig-15 title="Cross fix 15" source=self-fix:test:cross-sig-15 program=d104fa7bc7e3f1ea
+time=2026-10-02T00:13:12.758+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=cross-sig-14 title="Cross fix 14" source=self-fix:test:cross-sig-14 program=42010a8bee7a93c9
+time=2026-10-02T00:13:12.759+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=cross-sig-17 title="Cross fix 17" source=self-fix:test:cross-sig-17 program=b5602b6a444e92aa
+time=2026-10-02T00:13:12.761+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=cross-sig-18 title="Cross fix 18" source=self-fix:test:cross-sig-18 program=dfd413780ce9dc6a
+time=2026-10-02T00:13:12.762+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=cross-sig-11 title="Cross fix 11" source=self-fix:test:cross-sig-11 program=f05a2e4eacc9f0af
+time=2026-10-02T00:13:12.764+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=cross-sig-9 title="Cross fix 9" source=self-fix:test:cross-sig-9 program=a6679a4a8c77e5d7
+time=2026-10-02T00:13:12.766+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=cross-sig-10 title="Cross fix 10" source=self-fix:test:cross-sig-10 program=003ef11396664938
+time=2026-10-02T00:13:12.769+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=cross-sig-12 title="Cross fix 12" source=self-fix:test:cross-sig-12 program=a69aba67f85c4a28
+time=2026-10-02T00:13:12.770+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=cross-sig-19 title="Cross fix 19" source=self-fix:test:cross-sig-19 program=1801781fbef71c5b
+time=2026-10-02T00:13:12.772+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=cross-sig-13 title="Cross fix 13" source=self-fix:test:cross-sig-13 program=949290e889f6d49c
+time=2026-10-02T00:13:12.774+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=cross-sig-16 title="Cross fix 16" source=self-fix:test:cross-sig-16 program=267bb31e79d76ce5
+time=2026-10-02T00:13:15.955+02:00 level=INFO msg="WARN log export already initialized"
+time=2026-10-02T00:13:16.869+02:00 level=INFO msg="pr shepherd: pass complete" outcome=pr_shepherd_merged
+time=2026-10-02T00:13:16.881+02:00 level=WARN msg="pr shepherd: pass needs attention" outcome=pr_shepherd_api_error detail="## PR Shepherd Skipped\n\nCould not verify previous PR merge: Get \"http://127.0.0.1:37687/repos/greenTeeProduction/bt-agent-platform/pulls/76\": lookup unavailable"
+time=2026-10-02T00:13:16.886+02:00 level=INFO msg="pr shepherd: pass complete" outcome=pr_shepherd_ci_pending
+time=2026-10-02T00:13:16.887+02:00 level=WARN msg="goap fusion: implementation degraded — Claude path failed, no code landed; fell back to deterministic analysis" outcome="" reason="## GOAP Superpowers Runtime Failed\n\nNo existing plan path found."
+time=2026-10-02T00:13:17.003+02:00 level=INFO msg="HermesUpdateAgent: ENTERED action"
+time=2026-10-02T00:13:17.005+02:00 level=INFO msg="HermesUpdateAgent: version check: bin=/tmp/TestHermesUpdateAgentVerificationupdated2787168906/001/.local/bin/hermes err=<nil> ver=Hermes fixture version"
+time=2026-10-02T00:13:17.039+02:00 level=INFO msg="HermesUpdateAgent: git fetch: err=<nil>"
+time=2026-10-02T00:13:17.043+02:00 level=INFO msg="HermesUpdateAgent: behind count: known=true count=2 raw=\"2\" err=<nil>"
+time=2026-10-02T00:13:17.043+02:00 level=INFO msg="HermesUpdateAgent: running hermes update, behind known=true count=2"
+time=2026-10-02T00:13:17.060+02:00 level=INFO msg="HermesUpdateAgent: update complete: err=<nil> output_len=29"
+time=2026-10-02T00:13:17.069+02:00 level=INFO msg="HermesUpdateAgent: DONE: updated successfully"
+time=2026-10-02T00:13:17.156+02:00 level=INFO msg="HermesUpdateAgent: ENTERED action"
+time=2026-10-02T00:13:17.160+02:00 level=INFO msg="HermesUpdateAgent: version check: bin=/tmp/TestHermesUpdateAgentVerificationunchanged2486217483/001/.local/bin/hermes err=<nil> ver=Hermes fixture version"
+time=2026-10-02T00:13:17.196+02:00 level=INFO msg="HermesUpdateAgent: git fetch: err=<nil>"
+time=2026-10-02T00:13:17.199+02:00 level=INFO msg="HermesUpdateAgent: behind count: known=true count=2 raw=\"2\" err=<nil>"
+time=2026-10-02T00:13:17.200+02:00 level=INFO msg="HermesUpdateAgent: running hermes update, behind known=true count=2"
+time=2026-10-02T00:13:17.209+02:00 level=INFO msg="HermesUpdateAgent: update complete: err=<nil> output_len=0"
+time=2026-10-02T00:13:17.218+02:00 level=INFO msg="HermesUpdateAgent: DONE: update NOT verified — **Status**: FAILED — hermes update exited 0 but HEAD did not move (still 2 commits behind)"
+time=2026-10-02T00:13:17.303+02:00 level=INFO msg="HermesUpdateAgent: ENTERED action"
+time=2026-10-02T00:13:17.305+02:00 level=INFO msg="HermesUpdateAgent: version check: bin=/tmp/TestHermesUpdateAgentVerificationresidual_behind2708193044/001/.local/bin/hermes err=<nil> ver=Hermes fixture version"
+time=2026-10-02T00:13:17.341+02:00 level=INFO msg="HermesUpdateAgent: git fetch: err=<nil>"
+time=2026-10-02T00:13:17.344+02:00 level=INFO msg="HermesUpdateAgent: behind count: known=true count=2 raw=\"2\" err=<nil>"
+time=2026-10-02T00:13:17.344+02:00 level=INFO msg="HermesUpdateAgent: running hermes update, behind known=true count=2"
+time=2026-10-02T00:13:17.366+02:00 level=INFO msg="HermesUpdateAgent: update complete: err=<nil> output_len=30"
+time=2026-10-02T00:13:17.377+02:00 level=INFO msg="HermesUpdateAgent: DONE: update NOT verified — **Status**: FAILED — HEAD moved but still 1 behind; update incomplete, retry next run"
+time=2026-10-02T00:13:17.464+02:00 level=INFO msg="HermesUpdateAgent: ENTERED action"
+time=2026-10-02T00:13:17.467+02:00 level=INFO msg="HermesUpdateAgent: version check: bin=/tmp/TestHermesUpdateAgentVerificationunreadable_HEAD1965195030/001/.local/bin/hermes err=<nil> ver=Hermes fixture version"
+time=2026-10-02T00:13:17.501+02:00 level=INFO msg="HermesUpdateAgent: git fetch: err=<nil>"
+time=2026-10-02T00:13:17.506+02:00 level=INFO msg="HermesUpdateAgent: behind count: known=true count=2 raw=\"2\" err=<nil>"
+time=2026-10-02T00:13:17.506+02:00 level=INFO msg="HermesUpdateAgent: running hermes update, behind known=true count=2"
+time=2026-10-02T00:13:17.520+02:00 level=INFO msg="HermesUpdateAgent: update complete: err=<nil> output_len=0"
+time=2026-10-02T00:13:17.527+02:00 level=INFO msg="HermesUpdateAgent: DONE: update NOT verified — **Status**: FAILED — could not verify HEAD movement"
+time=2026-10-02T00:13:17.610+02:00 level=INFO msg="HermesUpdateAgent: ENTERED action"
+time=2026-10-02T00:13:17.613+02:00 level=INFO msg="HermesUpdateAgent: version check: bin=/tmp/TestHermesUpdateAgentVerificationunknown_residual2124864571/001/.local/bin/hermes err=<nil> ver=Hermes fixture version"
+time=2026-10-02T00:13:17.648+02:00 level=INFO msg="HermesUpdateAgent: git fetch: err=<nil>"
+time=2026-10-02T00:13:17.652+02:00 level=INFO msg="HermesUpdateAgent: behind count: known=true count=2 raw=\"2\" err=<nil>"
+time=2026-10-02T00:13:17.652+02:00 level=INFO msg="HermesUpdateAgent: running hermes update, behind known=true count=2"
+time=2026-10-02T00:13:17.680+02:00 level=INFO msg="HermesUpdateAgent: update complete: err=<nil> output_len=29"
+time=2026-10-02T00:13:17.689+02:00 level=INFO msg="HermesUpdateAgent: DONE: update NOT verified — **Status**: FAILED — could not re-verify behind count after update"
+--- FAIL: TestAction_GoapFallback (0.00s)
+    registry_test.go:969: expected 1, got -1
+    registry_test.go:972: expected outcome 'partial', got "failure"
+    registry_test.go:975: result should mention falling back
+time=2026-10-02T00:13:20.686+02:00 level=WARN msg="landed code lacks complete research attribution" run=delivery-5a2baecbc2f62913 err="read /tmp/TestResearchDeliveryPersistenceFailureDoesNotReplayCode2137963640/001/knowledge.json.trace-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.json: is a directory"
+time=2026-10-02T00:13:20.706+02:00 level=WARN msg="landed code lacks complete research attribution" run=delivery-5a2baecbc2f62913 err="read /tmp/TestResearchDeliveryPersistenceFailureDoesNotReplayCode2137963640/001/knowledge.json.trace-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.json: is a directory"
+time=2026-10-02T00:13:21.785+02:00 level=ERROR msg="terminal run evidence not saved" tree=EvidenceOnce run_id=run-b06478fbdc4b4498ab0db9ed46e44720 error="create dir for /tmp/TestRunEvidenceFailureDoesNotReplayCompletedWork3820682983/001/reflection-run-b06478fbdc4b4498ab0db9ed46e44720.json: open /tmp/TestRunEvidenceFailureDoesNotReplayCompletedWork3820682983/001: not a directory"
+time=2026-10-02T00:13:21.787+02:00 level=INFO msg="tree mutated at tick boundary" run=run_1790892801786323760 applied=1 generation=1
+time=2026-10-02T00:13:21.789+02:00 level=INFO msg="tree mutated at tick boundary" run=run_1790892801788434459 applied=1 generation=1
+time=2026-10-02T00:13:21.789+02:00 level=INFO msg="tree mutated at tick boundary" run=run_1790892801789908003 applied=1 generation=1
+time=2026-10-02T00:13:21.790+02:00 level=WARN msg="tree mutation rejected" run=run_1790892801790226629 op=run_1790892801790226629-op1 kind=remove err="remove: cannot remove the root node"
+time=2026-10-02T00:13:21.790+02:00 level=INFO msg="tree mutated at tick boundary" run=run_1790892801790443526 applied=1 generation=1
+time=2026-10-02T00:13:21.790+02:00 level=WARN msg="tree mutation rejected" run=run_1790892801790895209 op=run_1790892801790895209-op1 kind=remove err="remove: cannot remove the root node"
+time=2026-10-02T00:13:21.792+02:00 level=INFO msg="tree mutated at tick boundary" run=run_1790892801790895209 applied=1 generation=1
+time=2026-10-02T00:13:21.792+02:00 level=WARN msg="tree mutation rejected" run=run_1790892801792672403 op=run_1790892801792672403-op1 kind=remove err="remove: cannot remove the root node"
+time=2026-10-02T00:13:21.794+02:00 level=INFO msg="tree mutated at tick boundary" run=run_1790892801792672403 applied=1 generation=1
+time=2026-10-02T00:13:21.804+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=sig1 title="Fix X" source=self-fix:test:sig1 program=45045a5297cb9415
+time=2026-10-02T00:13:21.806+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=sig1 title="Fix X" source=self-fix:test:sig1 program=45045a5297cb9415
+time=2026-10-02T00:13:21.807+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=sig1 title="Fix X" source=self-fix:test:sig1 program=45045a5297cb9415
+time=2026-10-02T00:13:21.808+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=sig1 title="Fix X take two" source=self-fix:test:sig1 program=19215f8b67394a3b
+time=2026-10-02T00:13:21.818+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=sig-new title="Fix Z" source=self-fix:test:sig-new program=9b6e81c814e2b2e8
+time=2026-10-02T00:13:21.821+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=sigA title="Fix X" source=self-fix:test:sigA program=45045a5297cb9415
+time=2026-10-02T00:13:21.823+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=sig-same title="Fix Same" source=self-fix:test:sig-same program=37937f69b1fb27d5
+time=2026-10-02T00:13:21.826+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=sig1 title="Fix One" source=self-fix:mis-tagged-source-1 program=6bd36ff1f99f2a45
+time=2026-10-02T00:13:21.827+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=sig2 title="Fix Two" source=self-fix:mis-tagged-source-2 program=28c1d2cc8f4fa963
+time=2026-10-02T00:13:21.829+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=sig11 title="Fix sig11" source=self-fix:test:sig11 program=994fcf3e94dfbea1
+time=2026-10-02T00:13:21.829+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=sig1 title="Fix sig1" source=self-fix:test:sig1 program=79ea9b9f00933f67
+time=2026-10-02T00:13:21.830+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=sig0 title="Fix sig0" source=self-fix:test:sig0 program=9ea99a1ffb127192
+time=2026-10-02T00:13:21.831+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=sig6 title="Fix sig6" source=self-fix:test:sig6 program=f1c3c47c72cedb52
+time=2026-10-02T00:13:21.832+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=sig4 title="Fix sig4" source=self-fix:test:sig4 program=c37285e65cb5242f
+time=2026-10-02T00:13:21.833+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=sig5 title="Fix sig5" source=self-fix:test:sig5 program=abdabdd93780cb90
+time=2026-10-02T00:13:21.834+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=sig2 title="Fix sig2" source=self-fix:test:sig2 program=4d0c5ad1eb1008dd
+time=2026-10-02T00:13:21.835+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=sig3 title="Fix sig3" source=self-fix:test:sig3 program=7e3e6e255c6812d0
+time=2026-10-02T00:13:21.836+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=sig8 title="Fix sig8" source=self-fix:test:sig8 program=b41b3da39464eff7
+time=2026-10-02T00:13:21.837+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=sig9 title="Fix sig9" source=self-fix:test:sig9 program=989650e270bde65a
+time=2026-10-02T00:13:21.838+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=sig7 title="Fix sig7" source=self-fix:test:sig7 program=5d05c7c5ac8989da
+time=2026-10-02T00:13:21.839+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=sig10 title="Fix sig10" source=self-fix:test:sig10 program=cc3d4820d92236ad
+time=2026-10-02T00:13:23.341+02:00 level=WARN msg="goap fusion: implementation degraded — Claude path failed, no code landed; fell back to deterministic analysis" outcome="" reason="## GOAP Superpowers Execution Failed\n\nred-phase claude failed: exit status 1\nYou are Claude Code executing the RED phase of one Superpowers SDLC task.\n\nRepo: /tmp/TestRateLimitFailoverRuntimeDoesNotReclassifyPrompt103344781/006\nTask 1: 1: Execute requested Superpowers change\nObjective: Implement the\n...<truncated>"
+time=2026-10-02T00:13:23.351+02:00 level=WARN msg="goap fusion: implementation degraded — Claude path failed, no code landed; fell back to deterministic analysis" outcome="" reason="## GOAP Superpowers Execution Failed\n\ntask GREEN verification failed: /usr/local/go/bin/go test ./internal/engine -count=1 -run TestSuperpowersRuntime_ActionsRegistered -timeout 120s\nerror: exit status 1\nfixture: You've reached your model limit. Run /usage-credits\nRED command unexpectedly passed\n---\n...<truncated>"
+time=2026-10-02T00:13:24.614+02:00 level=WARN msg="goap fusion: implementation degraded — Claude path failed, no code landed; fell back to deterministic analysis" outcome=pending_patch reason="## GOAP Superpowers Pending Patch\n\npending_patch: main repo has blocking dirty files; patch saved to /tmp/TestRunSuperpowersRuntime_PreservesDirtyMainCheckout1447454055/007/artifacts/verification/worktree.patch\nMM operator.txt"
+time=2026-10-02T00:13:25.068+02:00 level=WARN msg="goap fusion: force-reaped orphaned branch superpowers/old-abandoned (diff archived before delete)"
+time=2026-10-02T00:13:25.068+02:00 level=WARN msg="goap fusion: force-reaped orphaned branch superpowers/old-missing (diff archived before delete)"
+time=2026-10-02T00:13:25.074+02:00 level=WARN msg="goap fusion: force-reaped orphaned branch superpowers/reap-1 (diff archived before delete)"
+FAIL
+FAIL	github.com/nico/go-bt-evolve/internal/engine	32.870s
+ok  	github.com/nico/go-bt-evolve/internal/domains	1.367s
+ok  	github.com/nico/go-bt-evolve/internal/knowledge	21.190s
+ok  	github.com/nico/go-bt-evolve/internal/factory	0.027s
+ok  	github.com/nico/go-bt-evolve/internal/benchmark	0.101s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-agent	2.933s
+FAIL

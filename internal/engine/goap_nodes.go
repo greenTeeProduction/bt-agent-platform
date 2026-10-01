@@ -2,11 +2,9 @@ package engine
 
 import (
 	"fmt"
-	"maps"
 	"strings"
 
 	"github.com/nico/go-bt-evolve/internal/goap"
-	"github.com/nico/go-bt-evolve/internal/reliability"
 	btcore "github.com/rvitorper/go-bt/core"
 )
 
@@ -17,32 +15,9 @@ func registerGoapNodes() {
 	// SetupGoapTools initializes GOAP chain state on the blackboard.
 	// This seeds goap_actions, goap_goals, goap_config so that HasGoapGoal
 	// and PlanGoapActions can operate without external seeding.
-	actionRegistry["SetupGoapTools"] = func(ctx *btcore.BTContext[Blackboard]) int {
-		b := ctx.Blackboard
-		cs := b.ChainState
-		if cs == nil {
-			cs = make(map[string]any)
-			b.ChainState = cs
-		}
-
-		// Only seed if not already configured (idempotent)
-		if _, ok := cs["goap_actions"]; ok {
-			return 1
-		}
-
-		// Seed standard GOAP actions for task decomposition
-		cs["goap_actions"] = goap.StandardActions()
-		cs["goap_goals"] = []*goap.Goal{
-			goap.NewGoal("task_completed", 1.0, goap.WorldState{"task_status": "completed"}),
-		}
-		cs["goap_config"] = goap.DefaultGOAPConfig()
-		cs["goap_world_state"] = goap.WorldState{
-			"task":        b.Task,
-			"has_result":  false,
-			"task_status": "pending",
-		}
-		return 1
-	}
+	actionRegistry["SetupGoapTools"] = setupObservedGoapTools
+	actionRegistry["SeedGoapState"] = func(ctx *btcore.BTContext[Blackboard]) int { return 1 }
+	actionRegistry["VerifyGoapGoal"] = func(ctx *btcore.BTContext[Blackboard]) int { return 1 }
 
 	// --- Conditions ---
 
@@ -138,6 +113,13 @@ func registerGoapNodes() {
 			b.ChainState = cs
 		}
 
+		// A failed replan must not leave an executable old cursor/plan behind.
+		for _, key := range []string{"goap_plan", "goap_steps", "goap_step_index"} {
+			delete(cs, key)
+		}
+		cs["goap_plan_found"] = false
+		b.goapStepRuntime = nil
+
 		// Extract actions and config from metadata
 		actionsRaw, ok := cs["goap_actions"]
 		if !ok {
@@ -147,26 +129,10 @@ func registerGoapNodes() {
 		}
 
 		var plannerActions []goap.Action
-		// Support both []goap.Action and []interface{} from JSON deserialization
-		switch v := actionsRaw.(type) {
-		case []goap.Action:
-			plannerActions = v
-		case []any:
-			for _, a := range v {
-				if m, ok := a.(map[string]any); ok {
-					action := goap.Action{
-						Name: stringField(m, "name"),
-						Cost: floatField(m, "cost", 1.0),
-					}
-					if pre, ok := m["preconditions"].(map[string]any); ok {
-						action.Preconditions = goap.WorldState(worldStateFromMap(pre))
-					}
-					if eff, ok := m["effects"].(map[string]any); ok {
-						action.Effects = goap.WorldState(worldStateFromMap(eff))
-					}
-					plannerActions = append(plannerActions, action)
-				}
-			}
+		if err := decodeGoapValue(actionsRaw, &plannerActions); err != nil {
+			b.Outcome = "failure"
+			b.Result = "invalid GOAP actions: " + err.Error()
+			return -1
 		}
 
 		if len(plannerActions) == 0 {
@@ -178,19 +144,22 @@ func registerGoapNodes() {
 		// Build planner
 		config := goap.DefaultGOAPConfig()
 		if cfgRaw, ok := cs["goap_config"]; ok {
-			if cfg, ok := cfgRaw.(goap.GOAPTreeConfig); ok {
-				config = cfg
+			if err := decodeGoapValue(cfgRaw, &config); err != nil {
+				b.Outcome = "failure"
+				b.Result = err.Error()
+				return -1
 			}
+		}
+		if config.MaxPlannerDepth <= 0 {
+			config.MaxPlannerDepth = 50
+		}
+		if config.MaxPlannerNodes <= 0 {
+			config.MaxPlannerNodes = 10000
 		}
 		planner := goap.NewPlanner(plannerActions, config.MaxPlannerDepth, config.MaxPlannerNodes)
 
 		// Get or create world state
-		var worldState goap.WorldState
-		if wsRaw, ok := cs["goap_world_state"]; ok {
-			if ws, ok := wsRaw.(goap.WorldState); ok {
-				worldState = ws
-			}
-		}
+		worldState := goapWorldStateFrom(b)
 		if worldState == nil {
 			worldState = make(goap.WorldState)
 			// Initialize from task
@@ -202,8 +171,10 @@ func registerGoapNodes() {
 		// Get goal
 		var goal *goap.Goal
 		if gRaw, ok := cs["goap_current_goal"]; ok {
-			if g, ok := gRaw.(*goap.Goal); ok {
-				goal = g
+			if err := decodeGoapValue(gRaw, &goal); err != nil || goal == nil || len(goal.Conditions) == 0 {
+				b.Outcome = "failure"
+				b.Result = "invalid GOAP goal"
+				return -1
 			}
 		}
 		if goal == nil {
@@ -232,116 +203,20 @@ func registerGoapNodes() {
 	}
 
 	// ExecuteGoapStep executes the next step in the GOAP plan.
-	actionRegistry["ExecuteGoapStep"] = func(ctx *btcore.BTContext[Blackboard]) int {
-		b := ctx.Blackboard
-		cs := b.ChainState
-		if cs == nil {
-			b.Outcome = "failure"
-			return -1
-		}
-
-		idxRaw, ok := cs["goap_step_index"]
-		if !ok {
-			b.Outcome = "failure"
-			return -1
-		}
-		idx := idxRaw.(int)
-
-		stepsRaw, ok := cs["goap_steps"]
-		if !ok {
-			b.Outcome = "failure"
-			return -1
-		}
-		steps := stepsRaw.([]string)
-
-		if idx >= len(steps) {
-			b.Outcome = "success"
-			b.Result = "all GOAP steps completed"
-			return 1
-		}
-
-		stepName := steps[idx]
-
-		// Execute step via LLM if available
-		var stepOutput string
-		if b.LLM != nil {
-			prompt := buildGoapStepPrompt(b.Task, stepName, cs)
-			result, err := b.LLM.Generate(prompt)
-			if err != nil {
-				b.Outcome = "failure"
-				b.Result = "GOAP step " + stepName + " failed: " + err.Error()
-				return -1
-			}
-			cs["goap_last_step_result"] = result
-			stepOutput = result
-		} else {
-			err := fmt.Errorf("GOAP step %q has no configured executor", stepName)
-			b.stopExecution(err.Error(), &reliability.ExecutionStoppedError{Outcome: "failure", Err: err})
-			b.applyExecutionStop()
-			return -1
-		}
-
-		// Accumulate step result for multi-step reasoning context
-		stepResults := getStepResults(cs)
-		stepResults = append(stepResults, GoapStepResult{Step: len(stepResults) + 1, Result: stepOutput})
-		cs["goap_step_results"] = stepResults
-
-		// Update world state based on the plan step effects
-		if plan, ok := cs["goap_plan"]; ok {
-			if p, ok := plan.(*goap.Plan); ok && idx < len(p.Steps) {
-				ws, ok := cs["goap_world_state"].(goap.WorldState)
-				if !ok {
-					ws = make(goap.WorldState)
-				}
-				maps.Copy(ws, p.Steps[idx].Effects)
-				cs["goap_world_state"] = ws
-			}
-		}
-
-		cs["goap_step_index"] = idx + 1
-		cs["goap_executed_steps"] = append(getStringSlice(cs, "goap_executed_steps"), stepName)
-		b.Outcome = "running"
-
-		return 1
-	}
+	actionRegistry["ExecuteGoapStep"] = executeObservedGoapStep
 
 	// GoapFallback handles the case where GOAP execution fails.
 	actionRegistry["GoapFallback"] = func(ctx *btcore.BTContext[Blackboard]) int {
-		b := ctx.Blackboard
-		b.Outcome = "partial"
-		b.Result = "GOAP execution failed, falling back to default behavior"
-		return 1
+		ctx.Blackboard.Outcome = "failure"
+		return -1
 	}
 
-	// ReflectGoapOutcome reflects on the GOAP execution outcome and synthesizes
-	// a final result from all accumulated step outputs.
+	// ReflectGoapOutcome retains the verified final output after completion.
 	actionRegistry["ReflectGoapOutcome"] = func(ctx *btcore.BTContext[Blackboard]) int {
-		b := ctx.Blackboard
-		cs := b.ChainState
-
-		planFound := false
-		if cs != nil {
-			if pf, ok := cs["goap_plan_found"]; ok {
-				planFound = pf.(bool)
-			}
+		if ctx.Blackboard.Outcome != "success" {
+			return -1
 		}
-
-		if b.Outcome == "success" && planFound {
-			b.Outcome = "success"
-			// Synthesize final result from all step outputs
-			results := getStepResults(cs)
-			if len(results) > 0 {
-				parts := make([]string, 0, len(results))
-				for _, r := range results {
-					parts = append(parts, fmt.Sprintf("Step %d: %s", r.Step, r.Result))
-				}
-				b.Result = strings.Join(parts, "\n")
-			} else {
-				b.Result = "GOAP plan executed successfully (no step results)"
-			}
-		}
-
-		return 1
+		return 1 // Keep the verified final output intact.
 	}
 }
 

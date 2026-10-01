@@ -1,0 +1,10 @@
+ok  	github.com/nico/go-bt-evolve/internal/goap	0.030s
+ok  	github.com/nico/go-bt-evolve/internal/evolution	0.017s [no tests to run]
+--- FAIL: TestAction_ReflectGoapOutcome_NoPlan (0.00s)
+    registry_test.go:1014: expected 1, got -1
+--- FAIL: TestAction_ReflectGoapOutcome_NilChainState (0.00s)
+    registry_test.go:1034: expected 1, got -1
+FAIL
+FAIL	github.com/nico/go-bt-evolve/internal/engine	0.025s
+ok  	github.com/nico/go-bt-evolve/internal/benchmark	0.015s [no tests to run]
+FAIL

@@ -2,6 +2,7 @@ package engine
 
 import (
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -64,6 +65,7 @@ type runEvidence struct {
 	versions      []string
 	checks        []evolution.ResultCheck
 	effects       []evolution.EffectReceipt
+	goapChecks    []evolution.GoapCheck
 	checksDropped int
 	reflect       bool
 	finalized     bool
@@ -82,6 +84,8 @@ func (bb *Blackboard) EvidenceExecutionVersions() []string {
 }
 
 func beginRunEvidence(bb *Blackboard, command btcore.Command[Blackboard], started time.Time) {
+	bb.goapObserved, bb.goapStepRuntime = nil, nil
+	bb.goapEffectScope = ""
 	bb.contractValidatedResult = ""
 	token := make([]byte, 16)
 	// crypto/rand.Read fills the buffer or terminates on an unrecoverable failure.
@@ -147,6 +151,7 @@ func FinalizeRunEvidence(bb *Blackboard, diagnostics ...error) error {
 		ResultChecks:        append([]evolution.ResultCheck(nil), e.checks...),
 		ResultChecksDropped: e.checksDropped,
 		Effects:             append([]evolution.EffectReceipt(nil), e.effects...),
+		GoapChecks:          append([]evolution.GoapCheck(nil), e.goapChecks...),
 		Task:                bb.Task, Plan: bb.Plan, Result: bb.Result,
 		Outcome: evolution.Outcome(bb.Outcome), QualityScore: bb.QualityScore,
 		Path: bb.CurrentPath,
@@ -158,7 +163,7 @@ func FinalizeRunEvidence(bb *Blackboard, diagnostics ...error) error {
 		record.Error = diagnostic.Error()
 	}
 	if e.reflect && bb.LLM != nil {
-		record.WhatWentWell, record.WhatToImprove = terminalReflection(bb)
+		record.WhatWentWell, record.WhatToImprove = terminalReflection(bb, record.Effects)
 	}
 	bb.DurationMs = time.Since(e.started).Milliseconds()
 	record.DurationMs = bb.DurationMs
@@ -170,13 +175,19 @@ func FinalizeRunEvidence(bb *Blackboard, diagnostics ...error) error {
 	return e.err
 }
 
-func terminalReflection(bb *Blackboard) (well, improve []string) {
+func terminalReflection(bb *Blackboard, effects []evolution.EffectReceipt) (well, improve []string) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			improve = []string{fmt.Sprintf("terminal reflection failed: %v", recovered)}
 		}
 	}()
-	good, bad := bb.LLM.Reflect(bb.Task, bb.Outcome, bb.Plan+"\nResult:\n"+bb.Result)
+	context := bb.Plan + "\nResult:\n" + bb.Result
+	if len(effects) > 0 {
+		if data, err := json.Marshal(effects); err == nil {
+			context += "\nRuntime effect receipts (verified means independent readback; unverified effects remain uncertain):\n" + string(data)
+		}
+	}
+	good, bad := bb.LLM.Reflect(bb.Task, bb.Outcome, context)
 	return []string{good}, []string{bad}
 }
 

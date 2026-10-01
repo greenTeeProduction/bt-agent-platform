@@ -1,6 +1,7 @@
 package evolution
 
 import (
+	"bytes"
 	"encoding/json"
 	"strings"
 
@@ -58,19 +59,9 @@ func WrapWithCheckpointVerifier(tree *SerializableNode, maxRetries int, postcond
 // GOAPPlanningTree returns a behavior tree that uses GOAP (Goal-Oriented
 // Action Planning) to plan and execute multi-step tasks.
 //
-// This tree is ideal for complex tasks that require sequential planning:
-// build pipelines, deployment sequences, research workflows, multi-phase
-// operations where the order of steps matters and preconditions must be satisfied.
-//
-// Structure:
-//
-//	Sequence: GOAP_Root
-//	  HasGoapGoal         ← condition: detects if task needs multi-step planning
-//	  PlanGoapActions     ← action: runs A* planner to find optimal action sequence
-//	  GoapStrategyRouter  ← selector: try execution, fallback on failure
-//	    GoapExecutePath   ← sequence: execute each step via LLM
-//	    GoapFallback      ← fallback: mark partial and continue
-//	  ReflectGoapOutcome  ← action: finalize outcome and result
+// The memory sequence retains the declared capabilities and goal while each
+// GoapStep checks fresh observations. Built-in action declarations require
+// capability adapters; generated prose alone cannot establish their effects.
 func GOAPPlanningTree() *SerializableNode {
 	def := goap.GOAPTreeDefinition{
 		Name:        "goap_planning",
@@ -176,36 +167,30 @@ func FromGoapNode(node *goap.SerializableNode) *SerializableNode {
 	if node == nil {
 		return nil
 	}
-	return &SerializableNode{
-		Type:     string(node.Type),
-		Name:     node.Name,
-		Metadata: node.Metadata,
-		Children: convertGoapChildren(node.Children),
-	}
+	converted := convertGoapChildren([]goap.SerializableNode{*node})
+	return &converted[0]
 }
 
 // goapNodeDescriptions documents the fixed node names goap.BuildSerializableTree
-// produces (see its doc comment for the shape). goap.SerializableNode carries no
-// Description field of its own, so descriptions are attached here on conversion
-// to satisfy the domains package's tree-coverage conventions.
+// produces. These descriptions fill missing descriptions on conversion.
 var goapNodeDescriptions = map[string]string{
+	"SetupGoapTools":     "Initialize declared GOAP capabilities without discarding observed state",
 	"GOAP_Root":          "GOAP A* planning pipeline: plan a multi-step action sequence, execute it, and reflect on the outcome",
 	"HasGoapGoal":        "Detect whether the task requires multi-step planning and a GOAP goal can be derived from it",
 	"PlanGoapActions":    "Run the A* planner over the configured actions to find an optimal step sequence toward the goal",
 	"GoapStrategyRouter": "Execute the planned steps, falling back to a partial-result path if execution fails",
 	"GoapExecutePath":    "Execute the next planned GOAP step and continue while steps remain",
-	"ExecuteGoapStep":    "Execute the next step of the computed GOAP plan via an LLM chain agent",
+	"ExecuteGoapStep":    "Execute and independently check the next GOAP capability step",
 	"HasMoreGoapSteps":   "Detect whether the computed plan has remaining unexecuted steps",
-	"GoapFallback":       "Mark the plan as partially complete and continue when execution cannot proceed",
+	"GoapFallback":       "Report failure when GOAP execution cannot proceed",
 	"ReflectGoapOutcome": "Finalize the outcome and result of the GOAP planning run",
 }
 
 // goapNodeGuards is the machine-readable counterpart to goapNodeDescriptions:
 // the description is prose, but engine/typed_edges.go and
 // engine/utility_selector.go gate execution on TypedEdge.Condition, and
-// ValidateEdge rejects a guard edge with a blank Condition. goap.SerializableNode
-// carries no Edges field, so — like the descriptions — the guard metadata for
-// the fixed Condition node names is attached here on conversion, keeping the
+// ValidateEdge rejects a guard edge with a blank Condition. Default guard
+// metadata for fixed Condition names is attached only when absent, keeping the
 // converted trees compliant with the domains package's condition-coverage
 // convention (every Condition node carries a labelled guard edge).
 var goapNodeGuards = map[string]TypedEdge{
@@ -229,13 +214,21 @@ func convertGoapChildren(children []goap.SerializableNode) []SerializableNode {
 	}
 	result := make([]SerializableNode, len(children))
 	for i, c := range children {
-		node := SerializableNode{
-			Type:        string(c.Type),
-			Name:        c.Name,
-			Description: goapNodeDescriptions[c.Name],
-			Metadata:    c.Metadata,
+		var node SerializableNode
+		data, err := json.Marshal(c)
+		if err != nil {
+			node.Type = "InvalidGOAPDefinition"
+		} else {
+			decoder := json.NewDecoder(bytes.NewReader(data))
+			decoder.UseNumber()
+			if err = decoder.Decode(&node); err != nil {
+				node.Type = "InvalidGOAPDefinition"
+			}
 		}
-		if guard, ok := goapNodeGuards[c.Name]; ok {
+		if node.Description == "" {
+			node.Description = goapNodeDescriptions[c.Name]
+		}
+		if guard, ok := goapNodeGuards[c.Name]; ok && len(node.Edges) == 0 {
 			node.Edges = []TypedEdge{guard}
 		}
 		if len(c.Children) > 0 {

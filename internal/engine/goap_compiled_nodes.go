@@ -1,19 +1,9 @@
-// Compiled-GOAP leaf nodes (ADR-133 Phase 3). The plan→BT compiler
-// (goap.CompilePlanToTree) emits precondition guards and effect writes as
-// name-parameterized leaves, following the same name-encoding convention as
-// ChainAction's "llm_call:<prompt>":
-//
-//	Condition "GoapStateMatches:has_analysis=true,task_type=build"
-//	Action    "ApplyGoapEffects:has_resources=true"
-//
-// Both operate on ChainState["goap_world_state"], the same world-state map
-// the dynamic GOAP nodes (PlanGoapActions/ExecuteGoapStep) maintain, so a
-// compiled plan path and its replan fallback share one source of truth.
+// Legacy compiled-GOAP guards remain readable. Unconditional effect assertions
+// fail explicitly; regenerated trees use GoapStep observations instead.
 package engine
 
 import (
-	"maps"
-	"strconv"
+	"encoding/json"
 	"strings"
 
 	"github.com/nico/go-bt-evolve/internal/goap"
@@ -67,33 +57,21 @@ func compiledGoapConditionFor(name string) ConditionFunc {
 
 // compiledGoapActionFor returns the effect-write implementation for an
 // ApplyGoapEffects name, or nil when the name is not a compiled effect node.
-// Effects are merged into ChainState["goap_world_state"] (created on first
-// write), mirroring what ExecuteGoapStep does after a dynamic step.
+// Legacy effect assertions are recognized and rejected. A GoapStep must
+// observe an execution result before the world state can advance.
 func compiledGoapActionFor(name string) ActionFunc {
 	if !isCompiledGoapAction(name) {
 		return nil
 	}
-	effects := parseGoapPairs(strings.TrimPrefix(name, goapEffectsActPrefix))
 	return func(ctx *btcore.BTContext[Blackboard]) int {
-		b := ctx.Blackboard
-		if len(effects) == 0 {
-			return -1 // malformed spec: fail loudly instead of no-op success
-		}
-		if b.ChainState == nil {
-			b.ChainState = make(map[string]any)
-		}
-		ws := goapWorldStateFrom(b)
-		if ws == nil {
-			ws = make(goap.WorldState)
-		}
-		maps.Copy(ws, effects)
-		b.ChainState[goapWorldStateChainKey] = ws
-		return 1
+		ctx.Blackboard.Outcome = "failure"
+		ctx.Blackboard.Result = "Legacy GOAP effect assertion is unverified; regenerate with an observed GoapStep gate"
+		return -1
 	}
 }
 
 // goapWorldStateFrom reads the GOAP world state off the blackboard,
-// tolerating both the typed form (set by SetupGoapTools / ApplyGoapEffects)
+// tolerating both the typed form (set by SetupGoapTools / GoapStep)
 // and the plain-map form that survives a JSON roundtrip.
 func goapWorldStateFrom(b *Blackboard) goap.WorldState {
 	if b == nil || b.ChainState == nil {
@@ -110,7 +88,7 @@ func goapWorldStateFrom(b *Blackboard) goap.WorldState {
 }
 
 // parseGoapPairs decodes "k=v,k2=v2" into typed values: booleans, numbers,
-// else strings. Malformed fragments (no "=") are skipped.
+// else strings. Malformed or duplicate keys reject the complete guard.
 func parseGoapPairs(spec string) map[string]any {
 	pairs := make(map[string]any)
 	for frag := range strings.SplitSeq(spec, ",") {
@@ -120,11 +98,11 @@ func parseGoapPairs(spec string) map[string]any {
 		}
 		kv := strings.SplitN(frag, "=", 2)
 		if len(kv) != 2 {
-			continue
+			return nil
 		}
 		key := strings.TrimSpace(kv[0])
-		if key == "" {
-			continue
+		if _, duplicate := pairs[key]; key == "" || duplicate {
+			return nil
 		}
 		pairs[key] = parseGoapValue(strings.TrimSpace(kv[1]))
 	}
@@ -138,35 +116,16 @@ func parseGoapValue(raw string) any {
 	case "false":
 		return false
 	}
-	if f, err := strconv.ParseFloat(raw, 64); err == nil {
-		return f
+	decoder := json.NewDecoder(strings.NewReader(raw))
+	decoder.UseNumber()
+	var value any
+	if err := decoder.Decode(&value); err == nil && json.Valid([]byte(raw)) {
+		if number, ok := value.(json.Number); ok && goap.ValuesEqual(number, number) {
+			return number
+		}
 	}
 	return raw
 }
 
-// goapValuesEqual compares world-state values with numeric tolerance:
-// ints and float64s that JSON/parsing produce for the same number compare
-// equal, everything else falls back to ==.
-func goapValuesEqual(a, b any) bool {
-	if af, aok := asFloat(a); aok {
-		if bf, bok := asFloat(b); bok {
-			return af == bf
-		}
-		return false
-	}
-	return a == b
-}
-
-func asFloat(v any) (float64, bool) {
-	switch n := v.(type) {
-	case float64:
-		return n, true
-	case float32:
-		return float64(n), true
-	case int:
-		return float64(n), true
-	case int64:
-		return float64(n), true
-	}
-	return 0, false
-}
+// goapValuesEqual compares typed scalar facts with exact numeric equivalence.
+func goapValuesEqual(a, b any) bool { return goap.ValuesEqual(a, b) }

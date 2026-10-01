@@ -258,8 +258,19 @@ causes an uncertain execution stop and forbids replay. Both gate types preserve
 typed execution stops. See [gate regressions](../../internal/engine/governance_gate_test.go)
 and [typed checkpoint regressions](../../internal/engine/checkpoint_contract_test.go).
 The facts still depend on their producer: a matching map alone does not prove an
-external action, and the generic compiled/dynamic GOAP paths still need independent
-effect observers before their assertions can establish task impact.
+external action. Compiled/dynamic plans use `GoapStep` to separate predictions
+from fresh observations (ADR-289). Direct model results can establish only
+`result.*` facts checked against declared scalar values. External facts require
+an actual FileTask write/readback receipt or a trusted adapter calling
+`ObserveGoapFacts` inside the active step. Public blackboard assertions and old
+receipts do not qualify. Terminal `GoapChecks` retain source, scope, expected and
+observed values; value checks can be recomputed. Scope IDs are runtime correlation,
+not cryptographic attestations. FileTask adds a result check over its normalized,
+committed bytes, so the final output digest can be independently reverified.
+GOAP semantic metadata and persisted contract numbers retain exact JSON values.
+Evolution preserves each worker's observation source, bindings and required facts.
+Original plan capabilities survive compiled replanning; alternative capabilities
+not present in that plan cannot be invented by the replan path.
 
 | Path | Current acceptance behavior | Remaining boundary |
 |---|---|---|

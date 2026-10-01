@@ -84,6 +84,12 @@ func AssessGovernance(tree *SerializableNode) GovernanceAssessment {
 			return // Action nodes cannot execute decorative children.
 		}
 		switch n.Type {
+		case "GoapStep":
+			if spec, err := ParseGoapStep(n); err == nil {
+				data, _ := json.Marshal(spec)
+				ctx.contracts = append(slices.Clone(ctx.contracts), "goap:"+string(data))
+				ctx.checked, ctx.contractChecked = true, true
+			}
 		case "QualityGate", "FileTask":
 			if contract, err := ParseResultContract(n); err == nil && contract != nil {
 				data, _ := json.Marshal(contract)
@@ -176,7 +182,7 @@ func executableChildren(n *SerializableNode) []SerializableNode {
 		return nil
 	case "QualityGate":
 		return n.Children[:min(len(n.Children), 2)]
-	case "FileTask", "Timeout", "Retry", "CheckpointVerifier", "Budget", "RateLimit", "CircuitBreaker", "Inverter", "Succeeder", "Repeater", "Runner", "Monitor", "AbortOnEvent", "SemaphoreGuard":
+	case "GoapStep", "FileTask", "Timeout", "Retry", "CheckpointVerifier", "Budget", "RateLimit", "CircuitBreaker", "Inverter", "Succeeder", "Repeater", "Runner", "Monitor", "AbortOnEvent", "SemaphoreGuard":
 		return n.Children[:min(len(n.Children), 1)]
 	case "Sequence", "MemSequence", "PersistentMemSequence", "Selector", "MemSelector", "UtilitySelector", "BanditSelector", "DecisionTree", "PlannerNode", "Parallel", "ReactiveParallel", "HumanApprovalGate", "ForEachTask", "ReviewCycle", "ClaudeErrorHandler":
 		return n.Children

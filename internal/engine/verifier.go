@@ -93,6 +93,10 @@ func walkValidate(node *evolution.SerializableNode, info *evolution.NodeValidati
 	}
 
 	switch node.Type {
+	case "GoapStep":
+		if _, err := evolution.ParseGoapStep(node); err != nil {
+			info.Errors = append(info.Errors, fmt.Sprintf("node %q: %v", node.Name, err))
+		}
 	case "CheckpointVerifier":
 		if _, err := evolution.ParseCheckpointContract(node); err != nil {
 			info.Errors = append(info.Errors, fmt.Sprintf("node %q: %v", node.Name, err))

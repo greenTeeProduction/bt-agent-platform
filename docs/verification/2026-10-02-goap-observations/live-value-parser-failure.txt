@@ -1,0 +1,18 @@
+=== RUN   TestLiveGoapPlansObserveActualPersonalFileEffects
+=== RUN   TestLiveGoapPlansObserveActualPersonalFileEffects/compiled
+    live_goap_test.go:115: compiled: two observed file effects, total=25, double_total=50, real calls=3
+=== RUN   TestLiveGoapPlansObserveActualPersonalFileEffects/dynamic
+    live_goap_test.go:115: dynamic: two observed file effects, total=25, double_total=50, real calls=2
+--- PASS: TestLiveGoapPlansObserveActualPersonalFileEffects (64.72s)
+    --- PASS: TestLiveGoapPlansObserveActualPersonalFileEffects/compiled (40.34s)
+    --- PASS: TestLiveGoapPlansObserveActualPersonalFileEffects/dynamic (24.39s)
+=== RUN   TestLiveGoapModelResultRequiresExactValueOracle
+    live_goap_test.go:152: independent value check: ```json
+        {
+          "total": 42
+        }
+        ``` invalid character '`' looking for beginning of value
+--- FAIL: TestLiveGoapModelResultRequiresExactValueOracle (1.23s)
+FAIL
+FAIL	github.com/nico/go-bt-evolve/internal/benchmark	66.046s
+FAIL

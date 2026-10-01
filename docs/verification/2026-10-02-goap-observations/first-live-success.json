@@ -1,0 +1,799 @@
+[
+  {
+    "calls": 3,
+    "independent_artifacts_verified": true,
+    "mode": "compiled",
+    "model": {
+      "backend": "sol",
+      "model": "gpt-6.1-sol",
+      "calls": 3,
+      "fallbacks": 1,
+      "errors": 0
+    },
+    "record": {
+      "goap_checks": [
+        {
+          "step": "Step_1_save_total",
+          "scope": "DY6TGEVGCBKQLG6EJICMBSFDHH",
+          "source": "file_task",
+          "origin": "owned artifact readback",
+          "passed": true,
+          "observed": {
+            "report_written": true
+          },
+          "expected": {
+            "report_written": true
+          }
+        },
+        {
+          "step": "Step_2_save_double",
+          "scope": "HB2TQL4Y7JBPPBSQUKNRR6XTYR",
+          "source": "file_task",
+          "origin": "owned artifact readback",
+          "passed": true,
+          "observed": {
+            "double_written": true
+          },
+          "expected": {
+            "double_written": true
+          }
+        }
+      ],
+      "build": {
+        "module": "github.com/nico/go-bt-evolve",
+        "dirty": true,
+        "known": false
+      },
+      "started_at": "2026-10-02T00:04:49.639894759+02:00",
+      "effects": [
+        {
+          "scope": "DY6TGEVGCBKQLG6EJICMBSFDHH",
+          "kind": "file",
+          "input": "expenses.json",
+          "input_digest": "sha256:aa4ca0a1649eb559df8c20b1ef60d4ccd64918b76a40211fb0bd265346650c09",
+          "output": "total.json",
+          "output_digest": "sha256:406c5384e13ad87650bdd6938f1d207bdf4c40a6dd9dce342b0336fbbcc5798d",
+          "write_committed": true,
+          "verified": true
+        },
+        {
+          "scope": "HB2TQL4Y7JBPPBSQUKNRR6XTYR",
+          "kind": "file",
+          "input": "total.json",
+          "input_digest": "sha256:406c5384e13ad87650bdd6938f1d207bdf4c40a6dd9dce342b0336fbbcc5798d",
+          "output": "double.json",
+          "output_digest": "sha256:c82fceedf0c11d4cb1408ffb3f0e43e18de93e217b74c4a94a68415d117a8747",
+          "write_committed": true,
+          "verified": true
+        }
+      ],
+      "result_checks": [
+        {
+          "gate": "sum_expenses_values",
+          "passed": true,
+          "output_digest": "sha256:49ad42a2793391d926e7b0e74057376a39582b9fa6e47e30fb2e6130bac6419b",
+          "contract": {
+            "json_fields": {
+              "total": 25
+            }
+          }
+        },
+        {
+          "gate": "sum_expenses",
+          "passed": true,
+          "output_digest": "sha256:406c5384e13ad87650bdd6938f1d207bdf4c40a6dd9dce342b0336fbbcc5798d",
+          "contract": {
+            "json_fields": {
+              "total": 25
+            }
+          }
+        },
+        {
+          "gate": "double_total_values",
+          "passed": true,
+          "output_digest": "sha256:f721d646de0694aec658073b7712d7d867cf5fe271187ebc1a8d60537e7b0ba9",
+          "contract": {
+            "json_fields": {
+              "double_total": 50
+            }
+          }
+        },
+        {
+          "gate": "double_total",
+          "passed": true,
+          "output_digest": "sha256:c82fceedf0c11d4cb1408ffb3f0e43e18de93e217b74c4a94a68415d117a8747",
+          "contract": {
+            "json_fields": {
+              "double_total": 50
+            }
+          }
+        }
+      ],
+      "run_id": "run-bf12e2edb1360eb6a3b8d107fa925f42",
+      "tree_version": "sha256:1e8f3569e20a6cc0976de8bbe49d9392b79a1ad554680f9db91dd0b0ec4ac295",
+      "execution_versions": [
+        "sha256:1e8f3569e20a6cc0976de8bbe49d9392b79a1ad554680f9db91dd0b0ec4ac295"
+      ],
+      "evidence_kind": "execution",
+      "result": "{\"double_total\":50}\n",
+      "quality_score": 0.5,
+      "path": "PlanPath",
+      "task_id": "run-bf12e2edb1360eb6a3b8d107fa925f42",
+      "timestamp": 1790892318426,
+      "task": "Create my expense total report, then create a second report with twice that total.",
+      "plan": "",
+      "tree_name": "personal-goap",
+      "what_went_well": [
+        "Verified strengths: Both report files, `total.json` and `double.json`, were committed and independently read back. Matching digests confirm the second step used the first report as its input. The returned result reports `double_total: 50`.\n\nMissing evidence: The expense amounts and report contents aren’t shown, so the receipts don’t establish that the expense total was correctly calculated as 25 or that the second report correctly doubled it.\n\nThe evidence supports successful file creation and sequencing, but not full numerical correctness."
+      ],
+      "what_to_improve": [
+        ""
+      ],
+      "adjusted_behavior": "",
+      "outcome": "success",
+      "duration_ms": 28786,
+      "user": "goap-owner"
+    },
+    "tree": {
+      "type": "Sequence",
+      "name": "personal-goap",
+      "children": [
+        {
+          "type": "Sequence",
+          "name": "PreGate",
+          "children": [
+            {
+              "type": "Condition",
+              "name": "ValidateInput"
+            },
+            {
+              "type": "Action",
+              "name": "SetupDefaultTools"
+            },
+            {
+              "type": "Action",
+              "name": "SeedGoapState",
+              "metadata": {
+                "goap_initial_state": {
+                  "double_written": false,
+                  "report_written": false
+                }
+              }
+            }
+          ]
+        },
+        {
+          "type": "Selector",
+          "name": "StrategyRouter",
+          "children": [
+            {
+              "type": "Sequence",
+              "name": "PlanPath",
+              "children": [
+                {
+                  "type": "GoapStep",
+                  "name": "Step_1_save_total",
+                  "children": [
+                    {
+                      "type": "FileTask",
+                      "name": "sum_expenses",
+                      "children": [
+                        {
+                          "type": "QualityGate",
+                          "name": "sum_expenses_values",
+                          "children": [
+                            {
+                              "type": "ChainAction",
+                              "name": "llm_call:Sum the expenses in the input. Return JSON with exactly the field total containing the calculated sum.\nInput data:\n{{.ChainState.task_input}}",
+                              "metadata": {
+                                "max_tokens": 128
+                              }
+                            }
+                          ],
+                          "metadata": {
+                            "result_contract": {
+                              "json_fields": {
+                                "total": 25
+                              }
+                            }
+                          }
+                        }
+                      ],
+                      "metadata": {
+                        "file_task": {
+                          "input": "expenses.json",
+                          "output": "total.json"
+                        },
+                        "result_contract": {
+                          "json_fields": {
+                            "total": 25
+                          }
+                        },
+                        "task": "Create my expense total report, then create a second report with twice that total.",
+                        "user": "goap-owner"
+                      }
+                    }
+                  ],
+                  "metadata": {
+                    "effect_bindings": {
+                      "report_written": "verified"
+                    },
+                    "effect_source": "file_task",
+                    "effects": {
+                      "report_written": true
+                    },
+                    "preconditions": {
+                      "report_written": false
+                    }
+                  }
+                },
+                {
+                  "type": "GoapStep",
+                  "name": "Step_2_save_double",
+                  "children": [
+                    {
+                      "type": "FileTask",
+                      "name": "double_total",
+                      "children": [
+                        {
+                          "type": "QualityGate",
+                          "name": "double_total_values",
+                          "children": [
+                            {
+                              "type": "ChainAction",
+                              "name": "llm_call:Read total from the input and multiply it by two. Return JSON with exactly the field double_total containing the calculated product.\nInput data:\n{{.ChainState.task_input}}",
+                              "metadata": {
+                                "max_tokens": 128
+                              }
+                            }
+                          ],
+                          "metadata": {
+                            "result_contract": {
+                              "json_fields": {
+                                "double_total": 50
+                              }
+                            }
+                          }
+                        }
+                      ],
+                      "metadata": {
+                        "file_task": {
+                          "input": "total.json",
+                          "output": "double.json"
+                        },
+                        "result_contract": {
+                          "json_fields": {
+                            "double_total": 50
+                          }
+                        },
+                        "task": "Create my expense total report, then create a second report with twice that total.",
+                        "user": "goap-owner"
+                      }
+                    }
+                  ],
+                  "metadata": {
+                    "effect_bindings": {
+                      "double_written": "verified"
+                    },
+                    "effect_source": "file_task",
+                    "effects": {
+                      "double_written": true
+                    },
+                    "preconditions": {
+                      "report_written": true
+                    }
+                  }
+                },
+                {
+                  "type": "Action",
+                  "name": "VerifyGoapGoal",
+                  "metadata": {
+                    "goap_final_goal": {
+                      "conditions": {
+                        "double_written": true,
+                        "report_written": true
+                      },
+                      "deadline": 0,
+                      "name": "both reports saved",
+                      "priority": 1
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "type": "MemSequence",
+              "name": "GoapReplanPath",
+              "children": [
+                {
+                  "type": "Action",
+                  "name": "SetupGoapTools",
+                  "description": "Initialize declared GOAP capabilities without discarding observed state",
+                  "metadata": {
+                    "goap_actions": [
+                      {
+                        "cost": 1,
+                        "effects": {
+                          "report_written": true
+                        },
+                        "metadata": {
+                          "effect_bindings": {
+                            "report_written": "verified"
+                          },
+                          "effect_source": "file_task",
+                          "execution": {
+                            "children": [
+                              {
+                                "children": [
+                                  {
+                                    "metadata": {
+                                      "max_tokens": 128
+                                    },
+                                    "name": "llm_call:Sum the expenses in the input. Return JSON with exactly the field total containing the calculated sum.\nInput data:\n{{.ChainState.task_input}}",
+                                    "type": "ChainAction"
+                                  }
+                                ],
+                                "metadata": {
+                                  "result_contract": {
+                                    "json_fields": {
+                                      "total": 25
+                                    }
+                                  }
+                                },
+                                "name": "sum_expenses_values",
+                                "type": "QualityGate"
+                              }
+                            ],
+                            "metadata": {
+                              "file_task": {
+                                "input": "expenses.json",
+                                "output": "total.json"
+                              },
+                              "result_contract": {
+                                "json_fields": {
+                                  "total": 25
+                                }
+                              },
+                              "task": "Create my expense total report, then create a second report with twice that total.",
+                              "user": "goap-owner"
+                            },
+                            "name": "sum_expenses",
+                            "type": "FileTask"
+                          }
+                        },
+                        "name": "save_total",
+                        "preconditions": {
+                          "report_written": false
+                        }
+                      },
+                      {
+                        "cost": 1,
+                        "effects": {
+                          "double_written": true
+                        },
+                        "metadata": {
+                          "effect_bindings": {
+                            "double_written": "verified"
+                          },
+                          "effect_source": "file_task",
+                          "execution": {
+                            "children": [
+                              {
+                                "children": [
+                                  {
+                                    "metadata": {
+                                      "max_tokens": 128
+                                    },
+                                    "name": "llm_call:Read total from the input and multiply it by two. Return JSON with exactly the field double_total containing the calculated product.\nInput data:\n{{.ChainState.task_input}}",
+                                    "type": "ChainAction"
+                                  }
+                                ],
+                                "metadata": {
+                                  "result_contract": {
+                                    "json_fields": {
+                                      "double_total": 50
+                                    }
+                                  }
+                                },
+                                "name": "double_total_values",
+                                "type": "QualityGate"
+                              }
+                            ],
+                            "metadata": {
+                              "file_task": {
+                                "input": "total.json",
+                                "output": "double.json"
+                              },
+                              "result_contract": {
+                                "json_fields": {
+                                  "double_total": 50
+                                }
+                              },
+                              "task": "Create my expense total report, then create a second report with twice that total.",
+                              "user": "goap-owner"
+                            },
+                            "name": "double_total",
+                            "type": "FileTask"
+                          }
+                        },
+                        "name": "save_double",
+                        "preconditions": {
+                          "report_written": true
+                        }
+                      }
+                    ],
+                    "goap_goals": [
+                      {
+                        "conditions": {
+                          "double_written": true,
+                          "report_written": true
+                        },
+                        "deadline": 0,
+                        "name": "both reports saved",
+                        "priority": 1
+                      }
+                    ],
+                    "goap_llm_prompts": null
+                  }
+                },
+                {
+                  "type": "Action",
+                  "name": "PlanGoapActions",
+                  "description": "Run the A* planner over the configured actions to find an optimal step sequence toward the goal"
+                },
+                {
+                  "type": "Action",
+                  "name": "ExecuteGoapStep",
+                  "description": "Execute the next step of the computed GOAP plan via an LLM chain agent"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "Action",
+          "name": "ReflectOnOutcome"
+        },
+        {
+          "type": "Selector",
+          "name": "OutcomeSelector",
+          "children": [
+            {
+              "type": "Condition",
+              "name": "WasSuccessful"
+            },
+            {
+              "type": "ChainAction",
+              "name": "llm_call:Self-correct the previous step and fix any issues.",
+              "metadata": {
+                "max_tokens": 512
+              }
+            }
+          ]
+        }
+      ],
+      "metadata": {
+        "generated_by": "goap_compiler",
+        "goal": "both reports saved",
+        "plan_cost": 2,
+        "plan_hash": "42e4b3aa",
+        "plan_steps": [
+          "save_total",
+          "save_double"
+        ],
+        "user": "goap-owner"
+      }
+    }
+  },
+  {
+    "calls": 2,
+    "independent_artifacts_verified": true,
+    "mode": "dynamic",
+    "model": {
+      "backend": "sol",
+      "model": "gpt-6.1-sol",
+      "calls": 5,
+      "fallbacks": 1,
+      "errors": 0
+    },
+    "record": {
+      "goap_checks": [
+        {
+          "step": "Step_1_save_total",
+          "scope": "JKBS3XSPDBRQYD2QN6PAGF7AW7",
+          "source": "file_task",
+          "origin": "owned artifact readback",
+          "passed": true,
+          "observed": {
+            "report_written": true
+          },
+          "expected": {
+            "report_written": true
+          }
+        },
+        {
+          "step": "Step_2_save_double",
+          "scope": "KY4CUUS3L4B5QDX4I34F6WXK5F",
+          "source": "file_task",
+          "origin": "owned artifact readback",
+          "passed": true,
+          "observed": {
+            "double_written": true
+          },
+          "expected": {
+            "double_written": true
+          }
+        }
+      ],
+      "build": {
+        "module": "github.com/nico/go-bt-evolve",
+        "dirty": true,
+        "known": false
+      },
+      "started_at": "2026-10-02T00:05:18.431544419+02:00",
+      "effects": [
+        {
+          "scope": "JKBS3XSPDBRQYD2QN6PAGF7AW7",
+          "kind": "file",
+          "input": "expenses.json",
+          "input_digest": "sha256:aa4ca0a1649eb559df8c20b1ef60d4ccd64918b76a40211fb0bd265346650c09",
+          "output": "total.json",
+          "output_digest": "sha256:406c5384e13ad87650bdd6938f1d207bdf4c40a6dd9dce342b0336fbbcc5798d",
+          "write_committed": true,
+          "verified": true
+        },
+        {
+          "scope": "KY4CUUS3L4B5QDX4I34F6WXK5F",
+          "kind": "file",
+          "input": "total.json",
+          "input_digest": "sha256:406c5384e13ad87650bdd6938f1d207bdf4c40a6dd9dce342b0336fbbcc5798d",
+          "output": "double.json",
+          "output_digest": "sha256:c82fceedf0c11d4cb1408ffb3f0e43e18de93e217b74c4a94a68415d117a8747",
+          "write_committed": true,
+          "verified": true
+        }
+      ],
+      "result_checks": [
+        {
+          "gate": "sum_expenses_values",
+          "passed": true,
+          "output_digest": "sha256:e9d0464916337f3a260a232e702ab669033d024876eab6601853b8a7cb046ccc",
+          "contract": {
+            "json_fields": {
+              "total": 25
+            }
+          }
+        },
+        {
+          "gate": "sum_expenses",
+          "passed": true,
+          "output_digest": "sha256:406c5384e13ad87650bdd6938f1d207bdf4c40a6dd9dce342b0336fbbcc5798d",
+          "contract": {
+            "json_fields": {
+              "total": 25
+            }
+          }
+        },
+        {
+          "gate": "double_total_values",
+          "passed": true,
+          "output_digest": "sha256:a900c7dcb0243e6b5fe2a7a5701ecc971c7d10c333980eff2b4bb8bbd5c4b909",
+          "contract": {
+            "json_fields": {
+              "double_total": 50
+            }
+          }
+        },
+        {
+          "gate": "double_total",
+          "passed": true,
+          "output_digest": "sha256:c82fceedf0c11d4cb1408ffb3f0e43e18de93e217b74c4a94a68415d117a8747",
+          "contract": {
+            "json_fields": {
+              "double_total": 50
+            }
+          }
+        }
+      ],
+      "run_id": "run-82dc866eaf2402e7e719ad4d4532383c",
+      "tree_version": "sha256:a42c6a05daaa06af2d63a4450bdd7652abf19e88e9c694bb049bd00a757b502e",
+      "execution_versions": [
+        "sha256:a42c6a05daaa06af2d63a4450bdd7652abf19e88e9c694bb049bd00a757b502e"
+      ],
+      "evidence_kind": "execution",
+      "result": "{\"double_total\":50}\n",
+      "quality_score": 0.5,
+      "task_id": "run-82dc866eaf2402e7e719ad4d4532383c",
+      "timestamp": 1790892331417,
+      "task": "Create my expense total report, then create a second report with twice that total.",
+      "plan": "Plan for \"both reports saved\" (cost=2.0, 2 steps):\n  1. save_total (cost=1.0)\n  2. save_double (cost=1.0)\n",
+      "tree_name": "personal-goap",
+      "what_went_well": null,
+      "what_to_improve": null,
+      "adjusted_behavior": "",
+      "outcome": "success",
+      "duration_ms": 12985,
+      "user": "goap-owner"
+    },
+    "tree": {
+      "type": "MemSequence",
+      "name": "GOAP_Root",
+      "description": "GOAP A* planning pipeline: plan a multi-step action sequence, execute it, and reflect on the outcome",
+      "children": [
+        {
+          "type": "Action",
+          "name": "SetupGoapTools",
+          "description": "Initialize declared GOAP capabilities without discarding observed state",
+          "metadata": {
+            "goap_actions": [
+              {
+                "cost": 1,
+                "effects": {
+                  "report_written": true
+                },
+                "metadata": {
+                  "effect_bindings": {
+                    "report_written": "verified"
+                  },
+                  "effect_source": "file_task",
+                  "execution": {
+                    "children": [
+                      {
+                        "children": [
+                          {
+                            "metadata": {
+                              "max_tokens": 128
+                            },
+                            "name": "llm_call:Sum the expenses in the input. Return JSON with exactly the field total containing the calculated sum.\nInput data:\n{{.ChainState.task_input}}",
+                            "type": "ChainAction"
+                          }
+                        ],
+                        "metadata": {
+                          "result_contract": {
+                            "json_fields": {
+                              "total": 25
+                            }
+                          }
+                        },
+                        "name": "sum_expenses_values",
+                        "type": "QualityGate"
+                      }
+                    ],
+                    "metadata": {
+                      "file_task": {
+                        "input": "expenses.json",
+                        "output": "total.json"
+                      },
+                      "result_contract": {
+                        "json_fields": {
+                          "total": 25
+                        }
+                      },
+                      "task": "Create my expense total report, then create a second report with twice that total.",
+                      "user": "goap-owner"
+                    },
+                    "name": "sum_expenses",
+                    "type": "FileTask"
+                  }
+                },
+                "name": "save_total",
+                "preconditions": {
+                  "report_written": false
+                }
+              },
+              {
+                "cost": 1,
+                "effects": {
+                  "double_written": true
+                },
+                "metadata": {
+                  "effect_bindings": {
+                    "double_written": "verified"
+                  },
+                  "effect_source": "file_task",
+                  "execution": {
+                    "children": [
+                      {
+                        "children": [
+                          {
+                            "metadata": {
+                              "max_tokens": 128
+                            },
+                            "name": "llm_call:Read total from the input and multiply it by two. Return JSON with exactly the field double_total containing the calculated product.\nInput data:\n{{.ChainState.task_input}}",
+                            "type": "ChainAction"
+                          }
+                        ],
+                        "metadata": {
+                          "result_contract": {
+                            "json_fields": {
+                              "double_total": 50
+                            }
+                          }
+                        },
+                        "name": "double_total_values",
+                        "type": "QualityGate"
+                      }
+                    ],
+                    "metadata": {
+                      "file_task": {
+                        "input": "total.json",
+                        "output": "double.json"
+                      },
+                      "result_contract": {
+                        "json_fields": {
+                          "double_total": 50
+                        }
+                      },
+                      "task": "Create my expense total report, then create a second report with twice that total.",
+                      "user": "goap-owner"
+                    },
+                    "name": "double_total",
+                    "type": "FileTask"
+                  }
+                },
+                "name": "save_double",
+                "preconditions": {
+                  "report_written": true
+                }
+              }
+            ],
+            "goap_config": {
+              "fallback_on_fail": true,
+              "max_planner_depth": 50,
+              "max_planner_nodes": 10000,
+              "max_replans": 3
+            },
+            "goap_goals": [
+              {
+                "conditions": {
+                  "double_written": true,
+                  "report_written": true
+                },
+                "deadline": 0,
+                "name": "both reports saved",
+                "priority": 1
+              }
+            ],
+            "goap_initial_state": {
+              "double_written": false,
+              "report_written": false
+            },
+            "goap_llm_prompts": null
+          }
+        },
+        {
+          "type": "Condition",
+          "name": "HasGoapGoal",
+          "description": "Detect whether the task requires multi-step planning and a GOAP goal can be derived from it",
+          "edges": [
+            {
+              "type": "guard",
+              "child_index": -1,
+              "label": "has-goap-goal",
+              "condition": "task requires multi-step planning and a GOAP goal can be derived from it",
+              "effect": "",
+              "blackboard": null,
+              "priority": 0,
+              "weight": 0
+            }
+          ]
+        },
+        {
+          "type": "Action",
+          "name": "PlanGoapActions",
+          "description": "Run the A* planner over the configured actions to find an optimal step sequence toward the goal"
+        },
+        {
+          "type": "Action",
+          "name": "ExecuteGoapStep",
+          "description": "Execute the next step of the computed GOAP plan via an LLM chain agent"
+        },
+        {
+          "type": "Action",
+          "name": "ReflectGoapOutcome",
+          "description": "Finalize the outcome and result of the GOAP planning run"
+        }
+      ]
+    }
+  }
+]
