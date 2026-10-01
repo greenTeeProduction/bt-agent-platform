@@ -109,7 +109,7 @@ func acquireSuperpowersApplyLock(ctx context.Context, repoDir string) (func(), e
 	if resolved, err := filepath.EvalSymlinks(canonical); err == nil {
 		canonical = resolved
 	}
-	if err := os.MkdirAll(superpowersRunsDir, 0o755); err != nil {
+	if err := os.MkdirAll(superpowersRunsDir, 0o750); err != nil {
 		return nil, err
 	}
 	key := sha256.Sum256([]byte(canonical))

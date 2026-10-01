@@ -1,0 +1,59 @@
+{
+  "scanner_module_version": "v2.27.1",
+  "command": "gosec -no-fail -fmt sarif -out <private>/results.sarif -severity medium ./...",
+  "results": 313,
+  "by_rule": {
+    "G115": 17,
+    "G404": 18,
+    "G704": 1,
+    "G703": 16,
+    "G124": 4,
+    "G401": 1,
+    "G204": 30,
+    "G304": 74,
+    "G117": 2,
+    "G302": 12,
+    "G301": 65,
+    "G306": 72,
+    "G505": 1
+  },
+  "target_file_remaining_alerts": [
+    {
+      "rule": "G301",
+      "line": 555,
+      "message": "Expect directory permissions to be 0750 or less"
+    },
+    {
+      "rule": "G301",
+      "line": 543,
+      "message": "Expect directory permissions to be 0750 or less"
+    },
+    {
+      "rule": "G301",
+      "line": 44,
+      "message": "Expect directory permissions to be 0750 or less"
+    },
+    {
+      "rule": "G306",
+      "line": 557,
+      "message": "Expect WriteFile permissions to be 0600 or less"
+    },
+    {
+      "rule": "G306",
+      "line": 544,
+      "message": "Expect WriteFile permissions to be 0600 or less"
+    },
+    {
+      "rule": "G306",
+      "line": 398,
+      "message": "Expect WriteFile permissions to be 0600 or less"
+    },
+    {
+      "rule": "G306",
+      "line": 47,
+      "message": "Expect WriteFile permissions to be 0600 or less"
+    }
+  ],
+  "target_line_112_G301_present": false,
+  "limitation": "No-fail scanner exit does not mean zero findings or a passing GitHub code-scanning check."
+}
