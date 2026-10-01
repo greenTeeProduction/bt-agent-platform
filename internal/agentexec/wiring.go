@@ -30,6 +30,17 @@ import (
 // test. The daemon separately supplies the live candidate source at startup
 // (a2a.AuctionCardsFn); until then AuctionDelegate simply finds no candidates.
 func init() {
+	engine.ArtifactRootFn = func(user string) (string, error) {
+		if user == "" {
+			return "", fmt.Errorf("artifact owner required")
+		}
+		root := usersTreeRoot
+		if root == "" {
+			root = agent.UsersDir()
+		}
+		return (persona.Workspace{Root: filepath.Join(root, persona.SanitizeUserID(user)), User: user}).ArtifactsDir(), nil
+	}
+
 	domains.GoapFusionLoopWireFn = engine.WireGoapFusionLoopTree
 	engine.AuctionDelegateFn = a2a.AuctionDelegate
 	engine.AuctionDelegateWithContextFn = a2a.AuctionDelegateWithContext
@@ -79,7 +90,11 @@ func ResolveRuntimeVersion(user, id string) (*evolution.SerializableNode, error)
 	if err == nil && tree == nil && user != "" {
 		tree, _, err = store.Resolve(id, "")
 	}
-	if err == nil && tree != nil && AutomationBlocked(user, id) {
+	root := usersTreeRoot
+	if root == "" {
+		root = agent.UsersDir()
+	}
+	if err == nil && tree != nil && !automationApproved(root, user, id, tree) {
 		return nil, fmt.Errorf("automation %q is not approved for execution", id)
 	}
 	if err != nil {
@@ -190,7 +205,7 @@ func resolveUserTree(id string) *evolution.SerializableNode {
 			if owner, _ := tree.Metadata["user"].(string); owner != "" {
 				continue
 			}
-			if !automationApproved(root, user, id) {
+			if !automationApproved(root, user, id, tree) {
 				continue
 			}
 			return tree
@@ -205,7 +220,7 @@ func resolveUserTree(id string) *evolution.SerializableNode {
 // matching record's Status is persona.AutomationApproved. Pending and
 // rejected automation proposals must never run just because their compiled
 // tree file happens to exist on disk (Q4 Personalization milestone 1).
-func automationApproved(root, user, treeID string) bool {
+func automationApproved(root, user, treeID string, trees ...*evolution.SerializableNode) bool {
 	if root == "" || user == "" || treeID == "" {
 		return true
 	}
@@ -221,11 +236,26 @@ func automationApproved(root, user, treeID string) bool {
 	if err != nil {
 		return false
 	}
-	approved := true
+	approved, found := true, false
+	var tree *evolution.SerializableNode
+	if len(trees) > 0 {
+		tree = trees[0]
+	}
 	for _, rec := range records {
 		if rec.TreeID == treeID {
+			found = true
+			if tree != nil && tree.Metadata["source"] == "autopilot" && rec.TreeVersion == "" {
+				return false
+			}
 			approved = approved && rec.Status == persona.AutomationApproved
+			if tree != nil && rec.TreeVersion != "" {
+				version, err := evolution.TreeVersion(tree)
+				approved = approved && err == nil && version == rec.TreeVersion
+			}
 		}
+	}
+	if tree != nil && tree.Metadata["source"] == "autopilot" && !found {
+		return false
 	}
 	return approved
 }
@@ -274,7 +304,7 @@ func ResolveGeneratedTreeForUser(user, id string) *evolution.SerializableNode {
 		if owner, _ := tree.Metadata["user"].(string); owner != "" && owner != user {
 			return nil
 		}
-		if !automationApproved(root, user, id) {
+		if !automationApproved(root, user, id, tree) {
 			return nil
 		}
 		return tree
@@ -284,7 +314,7 @@ func ResolveGeneratedTreeForUser(user, id string) *evolution.SerializableNode {
 		if owner, _ := tree.Metadata["user"].(string); owner != "" && owner != user {
 			return nil
 		}
-		if !automationApproved(root, user, id) {
+		if !automationApproved(root, user, id, tree) {
 			return nil
 		}
 		return tree

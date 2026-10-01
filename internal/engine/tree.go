@@ -338,6 +338,8 @@ func buildNodeInner(node *evolution.SerializableNode, bb *Blackboard, parentName
 		return BuildRunner(node, bb)
 	case "Monitor":
 		return BuildMonitor(node, bb)
+	case "FileTask":
+		return buildFileTask(node, bb)
 	case "QualityGate":
 		return BuildQualityGate(node, bb)
 	case "Retry":

@@ -227,11 +227,16 @@ func recordPersonaInteraction(deps *mcpDeps, user, task, treeID, outcome string,
 		engine.Warn("persona: interaction log unavailable", "user", user, "error", err)
 		return
 	}
+	version := ""
+	if deps.bb != nil {
+		version = deps.bb.EvidenceTreeVersion()
+	}
 	if err := log.Append(persona.Interaction{
-		Task:       task,
-		TreeID:     treeID,
-		Outcome:    outcome,
-		DurationMs: durationMs,
+		Task:        task,
+		TreeID:      treeID,
+		TreeVersion: version,
+		Outcome:     outcome,
+		DurationMs:  durationMs,
 	}); err != nil {
 		engine.Warn("persona: interaction append failed", "user", user, "error", err)
 	}

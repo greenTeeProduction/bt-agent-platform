@@ -44,8 +44,9 @@ type AutomationRecord struct {
 	Schedule  string `json:"schedule,omitempty"`
 	Status    string `json:"status"` // pending | approved | rejected
 	// HITLID is the approval request handling this proposal.
-	HITLID string `json:"hitl_id,omitempty"`
-	TreeID string `json:"tree_id,omitempty"`
+	HITLID      string `json:"hitl_id,omitempty"`
+	TreeID      string `json:"tree_id,omitempty"`
+	TreeVersion string `json:"tree_version,omitempty"`
 	// AgentName and Schedule are reserved before publication.
 	AgentName string `json:"agent_name,omitempty"`
 	// Representative is the task text the pattern was mined from.

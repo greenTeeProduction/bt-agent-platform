@@ -391,7 +391,7 @@ func (s *Scheduler) RunNow(agentName, task string, runner AgentRunner, timeout s
 	}
 
 	// Feed back into knowledge graph
-	if inst.Definition.Tree != "" {
+	if inst.Definition.Tree != "" && inst.Definition.Metadata["user"] == "" {
 		knowledge.GlobalGraph.RecordRun(knowledge.RunRecord{
 			TreeID:   inst.Definition.Tree,
 			Task:     task,
@@ -1045,7 +1045,7 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 	}
 
 	// Feed back into knowledge graph
-	if inst.Definition.Tree != "" {
+	if inst.Definition.Tree != "" && inst.Definition.Metadata["user"] == "" {
 		knowledge.GlobalGraph.RecordRun(knowledge.RunRecord{
 			TreeID:   inst.Definition.Tree,
 			Task:     runCtx.Task,
@@ -1265,6 +1265,13 @@ func matches(fn func(int) bool, v int) bool {
 		return true
 	}
 	return fn(v)
+}
+
+// ValidateCronSchedule validates the explicit five-field scheduling contract.
+// Unlike the legacy scheduler parser, invalid syntax cannot fall back to +1h.
+func ValidateCronSchedule(expr string) error {
+	_, err := nextCronTime(expr, time.Now())
+	return err
 }
 
 // nextCronTime computes the next fire time for a 5-field cron expression.

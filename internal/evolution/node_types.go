@@ -95,6 +95,7 @@ var KnownNodeTypes = map[string]bool{
 	// Domain-specific
 	"HumanApprovalGate":  true,
 	"QualityGate":        true,
+	"FileTask":           true,
 	"CheckpointVerifier": true,
 	// ClaudeErrorHandler — self-extending recovery decorator: child 0 is the
 	// protected subtree; further children are Claude-proposed recovery nodes

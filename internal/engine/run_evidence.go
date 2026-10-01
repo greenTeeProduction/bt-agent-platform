@@ -52,6 +52,7 @@ type runEvidence struct {
 	definition    treeDefinition
 	versions      []string
 	checks        []evolution.ResultCheck
+	effects       []evolution.EffectReceipt
 	checksDropped int
 	reflect       bool
 	finalized     bool
@@ -133,6 +134,7 @@ func FinalizeRunEvidence(bb *Blackboard, diagnostics ...error) error {
 		EvidenceKind: evolution.EvidenceExecution, User: bb.User,
 		ResultChecks:        append([]evolution.ResultCheck(nil), e.checks...),
 		ResultChecksDropped: e.checksDropped,
+		Effects:             append([]evolution.EffectReceipt(nil), e.effects...),
 		Task:                bb.Task, Plan: bb.Plan, Result: bb.Result,
 		Outcome: evolution.Outcome(bb.Outcome), QualityScore: bb.QualityScore,
 		Path: bb.CurrentPath,

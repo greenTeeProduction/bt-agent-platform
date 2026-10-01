@@ -34,26 +34,27 @@ type ResultCheck struct {
 
 // Record captures evidence with its origin and execution identity.
 type Record struct {
-	ResultChecks        []ResultCheck `json:"result_checks,omitempty"`
-	ResultChecksDropped int           `json:"result_checks_dropped,omitempty"`
-	RunID               string        `json:"run_id,omitempty"`
-	TreeVersion         string        `json:"tree_version,omitempty"`
-	ExecutionVersions   []string      `json:"execution_versions,omitempty"`
-	EvidenceKind        string        `json:"evidence_kind,omitempty"`
-	Result              string        `json:"result,omitempty"`
-	QualityScore        float64       `json:"quality_score,omitempty"`
-	Path                string        `json:"path,omitempty"`
-	Error               string        `json:"error,omitempty"`
-	TaskID              string        `json:"task_id"`
-	Timestamp           int64         `json:"timestamp"`
-	Task                string        `json:"task"`
-	Plan                string        `json:"plan"`
-	TreeName            string        `json:"tree_name,omitempty"`
-	WhatWentWell        []string      `json:"what_went_well"`
-	WhatToImprove       []string      `json:"what_to_improve"`
-	AdjustedBehavior    string        `json:"adjusted_behavior"`
-	Outcome             Outcome       `json:"outcome"`
-	DurationMs          int64         `json:"duration_ms"`
+	Effects             []EffectReceipt `json:"effects,omitempty"`
+	ResultChecks        []ResultCheck   `json:"result_checks,omitempty"`
+	ResultChecksDropped int             `json:"result_checks_dropped,omitempty"`
+	RunID               string          `json:"run_id,omitempty"`
+	TreeVersion         string          `json:"tree_version,omitempty"`
+	ExecutionVersions   []string        `json:"execution_versions,omitempty"`
+	EvidenceKind        string          `json:"evidence_kind,omitempty"`
+	Result              string          `json:"result,omitempty"`
+	QualityScore        float64         `json:"quality_score,omitempty"`
+	Path                string          `json:"path,omitempty"`
+	Error               string          `json:"error,omitempty"`
+	TaskID              string          `json:"task_id"`
+	Timestamp           int64           `json:"timestamp"`
+	Task                string          `json:"task"`
+	Plan                string          `json:"plan"`
+	TreeName            string          `json:"tree_name,omitempty"`
+	WhatWentWell        []string        `json:"what_went_well"`
+	WhatToImprove       []string        `json:"what_to_improve"`
+	AdjustedBehavior    string          `json:"adjusted_behavior"`
+	Outcome             Outcome         `json:"outcome"`
+	DurationMs          int64           `json:"duration_ms"`
 	// User attributes the record to a persona (ADR-133 Phase 5); empty for
 	// anonymous/system runs.
 	User string `json:"user,omitempty"`

@@ -842,8 +842,26 @@ compares all configuration after normalizing timestamps/default version.
 The ledger and agent YAML are separate commits. A definition prepared before a
 failed ledger commit remains gated; this is not a distributed transaction or a
 power-loss durability guarantee. Legacy raw writers/updates do not all share the
-creation lock. Missing-ledger provenance, immutable tree-version consent, stale
-feedback requests and external-effect proof need further work (ADR-284).
+creation lock. ADR-285 adds version consent and missing-ledger admission for marked autopilot
+trees. Stale feedback-review identities and incomplete-reservation repair remain.
+
+### File task effect evidence
+
+`FileTask` uses a runtime-injected owner root; raw owner hashes isolate colliding
+legacy sanitized paths. Only relative paths are accepted. Rooted operations prevent
+escaping through nested symlinks, regular files are size-bounded, and atomic private
+replacement avoids partial outputs. A five-second context-bounded lock serializes
+cooperating writers per declared destination path. Readback checks both committed bytes and the
+declared JSON contract; the unchanged input snapshot is checked before commit.
+Terminal disposition is cached within the run. Failed post-write verification is
+uncertain and cannot trigger automatic replay. The receipt is an observation at
+completion, not continuous integrity or a distributed/power-loss guarantee.
+
+Generic live benchmarks deny this effectful node unless a dedicated isolated
+fixture supplies its real filesystem capability. Governance preservation prevents
+removing or redirecting existing file contracts. Qualified publication does not yet
+support general file-task corpora. Personal scheduler runs do not feed the shared
+knowledge graph; their exact execution records retain owner/version/effects.
 
 ---
 

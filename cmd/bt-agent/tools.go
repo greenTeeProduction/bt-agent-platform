@@ -392,7 +392,7 @@ func evolveHealthProjection(pop *evolution.Population) map[string]any {
 	}
 }
 
-// registerMCPTools registers all 83 MCP tools on the server.
+// registerMCPTools registers all 84 MCP tools on the server.
 // Each tool handler accesses shared state through deps instead of main() locals.
 func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 	// ─── TREE EXECUTION ───────────────────────────────────────────────
@@ -790,7 +790,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 
-	server.RegisterTool("bt_kg_auto_create", "Create a governed task response tree with declared result checks",
+	server.RegisterTool("bt_kg_auto_create", "Create a governed response or owned file-task tree with declared result checks",
 		factoryTaskProperties(), []string{"task", "result_contract"},
 		func(args json.RawMessage) *engine.ToolResult { return createFactoryTask(deps, args) })
 
@@ -2302,7 +2302,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 
 	// ─── FACTORY ──────────────────────────────────────────────────────
 
-	server.RegisterTool("bt_factory_create", "Create and persist a governed task response tree; parent references record design lineage",
+	server.RegisterTool("bt_factory_create", "Create and persist a governed response or owned file-task tree; parent references record design lineage",
 		factoryTaskProperties(), []string{"task", "result_contract"},
 		func(args json.RawMessage) *engine.ToolResult { return createFactoryTask(deps, args) })
 

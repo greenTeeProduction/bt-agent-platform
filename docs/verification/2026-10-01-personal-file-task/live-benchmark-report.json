@@ -1,0 +1,145 @@
+{
+  "after": {
+    "total_tasks": 2,
+    "successes": 2,
+    "failures": 0,
+    "success_rate": 1,
+    "avg_duration_ms": 894.5,
+    "avg_result_len": 56.5,
+    "path_coverage": 0.5,
+    "path_match_rate": 1,
+    "lower_ci": 0,
+    "upper_ci": 0,
+    "results": [
+      {
+        "task": "Compute 17 + 25. Return JSON with total set to the answer and approved set to true only if total is 42.",
+        "outcome": "success",
+        "duration_ms": 1789,
+        "result_len": 49,
+        "path": "GeneralPath",
+        "path_matched": true,
+        "success": true,
+        "quality_score": 0.6,
+        "contract_passed": true,
+        "output": "```json\n{\n  \"total\": 42,\n  \"approved\": true\n}\n```"
+      },
+      {
+        "task": "",
+        "outcome": "failure",
+        "duration_ms": 0,
+        "result_len": 64,
+        "path": "GeneralPath",
+        "path_matched": true,
+        "success": true,
+        "quality_score": 0.5,
+        "contract_passed": true,
+        "output": "task \"\" produced no output (terminal outcome: failure, code: -1)"
+      }
+    ],
+    "contract_pass_rate": 1,
+    "model_evidence": {
+      "backend": "ollama",
+      "model": "qwen2.5:1.5b",
+      "calls": 2,
+      "fallbacks": 0,
+      "errors": 0
+    }
+  },
+  "baseline_tree": {
+    "type": "Sequence",
+    "name": "ControlledBaseline",
+    "children": [
+      {
+        "type": "Condition",
+        "name": "ValidateInput"
+      },
+      {
+        "type": "ChainAction",
+        "name": "llm_call",
+        "metadata": {
+          "max_tokens": 16,
+          "prompt": "Reply with only the letter x."
+        }
+      }
+    ]
+  },
+  "before": {
+    "total_tasks": 2,
+    "successes": 1,
+    "failures": 1,
+    "success_rate": 0.5,
+    "avg_duration_ms": 90,
+    "avg_result_len": 32.5,
+    "path_coverage": 0.5,
+    "path_match_rate": 1,
+    "lower_ci": 0,
+    "upper_ci": 0,
+    "results": [
+      {
+        "task": "Compute 17 + 25. Return JSON with total set to the answer and approved set to true only if total is 42.",
+        "outcome": "failure",
+        "duration_ms": 180,
+        "result_len": 1,
+        "path": "GeneralPath",
+        "path_matched": true,
+        "success": false,
+        "quality_score": 0,
+        "contract_passed": false,
+        "output": "x"
+      },
+      {
+        "task": "",
+        "outcome": "failure",
+        "duration_ms": 0,
+        "result_len": 64,
+        "path": "GeneralPath",
+        "path_matched": true,
+        "success": true,
+        "quality_score": 0.5,
+        "contract_passed": true,
+        "output": "task \"\" produced no output (terminal outcome: failure, code: -1)"
+      }
+    ],
+    "contract_pass_rate": 0.5,
+    "model_evidence": {
+      "backend": "ollama",
+      "model": "qwen2.5:1.5b",
+      "calls": 1,
+      "fallbacks": 0,
+      "errors": 0
+    }
+  },
+  "candidate_tree": {
+    "type": "Sequence",
+    "name": "GovernedCandidate",
+    "children": [
+      {
+        "type": "Condition",
+        "name": "ValidateInput"
+      },
+      {
+        "type": "QualityGate",
+        "name": "VerifyAndRecover",
+        "children": [
+          {
+            "type": "ChainAction",
+            "name": "llm_call",
+            "metadata": {
+              "max_tokens": 16,
+              "prompt": "Reply with only the letter x."
+            }
+          },
+          {
+            "type": "ChainAction",
+            "name": "llm_call:{{.Task}}",
+            "metadata": {
+              "max_tokens": 96,
+              "system_msg": "Follow the task exactly. Return a compact JSON object only."
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "experiment": "controlled_live_gate_recovery"
+}

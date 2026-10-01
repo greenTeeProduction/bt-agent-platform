@@ -68,3 +68,25 @@ func TestTaskFactoryRejectsMissingControls(t *testing.T) {
 		t.Fatal("accepted missing validator")
 	}
 }
+
+func TestTaskFactoryFileCapabilityRequiresOwnerAndReadbackContract(t *testing.T) {
+	request := knowledge.TaskRequest{Task: "Read expenses and calculate totals", User: "alice", ResultContract: json.RawMessage(`{"json_fields":{"total":25}}`), FileTask: &evolution.FileTaskSpec{Input: "expenses.json", Output: "reports/summary.json"}}
+	tree, _, err := taskFactory().BuildTask(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tree.Type != "FileTask" || tree.Metadata["factory_kind"] != "file_task" {
+		t.Fatalf("missing file capability: %+v", tree)
+	}
+	if _, err := evolution.ParseFileTask(tree); err != nil {
+		t.Fatal(err)
+	}
+	prompt := tree.Children[0].Children[1].Children[0].Name
+	if !strings.Contains(prompt, "{{.ChainState.task_input}}") || strings.Contains(prompt, "25") {
+		t.Fatalf("input missing or expected answer leaked: %s", prompt)
+	}
+	request.User = ""
+	if _, _, err := taskFactory().BuildTask(request); err == nil {
+		t.Fatal("unowned file capability admitted")
+	}
+}

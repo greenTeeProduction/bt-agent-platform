@@ -310,6 +310,7 @@ Navigation and provenance:
 | ADR-282 | [Manual and Genetic Publication Requires Measured Task Improvement](#adr-282) | Accepted — covered MCP entrypoints; fleet rollout partial | 2026-10-01 |
 | ADR-283 | [Evidence-Preserving Offline Recovery of Collapsed Trees](#adr-283) | Accepted — observed data repair; service rollout open | 2026-10-01 |
 | ADR-284 | [Transactional Automation Reservations and Exact Activation](#adr-284) | Accepted — approval boundary; task effects remain open | 2026-10-01 |
+| ADR-285 | [Executable Personal File Tasks and Version-Bound Consent](#adr-285) | Accepted — real file fixture; broader capabilities/rollout open | 2026-10-01 |
 
 <a id="adr-001"></a>
 
@@ -6667,6 +6668,55 @@ is claimed. Ordinary Sol policy and real-model benchmark configuration are uncha
 [approval identity/retry tests](../../internal/persona/automation_finalize_test.go),
 [current-disk creation tests](../../internal/agent/registry_identity_test.go), and
 [admission tests](../../internal/agentexec/wiring_test.go).
+
+---
+
+<a id="adr-285"></a>
+## ADR-285: Executable Personal File Tasks and Version-Bound Consent
+
+**Date:** 2026-10-01
+**Status:** Accepted; observed isolated real-model file workflow, not deployed.
+
+**Context:** The autopilot compiled operators for creating/scheduling an automation
+instead of the recurring task. Generated text could mark administrative effects as
+complete. Ordinary response trees had no verified filesystem capability, and approval
+was not bound to definition bytes. A missing registered tree could select a fallback.
+
+**Decision:** Reuse exact owned response/file task definitions from version-attributed
+interaction history, or explicitly request scheduling with `bt_automation_schedule`.
+Resolve templates through active runtime authority so a measured improvement is
+carried into the proposed task rather than reverting to the legacy definition.
+Do not infer executable capabilities from keyword similarity. Preserve task/contract
+and bind the proposal/ledger to the copied version. Block changed or untracked marked
+automations, and stop registered-agent fallback when its tree is unavailable.
+
+The factory supports an explicit `FileTask` node: owner-relative input snapshot,
+bounded governed generation, declared JSON verification, input freshness check,
+atomic output replacement and independent readback. The engine obtains the storage
+root through a lower-layer hook, never task/model text. Persist effect receipts with
+exact run identity; verification uncertainty stops replay. Governance cannot silently
+remove or redirect the file contract. Generic benchmarks reject filesystem effects;
+a dedicated temporary fixture uses actual files and a real Ollama/Sol model. Personal
+scheduler feedback stays out of the shared graph.
+
+**Alternatives:** A ReAct final answer alone is not evidence that a file was written.
+Automatically setting GOAP state cannot verify an external effect. Copying another
+keyword-matched task or running a fallback after missing consent changes the user's
+authorized task. A mocked model would not qualify generated output quality.
+
+**Consequences:** One declared file workflow is usable and independently tested,
+including a real failed result contract preserving an existing report. The trial
+uses scheduler manual dispatch, not observed wall-clock cron. Arbitrary integrations,
+dynamic semantic oracles, general GOAP effect verification, managed file-task evolution,
+stale feedback approvals and deployment remain open. Legacy unversioned autopilot trees
+are held for explicit reconciliation. Filesystem receipts prove observed completion,
+not permanent integrity, global transactions or power-loss durability. Sol 6.1 remains
+the ordinary provider; fast real Ollama remains the authorized benchmark exception.
+
+**Evidence:** [Real create/approve/dispatch/readback trial](../../cmd/bt-agent/file_automation_test.go),
+[filesystem lifecycle failures](../../internal/engine/file_task_test.go),
+[effect-contract preservation](../../internal/evolution/file_task_test.go),
+and [autopilot task/version tests](../../cmd/bt-agent/autopilot_test.go).
 
 ---
 

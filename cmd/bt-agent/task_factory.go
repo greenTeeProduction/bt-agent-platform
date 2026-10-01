@@ -13,7 +13,8 @@ import (
 
 func factoryTaskProperties() map[string]engine.Property {
 	return map[string]engine.Property{
-		"task":            {Type: "string", Description: "Full task for a response workflow; this factory does not execute external tools"},
+		"file_task":       {Type: "object", Description: "Optional approved file operation: input and output paths relative to the owner artifact directory; output JSON is independently read back"},
+		"task":            {Type: "string", Description: "Full task for a response or owner-scoped file workflow"},
 		"user":            {Type: "string", Description: "Optional owner; requires a personal workspace"},
 		"category":        {Type: "string", Description: "Optional category for the new tree"},
 		"result_contract": {Type: "object", Description: "Required JSON result checks: json_fields maps keys to expected values; required_keys lists mandatory fields; optional min_length"},
@@ -66,7 +67,10 @@ func createFactoryTask(deps *mcpDeps, args json.RawMessage) *engine.ToolResult {
 	}
 	result["tree_id"], result["tree_version"] = id, version
 	result["node_count"] = evolution.CountNodes(tree)
-	result["kind"], result["owner"] = "response", params.User
+	result["kind"], result["owner"] = tree.Metadata["factory_kind"], params.User
+	if params.FileTask != nil {
+		result["artifact_directory"] = deps.personaStore.Workspace(params.User).ArtifactsDir()
+	}
 	result["qualification"] = "unexecuted; creation and validation are not task-performance evidence"
 	persistGeneratedTreeForUser(deps, params.User, id, tree, result)
 	if persisted, _ := result["persisted"].(bool); !persisted {

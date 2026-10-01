@@ -102,10 +102,13 @@ cleanup and personal GOAP effect compilation still require work.
 Automation approval now reserves before publication, verifies the task/schedule
 and existing definition, surfaces commit errors, denies unreadable/contradictory
 ledgers and keeps personal descriptions out of shared discovery (ADR-284).
-Administrative GOAP steps still do not perform the recurring user task. Missing
-ledger provenance, immutable version consent, incomplete-reservation recovery,
-stale feedback review IDs and independently observed effects remain open. This
-increment does not qualify personal assistant behavior or deployed adoption.
+ADR-285 replaces autopilot administrative plans with exact governed task reuse,
+adds immutable version consent and missing-ledger holds for marked definitions,
+and verifies one real file-task fixture including rejection without overwrite.
+General GOAP effect assertions, additional external capabilities, dynamic semantic
+oracles, file-task evolution corpora, actual cron dispatch, incomplete-reservation
+recovery and stale feedback-review IDs remain open. These changes are not deployed
+and do not qualify broad personal assistant behavior.
 
 ---
 

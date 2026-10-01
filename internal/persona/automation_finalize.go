@@ -15,22 +15,26 @@ import (
 // refresh derived state (e.g. cmd/bt-agent's A2A card registry) do so after
 // this returns successfully.
 func ActivateAutomation(reg *agent.Registry, user, agentName, treeID, signature, schedule, representative string) error {
+	return activateAutomationVersion(reg, user, agentName, treeID, signature, schedule, representative, "")
+}
+
+func activateAutomationVersion(reg *agent.Registry, user, agentName, treeID, signature, schedule, representative, version string) error {
 	if reg == nil {
 		return fmt.Errorf("agent registry not configured")
 	}
 	if strings.TrimSpace(user) == "" || strings.TrimSpace(treeID) == "" || strings.TrimSpace(signature) == "" || strings.TrimSpace(schedule) == "" || strings.TrimSpace(representative) == "" {
 		return fmt.Errorf("automation requires owner, tree, signature, schedule and exact task")
 	}
+	metadata := map[string]string{"auto_created": "true", "user": user, "pattern_signature": signature}
+	if version != "" {
+		metadata["tree_version"] = version
+	}
 	_, err := reg.EnsureDefinition(agent.Definition{
 		Name:        agentName,
 		Description: representative,
 		Tree:        treeID,
 		Schedule:    schedule,
-		Metadata: map[string]string{
-			"auto_created":      "true",
-			"user":              user,
-			"pattern_signature": signature,
-		},
+		Metadata:    metadata,
 	})
 	return err
 }
@@ -75,7 +79,17 @@ func FinalizeAutomationApproval(reg *agent.Registry, store *Store, req *hitl.Req
 		if rec.Status != AutomationPending && rec.Status != AutomationApproved {
 			return fmt.Errorf("automation is %s; original approval cannot reactivate it", rec.Status)
 		}
-		if err := ActivateAutomation(reg, user, rec.AgentName, rec.TreeID, rec.Signature, rec.Schedule, rec.Representative); err != nil {
+		if rec.TreeVersion != "" {
+			tree, err := evolution.LoadNamedTree(store.Workspace(user).TreesDir(), rec.TreeID)
+			if err != nil {
+				return err
+			}
+			version, err := evolution.TreeVersion(tree)
+			if err != nil || version != rec.TreeVersion || req.Context["tree_version"] != version || tree.Metadata["user"] != user || tree.Metadata["task"] != rec.Representative {
+				return fmt.Errorf("automation definition changed since proposal")
+			}
+		}
+		if err := activateAutomationVersion(reg, user, rec.AgentName, rec.TreeID, rec.Signature, rec.Schedule, rec.Representative, rec.TreeVersion); err != nil {
 			return err
 		}
 		rec.Status = AutomationApproved

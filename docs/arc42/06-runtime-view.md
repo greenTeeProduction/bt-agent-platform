@@ -435,12 +435,14 @@ Sessions are process-local, so dashboard restart requires sign-in again
 
 ## 6.7 Personal Automation and Feedback
 
-Intent or recurring-pattern evidence creates a goal. The canonical planner
-produces a plan, the compiler validates a tree and persists it in the user's
-workspace, and the automation flow creates a tracked approval request.
-Approval finalization activates/schedules the tracked automation; rejection
-keeps it unavailable. Negative feedback can flag and pause an approved
-automation until review finalization.
+Personal automation reuses a governed owned task tree. Exact successful interaction
+records carry source tree versions; template selection resolves the adopted runtime
+version before consulting legacy storage. Keyword similarity alone cannot supply a task
+implementation. `bt_automation_schedule` offers the same proposal path directly for
+an existing owned response/file task and a validated five-field cron expression.
+Missing templates require an explicit task contract rather than a prose-only
+administrative GOAP plan. Approval schedules the copied task; rejection keeps it
+unavailable. Negative feedback can pause it for review.
 
 The proposal path reserves a pending record before publishing its tree. Reservation
 serializes duplicate checks and the per-user cap across instances; pending and
@@ -452,12 +454,26 @@ agents receive the original task text as their description. Unreadable ledgers
 and contradictory records deny admission. Personal task descriptions are not
 registered in the shared knowledge graph (ADR-284).
 
-This repairs approval integrity, not task execution: the current autopilot still
-compiles administrative automation operators, and GOAP can assert effects after
-text generation. Independent task/effect qualification and version-bound consent
-remain open. Incomplete legacy proposals cannot be newly activated; they can be
-rejected or reconciled explicitly. Failed proposal preparation can leave a pending
-reservation requiring repair; it must not silently release execution admission.
+New proposals bind consent to the exact tree version as well as owner/task/schedule.
+Changed definitions and missing ledgers cannot resolve tracked trees; a registered
+agent with an unavailable tree cannot fall through to an unrelated alias/default.
+Legacy unversioned autopilot definitions require explicit reconciliation. Failed
+preparation can leave a pending reservation requiring repair (ADR-285).
+
+`FileTask` snapshots a declared input beneath an owner-isolated artifact root,
+runs the factory's bounded response/gateway children, validates JSON before writing,
+checks input freshness, atomically writes the declared destination and independently
+reads it back. Exact bytes and the result contract must agree. Run records and runner
+results retain input/output digests and committed/verified disposition. Failed gates
+leave the prior output intact; uncertain post-write verification stops replay. Paths
+are declared before consent and cannot be chosen by model output.
+
+The retained real Ollama trial used `Scheduler.RunNow` and the production runner:
+an expenses file totaling 25 across three entries produced a verified report; an
+inconsistent expected total failed without replacing it. This qualifies that file
+fixture, not cron wall-clock dispatch, other integrations or general assistant
+performance. Ordinary operations still use Sol 6.1. Legacy general GOAP compilation
+continues to assert world state without proving external effects and remains open.
 
 Explicit-feedback totals and review thresholds are scoped to the exact
 tree/user pair. Another user's same-ID tree and unowned legacy feedback do
@@ -481,11 +497,12 @@ unconditional guarantee that every installation requires a human click.
 See [automation finalization](../../internal/persona/automation_finalize.go),
 [autopilot tests](../../cmd/bt-agent/autopilot_test.go), and QS9–QS13.
 
-### On-demand response-tree creation
+### On-demand governed task creation
 
 `bt_factory_create` and the compatibility name `bt_kg_auto_create` require
 `task` and `result_contract`. Optional steps each declare their own instruction
-and contract. The response factory retains the full task and uses bounded
+and contract. `file_task` adds declared relative input/output artifact paths for
+an owned file workflow. The response factory retains the full task and uses bounded
 primary/recovery calls behind every step's quality gate. Expected values remain
 inside the verifier; only required field names are sent to the worker.
 
@@ -499,7 +516,8 @@ does not splice unrelated parent actions into the requested work.
 Factory IDs resolve only to their saved definition. Missing or inaccessible
 IDs cannot execute DefaultTree. Owner-scoped execution reloads the definition
 and records its actual result, owner, version and gate verdicts. These are
-response workflows; external-tool automation and measured evolution/promotion
+response workflows; file-task fixtures add real read/write effects (ADR-285).
+Other external integrations and measured file-task evolution/promotion
 remain separate work. See [factory handler](../../cmd/bt-agent/task_factory.go)
 and [real-model execution test](../../cmd/bt-agent/task_factory_test.go).
 

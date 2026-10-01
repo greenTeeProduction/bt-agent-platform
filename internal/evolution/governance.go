@@ -84,7 +84,7 @@ func AssessGovernance(tree *SerializableNode) GovernanceAssessment {
 			return // Action nodes cannot execute decorative children.
 		}
 		switch n.Type {
-		case "QualityGate":
+		case "QualityGate", "FileTask":
 			if contract, err := ParseResultContract(n); err == nil && contract != nil {
 				data, _ := json.Marshal(contract)
 				ctx.contracts = append(slices.Clone(ctx.contracts), string(data))
@@ -172,7 +172,7 @@ func executableChildren(n *SerializableNode) []SerializableNode {
 		return nil
 	case "QualityGate":
 		return n.Children[:min(len(n.Children), 2)]
-	case "Timeout", "Retry", "CheckpointVerifier", "Budget", "RateLimit", "CircuitBreaker", "Inverter", "Succeeder", "Repeater", "Runner", "Monitor", "AbortOnEvent", "SemaphoreGuard":
+	case "FileTask", "Timeout", "Retry", "CheckpointVerifier", "Budget", "RateLimit", "CircuitBreaker", "Inverter", "Succeeder", "Repeater", "Runner", "Monitor", "AbortOnEvent", "SemaphoreGuard":
 		return n.Children[:min(len(n.Children), 1)]
 	case "Sequence", "MemSequence", "PersistentMemSequence", "Selector", "MemSelector", "UtilitySelector", "BanditSelector", "DecisionTree", "PlannerNode", "Parallel", "ReactiveParallel", "HumanApprovalGate", "ForEachTask", "ReviewCycle", "ClaudeErrorHandler":
 		return n.Children
@@ -185,6 +185,9 @@ func executableChildren(n *SerializableNode) []SerializableNode {
 // task-specific equivalence evaluation; shared history cannot establish it.
 func PreservesGovernance(before, after *SerializableNode) bool {
 	if before == nil || after == nil {
+		return false
+	}
+	if !preservesFileTasks(before, after) {
 		return false
 	}
 	a, b := AssessGovernance(before), AssessGovernance(after)
@@ -336,6 +339,39 @@ func hasAgentGuidance(n *SerializableNode) bool {
 func preservesContracts(required, available []string) bool {
 	for _, contract := range required {
 		if !slices.Contains(available, contract) {
+			return false
+		}
+	}
+	return true
+}
+
+// Effectful capability declarations cannot be deleted or redirected by a
+// structurally higher-scoring descendant.
+func preservesFileTasks(before, after *SerializableNode) bool {
+	collect := func(tree *SerializableNode) map[string]int {
+		specs := map[string]int{}
+		var walk func(*SerializableNode)
+		walk = func(n *SerializableNode) {
+			if n.Type == "FileTask" {
+				spec, err := ParseFileTask(n)
+				if err != nil {
+					specs["invalid"]++
+					return
+				}
+				contract, _ := ParseResultContract(n)
+				data, _ := json.Marshal([]any{spec, contract, n.Metadata["user"], n.Metadata["task"]})
+				specs[string(data)]++
+			}
+			for i := range n.Children {
+				walk(&n.Children[i])
+			}
+		}
+		walk(tree)
+		return specs
+	}
+	required, candidate := collect(before), collect(after)
+	for key, count := range required {
+		if key == "invalid" || candidate[key] < count {
 			return false
 		}
 	}

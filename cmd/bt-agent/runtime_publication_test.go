@@ -167,6 +167,17 @@ func TestLiveManualAndGeneticPublication(t *testing.T) {
 			if inspectedVersion != out["candidate_version"] {
 				t.Fatal("inspection returned stale legacy definition")
 			}
+			if user != "" {
+				template, err := loadAutomationTemplate(deps, user, id)
+				if err != nil {
+					t.Fatal(err)
+				}
+				templateVersion, err := evolution.TreeVersion(template)
+				if err != nil || templateVersion != inspectedVersion {
+					t.Fatalf("automation reused stale pre-evolution task: %s %v", templateVersion, err)
+				}
+				evidence["automation_template_version"] = templateVersion
+			}
 			after, err := runner.RunOnce(t.Context(), "publication_sum", "Execute the saved task.", opts)
 			evidence["after"] = after
 			if err != nil || after == nil || after.Outcome != "success" || after.TreeVersion != out["candidate_version"] {

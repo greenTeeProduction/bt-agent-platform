@@ -37,6 +37,10 @@ func ValidateTree(tree *evolution.SerializableNode) []string {
 
 func validateNode(node *evolution.SerializableNode, msgs *[]string, nameCounts map[string]int) {
 	switch node.Type {
+	case "FileTask":
+		if _, err := evolution.ParseFileTask(node); err != nil {
+			*msgs = append(*msgs, fmt.Sprintf("node %q: %v", node.Name, err))
+		}
 	case "QualityGate":
 		if _, err := parseResultContract(node); err != nil {
 			*msgs = append(*msgs, fmt.Sprintf("node %q: %v", node.Name, err))
