@@ -1,4 +1,6 @@
 {
+  "code_commit": "f7fa8dc65756a6be0cc91a2f88d2d156f99620ec",
+  "coverage_profile_sha256": "ba48c37986bc73c02beb212808776d8866244695d626fb105803b9430cd9a77a",
   "file_count": 1054,
   "final_go_manifest_sha256": "87708d3aa27fa1758f5715e529c802938fb07190fb037a402e16bdf33f3abdb2",
   "full_file_manifest_location": "Private retained go-files.json; source recoverable from Git and source-snapshot.json.",

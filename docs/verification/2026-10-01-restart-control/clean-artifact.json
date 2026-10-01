@@ -1,0 +1,7 @@
+{
+  "binary": "bt-dashboard",
+  "code_commit": "f7fa8dc65756a6be0cc91a2f88d2d156f99620ec",
+  "qualification": "Clean committed artifact; version invocation only. No serving process, deployed execution, systemd handoff or production qualification.",
+  "sha256": "e37f345573c2867259720b8f28633829d70ef5898e32f18d2b12d86d8ff9f580",
+  "version": "bt-dashboard revision=f7fa8dc65756a6be0cc91a2f88d2d156f99620ec vcs_time=unknown dirty=false"
+}

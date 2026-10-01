@@ -7,9 +7,10 @@ verify exact clean artifact identity and request their own restart. A shared gat
 owns detached callbacks, cycles and gardener rescan/analysis/tools/metadata.
 Accepted or uncertain handoff stays sealed until process exit (ADR-279).
 
-## Snapshot and settled verification
+## Initial implementation snapshot and settled verification
 
-[Source manifest](source-snapshot.json) binds implementation, tests and current
+At implementation `f7fa8dc65756a6be0cc91a2f88d2d156f99620ec`,
+[source manifest](source-snapshot.json) binds implementation, tests and current
 architecture to base `a1b4ff7f60c5b5327bf01dbb1040122a02040b8e`. Evidence and
 regenerated graph files are excluded. Canonical payload SHA-256:
 `64b00b5f468f17799f66f068b2be8b42fa7e7abdd0ed5d580f1db213a5588bbb`. [Go identity](qualified-code.json) and
@@ -30,8 +31,8 @@ No model/coding provider runs in these fixture gates.
 
 The full local race run began before the three-line G204 explanation on the
 fixed, allowlisted systemctl MainPID query. That comment changes no Go behavior;
-its earlier file hash is retained. Final focused race/build gates qualify the
-annotated source. Initial fixture compile/setup and revive lint failures are
+its earlier file hash is retained. The original focused race/build gates qualify that
+annotated implementation; the scanner correction below has separate identities. Initial fixture compile/setup and revive lint failures are
 retained privately and are not counted as passing gates. The build reruns
 `graphify update .` without model calls (14,580 nodes, 28,895 edges, 1,161 files).
 Dirty-worktree gate artifacts are fingerprinted in [binary hashes](checked-binaries.json),
@@ -61,9 +62,29 @@ evidence, not power/volume-loss or distributed stale-writer proof.
 
 ## GitHub and operational qualification
 
-The implementation commit, actual separate GitHub gosec/CodeQL results and clean
-artifact metadata are appended in a subsequent evidence-only commit. Until those
-identities exist, previous PR #83 results apply only to their previous heads.
+At `f7fa8dc6`, actual GitHub full short race, build, lint, Actions Security Scan
+and separate CodeQL passed, while **separate gosec failed with three errors**.
+[Actual initial checks](github-before.json) and [annotations](github-failed-annotations.json)
+retain that failure. The local 256 medium baseline did not establish acceptance.
+The findings identify the fixed restart command, an existing workflow file read
+and its signed duration conversion. A narrow unit/MainPID command exception,
+rooted workflow loading and nonnegative duration conversion address them.
+[Correction manifest](scanner-correction-snapshot.json) and
+[corrected Go identity](scanner-correction-code.json) bind these changes to f7fa8dc6.
+[Focused race](scanner-fix-race.log), [all build gates](scanner-fix-build.log),
+[documentation checks](scanner-fix-docs.log) and
+[corrected scanner summary](scanner-fix-summary.json) record their separate scope.
+The corrected local medium scan retains 253 findings, three fewer than the
+initial scan; `-no-fail` exit zero is not clean acceptance. Corrective build
+fingerprints are [retained separately](scanner-fix-binaries.json). Initial drift
+footer failures were corrected; the failed log remains private. Graph rebuild:
+1,162 files, 14,588 nodes, 28,904 edges, without model calls. The corrective
+manifest canonical SHA-256 is
+`c6d72b251b69eda4899e71a17ba0fa1caa50ab9985ba3e632cd87ac0036dcaaa`.
+Actual corrected-head scanning results remain pending until retained below.
+
+[Initial clean artifact](clean-artifact.json) reports f7fa8dc6 and `dirty=false`;
+only its fixed `--version` was invoked. It predates the scanner correction.
 No current artifact has been deployed, and no host provider or real service
 restart runs in this increment. Clean version invocation alone will not prove
 serving identity or provider readiness.

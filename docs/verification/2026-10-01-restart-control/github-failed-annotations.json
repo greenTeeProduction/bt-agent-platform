@@ -1,0 +1,38 @@
+[
+  {
+    "annotation_level": "failure",
+    "blob_href": "https://github.com/greenTeeProduction/bt-agent-platform/blob/f7fa8dc65756a6be0cc91a2f88d2d156f99620ec/internal/agent/deploy_drift.go",
+    "end_column": 9,
+    "end_line": 73,
+    "message": "Subprocess launched with a potential tainted input or cmd arguments",
+    "path": "internal/agent/deploy_drift.go",
+    "raw_details": null,
+    "start_column": 9,
+    "start_line": 73,
+    "title": "Subprocess launched with variable"
+  },
+  {
+    "annotation_level": "failure",
+    "blob_href": "https://github.com/greenTeeProduction/bt-agent-platform/blob/f7fa8dc65756a6be0cc91a2f88d2d156f99620ec/internal/agentexec/pipeline.go",
+    "end_column": 15,
+    "end_line": 24,
+    "message": "Potential file inclusion via variable",
+    "path": "internal/agentexec/pipeline.go",
+    "raw_details": null,
+    "start_column": 15,
+    "start_line": 24,
+    "title": "Potential file inclusion via variable"
+  },
+  {
+    "annotation_level": "failure",
+    "blob_href": "https://github.com/greenTeeProduction/bt-agent-platform/blob/f7fa8dc65756a6be0cc91a2f88d2d156f99620ec/internal/agentexec/pipeline.go",
+    "end_column": 80,
+    "end_line": 61,
+    "message": "integer overflow conversion int64 -> uint64",
+    "path": "internal/agentexec/pipeline.go",
+    "raw_details": null,
+    "start_column": 80,
+    "start_line": 61,
+    "title": "integer overflow conversion int64 -> uint64"
+  }
+]

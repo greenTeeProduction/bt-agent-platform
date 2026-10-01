@@ -37,6 +37,12 @@
       "exit_code": 0,
       "qualification": "Not a clean security scan.",
       "remaining_findings": 256
+    },
+    {
+      "command": "go build -ldflags '-X github.com/nico/go-bt-evolve/internal/dashboard.stampedRevision=f7fa8dc65756a6be0cc91a2f88d2d156f99620ec' -o <private>/clean-bin/bt-dashboard ./cmd/bt-dashboard then <private>/clean-bin/bt-dashboard --version (only on successful build)",
+      "evidence": "clean-artifact.json",
+      "exit_code": 0,
+      "stage": "Clean committed source; version only, not deployed."
     }
   ],
   "fixture_environment": {
@@ -46,5 +52,32 @@
     "GOTMPDIR": "/tmp",
     "PATH": "Go toolchain and local Go tool binaries prepended"
   },
+  "initial_implementation_commit": "f7fa8dc65756a6be0cc91a2f88d2d156f99620ec",
+  "scanner_correction_commands": [
+    {
+      "command": "GOFLAGS=-p=2 go test -short -count=1 -race ./internal/agentexec ./internal/agent",
+      "evidence": "scanner-fix-race.log",
+      "exit_code": 0
+    },
+    {
+      "command": "GOFLAGS=-p=2 make build BIN_DIR=<private>/scanner-fix-bin",
+      "evidence": "scanner-fix-build.log",
+      "exit_code": 0,
+      "qualification": "Final corrective source; all build gates/13 binaries/AST graph."
+    },
+    {
+      "command": "python3 scripts/test_check_arc42.py then bash scripts/check-doc-drift.sh (only on success)",
+      "evidence": "scanner-fix-docs.log",
+      "exit_code": 0,
+      "fixtures": 11,
+      "initial_failed_check": "Misplaced generated footers failed drift; corrected and failed log retained privately."
+    },
+    {
+      "command": "GOFLAGS=-p=2 gosec -no-fail -fmt sarif -out <private>/scanner-fix-medium.sarif -severity medium ./...",
+      "evidence": "scanner-fix-summary.json",
+      "exit_code": 0,
+      "qualification": "253 remaining findings; not a clean scan."
+    }
+  ],
   "toolchain": "go1.26.5 linux/arm64"
 }

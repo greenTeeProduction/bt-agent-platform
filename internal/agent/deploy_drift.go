@@ -70,6 +70,9 @@ func defaultDriftRestart(binary string) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
+	// #nosec G204 -- verifyRestartUnitOwner accepts only the three canonical
+	// daemon names and confirms this process is that unit's MainPID. Executable
+	// and flags are fixed; no shell or request-supplied revision is used.
 	cmd := exec.CommandContext(ctx, "systemctl", "--user", "restart", "--no-block", binary+".service")
 	cmd.Env = os.Environ()
 	if err := cmd.Start(); err != nil {
