@@ -24,7 +24,7 @@ that base's history, with its own preceding verification reports.
 
 | Command | Outcome / evidence |
 |---|---|
-| `go test -short -count=1 -race -coverprofile=<private>/settled-coverage.out -covermode=atomic ./...`, `GOFLAGS=-p=2` | Passed; 77.7% total statement coverage; [race.log](race.log). |
+| `go test -short -count=1 -race -coverprofile=<private>/settled-coverage.out -covermode=atomic ./...`, `GOFLAGS=-p=2` | Passed; 77.8% total statement coverage; [race.log](race.log). |
 | `make build BIN_DIR=<private>/checked-bin` | Vet, format, tidy, zero-issue lint, high-severity security gate, thirteen binaries and AST-only graph passed; [build.log](build.log), [checked binary hashes](checked-binaries.json). |
 | `go test -short -count=1 -race ./internal/reliability ./internal/config ./internal/engine -run 'Test(FileLock\|SaveFile_Private\|ProcessCheck)'` | Escaping lock sidecar, private config replacement and literal process query regressions pass; [security-regressions.log](security-regressions.log). |
 | `go test -short -count=1 -race ./internal/gardener ./internal/config` | Corrected atomic-write fault fixtures and configuration tests pass; [metrics-config-race.log](metrics-config-race.log). |
