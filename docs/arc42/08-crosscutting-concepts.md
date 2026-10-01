@@ -204,6 +204,17 @@ remain review concerns (R24, ADR-246–253).
 
 ## 8.6 Error Resiliency
 
+Restart exclusion is distinct from cancellation and durable recovery.
+The dashboard's [activity owner](../../cmd/bt-dashboard/deploy_activity.go)
+retains process-local leases for HTTP and detached callbacks through cleanup.
+Its atomic idle seal rejects new admission during restart handoff; failed
+handoff reopens it, accepted handoff does not. `SafeGoWithCleanup` releases
+pipeline ownership after panic handling, including a failing handler (ADR-278).
+Worker/limiter/sprint/running-pipeline diagnostics conservatively supplement
+leases. Persisted queue entries and waiting pipeline records do not establish
+live ownership. These leases do not survive restart and cannot coordinate
+another process's systemd request; durable recovery claims remain separate.
+
 Durable admission and result recording are separate transitions (ADR-277).
 The scheduler commits an in-flight claim before scheduled or manual dispatch;
 failed admission dispatches nothing. It retains that claim through history

@@ -301,6 +301,7 @@ Navigation and provenance:
 | ADR-275 | [Sprint Result Commit and Metadata Reconciliation](#adr-275) | Accepted implementation | 2026-10-01 |
 | ADR-276 | [Sprint Capacity Reservation and Owned Batch Budgets](#adr-276) | Accepted implementation | 2026-10-01 |
 | ADR-277 | [Conservative Process Restart Recovery Holds](#adr-277) | Accepted implementation | 2026-10-01 |
+| ADR-278 | [Atomic Dashboard Restart Admission and Detached Ownership](#adr-278) | Accepted implementation | 2026-10-01 |
 
 <a id="adr-001"></a>
 
@@ -6311,6 +6312,56 @@ commit-before-release operator reconciliation.
 lose all transient diagnostics after completed-action/result failure or immediate
 exit, repair storage availability and reject automatic dispatch/reapproval.
 No coding/model provider is invoked by these fixtures.
+
+---
+
+<a id="adr-278"></a>
+## ADR-278: Atomic Dashboard Restart Admission and Detached Ownership
+
+**Status:** Accepted implementation, 2026-10-01. Fleet automatic adoption and
+production restart qualification remain open under R13/R30 and QS31.
+
+**Context:** HTTP completion can precede actual sprint/pipeline execution or
+cleanup of canceled agent execution. The dashboard's old HTTP-only drift check
+reported idle while an accepted action was running. Even a correct snapshot
+check permits admission between the check and `systemctl --no-block restart`.
+
+**Decision:** One process-local dashboard gate owns requests, capacity waits and
+detached execution through final evidence, cancellation cleanup and panic
+handling. Restart handoff seals that gate atomically only when idle. Rejected
+handoff reopens admission; accepted handoff stays sealed until process exit.
+All sealed HTTP requests return documented JSON 503 with Retry-After and an
+explicit non-admission header. Existing pool/limiter/running-record diagnostics
+supplement leases; persisted queues and non-live waiting records do not.
+Start the watcher only after execution owners initialize.
+
+The optional `DriftWatchConfig.RestartGuardFn` supplies that handshake without
+changing legacy daemon behavior. `SafeGoWithCleanup` preserves existing
+SafeGo compatibility and releases pipeline ownership after panic handling,
+even if the handler itself panics. No engine dependency or new hook is added.
+
+**Alternatives:** Counting HTTP requests loses detached ownership. Sampling
+pool/limiter counts leaves check-to-handoff admission races and misses fallback
+execution. Releasing after HTTP cancellation assumes an action stopped.
+Cross-process lease coordination is needed for fleet ownership but exceeds this
+local correction; do not infer it from this gate.
+
+**Consequences:** Long-lived requests and uncooperative callbacks defer adoption.
+Accepted but ineffective supervision can leave admission closed until an
+operator restarts the process. Failed panic metadata finalization may leave a
+conservative running diagnostic; retention/reconciliation remain backlog work.
+`bt-agent` sibling restarts still bypass the dashboard gate; other daemons retain
+snapshot checks. Automatic restart remains unqualified across the fleet.
+
+**Evidence:** [Dashboard ownership tests](../../cmd/bt-dashboard/deploy_activity_regression_test.go)
+run actual local actions through sprint, canceled fallback agent and authenticated
+pipeline handlers after HTTP completion; admission/seal races admit exactly one
+owner and all route schemas accept the sealed response.
+[Drift handoff tests](../../internal/agent/deploy_drift_restart_test.go) exercise
+busy deferral, failed handoff reopening and accepted handoff sealing with fake
+systemd. [Panic cleanup ordering](../../internal/reliability/panic_handler_test.go)
+holds ownership while panic handling blocks. No provider or actual restart is
+invoked; the prior independent process-recovery evidence remains ADR-277.
 
 ---
 

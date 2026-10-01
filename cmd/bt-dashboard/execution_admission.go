@@ -21,6 +21,16 @@ type dashboardAgentExecution struct {
 // execution surfaces. A reservation belongs to the accepted task until cleanup;
 // a canceled HTTP waiter must not release a slot still used by running work.
 func executeDashboardAgent(parent context.Context, agentName, task, treeID string) (dashboardAgentExecution, error) {
+	endActivity, err := dashActivity.acquire()
+	if err != nil {
+		return dashboardAgentExecution{}, err
+	}
+	transferred := false
+	defer func() {
+		if !transferred {
+			endActivity()
+		}
+	}()
 	executor := newAgentExecutor()
 	ctx, cancel := context.WithTimeout(parent, executor.Timeout)
 	defer cancel()
@@ -40,6 +50,7 @@ func executeDashboardAgent(parent context.Context, agentName, task, treeID strin
 	}
 	result := make(chan dashboardAgentExecution, 1)
 	run := func() {
+		defer endActivity()
 		start := time.Now()
 		var execution dashboardAgentExecution
 		defer func() {
@@ -67,6 +78,7 @@ func executeDashboardAgent(parent context.Context, agentName, task, treeID strin
 		// return while cooperative execution finishes its evidence/cleanup.
 		go run()
 	}
+	transferred = true
 	finish := func(execution dashboardAgentExecution) (dashboardAgentExecution, error) {
 		if execution.Result == nil && (errors.Is(execution.Err, context.Canceled) || errors.Is(execution.Err, context.DeadlineExceeded)) {
 			return execution, execution.Err
@@ -89,6 +101,10 @@ func executeDashboardAgent(parent context.Context, agentName, task, treeID strin
 
 func writeExecutionAdmissionError(w http.ResponseWriter, err error) {
 	status, message := http.StatusServiceUnavailable, "execution service unavailable; task was not admitted"
+	if errors.Is(err, errDashboardRestarting) {
+		writeDashboardRestarting(w)
+		return
+	}
 	if errors.Is(err, reliability.ErrWorkerPoolClosed) {
 		w.Header().Set(reliability.ExecutionAdmissionHeader, "false")
 	}

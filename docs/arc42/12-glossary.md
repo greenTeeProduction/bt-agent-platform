@@ -84,6 +84,7 @@ runtime details in §§5–8 and decision history in [§9](09-decisions.md).
 | **Superpowers Run** | Durable artifacts for a coding workflow, including plan, tasks, implementation and verification evidence. The historical name is provider-neutral. |
 | **Sprint batch budget** | A five-minute context owned by accepted asynchronous work, including queue time. Expiry stops new dispatch and returns only proven unstarted claims; capacity stays owned until actual cleanup (ADR-276). |
 | **Recovery hold** | Persisted inactive scheduler disposition requiring trusted operator reconciliation after interrupted or unrecorded execution. Restart, registry sync and ordinary scheduling do not prove side effects failed (ADR-277). |
+| **Restart admission seal** | Process-local exclusion of new dashboard requests/execution during accepted asynchronous self-restart handoff; failed handoff reopens admission. It is neither a durable recovery claim nor fleet coordination (ADR-278). |
 | **Sprint metadata reconciliation** | Retrying a retained observed task result against its original in-progress owner without running the action again. Failed/conflicting writes and execution uncertainty block new admission; evidence is process-local (ADR-275). |
 | **Task Approval (dashboard)** | The dashboard task workflow's execution decision. It is separate from login authentication and may be distinct from an engine HITL request. |
 | **Tick** | One evaluation step of a behavior tree returning success, failure or running; a synchronous tick can contain slow work. |

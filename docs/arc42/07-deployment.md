@@ -142,10 +142,12 @@ cycle. See the [runbook](../coding-delegation.md#observed-launch-configuration-2
    the target matching the unit's `ExecStart`. The automatic implementation
    is [`agent/rebuild.go`](../../internal/agent/rebuild.go).
 4. Coordinate with in-flight work, restart the owning units and respawn
-   affected MCP children. All three daemon mains supply in-flight callbacks
-   to drift adoption (ADR-228), but a review fixture shows the dashboard HTTP
-   request counter misses accepted asynchronous sprint work. Qualify the
-   asynchronous ownership guard before enabling its automatic restart.
+   affected MCP children. Dashboard self-adoption owns HTTP requests and
+   detached agent/sprint/pipeline work through cleanup, then atomically seals
+   admission through asynchronous restart handoff (ADR-278). Fleet sibling
+   restarts still bypass the target process guard; agent/gardener callbacks
+   remain snapshot checks. Qualify fleet coordination before enabling
+   automatic restart (ADR-228, R13).
 5. Confirm service activity, actual executable revision, a meaningful
    authenticated smoke test and the next relevant workflow outcome.
 

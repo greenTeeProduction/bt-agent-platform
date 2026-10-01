@@ -1,0 +1,11 @@
+{
+  "file_count": 1045,
+  "final_go_manifest_sha256": "084114cc35321414292451e4e6d7c5322cd30afdaca8550e2cbb0cfae69a7ced",
+  "full_file_manifest_location": "Private retained go-files.json; final source is recoverable from Git and source-snapshot.json.",
+  "local_full_race_variant": {
+    "change": "Two literal 503 constants replaced by http.StatusServiceUnavailable (503); final API race and all build gates rerun.",
+    "only_changed_file": "internal/api/openapi.go",
+    "sha256": "96e4d69afae3358c79b1b34de7a35dcdd178d302e4d28055ed489f4742394199"
+  },
+  "scope": "All Go files plus go.mod/go.sum"
+}

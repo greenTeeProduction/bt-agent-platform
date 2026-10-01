@@ -48,22 +48,22 @@ var kg *knowledge.KnowledgeGraph
 var sharedLLM llm.LLM
 var dashAgentRunner *agent.RunDeps
 
-// dashRequestsInFlight counts HTTP requests currently being served. Plugged
-// into agent.DriftWatchConfig.InFlightFn (via dashAnyInFlight) so the
-// deploy-drift AutoRestart wiring below can never SIGTERM the dashboard
-// mid-request, mirroring bt-agent's Scheduler.AnyInFlight guard and
-// gardener.Gardener.AnyInFlight.
+// dashRequestsInFlight exposes HTTP lifetime for diagnostics. Restart safety
+// also owns detached execution through dashActivity's admission leases.
 var dashRequestsInFlight atomic.Int64
 
-// dashAnyInFlight reports whether an HTTP request is currently being served.
 func dashAnyInFlight() bool {
-	return dashRequestsInFlight.Load() > 0
+	return dashRequestsInFlight.Load() > 0 || dashActivity.busy() || dashBackgroundBusy()
 }
 
-// inFlightMiddleware tracks requests for dashAnyInFlight for the full
-// duration each request spends in the handler chain it wraps.
 func inFlightMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		release, err := dashActivity.acquire()
+		if err != nil {
+			writeDashboardRestarting(w)
+			return
+		}
+		defer release()
 		dashRequestsInFlight.Add(1)
 		defer dashRequestsInFlight.Add(-1)
 		next.ServeHTTP(w, r)
@@ -247,22 +247,6 @@ func main() {
 	slog.Info("DLQ initialized", "path", dlqPath, "entries", dlq.Len())
 	dashboard.DLQCategoriesFn = dlq.CategoryCounts
 
-	// Deploy-drift watcher (program 94b0b31) — detection-only by default; WARNs
-	// when this binary falls behind repo HEAD. BT_AUTO_REBUILD_ON_DRIFT=1 opts
-	// into out-of-place rebuild+swap.
-	if repoDir, wdErr := os.Getwd(); wdErr == nil {
-		agent.StartDriftWatcher(context.Background(), agent.DriftWatchConfig{
-			RepoDir:         repoDir,
-			RunningRevision: dashboard.ReadBuildIdentity().Revision,
-			AutoRebuild:     agent.AutoRebuildEnabled(),
-			AutoRestart:     agent.AutoRestartEnabled(),
-			Targets:         agent.DashboardRebuildTargets(repoDir),
-			Binary:          "bt-dashboard",
-			Backoff:         agent.NewRebuildBackoff(),
-			InFlightFn:      dashAnyInFlight,
-		}, agent.DefaultDriftCheckInterval)
-	}
-
 	// Scalability components: worker pool and concurrency limiter for agent tasks
 	dashWorkerPool = reliability.NewWorkerPool(4)                 // 4 concurrent agent workers
 	dashConcurrencyLimiter = reliability.NewConcurrencyLimiter(2) // max 2 concurrent LLM-bound agent executions
@@ -440,6 +424,25 @@ func main() {
 		os.Exit(1)
 	}
 	server := security.NewHTTPServer(addr, handler)
+
+	// Start only after execution owners are initialized; the watcher reads them.
+	// Deploy-drift watcher (program 94b0b31) — detection-only by default; WARNs
+	// when this binary falls behind repo HEAD. BT_AUTO_REBUILD_ON_DRIFT=1 opts
+	// into out-of-place rebuild+swap.
+	if repoDir, wdErr := os.Getwd(); wdErr == nil {
+		agent.StartDriftWatcher(context.Background(), agent.DriftWatchConfig{
+			RepoDir:         repoDir,
+			RunningRevision: dashboard.ReadBuildIdentity().Revision,
+			AutoRebuild:     agent.AutoRebuildEnabled(),
+			AutoRestart:     agent.AutoRestartEnabled(),
+			Targets:         agent.DashboardRebuildTargets(repoDir),
+			Binary:          "bt-dashboard",
+			Backoff:         agent.NewRebuildBackoff(),
+			InFlightFn:      dashAnyInFlight,
+			RestartGuardFn:  dashActivity.beginRestart,
+		}, agent.DefaultDriftCheckInterval)
+	}
+
 	if tlsEnabled {
 		slog.Info("BT Studio Dashboard ready (TLS)", "addr", addr)
 		if err := server.ListenAndServeTLS(tlsCert, tlsKey); err != nil {

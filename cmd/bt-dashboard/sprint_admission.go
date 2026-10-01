@@ -48,6 +48,16 @@ func (r *sprintReservation) start(ctx context.Context, tasks []dashboard.Task) t
 }
 
 func reserveSprint(ctx context.Context, store *dashboard.TaskStore, executor *dashboard.AgentExecutor) (*sprintReservation, error) {
+	endActivity, err := dashActivity.acquire()
+	if err != nil {
+		return nil, err
+	}
+	transferred := false
+	defer func() {
+		if !transferred {
+			endActivity()
+		}
+	}()
 	limiter, pool := dashConcurrencyLimiter, dashWorkerPool
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -62,6 +72,7 @@ func reserveSprint(ctx context.Context, store *dashboard.TaskStore, executor *da
 		if limiter != nil {
 			limiter.Release()
 		}
+		endActivity()
 	})
 	run := func() {
 		defer reservation.release()
@@ -80,10 +91,15 @@ func reserveSprint(ctx context.Context, store *dashboard.TaskStore, executor *da
 	} else {
 		go run()
 	}
+	transferred = true
 	return reservation, nil
 }
 
 func writeSprintAdmissionError(w http.ResponseWriter, err error) {
+	if errors.Is(err, errDashboardRestarting) {
+		writeDashboardRestarting(w)
+		return
+	}
 	status := http.StatusServiceUnavailable
 	message := "Sprint admission unavailable; no task was dispatched"
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {

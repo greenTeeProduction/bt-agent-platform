@@ -1,0 +1,88 @@
+{
+  "canonical_payload_sha256": "d1a06d703072ca43bb01ba1e582e2f191393682a952bce483a03ce77f5a4de19",
+  "payload": {
+    "base_commit": "e8be1842024c04bb52cf91f9103ca5cfa894827a",
+    "excludes": [
+      "derived graph",
+      "verification reports"
+    ],
+    "files": [
+      {
+        "path": "cmd/bt-dashboard/deploy_activity.go",
+        "sha256": "944b245e4cbb37cb7a2c0d3d1798609b0e5b4e05057addb9d2ef11e224c40521"
+      },
+      {
+        "path": "cmd/bt-dashboard/deploy_activity_regression_test.go",
+        "sha256": "57aeda79a107e1d588f875d4c78c9e975c5a6aecb21b4294ea7632679f0c7ae5"
+      },
+      {
+        "path": "cmd/bt-dashboard/execution_admission.go",
+        "sha256": "b669eb0a8d045a72379192e5982990a72e949cc3534e3974a55c7aeccaeec678"
+      },
+      {
+        "path": "cmd/bt-dashboard/main.go",
+        "sha256": "c081c6a65530c9b818cace55da8c7beb305e641c2df51dc665b4d91cb4edcd36"
+      },
+      {
+        "path": "cmd/bt-dashboard/pipeline_handlers.go",
+        "sha256": "bb55c7475415ce2a259af6add46b3ad554ceeb2d0f8addd1435acb7af3f007e5"
+      },
+      {
+        "path": "cmd/bt-dashboard/sprint_admission.go",
+        "sha256": "8cd48659d0ced3da744c3979bc35e47ff0f42136ff3603efd53e55b4da519318"
+      },
+      {
+        "path": "docs/arc42/06-runtime-view.md",
+        "sha256": "48e47da3459ad2afeaec1ef1964c4d0ff65c3ca3f4744eb5166350c02357a9b6"
+      },
+      {
+        "path": "docs/arc42/07-deployment.md",
+        "sha256": "3f2aa4ea2b3621d87d6272fbafa5c0efb2b9bab3b49f89eed59d5ae9679e8686"
+      },
+      {
+        "path": "docs/arc42/08-crosscutting-concepts.md",
+        "sha256": "d2bf3c0c75100fb1d4779c24cdf035fb453b87c391dfb57af6cf9c41927b498a"
+      },
+      {
+        "path": "docs/arc42/09-decisions.md",
+        "sha256": "bd3a11b49b61eb19b7d01e4f49799cdb913539ceb22b33037a818fb28efd5607"
+      },
+      {
+        "path": "docs/arc42/10-quality.md",
+        "sha256": "3aecfade0d59b6f19d28edd77576cf1e24f87a45617fa1d784084b26e38cf69d"
+      },
+      {
+        "path": "docs/arc42/11-risks-debt.md",
+        "sha256": "ad1e8aeeef9431524e14a7e2a05123d39a899d0aab79812d4b99529b8d026542"
+      },
+      {
+        "path": "docs/arc42/12-glossary.md",
+        "sha256": "6e672404aad819befe6248cd10ceaac041482f466bcfd24fa5e2580baff58853"
+      },
+      {
+        "path": "docs/plans/2026-09-30-arc42-cleanup.md",
+        "sha256": "ed18213b967ae2cf57416e5f1552712795f610f85c410d5f615b37e20af6fc1f"
+      },
+      {
+        "path": "internal/agent/deploy_drift.go",
+        "sha256": "0fba9951373b34596d02864caae594e1629d2085c07986b4d46a39631be53288"
+      },
+      {
+        "path": "internal/agent/deploy_drift_restart_test.go",
+        "sha256": "01fc5a1ad3de6425cc7facb3134d733f59738314d2b8e75c92cb61effeff6f7d"
+      },
+      {
+        "path": "internal/api/openapi.go",
+        "sha256": "f9cc95a0ecbd5d15d4c04694c8ed73ce0da3d18e91ff4ea2226ada230541e30c"
+      },
+      {
+        "path": "internal/reliability/panic_handler.go",
+        "sha256": "5e4baf84511d4128c1e563d2d2459e5915eb9a65d8e7ee01b46703f80b678186"
+      },
+      {
+        "path": "internal/reliability/panic_handler_test.go",
+        "sha256": "cab4f92face990a89757a38c39b880d33deb3fce2d5213abcb22cd8744f88f5d"
+      }
+    ]
+  }
+}

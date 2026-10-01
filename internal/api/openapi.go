@@ -644,7 +644,7 @@ func DashboardRoutes() []Route {
 		"created_at": IntSchema("Unix timestamp of creation"),
 	}, "id", "session_id", "schema", "bookmarked", "rating", "created_at")
 
-	return []Route{
+	routes := []Route{
 		// Public endpoints
 		NewRoute("/api/health", GET).
 			Summary("Health check").
@@ -1548,6 +1548,21 @@ func DashboardRoutes() []Route {
 			ErrorResponse(405, "Method not allowed — GET only").
 			ErrorResponse(503, "Agent runner not configured").WithAuth().Build(),
 	}
+	for i := range routes {
+		declared := false
+		for _, response := range routes[i].Responses {
+			if response.StatusCode == http.StatusServiceUnavailable {
+				declared = true
+				break
+			}
+		}
+		if !declared {
+			builder := RouteBuilder{route: routes[i]}
+			builder.ErrorResponse(http.StatusServiceUnavailable, "Dashboard restart handoff pending; request was not admitted")
+			routes[i] = builder.Build()
+		}
+	}
+	return routes
 }
 
 func hitlDecisionSchema() *Schema {

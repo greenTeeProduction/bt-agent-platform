@@ -168,3 +168,26 @@ func TestWorkerPool_MultiplePanics(t *testing.T) {
 		t.Errorf("expected normal task to run once, got %d (worker likely died)", count)
 	}
 }
+
+func TestSafeGoWithCleanupRetainsOwnershipDuringPanicHandler(t *testing.T) {
+	handlerStarted, allowHandler, cleaned := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	release := sync.OnceFunc(func() { close(allowHandler) })
+	defer release()
+	SafeGoWithCleanup("owned-cleanup", func() { panic("fixture") }, func(any, string) { close(handlerStarted); <-allowHandler }, func() { close(cleaned) })
+	select {
+	case <-handlerStarted:
+	case <-time.After(time.Second):
+		t.Fatal("handler did not start")
+	}
+	select {
+	case <-cleaned:
+		t.Fatal("cleanup released ownership before panic evidence")
+	default:
+	}
+	release()
+	select {
+	case <-cleaned:
+	case <-time.After(time.Second):
+		t.Fatal("cleanup did not finish after handler")
+	}
+}

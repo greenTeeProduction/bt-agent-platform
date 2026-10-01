@@ -360,6 +360,16 @@ reached durable storage, cross-store ACID or safety after losing the state volum
 [scheduler](../../internal/agent/scheduler.go). Recovery from process/host
 loss also requires the deployment and backup procedures in §7.
 
+Dashboard self-adoption has a separate process-local ownership contract
+(ADR-278). HTTP requests, capacity waits and detached agent/sprint/pipeline
+callbacks own leases until actual evidence/cleanup and panic handling finish.
+An idle restart seals the same admission mutex before requesting systemd
+restart. Rejected handoff reopens admission; accepted asynchronous handoff
+keeps it sealed until process exit. Sealed requests return JSON 503,
+`Retry-After: 1` and `X-BT-Execution-Admitted: false`. Persisted waiting records
+are not live workers. Sibling restarts and other daemon admission remain outside
+this local contract; automatic fleet adoption is not qualified.
+
 ## 6.6 Browser Authentication and Session Expiry
 
 ```mermaid

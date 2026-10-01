@@ -171,6 +171,11 @@ type DriftWatchConfig struct {
 	// swaps the daemon's own binary out from under a mid-execution job. Nil
 	// disables the guard (every stale tick may rebuild).
 	InFlightFn func() bool
+	// RestartGuardFn atomically seals local execution admission when idle.
+	// Ready requires a non-nil finish callback: finish(false) reopens admission
+	// after failure, finish(true) keeps it closed until the process exits. Nil
+	// preserves legacy snapshot-only guards; it does not prove atomic exclusion.
+	RestartGuardFn func() (finish func(restarted bool), ready bool)
 	// RestartSiblings opts this watcher into restarting OTHER swapped
 	// unit-owning targets after a rebuild. Exactly one watcher per fleet — the
 	// bt-agent daemon — sets this; without single ownership the bt-agent and
@@ -363,6 +368,16 @@ func DriftWatchOnce(cfg DriftWatchConfig) (DriftResult, error) {
 			"binary", cfg.Binary, "head_revision", head)
 		return res, nil
 	}
+	if cfg.RestartGuardFn != nil {
+		finish, ready := cfg.RestartGuardFn()
+		if !ready {
+			return res, nil
+		}
+		if finish == nil {
+			return res, fmt.Errorf("deploy-drift restart guard returned no finish callback")
+		}
+		defer func() { finish(res.Restarted) }()
+	}
 	// A rebuild can swap multiple sibling binaries (e.g. bt-agent's
 	// DefaultRebuildTargets also rebuilds bin/bt-gardener); each swapped
 	// unit-owning sibling must be restarted too, or it keeps running its old
@@ -404,8 +419,8 @@ func DriftWatchOnce(cfg DriftWatchConfig) (DriftResult, error) {
 	if err := driftRestartFn(cfg.Binary); err != nil {
 		return res, fmt.Errorf("deploy-drift restart: %w", err)
 	}
-	writeAdoptionStamp(cfg.Binary, head)
 	res.Restarted = true
+	writeAdoptionStamp(cfg.Binary, head)
 	return res, nil
 }
 
