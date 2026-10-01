@@ -370,6 +370,23 @@ keeps it sealed until process exit. Sealed requests return JSON 503,
 are not live workers. Sibling restarts and other daemon admission remain outside
 this local contract; automatic fleet adoption is not qualified.
 
+Sibling drift adoption now requests the target owner instead of invoking
+systemd directly (ADR-279). Dashboard and gardener control listeners authenticate
+same-UID peers, attest the configured systemd MainPID, validate a bounded
+revision request, and respect the target's
+auto-restart policy. A live already-current owner avoids a second restart.
+Otherwise the owner seals admission while idle, verifies its configured
+artifact's exact unit/revision/clean version output and requests its own restart.
+Busy, disabled, missing or mismatched owners defer without direct fallback.
+Lost replies and post-start systemd acknowledgement failures remain uncertain;
+the target keeps its admission seal. Only proven rejection reopens admission.
+
+Gardener RunCycleV2 owns cycle admission through evidence and cleanup. Its
+periodic iteration additionally owns registry rescan, analysis/tools and final
+metadata, including nested cycles. The watcher starts after owner/analysis
+initialization. The bt-agent self path still has only scheduler snapshots;
+daemon-wide scheduler/A2A/DLQ admission remains separate C09 acceptance.
+
 ## 6.6 Browser Authentication and Session Expiry
 
 ```mermaid

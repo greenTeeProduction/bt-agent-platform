@@ -205,15 +205,19 @@ remain review concerns (R24, ADR-246–253).
 ## 8.6 Error Resiliency
 
 Restart exclusion is distinct from cancellation and durable recovery.
-The dashboard's [activity owner](../../cmd/bt-dashboard/deploy_activity.go)
-retains process-local leases for HTTP and detached callbacks through cleanup.
-Its atomic idle seal rejects new admission during restart handoff; failed
-handoff reopens it, accepted handoff does not. `SafeGoWithCleanup` releases
+The shared [restart admission gate](../../internal/reliability/restart_admission.go)
+retains process-local leases through actual cleanup. Dashboard owns HTTP and
+detached callbacks; gardener owns cycles plus periodic analysis/tool/metadata
+work (ADR-279). Its atomic idle seal rejects new admission during restart
+handoff; proven rejection reopens it, accepted/uncertain handoff does not. `SafeGoWithCleanup` releases
 pipeline ownership after panic handling, including a failing handler (ADR-278).
 Worker/limiter/sprint/running-pipeline diagnostics conservatively supplement
 leases. Persisted queue entries and waiting pipeline records do not establish
 live ownership. These leases do not survive restart and cannot coordinate
-another process's systemd request; durable recovery claims remain separate.
+another process's arbitrary systemd request; target-owned same-UID control now
+covers the new dashboard/gardener sibling paths. Old controllers/manual systemd
+calls and bt-agent self/transport ownership remain outside that contract.
+Durable recovery claims remain separate.
 
 Durable admission and result recording are separate transitions (ADR-277).
 The scheduler commits an in-flight claim before scheduled or manual dispatch;

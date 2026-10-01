@@ -35,6 +35,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/evaluator"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/knowledge"
+	"github.com/nico/go-bt-evolve/internal/reliability"
 	"github.com/nico/go-bt-evolve/internal/util"
 )
 
@@ -577,7 +578,8 @@ type Gardener struct {
 	// so the deploy-drift AutoRestart wiring in cmd/bt-gardener/main.go can
 	// defer a self-restart until the current evolution cycle finishes,
 	// mirroring bt-agent's Scheduler.AnyInFlight guard.
-	cycleInFlight atomic.Bool
+	cycleInFlight    atomic.Bool
+	restartAdmission reliability.RestartAdmissionGate
 
 	// cycleCount is the 1-based number of RunCycleV2 cycles this gardener has
 	// started, driving the periodic island-exploration pass's due check (see
@@ -594,7 +596,25 @@ func NewGardener(cfg Config) *Gardener {
 // Plugged into agent.DriftWatchConfig.InFlightFn so an out-of-place rebuild
 // or AutoRestart can never SIGTERM the gardener mid-cycle.
 func (g *Gardener) AnyInFlight() bool {
-	return g.cycleInFlight.Load()
+	return g.restartAdmission.Busy() || g.cycleInFlight.Load()
+}
+
+// BeginRestart atomically seals new cycle admission only after owned cycles
+// and their evidence/cleanup finish. Uncertain handoff remains sealed.
+func (g *Gardener) BeginRestart() (func(bool), bool) {
+	return g.restartAdmission.BeginRestart(func() bool { return g.cycleInFlight.Load() })
+}
+
+// WithActivity owns a daemon iteration, including registry rescan, analysis,
+// tools and final metadata. Nested RunCycleV2 calls retain their own leases.
+func (g *Gardener) WithActivity(fn func()) error {
+	release, err := g.restartAdmission.Acquire()
+	if err != nil {
+		return err
+	}
+	defer release()
+	fn()
+	return nil
 }
 
 // The v1 RunCycle/evolveTree pipeline was retired in ADR-133 Phase 6.

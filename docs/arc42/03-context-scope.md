@@ -34,6 +34,13 @@ flowchart LR
 | Research vault / host filesystem | Research context and persisted state | Analysis, plans, run artifacts and coordinated state writes. |
 | systemd / monitoring / subscribers | Start/stop/restart and operational probes | Logs, build/run metrics and configured webhook events. |
 
+Local restart coordination is an internal daemon interface (ADR-279), distinct
+from public dashboard/A2A HTTP. On Linux, the configured platform-home/unit
+namespace uses abstract Unix sockets and kernel same-UID credentials at both
+ends. The owning process seals admission and requests its own systemd restart.
+The UID is the trusted operator boundary, not end-user identity or service
+readiness. Production control also checks that systemd MainPID is this process. Unsupported/missing owners defer without fallback.
+
 ## 3.2 Technical Context
 
 | Interface | Channel / endpoint | Contract and source of truth |

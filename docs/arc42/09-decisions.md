@@ -302,6 +302,7 @@ Navigation and provenance:
 | ADR-276 | [Sprint Capacity Reservation and Owned Batch Budgets](#adr-276) | Accepted implementation | 2026-10-01 |
 | ADR-277 | [Conservative Process Restart Recovery Holds](#adr-277) | Accepted implementation | 2026-10-01 |
 | ADR-278 | [Atomic Dashboard Restart Admission and Detached Ownership](#adr-278) | Accepted implementation | 2026-10-01 |
+| ADR-279 | [Target-Owned Sibling Restart and Uncertain Handoff Seals](#adr-279) | Accepted implementation | 2026-10-01 |
 
 <a id="adr-001"></a>
 
@@ -6362,6 +6363,67 @@ busy deferral, failed handoff reopening and accepted handoff sealing with fake
 systemd. [Panic cleanup ordering](../../internal/reliability/panic_handler_test.go)
 holds ownership while panic handling blocks. No provider or actual restart is
 invoked; the prior independent process-recovery evidence remains ADR-277.
+
+---
+
+<a id="adr-279"></a>
+## ADR-279: Target-Owned Sibling Restart and Uncertain Handoff Seals
+
+**Status:** Accepted implementation, 2026-10-01. Daemon-wide bt-agent self
+ownership and production handoff qualification remain C09/C12 and R13/R30.
+
+**Context:** The bt-agent fleet sweep invoked systemd for sibling units after
+checking only its own scheduler. This bypassed the dashboard's local gate.
+A command failure after dispatch also does not prove systemd rejected restart.
+Cycle-only gardener snapshots miss analysis/tools and final iteration metadata.
+
+**Decision:** Both bt-agent sibling paths request the target process's ownership
+through a Linux abstract Unix socket scoped by configured home, UID and unit.
+Both ends check kernel peer credentials. Production owner/default restart
+also require the configured systemd unit MainPID to equal this process; a
+query failure/inactive/wrong unit rejects before dispatch. Bounded JSON framing accepts only a
+full lowercase Git revision; only known units are addressed. Dashboard/gardener
+listeners respect their own auto-restart flag, atomically seal admission when
+idle, verify their configured artifact's exact unit/revision/clean identity,
+then request their own bounded systemd restart. Missing/busy/disabled/wrong
+owners never authorize direct fallback. An already-current live owner avoids
+another restart. Client/framing, artifact and command budgets are 5/20/15 seconds.
+
+The shared reliability gate owns all leases through cleanup. Gardener cycles
+and complete periodic rescan/analysis/tool/metadata iterations use it, with
+nested ownership retained. Both target watchers start after initialization.
+Proven rejection reopens admission. Lost replies, unexpected owner failure and
+post-start command errors/timeouts retain uncertainty and the seal until exit.
+No operator repair is inferred from a timeout. Non-Linux control defers safely.
+
+**Alternatives:** Sibling systemd calls cannot observe the target's atomic gate.
+HTTP liveness/counter snapshots do not own detached work. Shared file locks
+alone release on controller death while a target restart may remain pending.
+An owner-mediated request keeps admission exclusion in the target process.
+This adds no database and no engine dependency/injection hook.
+
+**Consequences:** Same UID is trusted operator authority, not multi-tenant
+identity. Production MainPID attestation prevents another/manual process
+from approving or restarting a canonical unit. Abstract sockets leave no stale
+files and avoid path-length limits. A lost reply may conceal an accepted restart;
+controllers must not bypass or infer rejection. Adopted stamps remain advisory.
+Mixed old/new controllers are unsafe; upgrade with flags disabled first.
+The bt-agent self path still samples scheduler state and needs daemon-wide
+scheduler/A2A/DLQ leases. Power/volume loss and deployed stateful handoff are not
+established by these fixtures.
+
+**Evidence:** [No-owner bypass regression](../../internal/agent/restart_control_regression_test.go)
+was red with direct sibling calls. [Control/identity tests](../../internal/agent/restart_control_linux_test.go)
+cover disabled/busy/current/accepted/rejected/uncertain dispositions, framing,
+peer UID, wrong/inactive unit PID, missing owners, clean artifact identity, lost reply and panic seals.
+[Actual dashboard process fixture](../../cmd/bt-dashboard/restart_control_process_test.go)
+holds a real local authenticated sprint action in a separate owner process,
+defers restart, then accepts its own fake-systemd handoff and rejects new HTTP/
+execution admission. A second process with the current revision does not repeat
+handoff. [Actual gardener cycle and iteration](../../internal/gardener/restart_admission_test.go)
+retain ownership through blocked cycle dependencies and post-cycle analysis.
+Private version/systemctl scripts are controlled fixtures; no model provider
+or deployed service restart is invoked.
 
 ---
 

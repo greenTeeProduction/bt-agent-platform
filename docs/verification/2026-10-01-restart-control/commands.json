@@ -1,0 +1,50 @@
+{
+  "commands": [
+    {
+      "command": "go test -short -count=1 ./internal/agent -run TestDriftSiblingRestartRequiresTargetOwnership",
+      "evidence": "red.log",
+      "exit_code": 1,
+      "stage": "pre-fix red ownership fixture"
+    },
+    {
+      "command": "GOFLAGS=-p=2 go test -short -count=1 -race -coverprofile=<private>/coverage.out -covermode=atomic ./...",
+      "evidence": "full-race.log",
+      "exit_code": 0,
+      "snapshot_variant": "See qualified-code.json: three-line scanner explanation only.",
+      "total_statement_coverage": "77.8%"
+    },
+    {
+      "command": "GOFLAGS=-p=2 go test -short -count=1 -race ./internal/agent ./internal/reliability ./internal/gardener ./cmd/bt-dashboard ./cmd/bt-agent ./cmd/bt-gardener",
+      "evidence": "race-final.log",
+      "exit_code": 0,
+      "stage": "Final annotated Go source"
+    },
+    {
+      "command": "GOFLAGS=-p=2 make build BIN_DIR=<private>/bin",
+      "evidence": "build.log",
+      "exit_code": 0,
+      "stage": "Final annotated Go source; all build gates, 13 binaries and AST graph"
+    },
+    {
+      "command": "python3 scripts/test_check_arc42.py then bash scripts/check-doc-drift.sh (only on success)",
+      "evidence": "docs.log",
+      "exit_code": 0,
+      "fixtures": 11
+    },
+    {
+      "command": "GOFLAGS=-p=2 gosec -no-fail -fmt sarif -out <private>/medium.sarif -severity medium ./...",
+      "evidence": "scanner-summary.json",
+      "exit_code": 0,
+      "qualification": "Not a clean security scan.",
+      "remaining_findings": 256
+    }
+  ],
+  "fixture_environment": {
+    "BT_AGENT_HOME": "<private-fixture>",
+    "BT_SKIP_LLM_TESTS": "1",
+    "GOCACHE": "<separate-cache>",
+    "GOTMPDIR": "/tmp",
+    "PATH": "Go toolchain and local Go tool binaries prepended"
+  },
+  "toolchain": "go1.26.5 linux/arm64"
+}

@@ -1,61 +1,25 @@
 package main
 
 import (
-	"errors"
 	"net/http"
-	"sync"
 
 	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
-var errDashboardRestarting = errors.New("dashboard restart handoff is pending")
+var errDashboardRestarting = reliability.ErrRestartPending
 var dashActivity = &dashboardActivityGate{}
 
 // dashboardActivityGate owns requests and detached executions, including
 // capacity waits and cleanup. Sealing and new admission share one mutex.
 // Successful restart handoff keeps admission closed until the process exits.
 type dashboardActivityGate struct {
-	mu     sync.Mutex
-	active int
-	sealed bool
+	reliability.RestartAdmissionGate
 }
 
-func (g *dashboardActivityGate) acquire() (func(), error) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	if g.sealed {
-		return nil, errDashboardRestarting
-	}
-	g.active++
-	return sync.OnceFunc(func() { g.mu.Lock(); defer g.mu.Unlock(); g.active-- }), nil
-}
-
-func (g *dashboardActivityGate) busy() bool {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	return g.sealed || g.active > 0
-}
-
-// beginRestart supplements owned leases with current process-local execution
-// diagnostics. Persisted queue entries and waiting pipeline records are not
-// evidence of a live worker. It never claims to guard another process.
+func (g *dashboardActivityGate) acquire() (func(), error) { return g.Acquire() }
+func (g *dashboardActivityGate) busy() bool               { return g.Busy() }
 func (g *dashboardActivityGate) beginRestart() (func(bool), bool) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	if g.sealed || g.active != 0 || dashBackgroundBusy() {
-		return nil, false
-	}
-	g.sealed = true
-	var once sync.Once
-	return func(restarted bool) {
-		once.Do(func() {
-			if !restarted {
-				g.mu.Lock()
-				defer g.mu.Unlock()
-				g.sealed = false
-			}
-		})
-	}, true
+	return g.BeginRestart(dashBackgroundBusy)
 }
 
 func dashBackgroundBusy() bool {

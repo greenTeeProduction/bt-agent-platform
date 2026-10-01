@@ -631,6 +631,9 @@ func TestDriftConfigs_FleetOwnerSetsRestartSiblings(t *testing.T) {
 	if got := strings.Count(string(src), "RestartSiblings: true"); got < 2 {
 		t.Fatalf("found %d 'RestartSiblings: true' in cmd/bt-agent/main.go, want >= 2 (both the periodic watcher config and idleDriftCfg must opt in as fleet owner)", got)
 	}
+	if got := strings.Count(string(src), "agent.RequestOwnedRestart(agent.HomeDir(), unit, revision)"); got != 2 {
+		t.Fatalf("both fleet restart paths must delegate to target ownership; got %d", got)
+	}
 }
 
 // TestShutdownStopsA2AServer pins a NotebookLM research finding: neither of

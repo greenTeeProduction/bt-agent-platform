@@ -599,9 +599,12 @@ func main() {
 				// path skipped siblings, rebuilt sibling units would keep
 				// running their old binaries (live case 2026-07-16 23:46).
 				RestartSiblings: true,
-				Targets:         agent.DefaultRebuildTargets(repoDir),
-				Binary:          "bt-agent",
-				Backoff:         agent.NewRebuildBackoff(),
+				SiblingRestartFn: func(unit, revision string) error {
+					return agent.RequestOwnedRestart(agent.HomeDir(), unit, revision)
+				},
+				Targets: agent.DefaultRebuildTargets(repoDir),
+				Binary:  "bt-agent",
+				Backoff: agent.NewRebuildBackoff(),
 				// Post-rebuild restart re-check; nil-safe: no scheduler yet
 				// means "assume busy" and defer the restart.
 				InFlightFn: func() bool { return globalSched == nil || globalSched.AnyInFlight() },
@@ -737,10 +740,13 @@ func main() {
 				// Fleet owner: only THIS watcher restarts sibling units after
 				// a sweep (bt-dashboard's watcher rebuilds its own binary only).
 				RestartSiblings: true,
-				Targets:         agent.DefaultRebuildTargets(repoDir),
-				Binary:          "bt-agent",
-				Backoff:         agent.NewRebuildBackoff(),
-				InFlightFn:      globalSched.AnyInFlight,
+				SiblingRestartFn: func(unit, revision string) error {
+					return agent.RequestOwnedRestart(agent.HomeDir(), unit, revision)
+				},
+				Targets:    agent.DefaultRebuildTargets(repoDir),
+				Binary:     "bt-agent",
+				Backoff:    agent.NewRebuildBackoff(),
+				InFlightFn: globalSched.AnyInFlight,
 			}, agent.DefaultDriftCheckInterval)
 		}
 	}

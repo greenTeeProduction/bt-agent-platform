@@ -1,0 +1,40 @@
+...........
+----------------------------------------------------------------------
+Ran 11 tests in 0.478s
+
+OK
+=== Doc Drift Validation ===
+Root: <worktree>
+
+--- API_REFERENCE.md package listing ---
+  All code packages are documented
+  ✓ package listing consistent
+
+--- GETTING_STARTED.md binary listing ---
+  All core binaries mentioned in Getting Started
+
+--- TUTORIAL.md command validation ---
+  All tutorial command references are valid
+
+--- TROUBLESHOOTING.md command validation ---
+  All troubleshooting command references are valid
+
+--- arc42 section validation ---
+...........
+----------------------------------------------------------------------
+Ran 11 tests in 1.396s
+
+OK
+arc42 references, inventories and traceability pass; behavioral claims require evidence review
+  arc42 sections, ADR log, and README paths are consistent
+
+--- VIDEO_WALKTHROUGH.md command syntax check ---
+  All video walkthrough command references are valid
+
+--- Walkthrough evidence artifact ---
+  walkthrough-evidence.md is fresh (3h old)
+
+=== Results ===
+  ✓ Documentation structure and references pass; behavioral claims require evidence review
+
+Exit code: 0

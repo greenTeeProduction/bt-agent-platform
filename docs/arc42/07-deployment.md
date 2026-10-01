@@ -144,12 +144,28 @@ cycle. See the [runbook](../coding-delegation.md#observed-launch-configuration-2
 4. Coordinate with in-flight work, restart the owning units and respawn
    affected MCP children. Dashboard self-adoption owns HTTP requests and
    detached agent/sprint/pipeline work through cleanup, then atomically seals
-   admission through asynchronous restart handoff (ADR-278). Fleet sibling
-   restarts still bypass the target process guard; agent/gardener callbacks
-   remain snapshot checks. Qualify fleet coordination before enabling
-   automatic restart (ADR-228, R13).
+   admission through asynchronous restart handoff (ADR-278/279). Sibling
+   requests now require dashboard/gardener target ownership; missing owners
+   defer with no systemd fallback. Gardener owns cycles and periodic analysis/
+   metadata. The bt-agent self path still samples scheduler state. Qualify
+   daemon-wide ownership and bounded real handoff before enabling automatic
+   restart (ADR-228, R13).
 5. Confirm service activity, actual executable revision, a meaningful
    authenticated smoke test and the next relevant workflow outcome.
+
+**Coordinated rollout (ADR-279):** upgrade controllers and both target owners
+with automatic restart disabled. Older controllers retain direct sibling
+restart behavior, so mixed versions do not establish safety. A target requires
+its own `BT_AUTO_RESTART_ON_DRIFT=1` before accepting requests; a controller's
+flag does not override that policy. The private Linux control namespace requires
+the same UID and configured platform home; the owner/default restart also
+require the canonical unit MainPID to match this process. Identity queries
+and client/framing deadlines are five
+seconds, artifact probes twenty seconds and systemd commands fifteen seconds;
+a lost client reply does not cancel an accepted owner operation. Accepted or
+uncertain handoff stays sealed until process exit/operator restart. This is
+bounded fixture behavior, not deployed restart acceptance. Unknown version,
+dirty or wrong-revision artifacts are not accepted by the owner.
 
 **Evidence levels:** `/api/health` proves HTTP process liveness, not model
 readiness or successful GOAP implementation. Use `bt_build_info`/startup

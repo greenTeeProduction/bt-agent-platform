@@ -118,6 +118,14 @@ goals/personas/feedback, knowledge/impact queries and evolution. Tool families
 are defined in [`cmd/bt-agent`](../../cmd/bt-agent); avoid treating an old
 numeric inventory as a compatibility contract.
 
+Restart ownership uses the lower-layer
+[reliability admission gate](../../internal/reliability/restart_admission.go)
+for callback lifetime and sealing. The
+[agent restart coordinator](../../internal/agent/restart_control.go) owns
+local authenticated request framing, target artifact identity and handoff.
+Dashboard/gardener mains bind their initialized owners; bt-agent's two sibling
+paths request that ownership. No engine import or injection hook is added.
+
 ## 5.2 Core Engine
 
 The engine turns declarative structure into commands while keeping task state
