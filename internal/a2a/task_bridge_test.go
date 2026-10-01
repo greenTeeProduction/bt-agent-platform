@@ -24,7 +24,12 @@ func TestTaskStateBridge_BTToA2A(t *testing.T) {
 		{"unknown_outcome", a2a.TaskStateFailed},
 		{"", a2a.TaskStateFailed},
 		{"partial", a2a.TaskStateFailed},
-		{"cancelled", a2a.TaskStateFailed},
+		{"cancelled", a2a.TaskStateCanceled},
+		{"auth-required", a2a.TaskStateAuthRequired},
+		{"rejected", a2a.TaskStateRejected},
+		{"goap_fusion_rate_limited", a2a.TaskStateInputRequired},
+		{"no_change", a2a.TaskStateCompleted},
+		{"degraded", a2a.TaskStateCompleted},
 	}
 
 	for _, tt := range tests {
@@ -47,6 +52,8 @@ func TestTaskStateBridge_A2AToBT(t *testing.T) {
 		{a2a.TaskStateCanceled, "cancelled"},
 		{a2a.TaskStateWorking, "running"},
 		{a2a.TaskStateInputRequired, "input-required"},
+		{a2a.TaskStateAuthRequired, "auth-required"},
+		{a2a.TaskStateRejected, "rejected"},
 		{a2a.TaskStateSubmitted, "unknown"},
 		{a2a.TaskState("UNKNOWN_STATE"), "unknown"},
 	}
@@ -69,6 +76,7 @@ func TestTaskStateBridge_IsTerminal(t *testing.T) {
 		{a2a.TaskStateCompleted, true},
 		{a2a.TaskStateFailed, true},
 		{a2a.TaskStateCanceled, true},
+		{a2a.TaskStateRejected, true},
 		{a2a.TaskStateWorking, false},
 		{a2a.TaskStateInputRequired, false},
 		{a2a.TaskStateSubmitted, false},

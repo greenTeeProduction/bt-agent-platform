@@ -6,15 +6,15 @@ import (
 	"testing"
 )
 
-func TestResolvedSuperpowersProviderDefaultsToClaude(t *testing.T) {
+func TestResolvedSuperpowersProviderDefaultsToCodex(t *testing.T) {
 	t.Setenv("BT_SUPERPOWERS_PROVIDER", "")
 
 	p, err := resolvedSuperpowersProvider()
 	if err != nil {
 		t.Fatalf("resolvedSuperpowersProvider() err = %v, want nil", err)
 	}
-	if p != DelegationProviderClaude {
-		t.Fatalf("resolvedSuperpowersProvider() = %q, want claude (backwards-compatible default)", p)
+	if p != DelegationProviderCodex {
+		t.Fatalf("resolvedSuperpowersProvider() = %q, want codex", p)
 	}
 }
 

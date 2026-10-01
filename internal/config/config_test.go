@@ -2069,7 +2069,11 @@ func TestConfig_ResolvePaths(t *testing.T) {
 	if want := filepath.Join("/tmp/test-bt-home", "agents.db"); c.Paths.DBFile != want {
 		t.Errorf("DBFile = %q, want %q", c.Paths.DBFile, want)
 	}
-	if want := filepath.Join("/tmp/test-bt-home", "reflections"); c.Paths.ReflectionsDir != want {
+	userHome, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(userHome, ".go-bt-reflections"); c.Paths.ReflectionsDir != want {
 		t.Errorf("ReflectionsDir = %q, want %q", c.Paths.ReflectionsDir, want)
 	}
 	if want := filepath.Join("/tmp/test-bt-home", "history"); c.Paths.HistoryDir != want {

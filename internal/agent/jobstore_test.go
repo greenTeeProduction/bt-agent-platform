@@ -181,7 +181,9 @@ func TestScheduler_NoJobStore_NilSafe(t *testing.T) {
 	// Should not panic
 	_ = sched.RemoveJob(job.ID)
 	sched.saveState()
-	sched.saveStateLocked()
+	if err := sched.saveStateLocked(); err != nil {
+		t.Fatal(err)
+	}
 	sched.loadState()
 }
 

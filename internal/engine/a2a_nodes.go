@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/nico/go-bt-evolve/internal/reliability"
 	btcore "github.com/rvitorper/go-bt/core"
 )
 
@@ -47,6 +48,11 @@ func registerA2ANodes() {
 
 		result, err := DelegateToA2AFn(ctx, targetURL, task)
 		if err != nil {
+			if reliability.IsExecutionTerminalError(err) {
+				b.stopExecution(result, err)
+				b.applyExecutionStop()
+				return -1
+			}
 			// A remote rate-limit carryover is a healthy, expected pause, not
 			// a delegation failure: the A2A server keeps the sentinel in the
 			// failed task's error text (see internal/a2a's

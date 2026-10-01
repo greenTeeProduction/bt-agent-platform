@@ -26,11 +26,17 @@ type AgentFactory struct {
 
 // NewAgentFactory creates a new factory.
 func NewAgentFactory(llmClient llm.LLM, homeDir string) (*AgentFactory, error) {
-	ts, err := evolution.NewTreeStore(filepath.Join(homeDir, ".go-bt-reflections"))
+	return NewAgentFactoryWithReflections(llmClient, filepath.Join(homeDir, ".go-bt-reflections"))
+}
+
+// NewAgentFactoryWithReflections shares the caller's configured tree/reflection
+// owner instead of creating another store under an unrelated user-home path.
+func NewAgentFactoryWithReflections(llmClient llm.LLM, refDir string) (*AgentFactory, error) {
+	ts, err := evolution.NewTreeStore(refDir)
 	if err != nil {
 		return nil, fmt.Errorf("tree store: %w", err)
 	}
-	rs, err := evolution.NewStore(filepath.Join(homeDir, ".go-bt-reflections"))
+	rs, err := evolution.NewStore(refDir)
 	if err != nil {
 		return nil, fmt.Errorf("reflection store: %w", err)
 	}

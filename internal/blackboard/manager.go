@@ -23,8 +23,8 @@ var scopeLockTimeout = 10 * time.Second
 // user leaves, so diagnostic reads of unknown scope IDs cannot accumulate
 // gates the store map already refuses to keep.
 type scopeGate struct {
-	mu   sync.Mutex
-	refs int
+	token chan struct{}
+	refs  int
 }
 
 // Manager stores entries partitioned by scope.
@@ -123,20 +123,44 @@ func (m *Manager) Get(scope Scope, key string) (Entry, error) {
 
 // Set writes an entry to a scope.
 func (m *Manager) Set(scope Scope, key, value, summary, contentType string) error {
-	s, path, release, err := m.beginScope(scope)
+	return m.SetWithContext(context.Background(), scope, key, value, summary, contentType)
+}
+
+// SetWithContext uses the shorter caller/default budget for scope and file-lock
+// admission. A failed mutation or commit never publishes staged cache changes.
+func (m *Manager) SetWithContext(ctx context.Context, scope Scope, key, value, summary, contentType string) error {
+	return m.SetEntriesWithContext(ctx, scope, []Entry{{Key: key, Value: value, Summary: summary, ContentType: contentType}})
+}
+
+// SetEntriesWithContext commits a related group in one scoped transaction. A
+// failed entry, deadline or write publishes none of the group's staged changes.
+func (m *Manager) SetEntriesWithContext(ctx context.Context, scope Scope, entries []Entry) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	s, path, release, err := m.beginScopeWithContext(ctx, scope)
 	if err != nil {
 		return err
 	}
 	defer release()
-	if err := s.set(key, Entry{
-		Key:         key,
-		Value:       value,
-		Summary:     summary,
-		ContentType: contentType,
-	}); err != nil {
+	if err := ctx.Err(); err != nil {
 		return err
 	}
-	return persistScope(path, s)
+	staged := s.clone()
+	for _, entry := range entries {
+		if err := staged.set(entry.Key, entry); err != nil {
+			return err
+		}
+	}
+	for _, entry := range entries {
+		if _, ok := staged.get(entry.Key); !ok {
+			return fmt.Errorf("blackboard group exceeds retained-entry limits")
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return commitScope(path, s, staged)
 }
 
 // Append atomically appends value to the entry at key in scope, joining with
@@ -150,11 +174,12 @@ func (m *Manager) Append(scope Scope, key, value, sep, contentType string) (Entr
 		return Entry{}, err
 	}
 	defer release()
-	e, err := s.appendVal(key, value, sep, contentType)
+	staged := s.clone()
+	e, err := staged.appendVal(key, value, sep, contentType)
 	if err != nil {
 		return Entry{}, err
 	}
-	if err := persistScope(path, s); err != nil {
+	if err := commitScope(path, s, staged); err != nil {
 		return Entry{}, err
 	}
 	return e, nil
@@ -167,10 +192,11 @@ func (m *Manager) Delete(scope Scope, key string) error {
 		return err
 	}
 	defer release()
-	if err := s.delete(key); err != nil {
+	staged := s.clone()
+	if err := staged.delete(key); err != nil {
 		return err
 	}
-	return persistScope(path, s)
+	return commitScope(path, s, staged)
 }
 
 // List returns entries in a scope with an optional key prefix.
@@ -204,23 +230,44 @@ func (m *Manager) ListRecent(scope Scope, prefix string, limit int) ([]Entry, er
 // must leave unrelated run-scope reads and writes running — run and task
 // scopes are never persisted and take no file lock at all.
 func (m *Manager) acquireGate(id string) *scopeGate {
+	gate, _ := m.acquireGateWithContext(context.Background(), id)
+	return gate
+}
+
+func (m *Manager) acquireGateWithContext(ctx context.Context, id string) (*scopeGate, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	m.gatesMu.Lock()
 	if m.gates == nil {
 		m.gates = make(map[string]*scopeGate)
 	}
 	g, ok := m.gates[id]
 	if !ok {
-		g = &scopeGate{}
+		g = &scopeGate{token: make(chan struct{}, 1)}
 		m.gates[id] = g
 	}
 	g.refs++
 	m.gatesMu.Unlock()
-	g.mu.Lock()
-	return g
+	select {
+	case g.token <- struct{}{}:
+		if err := ctx.Err(); err != nil {
+			m.releaseGate(id, g)
+			return nil, err
+		}
+		return g, nil
+	case <-ctx.Done():
+		m.dropGateReference(id, g)
+		return nil, ctx.Err()
+	}
 }
 
 func (m *Manager) releaseGate(id string, g *scopeGate) {
-	g.mu.Unlock()
+	<-g.token
+	m.dropGateReference(id, g)
+}
+
+func (m *Manager) dropGateReference(id string, g *scopeGate) {
 	m.gatesMu.Lock()
 	g.refs--
 	if g.refs == 0 {
@@ -238,20 +285,27 @@ func (m *Manager) releaseGate(id string, g *scopeGate) {
 // The persistence root is resolved once here and threaded through the whole
 // operation so a load/mutate/save cycle cannot straddle EnablePersistence.
 func (m *Manager) beginScope(scope Scope) (*scopedStore, string, func(), error) {
+	return m.beginScopeWithContext(context.Background(), scope)
+}
+
+func (m *Manager) beginScopeWithContext(ctx context.Context, scope Scope) (*scopedStore, string, func(), error) {
+	ctx, cancel := context.WithTimeout(ctx, scopeLockTimeout)
+	defer cancel()
 	id, err := m.scopeID(scope)
 	if err != nil {
 		return nil, "", nil, err
 	}
-	gate := m.acquireGate(id)
+	gate, err := m.acquireGateWithContext(ctx, id)
+	if err != nil {
+		return nil, "", nil, fmt.Errorf("blackboard scope %s: %w", id, err)
+	}
 	// Resolve after joining the scope's serial order: queued operations must
 	// not retain a root captured before another operation/reconfiguration.
 	dir := m.persistRoot()
 	path := scopePath(dir, scope)
 	release := func() { m.releaseGate(id, gate) }
 	if path != "" {
-		ctx, cancel := context.WithTimeout(context.Background(), scopeLockTimeout)
 		unlock, lockErr := reliability.AcquireFileLockWithContext(ctx, path)
-		cancel()
 		if lockErr != nil {
 			release()
 			return nil, "", nil, fmt.Errorf("blackboard scope %s: %w", id, lockErr)
@@ -264,6 +318,9 @@ func (m *Manager) beginScope(scope Scope) (*scopedStore, string, func(), error) 
 	s, err := m.storeFor(dir, scope)
 	if err == nil && path != "" {
 		err = loadScope(dir, scope, s)
+	}
+	if err == nil {
+		err = ctx.Err()
 	}
 	if err != nil {
 		release()

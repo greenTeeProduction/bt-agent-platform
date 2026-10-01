@@ -69,7 +69,12 @@ func persistenceParent(path string, create bool, perm os.FileMode) (*os.Root, st
 // EnsurePersistenceParent creates a private parent before a caller acquires
 // its existing sidecar lock. It applies the same validation as the write.
 func EnsurePersistenceParent(path string) error {
-	root, _, err := persistenceParent(path, true, 0o750)
+	return EnsurePersistenceParentMode(path, 0o750)
+}
+
+// EnsurePersistenceParentMode preserves a store's stricter directory policy.
+func EnsurePersistenceParentMode(path string, dirPerm os.FileMode) error {
+	root, _, err := persistenceParent(path, true, dirPerm)
 	if err != nil {
 		return err
 	}

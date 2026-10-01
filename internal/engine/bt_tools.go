@@ -11,8 +11,9 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"syscall"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
 // Tool represents a callable tool with name, description, and implementation.
@@ -390,7 +391,5 @@ func splitPipeline(cmd string) []string {
 // Cancel the shell's process group so descendants cannot keep executing after
 // a losing parallel branch is joined. Bound pipe cleanup as a final backstop.
 func bindToolCommandCancellation(cmd *exec.Cmd) {
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
-	cmd.WaitDelay = 100 * time.Millisecond
+	reliability.BindCommandCancellation(cmd)
 }

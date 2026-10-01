@@ -1,9 +1,11 @@
 package engine
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
+	"github.com/nico/go-bt-evolve/internal/reliability"
 	btcore "github.com/rvitorper/go-bt/core"
 )
 
@@ -16,6 +18,10 @@ import (
 // won the auction. When awarded is false the AuctionDelegate action falls back
 // to running the task through a delegate tree via DelegateToTreeFn.
 var AuctionDelegateFn func(task string, chainState map[string]any) (result string, awarded bool, err error)
+
+// AuctionDelegateWithContextFn carries the execution owner's cancellation and
+// budget. AuctionDelegateFn remains a compatibility hook for older embedders.
+var AuctionDelegateWithContextFn func(context.Context, string, map[string]any) (string, bool, error)
 
 func init() {
 	registerAuctionDelegateNode()
@@ -61,14 +67,26 @@ func registerAuctionDelegateNode() {
 			return -1
 		}
 
-		if AuctionDelegateFn == nil {
+		if AuctionDelegateWithContextFn == nil && AuctionDelegateFn == nil {
 			b.Result = "auction delegate not configured (set engine.AuctionDelegateFn)"
 			b.Outcome = "failure"
 			return -1
 		}
 
-		result, awarded, err := AuctionDelegateFn(task, b.ChainState)
+		var result string
+		var awarded bool
+		var err error
+		if AuctionDelegateWithContextFn != nil {
+			result, awarded, err = AuctionDelegateWithContextFn(ctx.Context, task, b.ChainState)
+		} else {
+			result, awarded, err = AuctionDelegateFn(task, b.ChainState)
+		}
 		if err != nil {
+			if reliability.IsExecutionTerminalError(err) {
+				b.stopExecution(result, err)
+				b.applyExecutionStop()
+				return -1
+			}
 			b.Result = fmt.Sprintf("auction delegation failed: %v", err)
 			b.Outcome = "failure"
 			return -1

@@ -90,6 +90,10 @@ type EvolveV2Config struct {
 	// defaultMCTSCandidateIterations.
 	MCTSIterations int
 
+	// MCTSSeed fixes proposal generation for replay. Nil chooses a fresh seed;
+	// each accepted MCTS proposal retains the actual seed and search parameters.
+	MCTSSeed *int64
+
 	// Specialists supplies the archetype half of the per-tree strategy choice.
 	// Nil means "no archetype knowledge", which biases toward running the
 	// search; DefaultEvolveV2Config seeds it from the benchmark-validated
@@ -221,10 +225,12 @@ func lastFailureTask(records []evolution.Record) string {
 // cascade quick-check → ordered candidates → block filter → per-candidate
 // benchmark + pre-score + quality gate → apply → validation-gated persist.
 func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetrics {
-	tree := entry.Tree
-	if tree == nil {
+	if entry.Tree == nil {
 		return CycleMetrics{TreeName: entry.Name, Improved: false}
 	}
+	// Work on a detached candidate. Readers retain the committed predecessor
+	// until persistence succeeds, including when optional passes alter the tree.
+	tree := cloneTreeForGardener(entry.Tree)
 
 	allRecords, _ := g.cfg.RefStore.LoadAll()
 	records := recordsForEntry(allRecords, entry)
@@ -422,9 +428,20 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 	if g.cfg.SnapshotDir != "" {
 		if _, err := evolution.SnapshotTreeWithFitness(preReseedTree, entry.Name, g.cfg.SnapshotDir, baseFitness.Composite); err != nil {
 			slog.Warn("gardener/v2: pre-mutation snapshot failed", "tree", entry.Name, "error", err)
+			return CycleMetrics{
+				TreeName: entry.Name, Timestamp: time.Now().Unix(),
+				BaseFitness: baseFitness.Composite, NewFitness: baseFitness.Composite,
+				NodesBefore: nodesBefore, NodesAfter: nodesBefore, SaveFailed: true,
+			}
 		}
 	}
 
+	type mutationExperience struct {
+		tree          *evolution.SerializableNode
+		proposal      evaluator.MutationCandidate
+		before, after float64
+	}
+	var pendingExperience []mutationExperience
 	applied := 0
 	rejected := 0
 	rollbacks := 0
@@ -435,16 +452,14 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 			break
 		}
 
-		score := benchmark.QuickValidate(tree, suite, selectedLLM, []evolution.MutationOp{candidates[i].Op})
-		if score < 0 {
-			rejected++
-			continue
-		}
-
 		// Pre-score on a clone before mutating the live tree. This rejects no-op
 		// mutations and candidates whose estimated post-mutation fitness regresses.
 		candidateTree := cloneTreeForGardener(tree)
 		if evolution.ApplyMutations(candidateTree, []evolution.MutationOp{candidates[i].Op}) == 0 {
+			rejected++
+			continue
+		}
+		if !benchmark.QuickValidateCandidate(tree, candidateTree, suite, selectedLLM) {
 			rejected++
 			continue
 		}
@@ -479,11 +494,10 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 		if evolution.ApplyMutations(tree, []evolution.MutationOp{candidates[i].Op}) > 0 {
 			applied++
 			if bank != nil {
-				// Record before advancing currentFitness so the delta is the
-				// per-candidate improvement, not cumulative across the cycle.
-				if err := bank.AddFromMutation(tree, candidates[i].Op, currentFitness.Composite, candidateFitness.Composite, nil, lastFailureTask(records)); err != nil {
-					slog.Warn("gardener/v2: recording mutation experience failed", "tree", entry.Name, "error", err)
-				}
+				pendingExperience = append(pendingExperience, mutationExperience{
+					tree: cloneTreeForGardener(tree), proposal: candidates[i],
+					before: currentFitness.Composite, after: candidateFitness.Composite,
+				})
 			}
 			currentFitness = candidateFitness
 		}
@@ -502,11 +516,11 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 		// originalTree is the pre-reseed lineage, so the restore above undid
 		// the archive seed as well — this cycle no longer reseeded anything.
 		eliteReseed = false
+		pendingExperience = nil
 	}
 	// Feed this cycle's settled tree/fitness into the tree's diversity
 	// archive so BehavioralDiversity above reflects real accumulated shape
 	// exploration on the next cycle, not just the cold-start 0.
-	g.recordDiversityObservation(entry.Name, tree, newFitness.Composite)
 	improved := newFitness.Composite > baseFitness.Composite
 	// ── Local-search parameter refinement — run evolution.LocalSearcher over
 	// the settled tree's mutable parameters (MaxRetries, TimeoutMs, metadata
@@ -546,6 +560,12 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 		// ── Validation gate — prevent persisting evolved trees that fail
 		// quality thresholds. A rejection skips this tree only.
 		gateErr := ValidationGate(entry.Name, entry.Name, g.cfg.ValidationGate)
+		if gateErr == nil && !benchmark.QuickValidateCandidate(originalTree, tree, suite, selectedLLM) {
+			gateErr = errors.New("candidate definition or benchmark rejected")
+		}
+		if gateErr == nil && g.cfg.MetaValidator != nil && g.cfg.MetaValidator.ValidateMutation(originalTree, tree, baseFitness.Composite, newFitness.Composite).Decision == evolution.MetaReject {
+			gateErr = errors.New("settled candidate meta-validation rejected")
+		}
 		if gateErr != nil {
 			slog.Warn("gardener/v2: validation gate rejected, skipping deployment", "error", gateErr)
 			// Restore the in-memory tree to its pre-cycle state so that
@@ -572,6 +592,20 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 		if err := g.cfg.Registry.SaveTree(TreeEntry{Name: entry.Name, Tree: tree, FilePath: entry.FilePath}); err != nil {
 			slog.Error("gardener/v2: saving evolved tree failed, evolution result is not durably persisted", "tree", entry.Name, "error", err)
 			saveFailed = true
+			*tree = *originalTree
+			newFitness = baseFitness
+			improved = false
+			nodesAfter = nodesBefore
+			applied = 0
+			eliteReseed = false
+			localSearchDelta = 0
+		} else {
+			*entry.Tree = *cloneTreeForGardener(tree)
+			for _, experience := range pendingExperience {
+				if err := bank.AddFromProposal(experience.tree, experience.proposal, experience.before, experience.after, nil, lastFailureTask(records)); err != nil {
+					slog.Warn("gardener/v2: recording committed mutation experience failed", "tree", entry.Name, "error", err)
+				}
+			}
 		}
 	}
 
@@ -592,62 +626,79 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 	var deepSearchUsed bool
 	var deepSearchDepth int
 	var ttHitRate float64
-	if tt := g.transpositionTable(); tt != nil {
+	if tt := g.transpositionTable(); tt != nil && !saveFailed {
 		deep := evaluator.IterativeDeepening(tree, records, tt, deepSearchMaxDepth)
 		deepSearchUsed = true
 		deepSearchDepth = deep.Depth
 		if deep.TTProbes > 0 {
 			ttHitRate = float64(deep.TTProbeHits) / float64(deep.TTProbes)
 		}
-		if deep.BestMutation != nil && deep.BestFitness != nil && deep.BestFitness.Composite > newFitness.Composite+0.0001 {
-			preDeepSearchTree := cloneTreeForGardener(tree)
-			preDeepSearchFitness := newFitness
-
-			// ── Meta-validation — mirror the greedy loop's own check above:
-			// consult the structural safety layer on a cloned candidate before
-			// committing the deep-search mutation to the live tree at all.
-			metaRejected := false
-			if g.cfg.MetaValidator != nil {
-				candidateTree := cloneTreeForGardener(tree)
-				if evolution.ApplyMutations(candidateTree, []evolution.MutationOp{deep.BestMutation.Op}) > 0 {
-					metaReport := g.cfg.MetaValidator.ValidateMutation(preDeepSearchTree, candidateTree, preDeepSearchFitness.Composite, deep.BestFitness.Composite)
-					if metaReport.Decision == evolution.MetaReject {
-						slog.Warn("gardener/v2: meta validator rejected deep-search mutation, skipping", "tree", entry.Name)
-						metaRejected = true
-					}
+		if len(deep.BestMutations) > 0 && deep.BestFitness != nil {
+			candidate := cloneTreeForGardener(tree)
+			candidateApplied := 0
+			var deepExperience []mutationExperience
+			before := newFitness.Composite
+			for _, proposal := range deep.BestMutations {
+				if evolution.ApplyMutations(candidate, []evolution.MutationOp{proposal.Op}) == 0 {
+					continue
 				}
+				candidateApplied++
+				after := evaluator.EvaluateTree(candidate, records).Composite
+				deepExperience = append(deepExperience, mutationExperience{
+					tree: cloneTreeForGardener(candidate), proposal: proposal, before: before, after: after,
+				})
+				before = after
 			}
-
-			preDeepSearchApplied := applied
-			if !metaRejected && evolution.ApplyMutations(tree, []evolution.MutationOp{deep.BestMutation.Op}) > 0 {
-				applied++
-				if bank != nil {
-					if err := bank.AddFromMutation(tree, deep.BestMutation.Op, newFitness.Composite, deep.BestFitness.Composite, nil, lastFailureTask(records)); err != nil {
-						slog.Warn("gardener/v2: recording deep-search mutation experience failed", "tree", entry.Name, "error", err)
+			candidateFitness := evaluator.EvaluateTree(candidate, records)
+			if candidateApplied > 0 && candidateFitness.Composite > newFitness.Composite+0.0001 {
+				commitErr := func() error {
+					if !benchmark.QuickValidateCandidate(tree, candidate, suite, selectedLLM) {
+						return errors.New("deep-search candidate definition or benchmark rejected")
 					}
-				}
-				newFitness = *deep.BestFitness
-				nodesAfter = evolution.CountNodes(tree)
-				improved = newFitness.Composite > baseFitness.Composite
-
-				// ── Validation gate — mirror the greedy loop's own gate above:
-				// re-validate the deep-search mutation before persisting it, and
-				// revert to the pre-deep-search state on rejection so a mutation
-				// that fails validation is never saved.
-				if gateErr := ValidationGate(entry.Name, entry.Name, g.cfg.ValidationGate); gateErr != nil {
-					slog.Warn("gardener/v2: validation gate rejected deep-search mutation, reverting", "tree", entry.Name, "error", gateErr)
-					*tree = *preDeepSearchTree
-					newFitness = preDeepSearchFitness
-					applied = preDeepSearchApplied
+					if g.cfg.Gate != nil && g.cfg.Gate.ValidateFor(entry.Name, newFitness.Composite, candidateFitness.Composite) != evolution.GateAccepted {
+						return errors.New("deep-search candidate quality rejected")
+					}
+					if g.cfg.MetaValidator != nil && g.cfg.MetaValidator.ValidateMutation(tree, candidate, newFitness.Composite, candidateFitness.Composite).Decision == evolution.MetaReject {
+						return errors.New("deep-search candidate meta-validation rejected")
+					}
+					if err := ValidationGate(entry.Name, entry.Name, g.cfg.ValidationGate); err != nil {
+						return err
+					}
+					if g.cfg.SnapshotDir != "" {
+						if _, err := evolution.SnapshotTreeWithFitness(tree, entry.Name, g.cfg.SnapshotDir, newFitness.Composite); err != nil {
+							saveFailed = true
+							return err
+						}
+					}
+					if err := g.cfg.Registry.SaveTree(TreeEntry{Name: entry.Name, Tree: candidate, FilePath: entry.FilePath}); err != nil {
+						saveFailed = true
+						return err
+					}
+					return nil
+				}()
+				if commitErr != nil {
+					rejected++
+					slog.Warn("gardener/v2: deep-search adoption failed", "tree", entry.Name, "error", commitErr)
+				} else {
+					*tree = *candidate
+					*entry.Tree = *cloneTreeForGardener(candidate)
+					applied += candidateApplied
+					newFitness = candidateFitness
 					nodesAfter = evolution.CountNodes(tree)
 					improved = newFitness.Composite > baseFitness.Composite
-				} else if err := g.cfg.Registry.SaveTree(TreeEntry{Name: entry.Name, Tree: tree, FilePath: entry.FilePath}); err != nil {
-					slog.Error("gardener/v2: saving deep-search evolved tree failed, evolution result is not durably persisted", "tree", entry.Name, "error", err)
-					saveFailed = true
+					if bank != nil {
+						for _, experience := range deepExperience {
+							if err := bank.AddFromProposal(experience.tree, experience.proposal, experience.before, experience.after, nil, lastFailureTask(records)); err != nil {
+								slog.Warn("gardener/v2: recording committed deep-search experience failed", "tree", entry.Name, "error", err)
+							}
+						}
+					}
 				}
 			}
 		}
 	}
+
+	g.recordDiversityObservation(entry.Name, tree, newFitness.Composite)
 
 	// Knowledge-graph write-back (Q2 Evolvability milestone 2): a cycle that
 	// accepted at least one mutation is evidence the KG's fitness-aware
@@ -867,44 +918,21 @@ func (g *Gardener) augmentWithMCTSCandidates(
 		return evaluator.EvaluateTree(candidate, records).Composite
 	})
 
-	found := mutator.Candidates(tree, seedFitness.Composite)
+	var found []evolution.ScoredMutation
+	if cfg.MCTSSeed != nil {
+		found = mutator.CandidatesWithSeed(tree, seedFitness.Composite, *cfg.MCTSSeed)
+	} else {
+		found = mutator.Candidates(tree, seedFitness.Composite)
+	}
 	if len(found) == 0 {
 		return heuristic
 	}
 
-	merged := candidatesFromScored(evolution.MergeScoredMutations(scoredFromCandidates(heuristic), found))
+	merged := evolution.MergeScoredMutations(heuristic, found)
 	slog.Info("gardener/v2: MCTS search joined the structural-mutation competition",
 		"tree", treeID, "heuristic_candidates", len(heuristic),
 		"mcts_candidates", len(found), "merged_candidates", len(merged))
 	return merged
-}
-
-// scoredFromCandidates converts the evaluator package's heuristic candidates
-// into the shared evolution.ScoredMutation currency MergeScoredMutations
-// speaks. The two shapes are identical by design — evaluator imports evolution,
-// so the shared type has to live on the evolution side.
-func scoredFromCandidates(candidates []evaluator.MutationCandidate) []evolution.ScoredMutation {
-	if len(candidates) == 0 {
-		return nil
-	}
-	out := make([]evolution.ScoredMutation, len(candidates))
-	for i, c := range candidates {
-		out[i] = evolution.ScoredMutation{Op: c.Op, Score: c.Score, Reason: c.Reason}
-	}
-	return out
-}
-
-// candidatesFromScored is the inverse of scoredFromCandidates, handing the
-// merged competition back to evolveTreeV2's existing candidate loop unchanged.
-func candidatesFromScored(scored []evolution.ScoredMutation) []evaluator.MutationCandidate {
-	if len(scored) == 0 {
-		return nil
-	}
-	out := make([]evaluator.MutationCandidate, len(scored))
-	for i, s := range scored {
-		out[i] = evaluator.MutationCandidate{Op: s.Op, Score: s.Score, Reason: s.Reason}
-	}
-	return out
 }
 
 // selectorStatsPathFor resolves the durable Selector telemetry path for
@@ -1167,7 +1195,7 @@ func (g *Gardener) islandPassDue(cycle int) bool {
 // decided separately, per domain, against that domain's own records (the same
 // re-score-before-adopting discipline reseedFromDiversityArchive uses), so a
 // coarse exploration score can never push a tree backwards.
-func (g *Gardener) runIslandExploration(entries []TreeEntry) map[string]bool {
+func (g *Gardener) runIslandExploration(entries []TreeEntry, cfg EvolveV2Config) map[string]bool {
 	im := g.cfg.IslandModel
 	if im == nil {
 		return nil
@@ -1204,7 +1232,7 @@ func (g *Gardener) runIslandExploration(entries []TreeEntry) map[string]bool {
 
 	adopted := make(map[string]bool, len(active))
 	for _, entry := range active {
-		if g.adoptIslandWinner(entry, recordsForEntry(allRecords, entry)) {
+		if g.adoptIslandWinner(entry, recordsForEntry(allRecords, entry), cfg) {
 			adopted[entry.Name] = true
 		}
 	}
@@ -1224,7 +1252,7 @@ func (g *Gardener) runIslandExploration(entries []TreeEntry) map[string]bool {
 // (RunCycleV2), so a gate this pass skipped could not be caught downstream:
 // a randomly bred individual would already be on disk by the time
 // evolveTreeV2 reached the same tree.
-func (g *Gardener) adoptIslandWinner(entry TreeEntry, records []evolution.Record) bool {
+func (g *Gardener) adoptIslandWinner(entry TreeEntry, records []evolution.Record, cfg EvolveV2Config) bool {
 	if entry.Tree == nil {
 		return false
 	}
@@ -1269,15 +1297,37 @@ func (g *Gardener) adoptIslandWinner(entry TreeEntry, records []evolution.Record
 		return false
 	}
 
-	*entry.Tree = *winner
-	slog.Info("gardener/v2: island exploration — migrating winner into live tree",
-		"tree", entry.Name, "base_fitness", live, "winner_fitness", winnerFitness,
-		"winner_nodes", evolution.CountNodes(entry.Tree))
-
-	if err := g.cfg.Registry.SaveTree(TreeEntry{Name: entry.Name, Tree: entry.Tree, FilePath: entry.FilePath}); err != nil {
-		slog.Error("gardener/v2: saving migrated island winner failed, migration is not durably persisted",
-			"tree", entry.Name, "error", err)
+	// Validate a detached whole-tree candidate before any live mutation.
+	candidate := cloneTreeForGardener(winner)
+	var model llm.LLM = benchmark.DefaultMock()
+	if cfg.UseRealLLM {
+		model = benchmark.DefaultLLM()
 	}
+	if !benchmark.QuickValidateCandidate(entry.Tree, candidate, benchmark.SuiteForTree(entry.Name), model) {
+		slog.Warn("gardener/v2: benchmark rejected island winner", "tree", entry.Name)
+		return false
+	}
+	if g.cfg.Gate != nil && g.cfg.Gate.ValidateFor(entry.Name, live, winnerFitness) != evolution.GateAccepted {
+		return false
+	}
+	if g.cfg.MetaValidator != nil {
+		if report := g.cfg.MetaValidator.ValidateMutation(entry.Tree, candidate, live, winnerFitness); report.Decision == evolution.MetaReject {
+			slog.Warn("gardener/v2: meta-validation rejected island winner", "tree", entry.Name)
+			return false
+		}
+	}
+	if g.cfg.SnapshotDir != "" {
+		if _, err := evolution.SnapshotTreeWithFitness(entry.Tree, entry.Name, g.cfg.SnapshotDir, live); err != nil {
+			slog.Error("gardener/v2: predecessor snapshot failed, island adoption rejected", "tree", entry.Name, "error", err)
+			return false
+		}
+	}
+	if err := g.cfg.Registry.SaveTree(TreeEntry{Name: entry.Name, Tree: candidate, FilePath: entry.FilePath}); err != nil {
+		slog.Error("gardener/v2: island persistence failed, live tree preserved", "tree", entry.Name, "error", err)
+		return false
+	}
+	*entry.Tree = *candidate
+	slog.Info("gardener/v2: island winner committed", "tree", entry.Name, "base_fitness", live, "winner_fitness", winnerFitness)
 	return true
 }
 
@@ -1301,7 +1351,7 @@ func (g *Gardener) RunCycleV2(cfg EvolveV2Config) ([]CycleMetrics, error) {
 	// surfaced instead of the tree it superseded.
 	var islandAdopted map[string]bool
 	if cycle := int(g.cycleCount.Add(1)); g.islandPassDue(cycle) {
-		islandAdopted = g.runIslandExploration(entries)
+		islandAdopted = g.runIslandExploration(entries, cfg)
 	}
 
 	results := make([]CycleMetrics, 0, len(entries))

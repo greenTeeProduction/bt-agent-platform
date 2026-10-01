@@ -18,6 +18,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/knowledge"
 	"github.com/nico/go-bt-evolve/internal/util"
+	btcore "github.com/rvitorper/go-bt/core"
 )
 
 // ============================================================================
@@ -529,7 +530,7 @@ func TestEvolveTreeV2_NoRegressionGate(t *testing.T) {
 		Type: "Sequence", Name: "Root",
 		Children: []evolution.SerializableNode{
 			{Type: "Sequence", Name: "PreGate"},
-			{Type: "ChainAction", Name: "ResearchAgent", Metadata: map[string]any{"max_iterations": float64(3)}},
+			{Type: "ChainAction", Name: "agent:ResearchAgent", Metadata: map[string]any{"max_iterations": float64(3)}},
 		},
 	}
 	for i, outcome := range []evolution.Outcome{evolution.Failure, evolution.Failure, evolution.Success} {
@@ -1131,6 +1132,7 @@ func TestEvolveTreeV2_AppliesLearnedSelectorOrderingBeforePersist(t *testing.T) 
 // of A and C — which stay in their original relative order (tied gain) —
 // while Fallback stays last (the default-path guard).
 func dtOrderingTree() *evolution.SerializableNode {
+	registerGardenerFixtureLeaves()
 	return &evolution.SerializableNode{
 		Type: "Sequence", Name: "Root",
 		Children: []evolution.SerializableNode{
@@ -2433,6 +2435,7 @@ func chainTree(depth int) *evolution.SerializableNode {
 // change worth +1.6 composite points — no structural mutation can produce it,
 // which is exactly what the local-search pass is for.
 func refinableTree() *evolution.SerializableNode {
+	registerGardenerFixtureLeaves()
 	return &evolution.SerializableNode{
 		Type: "Sequence", Name: "Root",
 		Children: []evolution.SerializableNode{
@@ -2562,7 +2565,7 @@ func localSearchGateTree() *evolution.SerializableNode {
 			{
 				Type: "Retry", Name: "RetryStep", MaxRetries: 8,
 				Children: []evolution.SerializableNode{
-					{Type: "ChainAction", Name: "ResearchAgent", Metadata: map[string]any{"max_iterations": float64(3)}},
+					{Type: "ChainAction", Name: "agent:ResearchAgent", Metadata: map[string]any{"max_iterations": float64(3)}},
 				},
 			},
 		},
@@ -2687,6 +2690,7 @@ func TestEvolveTreeV2_LocalSearchRefinementRespectsValidationGate(t *testing.T) 
 // ("n0|d2|") versus the current best's 2 nodes / depth 1 ("n0|d0|") — so it is
 // a real escape from the collapsed niche rather than a same-cell shuffle.
 func eliteSeedTree() *evolution.SerializableNode {
+	registerGardenerFixtureLeaves()
 	return &evolution.SerializableNode{
 		Type: "Sequence", Name: "EliteRoot",
 		Children: []evolution.SerializableNode{
@@ -3027,6 +3031,21 @@ func TestEvolveTreeV2_DiversityCrisis_ReseedsFromLiveDrivenArchive(t *testing.T)
 // 1) and MaxMutations is 0, so the structural-mutation loop has no budget of
 // its own: anything that moves a tree here came from the island pass. Returns
 // the gardener, its registry, and the island model.
+// islandWinnerTree is structurally fitter and uses registered executable
+// vocabulary, so definition validation does not reject the adoption fixture.
+func islandWinnerTree() *evolution.SerializableNode {
+	const action = "IslandFixtureStep"
+	if engine.GetAction(action) == nil {
+		engine.RegisterAction(action, func(ctx *btcore.BTContext[engine.Blackboard]) int {
+			ctx.Blackboard.Result = "island fixture completed"
+			return 1
+		})
+	}
+	winner := eliteSeedTree()
+	winner.Children[1].Children[0].Name = action
+	return winner
+}
+
 func islandGardener(t *testing.T, names ...string) (*Gardener, *Registry, *evolution.IslandModel) {
 	t.Helper()
 	dir := t.TempDir()
@@ -3117,7 +3136,7 @@ func TestRunCycleV2_IslandPass_MigratesWinnerIntoPersistedTree(t *testing.T) {
 	records := entryRecords(t, g, entry)
 
 	baseComposite := evaluator.EvaluateTree(entry.Tree, records).Composite
-	winner := eliteSeedTree()
+	winner := islandWinnerTree()
 	winnerComposite := evaluator.EvaluateTree(winner, records).Composite
 	if winnerComposite <= baseComposite {
 		t.Fatalf("test setup sanity check failed: island winner composite %.4f must beat the live tree's %.4f", winnerComposite, baseComposite)
@@ -3218,7 +3237,7 @@ func islandAdoptionFixture(t *testing.T, treeName string) (*Gardener, TreeEntry,
 	records := entryRecords(t, g, entry)
 
 	baseComposite := evaluator.EvaluateTree(entry.Tree, records).Composite
-	winner := eliteSeedTree()
+	winner := islandWinnerTree()
 	winnerComposite := evaluator.EvaluateTree(winner, records).Composite
 	if winnerComposite <= baseComposite {
 		t.Fatalf("test setup sanity check failed: island winner composite %.4f must beat the live tree's %.4f", winnerComposite, baseComposite)
@@ -3261,7 +3280,7 @@ func assertIslandAdoptionSkipped(t *testing.T, g *Gardener, entry TreeEntry, im 
 		t.Fatalf("reading the seeded tree file: %v", err)
 	}
 
-	adopted := g.runIslandExploration(g.cfg.Registry.List())
+	adopted := g.runIslandExploration(g.cfg.Registry.List(), islandV2Config())
 
 	if len(adopted) != 0 {
 		t.Errorf("runIslandExploration adopted %v — a gated tree must adopt nothing", adopted)

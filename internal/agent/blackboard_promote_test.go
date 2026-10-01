@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/blackboard"
@@ -18,7 +19,9 @@ func TestPromoteRunToAgentScope(t *testing.T) {
 		RunID: "run_promote_test",
 		BB:    blackboard.NewHandle(mgr, "run_promote_test", "sess_1", "demo-agent"),
 	}
-	d.promoteRunToAgentScope("demo-agent", bb, "do something", "final output text")
+	if err := d.promoteRunToAgentScope(context.Background(), "demo-agent", bb, "do something", "final output text"); err != nil {
+		t.Fatal(err)
+	}
 
 	scope := blackboard.Scope{Kind: blackboard.ScopeAgent, ID: "demo-agent"}
 	e, err := mgr.Get(scope, "runs/latest/output")

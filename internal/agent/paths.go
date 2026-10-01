@@ -1,36 +1,26 @@
 package agent
 
 import (
-	"os"
 	"path/filepath"
+
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 // HomeDir returns the BT agent platform data root (~/.go-bt-evolve by default).
 // Override with BT_AGENT_HOME (preferred) or BT_HOME (legacy).
 func HomeDir() string {
-	if v := os.Getenv("BT_AGENT_HOME"); v != "" {
-		return v
-	}
-	if v := os.Getenv("BT_HOME"); v != "" {
-		return v
-	}
-	if v := os.Getenv("BT_AGENT_DEFS_DIR"); v != "" {
-		return filepath.Dir(v)
-	}
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		home = os.Getenv("HOME")
-	}
-	return filepath.Join(home, ".go-bt-evolve")
+	return util.RuntimePlatformHome()
 }
 
-func RegistryDir() string   { return filepath.Join(HomeDir(), "agents") }
+func RegistryDir() string   { return util.PlatformAgentDefinitionsDir() }
 func TemplatesDir() string  { return filepath.Join(HomeDir(), "agents", "templates") }
 func WorkflowsDir() string  { return filepath.Join(HomeDir(), "agents", "workflows") }
 func MemoryDir() string     { return filepath.Join(HomeDir(), "memory") }
 func BlackboardDir() string { return filepath.Join(HomeDir(), "blackboard") }
-func HistoryDir() string    { return filepath.Join(HomeDir(), "history") }
+func HistoryDir() string    { return util.PlatformHistoryDir() }
 func JobsDir() string       { return filepath.Join(HomeDir(), "jobs") }
+func TasksFile() string     { return filepath.Join(HomeDir(), "tasks.json") }
+func TaskQueueFile() string { return filepath.Join(HomeDir(), "task_queue.json") }
 func DLQFile() string       { return filepath.Join(HomeDir(), "dead_letter_queue.json") }
 func SchedulerJobsFile() string {
 	return filepath.Join(JobsDir(), "scheduler-jobs.json")
@@ -42,7 +32,7 @@ func FeedbackFile() string { return filepath.Join(HomeDir(), "feedback.json") }
 func NotificationThrottleFile() string {
 	return filepath.Join(HomeDir(), "notification_throttle.json")
 }
-func LogsDir() string { return filepath.Join(HomeDir(), "logs") }
+func LogsDir() string { return util.PlatformLogDir() }
 
 // SLOMetricsFile is the cross-process SLO evidence file the gardener's
 // validation gate falls back to (internal/gardener/validation_gate.go

@@ -46,6 +46,12 @@ func TestMain(m *testing.M) {
 			}
 		}
 	}
+	// Historical adapter fixtures use fake runners/scripts. Keep their explicit
+	// transport coverage; policy regressions below exercise the production default.
+	if !liveSmoke {
+		os.Setenv("BT_SUPERPOWERS_CODEX_ONLY", "false")
+		os.Setenv("BT_SUPERPOWERS_PROVIDER", "claude")
+	}
 	dir, err := os.MkdirTemp("", "engine-claude-backoff-*")
 	if err == nil {
 		goapClaudeBackoffPath = filepath.Join(dir, "claude_backoff.json")

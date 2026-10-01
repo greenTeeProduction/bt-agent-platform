@@ -2,6 +2,7 @@ package agentexec
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -38,9 +39,13 @@ func RunPipeline(ctx context.Context, d *agent.RunDeps, pipeline dashboard.Pipel
 
 // RunPipelineWithID executes a workflow and uses runID for HITL task correlation when set.
 func RunPipelineWithID(ctx context.Context, d *agent.RunDeps, pipeline dashboard.Pipeline, input, runID string) (*dashboard.PipelineResult, error) {
+	boards, err := d.BoardManager()
+	if err != nil {
+		return nil, fmt.Errorf("initialize pipeline blackboard: %w", err)
+	}
 	runner := &dashboard.Runner{
 		RunID:       runID,
-		Blackboards: d.BoardManager(),
+		Blackboards: boards,
 		RunAgent: func(stepCtx context.Context, agentName, _, task string) (string, string, error) {
 			opts := agent.RunOptions{
 				InjectMemory:   true,

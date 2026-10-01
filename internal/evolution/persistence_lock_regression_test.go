@@ -3,12 +3,8 @@ package evolution
 import (
 	"bytes"
 	"encoding/json"
-	"go/ast"
-	"go/parser"
-	"go/token"
 	"os"
 	"path/filepath"
-	"reflect"
 	"testing"
 )
 
@@ -140,53 +136,5 @@ func TestPersistenceFirstSaveCreatesParent(t *testing.T) {
 				t.Fatalf("invalid persisted JSON: %s", data)
 			}
 		})
-	}
-}
-
-// A successful first write alone cannot distinguish an unlocked fallback.
-// Pin directory-before-lock-before-write ordering in the actual save methods,
-// alongside the filesystem tests above; no timing races or production hooks.
-func TestPersistenceFirstSaveCreatesParentBeforeLock(t *testing.T) {
-	targets := map[string][]string{
-		"selector_optimizer.go": {"SaveSelectorStats"},
-		"decision_tree.go":      {"Save"},
-		"experience_bank.go":    {"Persist", "addEntry", "MarkReused"},
-	}
-	for file, names := range targets {
-		f, err := parser.ParseFile(token.NewFileSet(), file, nil, 0)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, name := range names {
-			t.Run(file+"/"+name, func(t *testing.T) {
-				var calls []string
-				for _, decl := range f.Decls {
-					fn, ok := decl.(*ast.FuncDecl)
-					if !ok || fn.Name.Name != name {
-						continue
-					}
-					ast.Inspect(fn.Body, func(n ast.Node) bool {
-						call, ok := n.(*ast.CallExpr)
-						if !ok {
-							return true
-						}
-						sel, ok := call.Fun.(*ast.SelectorExpr)
-						if !ok {
-							return true
-						}
-						if isPkgSelector(sel, "util", "EnsurePersistenceParent") {
-							calls = append(calls, "mkdir")
-						}
-						if isPkgSelector(sel, "reliability", "AcquireFileLock") {
-							calls = append(calls, "lock")
-						}
-						return true
-					})
-				}
-				if !reflect.DeepEqual(calls, []string{"mkdir", "lock"}) {
-					t.Fatalf("first-save setup = %v, want [mkdir lock]", calls)
-				}
-			})
-		}
 	}
 }

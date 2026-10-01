@@ -5,6 +5,7 @@ package reliability
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -212,6 +213,9 @@ func RetryWithBackoff(maxRetries int, base, maxDelay time.Duration, fn func() er
 		err := fn()
 		if err == nil {
 			return nil
+		}
+		if IsExecutionTerminalError(err) {
+			return err
 		}
 		lastErr = err
 		if attempt < maxRetries {
@@ -714,16 +718,50 @@ func (wp *WorkerPool) worker() {
 
 // Submit queues a task for execution. Returns false if the pool is closed.
 func (wp *WorkerPool) Submit(task func()) bool {
+	return wp.SubmitWithContext(context.Background(), task) == nil
+}
+
+var (
+	ErrWorkerPoolClosed = errors.New("worker pool is closed")
+	ErrNilWorkerTask    = errors.New("worker task is nil")
+)
+
+// SubmitWithContext waits for queue capacity until cancellation or shutdown.
+// A nil error acknowledges admission; shutdown drains every admitted task.
+func (wp *WorkerPool) SubmitWithContext(ctx context.Context, task func()) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if task == nil {
+		return ErrNilWorkerTask
+	}
 	wp.admission.RLock()
 	defer wp.admission.RUnlock()
-	if wp.closed || task == nil {
-		return false
+	if wp.closed {
+		return ErrWorkerPoolClosed
 	}
-	wp.tasks <- task
+	select {
+	case <-wp.quit:
+		return ErrWorkerPoolClosed
+	default:
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	select {
+	case wp.tasks <- task:
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-wp.quit:
+		return ErrWorkerPoolClosed
+	}
 	wp.mu.Lock()
 	wp.total++
 	wp.mu.Unlock()
-	return true
+	return nil
 }
 
 // Stats returns worker pool statistics.
@@ -737,9 +775,11 @@ func (wp *WorkerPool) Stats() (active int, queued int, total uint64, completed u
 // work. Tasks must eventually return; this method can be called concurrently.
 func (wp *WorkerPool) Shutdown() {
 	wp.shutdown.Do(func() {
+		// Wake submissions holding the read lock while waiting for queue
+		// capacity before acquiring the exclusive close lock.
+		close(wp.quit)
 		wp.admission.Lock()
 		wp.closed = true
-		close(wp.quit)
 		close(wp.tasks)
 		wp.admission.Unlock()
 	})
@@ -1106,11 +1146,13 @@ type AgentResult struct {
 	// directly — can still distinguish those dispositions instead of
 	// collapsing everything to the Success bool. Empty when the backend
 	// (e.g. a remote node that hasn't been updated to populate it) has none.
-	Outcome      string        `json:"outcome,omitempty"`
-	Duration     time.Duration `json:"duration"`
-	Success      bool          `json:"success"`
-	Error        string        `json:"error,omitempty"`
-	QualityScore float64       `json:"quality_score"`
+	Outcome  string        `json:"outcome,omitempty"`
+	Duration time.Duration `json:"duration"`
+	Success  bool          `json:"success"`
+	Error    string        `json:"error,omitempty"`
+	// ErrorKind preserves completed, stopped, or uncertain execution diagnostics.
+	ErrorKind    string  `json:"error_kind,omitempty"`
+	QualityScore float64 `json:"quality_score"`
 }
 
 // AgentExecutor defines the interface for executing agent tasks.
@@ -1309,7 +1351,8 @@ func (r *AgentRouter) SetLocal(e AgentExecutor) {
 // Execute routes a task to a healthy executor using the configured strategy.
 // Round-robin (default): distributes evenly across executors.
 // Least-connections: picks the executor with fewest in-flight requests.
-// If an executor's Execute() call fails, the router tries the next healthy executor.
+// Retryable execution failures may try the next healthy executor; completed
+// persistence diagnostics and uncertain remote outcomes are terminal.
 // Falls back to local executor if all remote executors are exhausted.
 // MaxFailover caps how many executors to try (0 = try all).
 //
@@ -1412,8 +1455,24 @@ func (r *AgentRouter) Execute(ctx context.Context, agent, task string) (*AgentRe
 			r.pingHeartbeatAfterSuccess(idx)
 			return result, nil
 		}
+		if IsExecutionPersistenceError(err) {
+			// Execution completed; another backend would repeat its effects.
+			r.recordSuccess(idx)
+			r.pingHeartbeatAfterSuccess(idx)
+			return result, err
+		}
+		if IsExecutionStoppedError(err) && IsExecutionPause(ExecutionStopOutcome(err), err) {
+			r.recordSuccess(idx)
+			r.pingHeartbeatAfterSuccess(idx)
+			return result, err // owner is waiting; another peer would start new work
+		}
 		// Record failure for zombie detection.
 		r.recordFailure(idx)
+		if IsExecutionTerminalError(err) {
+			// The peer may still be working. Preserve uncertainty through the
+			// outer retry policy instead of trying another peer or local copy.
+			return result, err
+		}
 		lastErr = err
 		if result != nil {
 			lastResult = result
@@ -1437,6 +1496,9 @@ func (r *AgentRouter) Execute(ctx context.Context, agent, task string) (*AgentRe
 			result, localErr := r.local.Execute(ctx, agent, task)
 			if localErr == nil {
 				return result, nil
+			}
+			if IsExecutionTerminalError(localErr) {
+				return result, localErr
 			}
 			if result != nil {
 				lastResult = result
@@ -1644,24 +1706,43 @@ type ConcurrencyLimiter struct {
 // NewConcurrencyLimiter creates a concurrency limiter with max slots.
 func NewConcurrencyLimiter(maxConcurrent int) *ConcurrencyLimiter {
 	return &ConcurrencyLimiter{
-		sem: make(chan struct{}, maxConcurrent),
+		sem: make(chan struct{}, max(1, maxConcurrent)),
 	}
 }
 
 // Acquire blocks until a concurrency slot is available.
-// Returns false if the context-like stop is signaled.
 func (cl *ConcurrencyLimiter) Acquire() {
+	_ = cl.AcquireWithContext(context.Background())
+}
+
+// AcquireWithContext reserves a slot or returns the caller's cancellation.
+// A successful reservation must be released exactly once by its owner.
+func (cl *ConcurrencyLimiter) AcquireWithContext(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	cl.mu.Lock()
 	cl.waiting++
 	cl.mu.Unlock()
 
-	cl.sem <- struct{}{}
+	select {
+	case cl.sem <- struct{}{}:
+	case <-ctx.Done():
+		cl.mu.Lock()
+		cl.waiting--
+		cl.mu.Unlock()
+		return ctx.Err()
+	}
 
 	cl.mu.Lock()
 	cl.waiting--
 	cl.active++
 	cl.total++
 	cl.mu.Unlock()
+	return nil
 }
 
 // TryAcquire attempts to acquire a slot without blocking.
@@ -1683,10 +1764,11 @@ func (cl *ConcurrencyLimiter) TryAcquire() bool {
 // Release frees a concurrency slot.
 func (cl *ConcurrencyLimiter) Release() {
 	cl.mu.Lock()
-	if cl.active > 0 {
-		cl.active--
+	defer cl.mu.Unlock()
+	if cl.active == 0 {
+		return
 	}
-	cl.mu.Unlock()
+	cl.active--
 
 	select {
 	case <-cl.sem:

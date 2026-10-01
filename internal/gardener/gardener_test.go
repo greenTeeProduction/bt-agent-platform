@@ -906,3 +906,25 @@ func TestGardener_AnyInFlight(t *testing.T) {
 		t.Fatal("AnyInFlight = true after cycle completed, want false")
 	}
 }
+
+func TestRegistryMarshalFailurePreservesUnrelatedLegacyTemporaryFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "tree.json")
+	if err := os.WriteFile(path, []byte(`{"original":true}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	temporary := path + ".tmp"
+	if err := os.WriteFile(temporary, []byte("unrelated"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	entry := TreeEntry{Name: "invalid-metadata", FilePath: path, Tree: &evolution.SerializableNode{Type: "AlwaysSucceed", Metadata: map[string]any{"cannot-marshal": func() {}}}}
+	if err := NewRegistry(dir).SaveTree(entry); err == nil {
+		t.Fatal("expected marshal failure")
+	}
+	for _, tc := range []struct{ path, want string }{{path, `{"original":true}`}, {temporary, "unrelated"}} {
+		data, err := os.ReadFile(tc.path)
+		if err != nil || string(data) != tc.want {
+			t.Fatalf("%s changed: %q err=%v", tc.path, data, err)
+		}
+	}
+}

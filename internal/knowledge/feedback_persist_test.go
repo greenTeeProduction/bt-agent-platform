@@ -1,10 +1,17 @@
 package knowledge
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
+	"sync"
 	"testing"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
 // =============================================================================
@@ -646,4 +653,314 @@ func hasToolEdge(kg *KnowledgeGraph, treeID, tool string) bool {
 		}
 	}
 	return false
+}
+
+// =============================================================================
+// Cross-process merge — SaveFeedback as a locked read-merge-write
+// =============================================================================
+//
+// feedback.json has several concurrent writers (the daemon's scheduler, the
+// dashboard, and the bt-agent MCP siblings all hold a KnowledgeGraph and all
+// flush it). The pre-merge SaveFeedback serialized ONLY its own in-memory
+// view and renamed it over whatever was there, so every sibling's committed
+// feedback between one process's load and its save was silently dropped —
+// atomic writes made the file untearable, not the transaction serialized.
+// These tests pin the replacement contract: read → merge → write under the
+// shared sidecar flock, merging per tree ID.
+
+// writeFeedbackSnapshot commits snap to path the way a sibling process would
+// have, bypassing SaveFeedback so the fixture never depends on the merge
+// logic under test.
+func writeFeedbackSnapshot(t *testing.T, path string, snap feedbackSnapshot) {
+	t.Helper()
+	data, err := json.MarshalIndent(snap, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal fixture snapshot: %v", err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("write fixture snapshot: %v", err)
+	}
+}
+
+// readFeedbackSnapshot decodes whatever SaveFeedback committed to path.
+func readFeedbackSnapshot(t *testing.T, path string) feedbackSnapshot {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read committed snapshot: %v", err)
+	}
+	var snap feedbackSnapshot
+	if err := json.Unmarshal(data, &snap); err != nil {
+		t.Fatalf("committed snapshot %q is not valid JSON: %v", data, err)
+	}
+	return snap
+}
+
+// TestSaveFeedback_PreservesOtherProcessEvidence asserts that tree IDs present
+// on disk but absent from the saving graph survive verbatim. A sibling
+// process's trees are evidence this process never had and cannot reconstruct:
+// dropping them loses that tree's whole fitness/run history until it happens
+// to be re-run, and (for evolved trees) permanently, since nothing rebuilds
+// them from disk at startup.
+func TestSaveFeedback_PreservesOtherProcessEvidence(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "feedback.json")
+
+	sibling := treeFeedback{
+		Fitness:           88.5,
+		RunCount:          12,
+		EvolvedCount:      4,
+		LastOutcome:       "success",
+		LastDuration:      3 * time.Second,
+		RecentRuns:        []RunSummary{{Outcome: "success", Quality: 1}, {Outcome: "failure", Quality: 0}},
+		StructuralFitness: 77.25,
+		NodeCount:         31,
+		Category:          "finance",
+	}
+	siblingEdge := Edge{From: "tree:sibling", To: "tool:ledger", Type: "uses_tool", Weight: 1}
+	writeFeedbackSnapshot(t, path, feedbackSnapshot{
+		Trees:     map[string]treeFeedback{"tree:sibling": sibling},
+		ToolEdges: []Edge{siblingEdge},
+	})
+
+	// This process only ever knew about its own tree.
+	kg := NewKnowledgeGraph()
+	kg.Register(&TreeMeta{ID: "tree:mine", Name: "Mine", Category: "test", Fitness: 50})
+	kg.RecordRun(RunRecord{TreeID: "tree:mine", Task: "work", Outcome: "success", Duration: time.Second, Tools: []string{"calculator"}})
+
+	if err := kg.SaveFeedback(path); err != nil {
+		t.Fatalf("SaveFeedback: %v", err)
+	}
+
+	got := readFeedbackSnapshot(t, path)
+	if _, ok := got.Trees["tree:mine"]; !ok {
+		t.Error("tree:mine missing: the saving graph's own feedback must still be committed")
+	}
+	gotSibling, ok := got.Trees["tree:sibling"]
+	if !ok {
+		t.Fatal("tree:sibling was dropped: an unknown ID on disk is another process's evidence and must be preserved verbatim")
+	}
+	if !reflect.DeepEqual(gotSibling, sibling) {
+		t.Errorf("tree:sibling = %+v, want preserved verbatim %+v", gotSibling, sibling)
+	}
+
+	var keptEdge bool
+	for _, e := range got.ToolEdges {
+		if e == siblingEdge {
+			keptEdge = true
+		}
+	}
+	if !keptEdge {
+		t.Errorf("tool_edges = %+v, want the sibling's %+v preserved", got.ToolEdges, siblingEdge)
+	}
+}
+
+// TestSaveFeedback_CountersMaxWins asserts RunCount and EvolvedCount merge by
+// max, not by overwrite. Both are monotonically increasing tallies of work
+// that actually happened, so the larger value is the one backed by evidence
+// regardless of which side holds it: a process that loaded feedback early and
+// flushes late must not roll a sibling's tally backwards, and its own newer
+// runs must not be discarded either.
+func TestSaveFeedback_CountersMaxWins(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "feedback.json")
+	writeFeedbackSnapshot(t, path, feedbackSnapshot{
+		Trees: map[string]treeFeedback{
+			"tree:disk-ahead": {RunCount: 12, EvolvedCount: 5, Fitness: 70},
+			"tree:mem-ahead":  {RunCount: 1, EvolvedCount: 0, Fitness: 40},
+		},
+	})
+
+	kg := NewKnowledgeGraph()
+	// Our view of tree:disk-ahead is stale — a sibling recorded more runs
+	// since we loaded.
+	kg.Register(&TreeMeta{ID: "tree:disk-ahead", Name: "Disk Ahead", Category: "test", RunCount: 3, EvolvedCount: 1, Fitness: 65})
+	// Our view of tree:mem-ahead is the fresh one.
+	kg.Register(&TreeMeta{ID: "tree:mem-ahead", Name: "Mem Ahead", Category: "test", RunCount: 9, EvolvedCount: 4, Fitness: 55})
+
+	if err := kg.SaveFeedback(path); err != nil {
+		t.Fatalf("SaveFeedback: %v", err)
+	}
+
+	got := readFeedbackSnapshot(t, path)
+	for _, tc := range []struct {
+		id                    string
+		wantRuns, wantEvolved int
+	}{
+		{"tree:disk-ahead", 12, 5},
+		{"tree:mem-ahead", 9, 4},
+	} {
+		fb, ok := got.Trees[tc.id]
+		if !ok {
+			t.Errorf("%s missing from committed snapshot", tc.id)
+			continue
+		}
+		if fb.RunCount != tc.wantRuns {
+			t.Errorf("%s RunCount = %d, want %d (max-wins across writers)", tc.id, fb.RunCount, tc.wantRuns)
+		}
+		if fb.EvolvedCount != tc.wantEvolved {
+			t.Errorf("%s EvolvedCount = %d, want %d (max-wins across writers)", tc.id, fb.EvolvedCount, tc.wantEvolved)
+		}
+	}
+}
+
+// TestSaveFeedback_RecentRunsNewestWins asserts the bounded run-history window
+// is taken whole from the writer that has observed more runs, rather than
+// being blindly overwritten by the saver. RecentRuns carries no timestamps, so
+// RunCount — the tally of appends to that very window — is what identifies the
+// newer window. Merging entry-by-entry would fabricate a history neither
+// writer observed; taking the stale side's window would hand a registered
+// domain fitness function (RegisterDomainFitness) outdated evidence to score.
+func TestSaveFeedback_RecentRunsNewestWins(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "feedback.json")
+
+	diskNewer := []RunSummary{{Outcome: "success", Quality: 0.9}, {Outcome: "success", Quality: 0.95}}
+	memNewer := []RunSummary{{Outcome: "failure", Quality: 0.1}, {Outcome: "partial", Quality: 0.5}}
+	writeFeedbackSnapshot(t, path, feedbackSnapshot{
+		Trees: map[string]treeFeedback{
+			"tree:disk-newer": {RunCount: 9, RecentRuns: diskNewer},
+			"tree:mem-newer":  {RunCount: 2, RecentRuns: []RunSummary{{Outcome: "success", Quality: 0.2}}},
+		},
+	})
+
+	kg := NewKnowledgeGraph()
+	kg.Register(&TreeMeta{
+		ID: "tree:disk-newer", Name: "Disk Newer", Category: "test",
+		RunCount:   2,
+		RecentRuns: []RunSummary{{Outcome: "failure", Quality: 0.0}},
+	})
+	kg.Register(&TreeMeta{
+		ID: "tree:mem-newer", Name: "Mem Newer", Category: "test",
+		RunCount:   7,
+		RecentRuns: memNewer,
+	})
+
+	if err := kg.SaveFeedback(path); err != nil {
+		t.Fatalf("SaveFeedback: %v", err)
+	}
+
+	got := readFeedbackSnapshot(t, path)
+	if diff := got.Trees["tree:disk-newer"].RecentRuns; !reflect.DeepEqual(diff, diskNewer) {
+		t.Errorf("tree:disk-newer RecentRuns = %+v, want the on-disk window %+v (sibling observed 9 runs to our 2)", diff, diskNewer)
+	}
+	if diff := got.Trees["tree:mem-newer"].RecentRuns; !reflect.DeepEqual(diff, memNewer) {
+		t.Errorf("tree:mem-newer RecentRuns = %+v, want our window %+v (we observed 7 runs to the file's 2)", diff, memNewer)
+	}
+}
+
+// TestSaveFeedback_SerializesOnSidecarLock asserts the read-merge-write cycle
+// is the unit of exclusion, not just the write. Reading outside the sidecar
+// flock reintroduces the lost update the merge exists to prevent: a sibling
+// can commit between this process's read and its rename, and the merge would
+// never see it.
+func TestSaveFeedback_SerializesOnSidecarLock(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "feedback.json")
+	kg := NewKnowledgeGraph()
+	kg.Register(&TreeMeta{ID: "tree:locked", Name: "Locked", Category: "test", Fitness: 50})
+
+	// Stand in for a sibling process mid-transaction.
+	release, err := reliability.AcquireFileLock(path)
+	if err != nil {
+		t.Fatalf("AcquireFileLock: %v", err)
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- kg.SaveFeedback(path) }()
+
+	select {
+	case err := <-done:
+		release()
+		t.Fatalf("SaveFeedback returned (err=%v) while the sidecar lock was held: read, merge and write must all happen inside the lock", err)
+	case <-time.After(250 * time.Millisecond):
+		// Correctly blocked on the sidecar.
+	}
+
+	release()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("SaveFeedback after lock release: %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("SaveFeedback never completed after the sidecar lock was released")
+	}
+
+	if _, ok := readFeedbackSnapshot(t, path).Trees["tree:locked"]; !ok {
+		t.Error("tree:locked missing after the serialized save landed")
+	}
+}
+
+// TestSaveFeedback_ConcurrentWritersAllSurvive is the lost-update regression
+// in its concrete form: several graphs, each holding feedback the others never
+// saw, flush to one feedback.json at once. Every writer's tree must be in the
+// final file. Under the pre-merge implementation exactly one survived — the
+// last rename won and silently discarded the rest.
+func TestSaveFeedback_ConcurrentWritersAllSurvive(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "feedback.json")
+	const writers = 8
+
+	var wg sync.WaitGroup
+	errs := make(chan error, writers)
+	for i := range writers {
+		wg.Go(func() {
+			id := fmt.Sprintf("tree:writer-%d", i)
+			kg := NewKnowledgeGraph()
+			kg.Register(&TreeMeta{ID: id, Name: id, Category: "test", Fitness: 50})
+			kg.RecordRun(RunRecord{TreeID: id, Task: "concurrent", Outcome: "success", Duration: time.Second})
+			if err := kg.SaveFeedback(path); err != nil {
+				errs <- err
+			}
+		})
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Fatalf("concurrent SaveFeedback: %v", err)
+	}
+
+	got := readFeedbackSnapshot(t, path)
+	for i := range writers {
+		id := fmt.Sprintf("tree:writer-%d", i)
+		fb, ok := got.Trees[id]
+		if !ok {
+			t.Errorf("%s missing: its writer's update was lost (%d of %d trees committed)", id, len(got.Trees), writers)
+			continue
+		}
+		if fb.RunCount != 1 {
+			t.Errorf("%s RunCount = %d, want 1", id, fb.RunCount)
+		}
+	}
+}
+
+// TestSaveFeedback_QuarantinesCorruptFile asserts that an unreadable
+// feedback.json does not wedge the writer. The merge has to decode what is on
+// disk, and bytes it cannot decode leave two bad options: failing the save
+// means this process never persists feedback again while the unreadable file
+// stays put, and overwriting in place destroys the only copy of whatever was
+// committed there. The save moves the bytes aside and proceeds instead.
+func TestSaveFeedback_QuarantinesCorruptFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "feedback.json")
+	corrupt := []byte(`{"trees": {"tree:truncated": {"run_c`)
+	if err := os.WriteFile(path, corrupt, 0o600); err != nil {
+		t.Fatalf("seed corrupt feedback: %v", err)
+	}
+
+	kg := NewKnowledgeGraph()
+	kg.Register(&TreeMeta{ID: "tree:healthy", Name: "Healthy", Category: "test", Fitness: 50})
+	kg.RecordRun(RunRecord{TreeID: "tree:healthy", Task: "work", Outcome: "success", Duration: time.Second})
+
+	if err := kg.SaveFeedback(path); err != nil {
+		t.Fatalf("SaveFeedback over a corrupt file: %v", err)
+	}
+
+	got := readFeedbackSnapshot(t, path)
+	if _, ok := got.Trees["tree:healthy"]; !ok {
+		t.Errorf("tree:healthy missing: a corrupt file must not block this process's own feedback")
+	}
+
+	quarantined, err := os.ReadFile(path + ".corrupt")
+	if err != nil {
+		t.Fatalf("read quarantined file: %v (the undecodable bytes must be kept as evidence)", err)
+	}
+	if !bytes.Equal(quarantined, corrupt) {
+		t.Errorf("quarantined bytes = %q, want the original %q", quarantined, corrupt)
+	}
 }

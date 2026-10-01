@@ -1,6 +1,8 @@
 package engine
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -109,19 +111,81 @@ func autoApproveFromNode(node *evolution.SerializableNode) bool {
 	return false
 }
 
+// matchesHITLTask keeps reused node names from sharing approvals across work.
+func matchesHITLTask(req *hitl.Request, bb *Blackboard) bool {
+	taskID, _ := bb.ChainState["task_id"].(string)
+	agentName, _ := bb.ChainState["agent_name"].(string)
+	if req.AgentName != agentName {
+		return false
+	}
+	if taskID != "" {
+		return req.TaskID == taskID
+	}
+	return req.TaskID == "" && req.Task == bb.Task
+}
+
+func failHITLGate(bb *Blackboard, err error) int {
+	delete(bb.ChainState, chainKeyHITLStatus)
+	bb.Result = fmt.Sprintf("HITL approval unavailable: %v", err)
+	bb.Outcome = string(evolution.Failure)
+	return -1
+}
+
 // humanApprovalGateCmd blocks until a human approves (or policy auto-approves), then runs children.
 type humanApprovalGateCmd struct {
 	node  *evolution.SerializableNode
 	child btcore.Command[Blackboard]
 }
 
+func (h *humanApprovalGateCmd) requestKey() string {
+	return "hitl_request:" + h.node.Type + ":" + h.node.Name + ":" + hitlPhase(h.node)
+}
+func (h *humanApprovalGateCmd) matchesRequest(req *hitl.Request) bool {
+	phase := req.Phase
+	if phase == "" {
+		phase = "pre"
+	}
+	return req.NodeName == h.node.Name && req.NodeType == h.node.Type && phase == hitlPhase(h.node)
+}
+func (h *humanApprovalGateCmd) setRequestState(bb *Blackboard, req *hitl.Request) {
+	setHITLState(bb, req.ID, req.Status)
+	bb.ChainState[h.requestKey()] = req.ID
+}
+func (h *humanApprovalGateCmd) childDone(bb *Blackboard) bool {
+	done, _ := bb.ChainState[h.requestKey()+":child_done"].(bool)
+	return done
+}
+func (h *humanApprovalGateCmd) clearRequestState(bb *Blackboard) {
+	delete(bb.ChainState, h.requestKey())
+	delete(bb.ChainState, h.requestKey()+":child_done")
+	delete(bb.ChainState, h.requestKey()+":child_code")
+	delete(bb.ChainState, chainKeyHITLRequestID)
+	delete(bb.ChainState, chainKeyHITLStatus)
+}
+
 func (h *humanApprovalGateCmd) Run(ctx *btcore.BTContext[Blackboard]) int {
 	bb := ctx.Blackboard
+	parent := ctx.Context
+	if parent == nil {
+		parent = context.Background()
+	}
+	if err := parent.Err(); err != nil {
+		return failHITLGate(bb, err)
+	}
 	if sideEffectRequiresHITL(h.node) {
 		if bb.ChainState == nil {
 			bb.ChainState = make(map[string]any)
 		}
 		bb.ChainState["side_effect_class"] = "external"
+	}
+	// Structural evaluation simulates approval as it simulates action effects.
+	// It must not depend on, or mutate, the operator's real approval store.
+	if bb.Sandbox {
+		setHITLState(bb, "", hitl.StatusSkipped)
+		if h.child != nil {
+			return h.child.Run(ctx)
+		}
+		return 1
 	}
 	store := hitlStore()
 	pol := hitl.GetPolicy()
@@ -132,17 +196,34 @@ func (h *humanApprovalGateCmd) Run(ctx *btcore.BTContext[Blackboard]) int {
 		}
 		return 1
 	}
+	if store == nil {
+		return failHITLGate(bb, fmt.Errorf("HITL store not initialized"))
+	}
 
 	// Resolve existing request from blackboard
-	reqID, _ := bb.ChainState[chainKeyHITLRequestID].(string)
+	reqID, _ := bb.ChainState[h.requestKey()].(string)
+	if reqID == "" {
+		reqID, _ = bb.ChainState[chainKeyHITLRequestID].(string)
+	}
 	var req *hitl.Request
 	var ok bool
 
 	if reqID != "" && store != nil {
-		if st, err := store.RefreshStatus(reqID); err == nil {
-			setHITLState(bb, reqID, st)
+		var err error
+		req, err = store.RefreshRequestWithContext(parent, reqID)
+		if err != nil && !errors.Is(err, hitl.ErrRequestNotFound) {
+			return failHITLGate(bb, err)
 		}
-		req, ok = store.Get(reqID)
+		ok = req != nil && h.matchesRequest(req)
+		if !ok {
+			req = nil
+		}
+		if ok {
+			if !matchesHITLTask(req, bb) {
+				return failHITLGate(bb, fmt.Errorf("HITL request belongs to another task or agent"))
+			}
+			h.setRequestState(bb, req)
+		}
 	}
 
 	// Deduplicate: when no request is found in the blackboard (fresh scheduler
@@ -151,23 +232,33 @@ func (h *humanApprovalGateCmd) Run(ctx *btcore.BTContext[Blackboard]) int {
 	// scheduler re-enters the gate on every tick.
 	phase := hitlPhase(h.node)
 	if (!ok || req == nil) && store != nil {
-		for _, r := range store.ListPending() {
-			if r.NodeName == h.node.Name && (r.Phase == "" || r.Phase == phase) {
+		pending, err := store.ListPendingWithContext(parent)
+		if err != nil {
+			return failHITLGate(bb, err)
+		}
+		for _, r := range pending {
+			if h.matchesRequest(r) && matchesHITLTask(r, bb) {
 				req = r
 				ok = true
-				setHITLState(bb, r.ID, r.Status)
+				h.setRequestState(bb, r)
 				break
 			}
 		}
 	}
-	if phase == "post" && !childExecuted(bb) && h.child != nil {
+	if phase == "post" && ok && childExecuted(bb) {
+		if _, exists := bb.ChainState[h.requestKey()+":child_code"]; !exists {
+			bb.ChainState[h.requestKey()+":child_done"] = true
+			bb.ChainState[h.requestKey()+":child_code"] = bb.ChainState["hitl_child_code"]
+		}
+	}
+	if phase == "post" && !h.childDone(bb) && h.child != nil {
 		code := h.child.Run(ctx)
-		markChildExecuted(bb, code)
 		if code != 1 {
-			delete(bb.ChainState, chainKeyHITLRequestID)
-			delete(bb.ChainState, chainKeyHITLStatus)
 			return code
 		}
+		markChildExecuted(bb, code)
+		bb.ChainState[h.requestKey()+":child_done"] = true
+		bb.ChainState[h.requestKey()+":child_code"] = code
 	}
 
 	if !ok || req == nil {
@@ -191,9 +282,11 @@ func (h *humanApprovalGateCmd) Run(ctx *btcore.BTContext[Blackboard]) int {
 		}
 		req = hitl.ApplyAutoApproveIfPolicy(req)
 		if store != nil {
-			_ = store.Create(req)
+			if err := store.CreateWithContext(parent, req); err != nil {
+				return failHITLGate(bb, err)
+			}
 		}
-		setHITLState(bb, req.ID, req.Status)
+		h.setRequestState(bb, req)
 	}
 
 	switch req.Status {
@@ -206,10 +299,9 @@ func (h *humanApprovalGateCmd) Run(ctx *btcore.BTContext[Blackboard]) int {
 		bb.Outcome = string(evolution.Failure)
 		return -1
 	case hitl.StatusApproved, hitl.StatusSkipped:
-		if phase == "post" && childExecuted(bb) {
-			if c, ok := bb.ChainState["hitl_child_code"].(int); ok {
-				delete(bb.ChainState, chainKeyHITLRequestID)
-				delete(bb.ChainState, chainKeyHITLStatus)
+		if phase == "post" && h.childDone(bb) {
+			if c, ok := bb.ChainState[h.requestKey()+":child_code"].(int); ok {
+				h.clearRequestState(bb)
 				delete(bb.ChainState, "hitl_child_executed")
 				delete(bb.ChainState, "hitl_child_code")
 				return c
@@ -217,12 +309,12 @@ func (h *humanApprovalGateCmd) Run(ctx *btcore.BTContext[Blackboard]) int {
 		}
 		if h.child != nil && phase != "post" {
 			code := h.child.Run(ctx)
-			delete(bb.ChainState, chainKeyHITLRequestID)
-			delete(bb.ChainState, chainKeyHITLStatus)
+			if code != 0 {
+				h.clearRequestState(bb)
+			}
 			return code
 		}
-		delete(bb.ChainState, chainKeyHITLRequestID)
-		delete(bb.ChainState, chainKeyHITLStatus)
+		h.clearRequestState(bb)
 		return 1
 	default:
 		return -1

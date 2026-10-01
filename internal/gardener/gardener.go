@@ -216,7 +216,6 @@ func (r *Registry) DeactivateAll() int {
 // SaveTree persists a tree to its file path.
 func (r *Registry) SaveTree(entry TreeEntry) error {
 	if err := util.SaveJSONAtomic(entry.FilePath, entry.Tree); err != nil {
-		_ = os.Remove(entry.FilePath + ".tmp")
 		return fmt.Errorf("write tree %q: %w", entry.FilePath, err)
 	}
 	return nil

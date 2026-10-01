@@ -18,6 +18,9 @@ func BuildPersistentMemSequence(node *evolution.SerializableNode, bb *Blackboard
 	key := "memseq/" + node.Name
 	return btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int {
 		start, _ := chainStateInt(ctx.Blackboard, key)
+		if start < 0 || start > len(children) {
+			start = 0
+		}
 		for i := start; i < len(children); i++ {
 			switch code := children[i].Run(ctx); {
 			case code == 0:

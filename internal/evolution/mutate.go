@@ -50,7 +50,10 @@ type TreeStore struct {
 
 // NewTreeStore creates a TreeStore in the given directory.
 func NewTreeStore(dir string) (*TreeStore, error) {
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if dir == "" {
+		return nil, fmt.Errorf("tree directory must not be empty")
+	}
+	if err := util.EnsurePersistenceParent(filepath.Join(dir, "tree.json")); err != nil {
 		return nil, fmt.Errorf("create tree dir: %w", err)
 	}
 	return &TreeStore{
@@ -70,16 +73,12 @@ func (ts *TreeStore) MetaPath() string { return filepath.Join(ts.dir, "metadata.
 
 // SaveMeta writes evolution metadata to disk alongside the tree.
 func (ts *TreeStore) SaveMeta(meta *EvolutionMetadata) error {
-	data, err := json.MarshalIndent(meta, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal metadata: %w", err)
-	}
-	return os.WriteFile(ts.MetaPath(), data, 0644)
+	return util.SaveJSONAtomic(ts.MetaPath(), meta)
 }
 
 // LoadMeta reads evolution metadata from disk. Returns nil if no metadata exists.
 func (ts *TreeStore) LoadMeta() (*EvolutionMetadata, error) {
-	data, err := os.ReadFile(ts.MetaPath())
+	data, err := util.ReadPersistenceFile(ts.MetaPath())
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -100,7 +99,7 @@ func (ts *TreeStore) SaveTo(tree *SerializableNode, path string) error {
 
 // Load reads the tree from disk. Returns nil if no tree exists yet.
 func (ts *TreeStore) Load() (*SerializableNode, error) {
-	data, err := os.ReadFile(ts.path)
+	data, err := util.ReadPersistenceFile(ts.path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -217,7 +216,8 @@ func applyOp(tree *SerializableNode, op MutationOp) bool {
 	case "replace_children":
 		return applyReplaceChildren(tree, op.Target)
 	case "reorder_children":
-		return applyReorderChildren(tree, op.Target)
+		direction, _ := op.Metadata["reorder_direction"].(string)
+		return applyReorderChildren(tree, op.Target, direction)
 	case "increase_iterations":
 		return applyIncreaseIterations(tree, op.Target)
 	case "add_tool":
@@ -427,14 +427,14 @@ func applyReplaceChildren(tree *SerializableNode, target string) bool {
 
 // applyReorderChildren shuffles the order of a Selector's children to change priority.
 // First-child-wins Selectors are sensitive to ordering — this explores better orders.
-func applyReorderChildren(tree *SerializableNode, target string) bool {
+func applyReorderChildren(tree *SerializableNode, target string, direction string) bool {
 	for i := range tree.Children {
 		if tree.Children[i].Name == target &&
 			(tree.Children[i].Type == "Selector" || tree.Children[i].Type == "Sequence") &&
 			len(tree.Children[i].Children) >= 2 {
 			children := tree.Children[i].Children
 			// Cyclic shift: move first child to end (or vice versa)
-			if evoIntn(2) == 0 {
+			if direction == "left" || (direction != "right" && evoIntn(2) == 0) {
 				// Shift first to last
 				first := children[0]
 				tree.Children[i].Children = append(tree.Children[i].Children[1:], first)
@@ -449,7 +449,7 @@ func applyReorderChildren(tree *SerializableNode, target string) bool {
 		}
 	}
 	for i := range tree.Children {
-		if applyReorderChildren(&tree.Children[i], target) {
+		if applyReorderChildren(&tree.Children[i], target, direction) {
 			return true
 		}
 	}

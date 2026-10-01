@@ -2,9 +2,13 @@ package knowledge
 
 import (
 	"encoding/json"
+	"fmt"
+	"maps"
 	"os"
-	"path/filepath"
+	"slices"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
 // feedbackSnapshot is the serializable subset of the knowledge graph that
@@ -49,6 +53,55 @@ type feedbackPersistState struct {
 	lastFlush   time.Time
 	minInterval time.Duration
 	writeCount  int
+	baseline    map[string]treeFeedback
+	pending     map[string]*feedbackDelta
+}
+
+// A bounded delta retains all EMA updates but only the last history window.
+// Baselines identify observations already loaded/committed by this process.
+type feedbackDelta struct {
+	runs      int
+	emaWeight float64
+	emaOffset float64
+	recent    []RunSummary
+}
+
+func treeFeedbackFor(tree *TreeMeta) treeFeedback {
+	return treeFeedback{Fitness: tree.Fitness, RunCount: tree.RunCount,
+		EvolvedCount: tree.EvolvedCount, LastOutcome: tree.LastOutcome,
+		LastDuration: tree.LastDuration, RecentRuns: slices.Clone(tree.RecentRuns),
+		StructuralFitness: tree.StructuralFitness, NodeCount: tree.NodeCount, Category: tree.Category}
+}
+
+// Caller holds kg.mu, before the first local mutation since load/save.
+func (kg *KnowledgeGraph) rememberFeedbackBaselineLocked(id string, tree *TreeMeta) {
+	if kg.feedbackPersist.baseline == nil {
+		kg.feedbackPersist.baseline = make(map[string]treeFeedback)
+	}
+	if _, ok := kg.feedbackPersist.baseline[id]; !ok {
+		kg.feedbackPersist.baseline[id] = treeFeedbackFor(tree)
+	}
+}
+
+func (kg *KnowledgeGraph) recordFeedbackDeltaLocked(rec RunRecord) {
+	if rec.Outcome == "evolved" {
+		return // EvolvedCount deltas are computed against the baseline.
+	}
+	if kg.feedbackPersist.pending == nil {
+		kg.feedbackPersist.pending = make(map[string]*feedbackDelta)
+	}
+	delta := kg.feedbackPersist.pending[rec.TreeID]
+	if delta == nil {
+		delta = &feedbackDelta{emaWeight: 1}
+		kg.feedbackPersist.pending[rec.TreeID] = delta
+	}
+	delta.runs++
+	delta.emaWeight *= 0.9
+	delta.emaOffset = 0.9*delta.emaOffset + 10*outcomeScore(rec.Outcome)
+	delta.recent = append(delta.recent, RunSummary{Outcome: rec.Outcome, Quality: rec.Quality})
+	if len(delta.recent) > maxRunHistory {
+		delta.recent = slices.Clone(delta.recent[len(delta.recent)-maxRunHistory:])
+	}
 }
 
 // ConfigureFeedbackPersistence wires the debounced writer to a target path and a
@@ -92,29 +145,111 @@ func (kg *KnowledgeGraph) FlushFeedback(force bool) error {
 	path := fp.path
 	kg.mu.Unlock()
 
-	// SaveFeedback takes mu.RLock itself, so it must not be called under the lock.
+	// SaveFeedback takes mu.Lock (and the file's sidecar lock) itself, so it
+	// must not be called under the lock.
 	if err := kg.SaveFeedback(path); err != nil {
 		return err
 	}
 
 	kg.mu.Lock()
-	kg.feedbackPersist.dirty = false
 	kg.feedbackPersist.lastFlush = time.Now()
 	kg.feedbackPersist.writeCount++
 	kg.mu.Unlock()
 	return nil
 }
 
-// SaveFeedback serializes the runtime-feedback fields (Fitness, RunCount,
+// SaveFeedback commits the runtime-feedback fields (Fitness, RunCount,
 // EvolvedCount, LastOutcome, LastDuration, RecentRuns) and the uses_tool and
-// evolved_from edges to a JSON file. Static tree metadata is not written. The
-// write is atomic: it lands in a temp file that is renamed into place, so a
-// crash mid-write can never leave a truncated snapshot.
+// evolved_from edges to a JSON file as one locked read-merge-write
+// transaction. Static tree metadata is still never written.
+//
+// feedback.json has several concurrent writers: the daemon's scheduler, the
+// dashboard, and the bt-agent MCP siblings each hold an independent
+// KnowledgeGraph over the same file and each flush it. Serializing only this
+// process's in-memory view and renaming it into place made the file
+// untearable but did not serialize the transaction — everything a sibling
+// committed between this process's load and its save was silently dropped.
+// The whole cycle therefore runs inside reliability.UpdateSharedJSON, which
+// holds the shared sidecar flock across the read, the merge and the atomic
+// write, so what lands is the merge of both writers rather than whichever one
+// renamed last (see mergeFeedback for the per-field rules).
 func (kg *KnowledgeGraph) SaveFeedback(path string) error {
-	kg.mu.RLock()
-	snap := feedbackSnapshot{
-		Trees: make(map[string]treeFeedback, len(kg.Trees)),
+	// Hold the graph lock through commit and acknowledgement, so a concurrent
+	// RecordRun can never be cleared by a flush that did not persist it. The
+	// shared helper bounds lock acquisition to 30 seconds.
+	kg.mu.Lock()
+	defer kg.mu.Unlock()
+	var merged feedbackSnapshot
+	err := reliability.UpdateSharedJSON(path, func(onDisk []byte) (any, error) {
+		committed, err := readCommittedFeedback(path, onDisk)
+		if err != nil {
+			return nil, err
+		}
+		mem := kg.snapshotFeedbackLocked()
+		merged = mergeFeedback(committed, mem)
+		for id, base := range kg.feedbackPersist.baseline {
+			local, ok := mem.Trees[id]
+			if !ok {
+				continue
+			}
+			runs := local.RunCount - base.RunCount
+			evolved := local.EvolvedCount - base.EvolvedCount
+			if runs < 0 || evolved < 0 {
+				return nil, fmt.Errorf("feedback counters regressed for %s", id)
+			}
+			parent := base
+			if disk, ok := committed.Trees[id]; ok {
+				parent = mergeTreeFeedback(disk, base)
+				// Preserve an explicit local score edit only while its loaded
+				// value is still current on disk; stale score edits never win.
+				if runs == 0 && local.Fitness != base.Fitness && disk.Fitness == base.Fitness {
+					parent.Fitness = local.Fitness
+				}
+			}
+			parent.RunCount += runs
+			parent.EvolvedCount += evolved
+			if delta := kg.feedbackPersist.pending[id]; delta != nil && delta.runs == runs {
+				parent.RecentRuns = append(slices.Clone(parent.RecentRuns), delta.recent...)
+				if len(parent.RecentRuns) > maxRunHistory {
+					parent.RecentRuns = slices.Clone(parent.RecentRuns[len(parent.RecentRuns)-maxRunHistory:])
+				}
+				if fn := kg.domainFitness[id]; fn != nil {
+					parent.Fitness = fn(parent.RecentRuns) * 100
+				} else {
+					parent.Fitness = delta.emaWeight*parent.Fitness + delta.emaOffset
+				}
+			}
+			if runs > 0 || evolved > 0 {
+				parent.LastOutcome, parent.LastDuration = local.LastOutcome, local.LastDuration
+			}
+			if local.StructuralFitness > parent.StructuralFitness {
+				parent.StructuralFitness, parent.NodeCount = local.StructuralFitness, local.NodeCount
+			}
+			merged.Trees[id] = parent
+		}
+		return merged, nil
+	})
+	if err != nil {
+		return err // retain baseline, pending deltas and dirty state for retry
 	}
+	kg.applyFeedbackLocked(merged)
+	// Save acknowledges the winning committed structure, unlike Load's gap-only
+	// compatibility policy. Otherwise a stale process could admit a weaker tree.
+	for id, fb := range merged.Trees {
+		kg.Trees[id].StructuralFitness = fb.StructuralFitness
+		kg.Trees[id].NodeCount = fb.NodeCount
+	}
+	kg.feedbackPersist.baseline = kg.snapshotFeedbackLocked().Trees
+	kg.feedbackPersist.pending = nil
+	kg.feedbackPersist.dirty = false
+	return nil
+}
+
+// snapshotFeedback captures this process's view of the persisted fields.
+// The caller holds kg.mu. Clone RecentRuns to detach committed/baseline windows
+// from future RecordRun appends.
+func (kg *KnowledgeGraph) snapshotFeedbackLocked() feedbackSnapshot {
+	snap := feedbackSnapshot{Trees: make(map[string]treeFeedback, len(kg.Trees))}
 	for id, tree := range kg.Trees {
 		snap.Trees[id] = treeFeedback{
 			Fitness:           tree.Fitness,
@@ -122,7 +257,7 @@ func (kg *KnowledgeGraph) SaveFeedback(path string) error {
 			EvolvedCount:      tree.EvolvedCount,
 			LastOutcome:       tree.LastOutcome,
 			LastDuration:      tree.LastDuration,
-			RecentRuns:        tree.RecentRuns,
+			RecentRuns:        slices.Clone(tree.RecentRuns),
 			StructuralFitness: tree.StructuralFitness,
 			NodeCount:         tree.NodeCount,
 			Category:          tree.Category,
@@ -133,28 +268,108 @@ func (kg *KnowledgeGraph) SaveFeedback(path string) error {
 			snap.ToolEdges = append(snap.ToolEdges, e)
 		}
 	}
-	kg.mu.RUnlock()
+	return snap
+}
 
-	data, err := json.MarshalIndent(snap, "", "  ")
-	if err != nil {
-		return err
+// readCommittedFeedback decodes the snapshot a sibling left on disk. No bytes
+// is a cold start, not a failure.
+//
+// Bytes that are not a snapshot are moved aside to `<path>.corrupt` and
+// treated as a cold start. Failing the save instead would mean this process
+// never persists feedback again while the unreadable file stays; overwriting
+// in place would destroy the only copy of whatever was committed there.
+// Quarantining keeps the evidence and lets the graph heal on the next write.
+func readCommittedFeedback(path string, onDisk []byte) (feedbackSnapshot, error) {
+	var snap feedbackSnapshot
+	if len(onDisk) == 0 {
+		return snap, nil
+	}
+	if err := json.Unmarshal(onDisk, &snap); err != nil {
+		if renameErr := os.Rename(path, path+".corrupt"); renameErr != nil {
+			return feedbackSnapshot{}, fmt.Errorf("quarantine corrupt feedback %s: %w", path, renameErr)
+		}
+		return feedbackSnapshot{}, nil
+	}
+	return snap, nil
+}
+
+// mergeFeedback folds the committed snapshot into this process's view and
+// returns what to write.
+//
+// Trees union by ID. A tree only this process knows and a tree only a sibling
+// knows are both real evidence that the other side cannot reconstruct —
+// dropping a sibling's loses that tree's whole fitness and run history, and
+// for an evolved tree permanently, since nothing else rebuilds it from disk.
+// Nothing in the graph ever deletes a tree or an edge, so a union can only
+// add back what a stale writer would have erased. Edges union the same way,
+// keyed like connectLocked (from/to/type); disk order leads so the committed
+// file keeps a stable shape across saves.
+func mergeFeedback(disk, mem feedbackSnapshot) feedbackSnapshot {
+	merged := feedbackSnapshot{Trees: make(map[string]treeFeedback, len(disk.Trees)+len(mem.Trees))}
+	maps.Copy(merged.Trees, disk.Trees)
+	for id, fb := range mem.Trees {
+		if committed, both := disk.Trees[id]; both {
+			fb = mergeTreeFeedback(committed, fb)
+		}
+		merged.Trees[id] = fb
 	}
 
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".feedback-*.tmp")
-	if err != nil {
-		return err
+	type edgeKey struct{ from, to, relType string }
+	seen := make(map[edgeKey]struct{}, len(disk.ToolEdges)+len(mem.ToolEdges))
+	for _, edges := range [][]Edge{disk.ToolEdges, mem.ToolEdges} {
+		for _, e := range edges {
+			key := edgeKey{e.From, e.To, e.Type}
+			if _, dup := seen[key]; dup {
+				continue
+			}
+			seen[key] = struct{}{}
+			merged.ToolEdges = append(merged.ToolEdges, e)
+		}
 	}
-	tmpName := tmp.Name()
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		os.Remove(tmpName)
-		return err
+	return merged
+}
+
+// mergeTreeFeedback reconciles untracked legacy snapshots and selects the
+// committed baseline before SaveFeedback adds this writer's pending deltas.
+// Legacy aggregate counters use max because their overlap cannot be inferred;
+// genuine observations are tracked separately and summed exactly once.
+// Runtime evidence comes from the larger run count, with disk winning ties.
+// Structural fitness is monotone and carries its associated node count.
+// Static discovery category fills only empty/unknown registration gaps.
+func mergeTreeFeedback(disk, mem treeFeedback) treeFeedback {
+	merged := mem
+	if disk.RunCount >= mem.RunCount {
+		merged.Fitness = disk.Fitness
+		merged.LastOutcome = disk.LastOutcome
+		merged.LastDuration = disk.LastDuration
+		merged.RecentRuns = disk.RecentRuns
 	}
-	if err := tmp.Close(); err != nil {
-		os.Remove(tmpName)
-		return err
+	merged.RunCount = max(mem.RunCount, disk.RunCount)
+	merged.EvolvedCount = max(mem.EvolvedCount, disk.EvolvedCount)
+
+	// A writer can hold a tally without the window behind it — a tree
+	// registered fresh this process, or a feedback file written before
+	// recent_runs existed. An empty window is the absence of evidence rather
+	// than evidence of no runs, so it never displaces a real one.
+	if len(merged.RecentRuns) == 0 {
+		if len(disk.RecentRuns) > 0 {
+			merged.RecentRuns = disk.RecentRuns
+		} else {
+			merged.RecentRuns = mem.RecentRuns
+		}
 	}
-	return os.Rename(tmpName, path)
+
+	if disk.StructuralFitness > merged.StructuralFitness {
+		merged.StructuralFitness = disk.StructuralFitness
+		merged.NodeCount = disk.NodeCount
+	}
+	if merged.NodeCount == 0 {
+		merged.NodeCount = disk.NodeCount
+	}
+	if (merged.Category == "" || merged.Category == "unknown") && disk.Category != "" {
+		merged.Category = disk.Category
+	}
+	return merged
 }
 
 // LoadFeedback restores runtime feedback from a JSON snapshot into the already
@@ -180,6 +395,27 @@ func (kg *KnowledgeGraph) LoadFeedback(path string) error {
 
 	kg.mu.Lock()
 	defer kg.mu.Unlock()
+	for id := range snap.Trees {
+		if kg.feedbackPersist.pending[id] != nil {
+			return fmt.Errorf("cannot reload %s with uncommitted local observations", id)
+		}
+		if base, ok := kg.feedbackPersist.baseline[id]; ok {
+			if tree := kg.Trees[id]; tree != nil && tree.EvolvedCount > base.EvolvedCount {
+				return fmt.Errorf("cannot reload %s with uncommitted evolution observations", id)
+			}
+		}
+	}
+	kg.applyFeedbackLocked(snap)
+	if kg.feedbackPersist.baseline == nil {
+		kg.feedbackPersist.baseline = make(map[string]treeFeedback)
+	}
+	for id := range snap.Trees {
+		kg.feedbackPersist.baseline[id] = treeFeedbackFor(kg.Trees[id])
+	}
+	return nil
+}
+
+func (kg *KnowledgeGraph) applyFeedbackLocked(snap feedbackSnapshot) {
 	for id, fb := range snap.Trees {
 		tree, ok := kg.Trees[id]
 		if !ok {
@@ -231,5 +467,4 @@ func (kg *KnowledgeGraph) LoadFeedback(path string) error {
 			}
 		}
 	}
-	return nil
 }

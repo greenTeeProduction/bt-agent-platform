@@ -129,6 +129,8 @@ type MCTSMutator struct {
 	WarmStartHints []string `json:"warmstart_hints,omitempty"`
 
 	mu sync.Mutex
+	// random belongs to one seeded Candidates call; it is never shared with callers.
+	random *rand.Rand
 }
 
 // NewMCTSMutator creates an MCTS mutator with sensible defaults.
@@ -297,7 +299,7 @@ func (m *MCTSMutator) expandNode(node *MCTSNode) *MCTSNode {
 		return nil
 	}
 	// Pick a random untried op
-	idx := rand.Intn(len(node.UntriedOps))
+	idx := m.randomIntn(len(node.UntriedOps))
 	op = node.UntriedOps[idx]
 	// Remove from untried list
 	node.UntriedOps = append(node.UntriedOps[:idx], node.UntriedOps[idx+1:]...)
@@ -329,9 +331,18 @@ func (m *MCTSMutator) expandNode(node *MCTSNode) *MCTSNode {
 }
 
 func (m *MCTSMutator) concreteMutationOp(op string, tree *SerializableNode) MutationOp {
-	target := randomNodeName(tree, tree.Name)
-	unique := fmt.Sprintf("MCTS_%s_%d", op, rand.Intn(1_000_000))
+	target := tree.Name
+	if names := collectNodeNames(tree); len(names) > 0 {
+		target = names[m.randomIntn(len(names))]
+	}
+	unique := fmt.Sprintf("MCTS_%s_%d", op, m.randomIntn(1_000_000))
 	switch op {
+	case "reorder_children":
+		direction := "left"
+		if m.randomIntn(2) != 0 {
+			direction = "right"
+		}
+		return MutationOp{Operation: op, Target: target, Metadata: map[string]any{"reorder_direction": direction}}
 	case "add_before", "add_after":
 		return MutationOp{Operation: op, Target: target, Node: &SerializableNode{
 			Type: "Condition", Name: unique, Description: "MCTS candidate guard",
@@ -355,6 +366,13 @@ func (m *MCTSMutator) concreteMutationOp(op string, tree *SerializableNode) Muta
 		}
 	}
 	return MutationOp{Operation: op, Target: target}
+}
+
+func (m *MCTSMutator) randomIntn(n int) int {
+	if m.random != nil {
+		return m.random.Intn(n) // seeded, per-search heuristic randomness
+	}
+	return evoIntn(n)
 }
 
 func firstNodeNameByType(tree *SerializableNode, typ string) string {
@@ -431,14 +449,24 @@ const (
 
 // ScoredMutation is a concrete, individually applicable mutation with an
 // ordering score and a human-readable justification — the common currency of
-// the merged structural-mutation competition. It mirrors
-// evaluator.MutationCandidate deliberately: the evaluator package imports
-// evolution (not the other way round), so the shared shape lives here and
-// callers convert at the boundary.
+// the merged structural-mutation competition. The evaluator's MutationCandidate
+// aliases this type so proposals retain their payload and attribution at boundaries.
 type ScoredMutation struct {
-	Op     MutationOp `json:"op"`
-	Score  float64    `json:"score"` // higher = try first; (0.5, 1.0] for MCTS output
-	Reason string     `json:"reason"`
+	Op     MutationOp              `json:"op"`
+	Score  float64                 `json:"score"` // higher = try first; (0.5, 1.0] for MCTS output
+	Reason string                  `json:"reason"`
+	Source string                  `json:"source,omitempty"`
+	Search *MutationSearchEvidence `json:"search,omitempty"`
+}
+
+// MutationSearchEvidence records the configuration needed to replay MCTS
+// proposal generation with the same tree and fitness evaluator.
+type MutationSearchEvidence struct {
+	Seed             int64    `json:"seed"`
+	Iterations       int      `json:"iterations"`
+	ExplorationConst float64  `json:"exploration_constant"`
+	MaxDepth         int      `json:"max_depth"`
+	WarmStartHints   []string `json:"warmstart_hints,omitempty"`
 }
 
 // Candidates runs the MCTS search over parent and returns every ROOT-level
@@ -459,6 +487,24 @@ type ScoredMutation struct {
 // "the search found no evidence", never "try these unscored guesses". parent is
 // never mutated.
 func (m *MCTSMutator) Candidates(parent *SerializableNode, parentFitness float64) []ScoredMutation {
+	return m.CandidatesWithSeed(parent, parentFitness, rand.Int63()) // non-crypto search seed
+}
+
+// CandidatesWithSeed isolates the complete search random stream. Concurrent
+// searches with the same seed/configuration/input produce the same proposals
+// when the supplied fitness evaluator is deterministic.
+func (m *MCTSMutator) CandidatesWithSeed(parent *SerializableNode, parentFitness float64, seed int64) []ScoredMutation {
+	m.mu.Lock()
+	run := &MCTSMutator{
+		Iterations: m.Iterations, ExplorationConst: m.ExplorationConst, MaxDepth: m.MaxDepth,
+		FitnessEvaluator: m.FitnessEvaluator, WarmStartHints: slices.Clone(m.WarmStartHints),
+		random: rand.New(rand.NewSource(seed)),
+	}
+	m.mu.Unlock()
+	return run.candidates(parent, parentFitness, seed)
+}
+
+func (m *MCTSMutator) candidates(parent *SerializableNode, parentFitness float64, seed int64) []ScoredMutation {
 	if parent == nil {
 		return nil
 	}
@@ -544,8 +590,10 @@ func (m *MCTSMutator) Candidates(parent *SerializableNode, parentFitness float64
 			score = 1.0
 		}
 		out = append(out, ScoredMutation{
-			Op:    imp.op,
-			Score: score,
+			Op:     imp.op,
+			Score:  score,
+			Source: "mcts",
+			Search: &MutationSearchEvidence{Seed: seed, Iterations: m.Iterations, ExplorationConst: m.ExplorationConst, MaxDepth: m.MaxDepth, WarmStartHints: slices.Clone(m.WarmStartHints)},
 			Reason: fmt.Sprintf("mcts search: %s on %q gained %+.4f fitness over the parent in %d iterations",
 				imp.op.Operation, imp.op.Target, imp.gain, m.Iterations),
 		})

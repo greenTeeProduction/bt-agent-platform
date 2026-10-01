@@ -12,7 +12,7 @@ import (
 
 func rateLimitFailoverEnabled() bool {
 	enabled, _ := strconv.ParseBool(os.Getenv("BT_SUPERPOWERS_RATE_LIMIT_FAILOVER"))
-	return enabled
+	return enabled && !codexOnlyDelegation()
 }
 
 func alternateDelegationProvider(p DelegationProvider) DelegationProvider {
@@ -35,6 +35,9 @@ func (e *DelegationRateLimitError) Error() string {
 
 func (d delegatingRunner) runProvider(ctx context.Context, dir, prompt string, p DelegationProvider) CommandResult {
 	var result CommandResult
+	if !p.Valid() || (codexOnlyDelegation() && p != DelegationProviderCodex) {
+		return CommandResult{Provider: p, Dir: dir, Err: fmt.Errorf("delegation policy rejects provider %q", p)}
+	}
 	if err := ctx.Err(); err != nil {
 		return CommandResult{Provider: p, Dir: dir, Err: err}
 	}

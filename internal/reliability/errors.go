@@ -671,6 +671,9 @@ func (p *RetryPolicy) ExecuteContext(ctx context.Context, fn func() error) error
 			return nil
 		}
 
+		if IsExecutionTerminalError(err) {
+			return err
+		}
 		lastErr = err
 		lastCat = ClassifyError(err)
 

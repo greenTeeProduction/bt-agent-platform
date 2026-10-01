@@ -391,11 +391,7 @@ func hashTask(task string) string {
 // --- Move Ordering (Stockfish: killer moves, history heuristic) ---
 
 // MutationCandidate is a proposed mutation with an ordering score.
-type MutationCandidate struct {
-	Op     evolution.MutationOp `json:"op"`
-	Score  float64              `json:"score"` // higher = try first
-	Reason string               `json:"reason"`
-}
+type MutationCandidate = evolution.ScoredMutation
 
 // OrderMutations ranks mutation candidates using Stockfish-like heuristics.
 // Priority: 1) wrap_retry on frequently-failing nodes (killer move)
@@ -518,6 +514,9 @@ func OrderMutations(tree *evolution.SerializableNode, records []evolution.Record
 	}
 
 	// Sort all candidates by descending score for deterministic ordering
+	for i := range candidates {
+		candidates[i].Source = "heuristic"
+	}
 	slices.SortFunc(candidates, func(a, b MutationCandidate) int {
 		return cmp.Compare(b.Score, a.Score)
 	})
@@ -549,14 +548,17 @@ func findFailureNodes(records []evolution.Record) []string {
 
 // DeepeningResult holds the result of iterative deepening mutation search.
 type DeepeningResult struct {
-	Depth        int                 `json:"depth"` // how deep we searched
-	BaseFitness  FitnessScore        `json:"base_fitness"`
-	BestMutation *MutationCandidate  `json:"best_mutation"`
-	BestFitness  *FitnessScore       `json:"best_fitness"`
-	Candidates   []MutationCandidate `json:"candidates_ordered"`
-	PrunedCount  int                 `json:"pruned"`
-	TTProbes     int                 `json:"tt_probes"`
-	TTProbeHits  int                 `json:"tt_probes_hit"`
+	Depth        int                `json:"depth"` // how deep we searched
+	BaseFitness  FitnessScore       `json:"base_fitness"`
+	BestMutation *MutationCandidate `json:"best_mutation"`
+	// BestMutations is the complete ordered proposal whose tree BestFitness scores.
+	// BestMutation retains the first proposal for older display-only consumers.
+	BestMutations []MutationCandidate `json:"best_mutations,omitempty"`
+	BestFitness   *FitnessScore       `json:"best_fitness"`
+	Candidates    []MutationCandidate `json:"candidates_ordered"`
+	PrunedCount   int                 `json:"pruned"`
+	TTProbes      int                 `json:"tt_probes"`
+	TTProbeHits   int                 `json:"tt_probes_hit"`
 }
 
 // IterativeDeepening progressively tests deeper mutations.
@@ -580,6 +582,10 @@ func IterativeDeepening(
 
 	// Alpha-beta style pruning: best score so far (alpha)
 	alpha := baseFitness.Composite
+	// Cached scoring belongs to both a tree and its reflection evidence.
+	// A new history must not reuse an old history's pruning decision.
+	recordBytes, recordErr := json.Marshal(records)
+	evidenceKey := fmt.Sprintf("%x", sha256.Sum256(recordBytes))
 
 	for depth := 1; depth <= maxDepth; depth++ {
 		result.Depth = depth
@@ -594,14 +600,17 @@ func IterativeDeepening(
 			}
 
 			// Transposition table probe
-			ttKey := hashTree(clone) + ":eval"
-			result.TTProbes++
-			if entry, ok := tt.Probe(tree, ttKey); ok {
-				result.TTProbeHits++
-				if entry.SuccessRate > alpha/100 {
-					alpha = entry.SuccessRate * 100
+			ttKey := "eval:" + evidenceKey
+			if tt != nil && recordErr == nil {
+				result.TTProbes++
+				if entry, ok := tt.Probe(clone, ttKey); ok {
+					result.TTProbeHits++
+					if entry.SuccessRate <= alpha/100 {
+						continue
+					}
+					// Reconstruct an improving cached candidate's full fitness and
+					// proposal; raising alpha alone discards the cached winner.
 				}
-				continue
 			}
 
 			// Prune: if node count exploded, skip
@@ -618,15 +627,21 @@ func IterativeDeepening(
 
 			// Evaluate the hypothetical tree
 			hypFitness := EvaluateTree(clone, records)
-			tt.Store(clone, ttKey, TranspositionEntry{
-				SuccessRate: hypFitness.Composite / 100,
-			})
+			if tt != nil && recordErr == nil {
+				tt.Store(clone, ttKey, TranspositionEntry{
+					SuccessRate: hypFitness.Composite / 100,
+				})
+			}
 
 			if hypFitness.Composite > alpha {
 				alpha = hypFitness.Composite
 				result.BestFitness = &hypFitness
 				if len(combo) > 0 {
-					result.BestMutation = &combo[0]
+					result.BestMutations = slices.Clone(combo)
+					for i := range result.BestMutations {
+						result.BestMutations[i].Source = "deep_search"
+					}
+					result.BestMutation = &result.BestMutations[0]
 				}
 			}
 		}

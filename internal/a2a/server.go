@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"iter"
 	"log/slog"
@@ -21,6 +22,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/llm"
+	"github.com/nico/go-bt-evolve/internal/reliability"
 	"github.com/nico/go-bt-evolve/internal/security"
 )
 
@@ -66,6 +68,17 @@ func (e *BTAgentExecutor) setCardCache(cards map[string]*a2a.AgentCard) {
 // Execute runs the BT agent for the given A2A task.
 func (e *BTAgentExecutor) Execute(ctx context.Context, execCtx *a2asrv.ExecutorContext) iter.Seq2[a2a.Event, error] {
 	return func(yield func(a2a.Event, error) bool) {
+		// Always replace this server-owned extension on a settled state. A
+		// client's request metadata must not masquerade as execution evidence.
+		emit := yield
+		yield = func(event a2a.Event, err error) bool {
+			if status, ok := event.(*a2a.TaskStatusUpdateEvent); ok && (status.Status.State.Terminal() || status.Status.State == a2a.TaskStateInputRequired || status.Status.State == a2a.TaskStateAuthRequired) {
+				if _, present := status.Metadata[executionMetadataKey]; !present {
+					status.SetMeta(executionMetadataKey, map[string]any{"outcome": string(status.Status.State), "error_kind": "", "error": ""})
+				}
+			}
+			return emit(event, err)
+		}
 		// Submit the task. The a2a-go v2 stream contract requires the FIRST
 		// event to be a Task (or message) — a leading TaskStatusUpdateEvent is
 		// rejected with "first event must be a Task or a message" and the whole
@@ -183,20 +196,37 @@ func (e *BTAgentExecutor) Execute(ctx context.Context, execCtx *a2asrv.ExecutorC
 		result := engine.RunTask(bb, bt)
 		elapsed := time.Since(startTime)
 
+		diagnostic := bb.ExecutionError()
+		detail := ""
+		if diagnostic != nil {
+			detail = diagnostic.Error()
+		}
+		var historyErr error
 		if e.History != nil {
 			historyAgent := agentName
 			if winner := AuctionWinnerName(bb.ChainState); winner != "" {
 				historyAgent = winner
 			}
-			_ = e.History.Record(agent.RunRecord{
+			historyErr = e.History.Record(agent.RunRecord{
 				AgentName: historyAgent,
 				Task:      taskText,
 				Outcome:   bb.Outcome,
 				Output:    result,
+				Quality:   bb.QualityScore,
+				Error:     detail,
 				Duration:  elapsed.Truncate(time.Second).String(),
 				StartedAt: startTime,
 				EndedAt:   startTime.Add(elapsed),
 			})
+		}
+
+		if historyErr != nil {
+			recordErr := fmt.Errorf("record A2A run history: %w", historyErr)
+			if diagnostic == nil && agent.IsHealthyOutcome(bb.Outcome) {
+				diagnostic = &reliability.ExecutionPersistenceError{Err: recordErr}
+			} else {
+				diagnostic = errors.Join(diagnostic, recordErr)
+			}
 		}
 
 		bridge := &TaskStateBridge{}
@@ -205,24 +235,27 @@ func (e *BTAgentExecutor) Execute(ctx context.Context, execCtx *a2asrv.ExecutorC
 			if !yield(a2a.NewArtifactEvent(execCtx, a2a.NewTextPart(result)), nil) {
 				return
 			}
-			if !yield(a2a.NewStatusUpdateEvent(execCtx, a2a.TaskStateCompleted,
+			if !yield(executionStatus(execCtx, a2a.TaskStateCompleted,
 				a2a.NewMessage(a2a.MessageRoleAgent, a2a.NewTextPart(
-					fmt.Sprintf("BT tree %s completed in %v", inst.Definition.Tree, elapsed.Round(time.Millisecond))))), nil) {
+					fmt.Sprintf("BT tree %s completed in %v", inst.Definition.Tree, elapsed.Round(time.Millisecond)))), bb.Outcome, diagnostic), nil) {
 				return
 			}
 		case a2a.TaskStateInputRequired:
 			msg := result
+			if agent.IsRateLimitCarryover(bb.Outcome) {
+				msg = failureEventMessage(inst.Definition.Tree, bb.Outcome, result, elapsed)
+			}
 			if msg == "" {
 				msg = fmt.Sprintf("BT tree %s awaiting input: %s (elapsed %v)", inst.Definition.Tree, bb.Outcome, elapsed.Round(time.Millisecond))
 			}
-			if !yield(a2a.NewStatusUpdateEvent(execCtx, a2a.TaskStateInputRequired,
-				a2a.NewMessage(a2a.MessageRoleAgent, a2a.NewTextPart(msg))), nil) {
+			if !yield(executionStatus(execCtx, a2a.TaskStateInputRequired,
+				a2a.NewMessage(a2a.MessageRoleAgent, a2a.NewTextPart(msg)), bb.Outcome, diagnostic), nil) {
 				return
 			}
 		default:
 			errMsg := failureEventMessage(inst.Definition.Tree, bb.Outcome, result, elapsed)
-			if !yield(a2a.NewStatusUpdateEvent(execCtx, state,
-				a2a.NewMessage(a2a.MessageRoleAgent, a2a.NewTextPart(errMsg))), nil) {
+			if !yield(executionStatus(execCtx, state,
+				a2a.NewMessage(a2a.MessageRoleAgent, a2a.NewTextPart(errMsg)), bb.Outcome, diagnostic), nil) {
 				return
 			}
 		}
@@ -249,18 +282,19 @@ func failureEventMessage(tree, outcome, result string, elapsed time.Duration) st
 // Cancel handles task cancellation.
 func (e *BTAgentExecutor) Cancel(ctx context.Context, execCtx *a2asrv.ExecutorContext) iter.Seq2[a2a.Event, error] {
 	return func(yield func(a2a.Event, error) bool) {
+		var historyErr error
 		if e.History != nil {
 			agentName, _ := ctx.Value(agentNameKey{}).(string)
 			if agentName == "" {
 				agentName = execCtx.ContextID
 			}
 			if agentName != "" {
-				_ = e.History.Record(agent.RunRecord{AgentName: agentName, Outcome: "cancelled"})
+				historyErr = e.History.Record(agent.RunRecord{AgentName: agentName, Outcome: "cancelled"})
 			}
 		}
 
-		if !yield(a2a.NewStatusUpdateEvent(execCtx, a2a.TaskStateCanceled,
-			a2a.NewMessage(a2a.MessageRoleAgent, a2a.NewTextPart("task cancelled by client"))), nil) {
+		if !yield(executionStatus(execCtx, a2a.TaskStateCanceled,
+			a2a.NewMessage(a2a.MessageRoleAgent, a2a.NewTextPart("task cancelled by client")), "cancelled", historyErr), nil) {
 			return
 		}
 	}
@@ -506,6 +540,7 @@ func (s *Server) handleAgentEndpoint(w http.ResponseWriter, r *http.Request) {
 
 	card, ok := cards[agentName]
 	if !ok {
+		w.Header().Set(reliability.ExecutionAdmissionHeader, "false")
 		http.Error(w, fmt.Sprintf(`{"error":"agent %q not found"}`, agentName), http.StatusNotFound)
 		return
 	}
@@ -517,6 +552,7 @@ func (s *Server) handleAgentEndpoint(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.APIKey == "" || subtle.ConstantTimeCompare([]byte(r.Header.Get("X-API-Key")), []byte(s.APIKey)) != 1 {
+		w.Header().Set(reliability.ExecutionAdmissionHeader, "false")
 		http.Error(w, "unauthorized: valid X-API-Key required", http.StatusUnauthorized)
 		return
 	}

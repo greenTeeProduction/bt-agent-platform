@@ -401,16 +401,20 @@ func (a *Auctioneer) RunAuction(ctx context.Context, ann TaskAnnouncement, candi
 	var result string
 	dispatchErr := policy.ExecuteContext(dispatchCtx, func() error {
 		res, sendErr := a.transport.SendTask(dispatchCtx, winnerURL, ann.Description)
-		if sendErr != nil {
-			return sendErr
-		}
 		result = res
-		return nil
+		return sendErr
 	})
 	if dispatchErr != nil {
-		breaker.RecordFailureWithCategory(dispatchErr)
+		if reliability.IsExecutionPersistenceError(dispatchErr) || reliability.IsExecutionPause(reliability.ExecutionStopOutcome(dispatchErr), dispatchErr) {
+			breaker.RecordSuccess()
+		} else {
+			breaker.RecordFailureWithCategory(dispatchErr)
+		}
 		a.persistWinnerBreakerState()
 		wrapped := fmt.Errorf("a2a: dispatch task to winner %q: %w", award.WinnerName, dispatchErr)
+		if reliability.IsExecutionTerminalError(dispatchErr) {
+			return AuctionResult{Award: award, Result: result}, wrapped
+		}
 		// ExecuteContext's own "retry exhausted" wording marks the case where
 		// the failure was transient (retryable) but persisted past every
 		// retry attempt — as opposed to a "retry refused" non-retryable
@@ -533,14 +537,32 @@ var newAuctionCollector = func() BidCollector { return NewBTAgentClient() }
 // signature only carries the bare result string can still attribute the run
 // to the winning agent, e.g. for a follow-up History.Record call.
 func AuctionDelegate(task string, chainState map[string]any) (string, bool, error) {
+	return AuctionDelegateWithContext(context.Background(), task, chainState)
+}
+
+// AuctionDelegateWithContext is the production hook: the owning tree's budget
+// covers bid collection, retry admission, and winner execution.
+func AuctionDelegateWithContext(ctx context.Context, task string, chainState map[string]any) (string, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return "", false, err
+	}
 	ann := auctionAnnouncement(task, chainState)
 	candidates := auctionCandidates(ann, chainState)
 	if len(candidates) == 0 {
 		return "", false, nil // no candidates → fall back to delegate tree
 	}
 
-	res, err := NewPersistentAuctioneer(newAuctionCollector()).RunAuction(context.Background(), ann, candidates)
+	res, err := NewPersistentAuctioneer(newAuctionCollector()).RunAuction(ctx, ann, candidates)
+	if res.Award.WinnerName != "" && chainState != nil {
+		chainState["auction_award"] = res.Award
+	}
 	if err != nil {
+		if reliability.IsExecutionTerminalError(err) {
+			return res.Result, res.Award.WinnerName != "", err
+		}
+		if ctx.Err() != nil {
+			return "", false, ctx.Err()
+		}
 		if errors.Is(err, ErrNoEligibleBids) ||
 			errors.Is(err, ErrWinnerCircuitBreakerOpen) ||
 			errors.Is(err, ErrWinnerDispatchExhausted) {

@@ -15,6 +15,16 @@ type scopeFile struct {
 	Entries map[string]Entry `json:"entries"`
 }
 
+// NewPersistentManager publishes a default manager only after its persistent
+// namespace is initialized. Failure never returns an in-memory substitute.
+func NewPersistentManager(baseDir string) (*Manager, error) {
+	mgr := DefaultManager()
+	if err := mgr.EnablePersistence(baseDir); err != nil {
+		return nil, err
+	}
+	return mgr, nil
+}
+
 func (m *Manager) EnablePersistence(baseDir string) error {
 	if m == nil {
 		return fmt.Errorf("blackboard manager is nil")
@@ -125,6 +135,19 @@ func persistScope(path string, s *scopedStore) error {
 		return err
 	}
 	return os.Rename(tmp, path)
+}
+
+// commitScope runs under the owner's scope gate. Publish only after the atomic
+// file replacement succeeds; failed commits retain entries and byte accounting.
+func commitScope(path string, live, staged *scopedStore) error {
+	if err := persistScope(path, staged); err != nil {
+		return err
+	}
+	live.mu.Lock()
+	defer live.mu.Unlock()
+	live.entries = staged.entries
+	live.totalBytes = staged.totalBytes
+	return nil
 }
 
 func safeFilename(id string) string {

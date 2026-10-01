@@ -27,6 +27,9 @@ func BuildForEachTask(node *evolution.SerializableNode, bb *Blackboard) btcore.C
 			return -1
 		}
 		i, _ := chainStateInt(ctx.Blackboard, key)
+		if i < 0 || i >= len(run.Tasks) {
+			i = 0
+		}
 		for ; i < len(run.Tasks); i++ {
 			if run.Tasks[i].Status == "done" {
 				continue
@@ -41,6 +44,10 @@ func BuildForEachTask(node *evolution.SerializableNode, bb *Blackboard) btcore.C
 			}
 			// child SUCCESS: re-read run (child may have mutated it), loop continues
 			run, _ = getSuperpowersRun(ctx.Blackboard)
+			if run == nil {
+				ctx.Blackboard.Outcome = "ForEachTask: child removed the active run"
+				return -1
+			}
 		}
 		delete(ctx.Blackboard.ChainState, key)
 		delete(ctx.Blackboard.ChainState, "superpowers_task_index")

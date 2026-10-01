@@ -58,18 +58,26 @@ func (h *History) Record(r RunRecord) error {
 		r.EndedAt = time.Now()
 	}
 
-	h.byName[r.AgentName] = append(h.byName[r.AgentName], r)
-
 	// Persist
 	path := filepath.Join(h.dir, r.AgentName+".jsonl")
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
 		return fmt.Errorf("open history file: %w", err)
 	}
-	defer f.Close()
-
-	data, _ := json.Marshal(r)
-	_, _ = f.Write(append(data, '\n'))
+	data, err := json.Marshal(r)
+	if err != nil {
+		_ = f.Close()
+		return fmt.Errorf("marshal history record: %w", err)
+	}
+	_, writeErr := f.Write(append(data, '\n'))
+	closeErr := f.Close()
+	if writeErr != nil {
+		return fmt.Errorf("write history record: %w", writeErr)
+	}
+	if closeErr != nil {
+		return fmt.Errorf("close history file: %w", closeErr)
+	}
+	h.byName[r.AgentName] = append(h.byName[r.AgentName], r)
 	return nil
 }
 
@@ -97,6 +105,11 @@ func (h *History) Stats(agentName string) RunStats {
 	defer h.mu.RUnlock()
 
 	runs := h.byName[agentName]
+	return historyStats(agentName, runs)
+}
+
+// historyStats expects its caller to hold the history read lock.
+func historyStats(agentName string, runs []RunRecord) RunStats {
 	if len(runs) == 0 {
 		return RunStats{AgentName: agentName}
 	}
@@ -137,8 +150,8 @@ func (h *History) AllStats() map[string]RunStats {
 	defer h.mu.RUnlock()
 
 	result := make(map[string]RunStats)
-	for name := range h.byName {
-		result[name] = h.Stats(name)
+	for name, runs := range h.byName {
+		result[name] = historyStats(name, runs)
 	}
 	return result
 }

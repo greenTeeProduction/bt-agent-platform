@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/knowledge"
+	"github.com/nico/go-bt-evolve/internal/reliability"
 	"github.com/nico/go-bt-evolve/internal/tracing"
 )
 
@@ -211,8 +213,8 @@ func (s *Scheduler) Schedule(agentName, schedule string, timeout string, maxRetr
 				delete(s.jobs, id)
 			}
 		}
-		s.saveStateLocked()
-		return &ScheduledJob{ID: fmt.Sprintf("job_%s_on_demand", agentName), AgentName: agentName, Schedule: "on_demand", Active: false}, nil
+		persistErr := s.saveStateLocked()
+		return &ScheduledJob{ID: fmt.Sprintf("job_%s_on_demand", agentName), AgentName: agentName, Schedule: "on_demand", Active: false}, persistErr
 	}
 
 	// Dedup: if any job for this agent already exists, update the best one and
@@ -254,8 +256,7 @@ func (s *Scheduler) Schedule(agentName, schedule string, timeout string, maxRetr
 		keep.Timeout = timeout
 		keep.MaxRetries = maxRetries
 		keep.Active = true
-		s.saveStateLocked()
-		return keep, nil
+		return keep, s.saveStateLocked()
 	}
 
 	job := &ScheduledJob{
@@ -268,8 +269,7 @@ func (s *Scheduler) Schedule(agentName, schedule string, timeout string, maxRetr
 		Active:     true,
 	}
 	s.jobs[job.ID] = job
-	s.saveStateLocked()
-	return job, nil
+	return job, s.saveStateLocked()
 }
 
 // RunNow triggers an immediate run of an agent (bypasses schedule).
@@ -307,7 +307,7 @@ func (s *Scheduler) RunNow(agentName, task string, runner AgentRunner, timeout s
 	// Record history
 	if s.history != nil {
 		quality := recordedQuality(inst, outcome, output, res)
-		_ = s.history.Record(RunRecord{
+		historyErr := s.history.Record(RunRecord{
 			AgentName: agentName,
 			Task:      task,
 			Outcome:   outcome,
@@ -317,6 +317,14 @@ func (s *Scheduler) RunNow(agentName, task string, runner AgentRunner, timeout s
 			StartedAt: start,
 			EndedAt:   time.Now(),
 		})
+		if historyErr != nil {
+			diagnostic := fmt.Errorf("record run history: %w", historyErr)
+			if err == nil && IsHealthyOutcome(outcome) {
+				err = &reliability.ExecutionPersistenceError{Err: diagnostic}
+			} else {
+				err = errors.Join(err, diagnostic)
+			}
+		}
 	}
 
 	// Feed back into knowledge graph
@@ -466,8 +474,7 @@ func (s *Scheduler) RemoveJob(jobID string) error {
 	slog.Warn("scheduler: deleting job (RemoveJob call)",
 		"job_id", jobID, "agent", job.AgentName, "run_count", job.RunCount)
 	delete(s.jobs, jobID)
-	s.saveStateLocked()
-	return nil
+	return s.saveStateLocked()
 }
 
 func betterScheduledJob(candidate, current *ScheduledJob) bool {
@@ -642,7 +649,7 @@ func (s *Scheduler) ReconcileWithRegistry() {
 		bestByAgent[name] = job
 	}
 
-	s.saveStateLocked()
+	_ = s.saveStateLocked()
 }
 
 func (s *Scheduler) tick(runner AgentRunner) {
@@ -689,7 +696,7 @@ func (s *Scheduler) tick(runner AgentRunner) {
 				}
 				s.mu.Lock()
 				job.InFlight = false
-				s.saveStateLocked()
+				_ = s.saveStateLocked()
 				s.mu.Unlock()
 			}()
 			s.runJob(job, runner)
@@ -821,7 +828,7 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 		errStr = runErr.Error()
 	}
 	if s.history != nil {
-		_ = s.history.Record(RunRecord{
+		if historyErr := s.history.Record(RunRecord{
 			AgentName: job.AgentName,
 			Task:      runCtx.Task,
 			Outcome:   outcome,
@@ -831,7 +838,9 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 			Quality:   quality,
 			StartedAt: start,
 			EndedAt:   time.Now(),
-		})
+		}); historyErr != nil {
+			slog.Error("scheduler: history persistence failed after execution", "agent", job.AgentName, "outcome", outcome, "error", historyErr)
+		}
 	}
 
 	// One structured INFO line per scheduled cycle — the operationally useful
@@ -883,7 +892,7 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 		// no_change, degraded, and the rate-limit carryover — so a healthy
 		// cycle is never labeled FAILED in the operator-facing summary.
 		failureReason := ""
-		if runErr != nil {
+		if runErr != nil && !reliability.IsExecutionPause(outcome, runErr) {
 			failureReason = runErr.Error()
 		} else if !IsBreakerSuccess(outcome, runErr) {
 			failureReason = fmt.Sprintf("agent outcome: %s", outcome)
@@ -906,13 +915,14 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 			Source:  job.AgentName,
 			Message: fmt.Sprintf("%s: %s (%s)", job.AgentName, outcome, duration.Truncate(time.Second)),
 			Data: map[string]any{
-				"tree":           tree,
-				"task":           runCtx.Task,
-				"outcome":        outcome,
-				"duration":       duration.Truncate(time.Second).String(),
-				"failure_reason": failureReason,
-				"nodes":          nodesStr,
-				"build_revision": s.buildRevision,
+				"tree":                 tree,
+				"task":                 runCtx.Task,
+				"outcome":              outcome,
+				"duration":             duration.Truncate(time.Second).String(),
+				"failure_reason":       failureReason,
+				"execution_diagnostic": errorDetail(runErr),
+				"nodes":                nodesStr,
+				"build_revision":       s.buildRevision,
 				// Rendered verbatim by the bt-task-complete Telegram template
 				// as {data.summary} — the operator-facing "what did this run
 				// actually do" digest (headline, run/commit facts, step trail).
@@ -977,10 +987,17 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 // Genuine failures, errored runs, and healthy outcomes that still carried a
 // run error count against it.
 func IsBreakerSuccess(outcome string, runErr error) bool {
-	if IsRateLimitCarryover(outcome) {
+	if reliability.IsExecutionPause(outcome, runErr) {
 		return true
 	}
-	return runErr == nil && isHealthyOutcome(outcome)
+	return (runErr == nil || reliability.IsExecutionPersistenceError(runErr)) && isHealthyOutcome(outcome)
+}
+
+func errorDetail(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }
 
 // stepsFromChildTicks converts a run's terminal child ticks (engine.Blackboard.
@@ -1278,11 +1295,11 @@ func (s *Scheduler) saveState() {
 		return
 	}
 	s.mu.RLock()
+	defer s.mu.RUnlock()
 	jobs := make([]ScheduledJob, 0, len(s.jobs))
 	for _, j := range s.jobs {
 		jobs = append(jobs, *j)
 	}
-	s.mu.RUnlock()
 
 	if err := s.jobStore.Save(jobs); err != nil {
 		slog.Warn("scheduler: failed to persist jobs", "error", err)
@@ -1291,9 +1308,9 @@ func (s *Scheduler) saveState() {
 
 // saveStateLocked persists all jobs to the configured JobStore.
 // Caller MUST hold s.mu (write lock). Performs synchronous I/O.
-func (s *Scheduler) saveStateLocked() {
+func (s *Scheduler) saveStateLocked() error {
 	if s.jobStore == nil {
-		return
+		return nil
 	}
 	jobs := make([]ScheduledJob, 0, len(s.jobs))
 	for _, j := range s.jobs {
@@ -1301,7 +1318,9 @@ func (s *Scheduler) saveStateLocked() {
 	}
 	if err := s.jobStore.Save(jobs); err != nil {
 		slog.Warn("scheduler: failed to persist jobs", "error", err)
+		return fmt.Errorf("persist scheduler jobs: %w", err)
 	}
+	return nil
 }
 
 // loadState restores jobs from the configured JobStore.

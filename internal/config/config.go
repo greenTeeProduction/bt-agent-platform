@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/hitl"
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 // Config holds all runtime configuration for the BT platform.
@@ -109,7 +110,7 @@ type HITLSettings struct {
 // PathConfig provides resolved file paths for all BT platform components.
 // Use cfg.ResolvePaths() to populate from env vars or defaults.
 type PathConfig struct {
-	HomeDir        string `json:"home_dir"`     // ~/.bt-agent/ or BT_HOME
+	HomeDir        string `json:"home_dir"`     // ~/.go-bt-evolve or configured platform root
 	ConfigFile     string `json:"config_file"`  // config.yaml
 	DBFile         string `json:"db_file"`      // agents.db
 	DLQFile        string `json:"dlq_file"`     // dead_letter_queue.json
@@ -122,21 +123,7 @@ type PathConfig struct {
 // ResolvePaths populates cfg.Paths from env vars (BT_HOME, BT_CONFIG_FILE, etc.)
 // with sensible defaults. Call after Load().
 func (c *Config) ResolvePaths() {
-	home := os.Getenv("BT_AGENT_HOME")
-	if home == "" {
-		home = os.Getenv("BT_HOME")
-	}
-	if home == "" {
-		if c.AgentDefsDir != "" {
-			home = filepath.Dir(c.AgentDefsDir)
-		} else {
-			userHome, err := os.UserHomeDir()
-			if err != nil || userHome == "" {
-				userHome = os.Getenv("HOME")
-			}
-			home = filepath.Join(userHome, ".go-bt-evolve")
-		}
-	}
+	home := util.PlatformHome(c.AgentDefsDir)
 	c.Paths.HomeDir = home
 
 	c.Paths.ConfigFile = c.ConfigFile
@@ -146,10 +133,7 @@ func (c *Config) ResolvePaths() {
 	c.Paths.DBFile = filepath.Join(home, "agents.db")
 	c.Paths.DLQFile = filepath.Join(home, "dead_letter_queue.json")
 	c.Paths.TemplateDir = filepath.Join(home, "agents", "templates")
-	c.Paths.ReflectionsDir = c.ReflectionsDir
-	if c.Paths.ReflectionsDir == "" {
-		c.Paths.ReflectionsDir = filepath.Join(home, "reflections")
-	}
+	c.Paths.ReflectionsDir, _ = c.SharedReflectionsDir()
 	c.Paths.HistoryDir = c.HistoryDir
 	if c.Paths.HistoryDir == "" {
 		c.Paths.HistoryDir = filepath.Join(home, "history")

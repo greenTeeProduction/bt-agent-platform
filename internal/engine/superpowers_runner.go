@@ -89,6 +89,9 @@ func (r execClaudeRunner) buildClaudeArgs(prompt string) []string {
 }
 
 func (r execClaudeRunner) RunClaude(ctx context.Context, repoDir string, prompt string) CommandResult {
+	if codexOnlyDelegation() {
+		return CommandResult{Provider: DelegationProviderClaude, Dir: repoDir, Err: fmt.Errorf("claude execution disabled by codex-only policy")}
+	}
 	isolatedDir, isolatedPrompt, cleanup, err := isolateProductionExploration(ctx, repoDir, prompt)
 	if err != nil {
 		return CommandResult{Dir: repoDir, Err: err}
