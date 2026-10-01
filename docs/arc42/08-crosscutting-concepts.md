@@ -403,7 +403,8 @@ repeated passing RED tests do not establish delivery. A research goal with repea
 passing RED commands is held for review rather than awarded completion credit.
 The older program-milestone RED-precheck path still needs separate reconciliation.
 
-The ledger uses rooted atomic JSON and a five-second transaction lock. Legacy
+The ledger uses rooted atomic JSON and a five-second transaction lock. An empty
+existing ledger is corrupt evidence, not a fresh missing store. Legacy
 knowledge/budget and Superpowers journal saves now reject stale snapshots under the same bounded locking
 convention instead of overwriting sibling evidence. New code-delivery attempts
 journal pending attribution before applying code. Preflight repairs pending

@@ -112,3 +112,23 @@ func TestDefaultKnowledgePathUsesConfiguredHome(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+func TestTraceRejectsEmptyExistingJournal(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "trace.json")
+	if err := os.WriteFile(path, []byte{}, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := OpenTraces(path, ""); err == nil {
+		t.Fatal("empty existing journal accepted as a new store")
+	}
+	if err := UpdateTraces(context.Background(), path, "", func(s *TraceStore) error {
+		s.Observe(Key("new"), "new", "review", "new")
+		return nil
+	}); err == nil {
+		t.Fatal("empty evidence was overwritten")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil || len(data) != 0 {
+		t.Fatalf("empty corruption evidence not retained: %q %v", data, err)
+	}
+}

@@ -68,7 +68,7 @@ func TracePath(knowledgePath, user string) string {
 
 func decodeTraces(data []byte, user string) (*TraceStore, error) {
 	s := &TraceStore{}
-	if len(data) != 0 {
+	if data != nil {
 		if err := json.Unmarshal(data, s); err != nil {
 			return nil, fmt.Errorf("research trace is corrupt: %w", err)
 		}

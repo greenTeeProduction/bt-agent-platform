@@ -1,5 +1,5 @@
 {
-  "status": "ready_for_commit",
+  "status": "verified_delivery_increment_with_empty_journal_followup",
   "base_commit": "7cba6c599e4b0b1cee47f290d2afe212ec04aec5",
   "pr83_remote_head": "af780cdbf4745432b4b3a2d890a9c9e88443237e",
   "scope": "research source / verified code delivery / review separation; no runtime adoption or measured impact claim",
@@ -15,12 +15,14 @@
     "focused_after_fixture_fixes": "passed",
     "research_engine_cmd_race_before_final_journal_CAS": "passed",
     "docs": "passed",
-    "final_checks": "normal commit hook required; final result retained in workspace checkpoint",
+    "final_checks": "final followup commit hook recorded in workspace checkpoint",
     "focused_final_race": "passed: research, engine, cmd/bt-agent",
     "journal_CAS_short": "passed: engine, cmd/bt-agent",
     "complete_fixture_git_bundle": "verified; full history retained",
     "changed_package_lint": "passed: 0 issues for research, engine and cmd/bt-agent",
-    "graph": "updated: 33180 nodes, 42858 edges"
+    "graph": "updated: 33180 nodes, 42858 edges",
+    "delivery_commit_hook": "passed: full vet, tidy, docs, 44 CI Doctor checks, configured full short tests",
+    "empty_existing_journal": "passed: rejected for both read and update; research race suite passed"
   },
   "limits": [
     "recorded verification is not an isolated build attestation",
@@ -37,5 +39,6 @@
     "receipt": "real-git-trace.json",
     "git_objects": "real-git-trace.json.bundle",
     "run": "real-git-trace.json.run.json"
-  }
+  },
+  "delivery_commit": "91d61b1b5dc61bc2a417e4218df1922f744fc030"
 }
