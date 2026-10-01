@@ -125,3 +125,28 @@ do not prove provider readiness or end-user identity. Non-Linux control safely
 defers. Accepted but ineffective supervision retains the seal until operator
 restart. P2: retention, operator recovery reconciliation, ignored metric writes,
 remaining schemas/transports, power/volume loss and numeric RPO/RTO remain open.
+
+
+## Final-head directory permission correction
+
+`1127c804e7c8cc90c9fa3012c518b8e9f2fcf042` preserved all Go/dependency bytes
+from the qualified `26935480` implementation, but its actual separate
+[gosec 110342342627](https://github.com/greenTeeProduction/bt-agent-platform/runs/110342342627)
+failed with one further existing G301 annotation in `ApplySchedule`.
+[That annotation](github-evidence-failed-annotations.json) and
+[actual head checks](github-evidence-before.json) are retained; source
+equivalence did not establish final-head acceptance. New jobs directories now
+use 0750 instead of 0755, without chmodding existing host directories.
+
+[Permission source manifest](permission-snapshot.json),
+[complete Go identity](permission-code.json), [scheduler/restart race](permission-race.log),
+[build gates](permission-build.log), [documentation](permission-docs.log) and
+[scanner summary](permission-summary.json) qualify this final small correction
+separately. Local scanner acceptance remains separate from GitHub. Final-head
+check identities and clean committed artifact metadata are retained in the
+private `github-final.json` / `clean-final-artifact.json` and on PR #83 after
+those checks complete; this report does not infer an unobserved outcome.
+Canonical permission payload SHA-256:
+`8f208864c5a7b0c209c482bed95c8e1516e855b73badb82869dcd5d5ee138c6e`.
+The local scan has 252 baseline findings; `-no-fail` is not clean acceptance.
+All preceding snapshot/operational scopes and goal statuses remain as stated.

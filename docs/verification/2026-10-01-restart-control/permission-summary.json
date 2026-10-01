@@ -1,0 +1,22 @@
+{
+  "command": "GOFLAGS=-p=2 gosec -no-fail -fmt sarif -out <private>/permission-medium.sarif -severity medium ./...",
+  "exit_code": 0,
+  "previous_findings": 253,
+  "qualification": "Actual scheduler G301 annotation removed locally. Baseline remains; -no-fail exit zero is not a clean scan or GitHub acceptance.",
+  "raw_private_sha256": "532d96a1d8fee640ec72e50e4f4364e679054580fe3297385d10b07ca797bbdf",
+  "remaining_findings": 252,
+  "rules": {
+    "G115": 15,
+    "G124": 4,
+    "G204": 23,
+    "G301": 53,
+    "G302": 11,
+    "G304": 64,
+    "G306": 55,
+    "G401": 1,
+    "G404": 12,
+    "G505": 1,
+    "G703": 12,
+    "G704": 1
+  }
+}

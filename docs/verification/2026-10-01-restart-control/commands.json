@@ -58,6 +58,32 @@
       "qualification": "No Go/dependency differences; exact corrected code identity preserved."
     }
   ],
+  "final_permission_commands": [
+    {
+      "command": "GOFLAGS=-p=2 go test -short -count=1 -race ./internal/agent",
+      "evidence": "permission-race.log",
+      "exit_code": 0,
+      "qualification": "Includes scheduler independent-process restart regressions."
+    },
+    {
+      "command": "GOFLAGS=-p=2 make build BIN_DIR=<private>/permission-bin",
+      "evidence": "permission-build.log",
+      "exit_code": 0,
+      "qualification": "Vet/fmt/tidy/zero-issue lint/local high-security/13 binaries/AST graph; hashes in permission-binaries.json."
+    },
+    {
+      "command": "python3 scripts/test_check_arc42.py then bash scripts/check-doc-drift.sh (only on success)",
+      "evidence": "permission-docs.log",
+      "exit_code": 0,
+      "fixtures": 11
+    },
+    {
+      "command": "GOFLAGS=-p=2 gosec -no-fail -fmt sarif -out <private>/permission-medium.sarif -severity medium ./...",
+      "evidence": "permission-summary.json",
+      "exit_code": 0,
+      "qualification": "252 baseline findings; not a clean scan."
+    }
+  ],
   "fixture_environment": {
     "BT_AGENT_HOME": "<private-fixture>",
     "BT_SKIP_LLM_TESTS": "1",

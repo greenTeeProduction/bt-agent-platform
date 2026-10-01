@@ -574,7 +574,7 @@ func ApplySchedule(reg *Registry, agentName, schedule, timeout string, maxRetrie
 	if maxRetries <= 0 {
 		maxRetries = 3
 	}
-	if err := os.MkdirAll(JobsDir(), 0755); err != nil {
+	if err := os.MkdirAll(JobsDir(), 0o750); err != nil {
 		return nil, fmt.Errorf("create jobs dir: %w", err)
 	}
 	store := NewFileJobStore(SchedulerJobsFile())
