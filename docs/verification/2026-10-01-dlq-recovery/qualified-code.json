@@ -1,0 +1,9 @@
+{
+  "base_commit": "7da5b8a7f20846d3ca9806fcb85f4c433600dcf8",
+  "complete_go_dependencies_sha256": "0f6deaa76b36d7c69aef94d0ffbeba5d79d8ffff1a4a710ffbbb57eaf50adaa3",
+  "files": 1061,
+  "full_race_exit_code": 0,
+  "implementation_commit": "0017825211f90d6bc8a2d24715b58496474c9fd2",
+  "qualification": "Final full short race with atomic coverage passed against this exact complete Go/dependency snapshot; final focused consumers and all build gates passed. Hosted final-head checks must be observed separately.",
+  "total_statement_coverage": "77.9%"
+}

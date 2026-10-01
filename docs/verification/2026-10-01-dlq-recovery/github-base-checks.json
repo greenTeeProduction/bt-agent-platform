@@ -1,0 +1,78 @@
+{
+  "head": "7da5b8a7f20846d3ca9806fcb85f4c433600dcf8",
+  "scope": "Predecessor checks, not current DLQ acceptance",
+  "checks": [
+    {
+      "name": "Release",
+      "id": 110346488826,
+      "head": "7da5b8a7f20846d3ca9806fcb85f4c433600dcf8",
+      "status": "completed",
+      "conclusion": "skipped",
+      "url": "https://github.com/greenTeeProduction/bt-agent-platform/actions/runs/36855008435/job/110346488826",
+      "summary": null
+    },
+    {
+      "name": "gosec",
+      "id": 110346131459,
+      "head": "7da5b8a7f20846d3ca9806fcb85f4c433600dcf8",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/greenTeeProduction/bt-agent-platform/runs/110346131459",
+      "summary": "[View all branch alerts](/greenTeeProduction/bt-agent-platform/security/code-scanning?query=pr%3A83+tool%3Agosec+is%3Aopen)."
+    },
+    {
+      "name": "CodeQL",
+      "id": 110345967920,
+      "head": "7da5b8a7f20846d3ca9806fcb85f4c433600dcf8",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/greenTeeProduction/bt-agent-platform/runs/110345967920",
+      "summary": "### New alerts in code changed by this pull request\n\nSecurity Alerts:\n * 5 medium\n\n\n_Alerts not introduced by this pull request might have been detected because the code changes were too large._\n\nSee annotations below for details.\n\n[View all branch alerts](/greenTeeProduction/bt-agent-platform/security/code-scanning?query=pr%3A83+tool%3ACodeQL+is%3Aopen)."
+    },
+    {
+      "name": "Analyze (go)",
+      "id": 110345304431,
+      "head": "7da5b8a7f20846d3ca9806fcb85f4c433600dcf8",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/greenTeeProduction/bt-agent-platform/actions/runs/36855008491/job/110345304431",
+      "summary": null
+    },
+    {
+      "name": "Build",
+      "id": 110345304345,
+      "head": "7da5b8a7f20846d3ca9806fcb85f4c433600dcf8",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/greenTeeProduction/bt-agent-platform/actions/runs/36855008435/job/110345304345",
+      "summary": null
+    },
+    {
+      "name": "Lint",
+      "id": 110345304163,
+      "head": "7da5b8a7f20846d3ca9806fcb85f4c433600dcf8",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/greenTeeProduction/bt-agent-platform/actions/runs/36855008435/job/110345304163",
+      "summary": null
+    },
+    {
+      "name": "Security Scan",
+      "id": 110345304131,
+      "head": "7da5b8a7f20846d3ca9806fcb85f4c433600dcf8",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/greenTeeProduction/bt-agent-platform/actions/runs/36855008435/job/110345304131",
+      "summary": null
+    },
+    {
+      "name": "Test (short)",
+      "id": 110345303928,
+      "head": "7da5b8a7f20846d3ca9806fcb85f4c433600dcf8",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/greenTeeProduction/bt-agent-platform/actions/runs/36855008435/job/110345303928",
+      "summary": null
+    }
+  ]
+}

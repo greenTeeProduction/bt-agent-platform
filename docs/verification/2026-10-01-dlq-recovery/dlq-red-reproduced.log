@@ -1,0 +1,15 @@
+--- FAIL: TestDLQReplaySurvivesIndependentRestarts (0.89s)
+    --- FAIL: TestDLQReplaySurvivesIndependentRestarts/successful-record-failure (0.33s)
+        dlq_restart_safety_test.go:71: action count after two independent restarts = 2, want 1; evidence=2139471
+            2139478
+    --- FAIL: TestDLQReplaySurvivesIndependentRestarts/uncertain-record-failure (0.10s)
+        dlq_restart_safety_test.go:71: action count after two independent restarts = 2, want 1; evidence=2139519
+            2139526
+    --- FAIL: TestDLQReplaySurvivesIndependentRestarts/exit-after-action (0.35s)
+        dlq_restart_safety_test.go:71: action count after two independent restarts = 2, want 1; evidence=2139553
+            2139576
+    --- FAIL: TestDLQReplaySurvivesIndependentRestarts/admission-failure (0.11s)
+        dlq_restart_safety_test.go:60: failed admission dispatched action: 2139595
+FAIL
+FAIL	github.com/nico/go-bt-evolve/internal/reliability	1.020s
+FAIL

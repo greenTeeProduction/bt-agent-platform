@@ -1,0 +1,7 @@
+{
+  "sha256": "27a2302f12b3881168d5f7300ca85664a50e1ae765556ab0dfd8e104358f2ffc",
+  "red_base": "7da5b8a7f20846d3ca9806fcb85f4c433600dcf8",
+  "red_exit": 1,
+  "green_exit": 0,
+  "method": "same exact fixture via Go overlay; baseline reliability.go and original reliability_test.go; new owner and transaction tests blanked only for red compilation. No source file mutated by overlay. Green overlays only the same fixture on final code."
+}

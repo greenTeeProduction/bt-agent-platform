@@ -1,0 +1,5 @@
+ok  	github.com/nico/go-bt-evolve/internal/reliability	20.768s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-agent	8.384s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-dashboard	1.348s
+ok  	github.com/nico/go-bt-evolve/internal/engine	3.246s
+ok  	github.com/nico/go-bt-evolve/internal/api	1.246s [no tests to run]

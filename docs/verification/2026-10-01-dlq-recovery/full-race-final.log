@@ -1,0 +1,47 @@
+ok  	github.com/nico/go-bt-evolve/cmd/benchcmp	1.101s	coverage: 82.0% of statements
+ok  	github.com/nico/go-bt-evolve/cmd/bt-agent	18.983s	coverage: 55.1% of statements
+ok  	github.com/nico/go-bt-evolve/cmd/bt-agent-cli	3.181s	coverage: 8.9% of statements
+ok  	github.com/nico/go-bt-evolve/cmd/bt-assistant	1.115s	coverage: 42.6% of statements
+ok  	github.com/nico/go-bt-evolve/cmd/bt-ci-doctor	1.065s	coverage: 89.7% of statements
+ok  	github.com/nico/go-bt-evolve/cmd/bt-dashboard	15.190s	coverage: 66.0% of statements
+ok  	github.com/nico/go-bt-evolve/cmd/bt-docgen	1.089s	coverage: 42.0% of statements
+ok  	github.com/nico/go-bt-evolve/cmd/bt-evaluator	1.076s	coverage: 46.8% of statements
+ok  	github.com/nico/go-bt-evolve/cmd/bt-gardener	2.395s	coverage: 20.9% of statements
+ok  	github.com/nico/go-bt-evolve/cmd/bt-langagent	1.141s	coverage: 43.1% of statements
+	github.com/nico/go-bt-evolve/cmd/bt-notebooklm-auth		coverage: 0.0% of statements
+ok  	github.com/nico/go-bt-evolve/cmd/bt-scalability-probe	1.119s	coverage: 63.3% of statements
+ok  	github.com/nico/go-bt-evolve/cmd/bt-security-probe	1.106s	coverage: 77.1% of statements
+ok  	github.com/nico/go-bt-evolve/cmd/bt-tree-integration	1.083s	coverage: 53.6% of statements
+ok  	github.com/nico/go-bt-evolve/internal/a2a	3.187s	coverage: 88.2% of statements
+ok  	github.com/nico/go-bt-evolve/internal/agent	25.576s	coverage: 81.8% of statements
+ok  	github.com/nico/go-bt-evolve/internal/agentexec	2.272s	coverage: 84.3% of statements
+ok  	github.com/nico/go-bt-evolve/internal/api	1.416s	coverage: 95.0% of statements
+	github.com/nico/go-bt-evolve/internal/audit		coverage: 0.0% of statements
+ok  	github.com/nico/go-bt-evolve/internal/benchmark	1.910s	coverage: 86.1% of statements
+ok  	github.com/nico/go-bt-evolve/internal/blackboard	4.713s	coverage: 84.3% of statements
+ok  	github.com/nico/go-bt-evolve/internal/blocks	1.232s	coverage: 68.9% of statements
+ok  	github.com/nico/go-bt-evolve/internal/cicd	1.189s	coverage: 90.5% of statements
+ok  	github.com/nico/go-bt-evolve/internal/config	8.487s	coverage: 91.9% of statements
+ok  	github.com/nico/go-bt-evolve/internal/dashboard	7.022s	coverage: 80.7% of statements
+ok  	github.com/nico/go-bt-evolve/internal/domains	8.175s	coverage: 89.2% of statements
+ok  	github.com/nico/go-bt-evolve/internal/doormate	1.141s	coverage: 84.8% of statements
+ok  	github.com/nico/go-bt-evolve/internal/engine	103.166s	coverage: 78.4% of statements
+ok  	github.com/nico/go-bt-evolve/internal/evaluator	1.447s	coverage: 71.5% of statements
+ok  	github.com/nico/go-bt-evolve/internal/evolution	61.529s	coverage: 82.1% of statements
+ok  	github.com/nico/go-bt-evolve/internal/factory	1.117s	coverage: 83.5% of statements
+ok  	github.com/nico/go-bt-evolve/internal/fusion	1.786s	coverage: 81.9% of statements
+ok  	github.com/nico/go-bt-evolve/internal/gardener	2.342s	coverage: 88.6% of statements
+ok  	github.com/nico/go-bt-evolve/internal/goap	1.559s	coverage: 89.2% of statements
+ok  	github.com/nico/go-bt-evolve/internal/hitl	4.732s	coverage: 84.6% of statements
+ok  	github.com/nico/go-bt-evolve/internal/knowledge	27.150s	coverage: 92.9% of statements
+ok  	github.com/nico/go-bt-evolve/internal/llm	21.087s	coverage: 60.3% of statements
+ok  	github.com/nico/go-bt-evolve/internal/notebooklmauth	22.506s	coverage: 70.0% of statements
+ok  	github.com/nico/go-bt-evolve/internal/persona	1.143s	coverage: 78.7% of statements
+ok  	github.com/nico/go-bt-evolve/internal/reliability	38.378s	coverage: 86.3% of statements
+ok  	github.com/nico/go-bt-evolve/internal/research	1.341s	coverage: 69.3% of statements
+ok  	github.com/nico/go-bt-evolve/internal/security	7.254s	coverage: 92.7% of statements
+ok  	github.com/nico/go-bt-evolve/internal/startup	2.040s	coverage: 94.3% of statements
+	github.com/nico/go-bt-evolve/internal/startup/companies		coverage: 0.0% of statements
+ok  	github.com/nico/go-bt-evolve/internal/thinktank	1.106s	coverage: 79.9% of statements
+ok  	github.com/nico/go-bt-evolve/internal/tracing	1.055s	coverage: 90.0% of statements
+ok  	github.com/nico/go-bt-evolve/internal/util	1.062s	coverage: 68.7% of statements
