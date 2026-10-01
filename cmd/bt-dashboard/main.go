@@ -1386,7 +1386,10 @@ func handleDLQ(w http.ResponseWriter, r *http.Request) {
 
 	// The executor process mutates the shared file as it replays; reload so
 	// the panel lists the current queue, not this process's boot-time view.
-	dlq.Reload()
+	if err := dlq.ReloadWithError(); err != nil {
+		writeDLQError(w, err)
+		return
+	}
 	entries := dlq.List()
 	resp := map[string]any{
 		"count":      len(entries),
@@ -1418,15 +1421,9 @@ func handleDLQReplay(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Reload from disk so we requeue against the executor's latest view rather
-	// than a stale in-memory copy that could clobber concurrent changes.
-	dlq.Reload()
-
-	entry, ok := dlq.Requeue(id)
-	if !ok {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotFound)
-		_ = encodeJSON(w, map[string]string{"error": "entry not found", "id": id})
+	entry, err := dlq.RequeueWithError(id)
+	if err != nil {
+		writeDLQError(w, err)
 		return
 	}
 
@@ -1446,15 +1443,33 @@ func handleDLQPurge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	count := dlq.Len()
-	dlq.Purge()
+	count, err := dlq.PurgeWithError()
+	if err != nil {
+		writeDLQError(w, err)
+		return
+	}
 	resp := map[string]any{
 		"status":  "purged",
 		"removed": count,
-		"pending": 0,
+		"pending": dlq.Len(),
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = encodeJSON(w, resp)
+}
+
+func writeDLQError(w http.ResponseWriter, err error) {
+	status, message := http.StatusServiceUnavailable, "dead letter storage unavailable"
+	if errors.Is(err, reliability.ErrDeadLetterNotFound) {
+		status, message = http.StatusNotFound, "entry not found"
+	} else if errors.Is(err, reliability.ErrReplayRecovery) {
+		status, message = http.StatusConflict, "entry requires explicit recovery reconciliation"
+	} else if errors.Is(err, reliability.ErrReplayExhausted) {
+		status, message = http.StatusConflict, "entry abandoned or replay attempts exhausted"
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set(reliability.ExecutionAdmissionHeader, "false")
+	w.WriteHeader(status)
+	_ = encodeJSON(w, map[string]string{"error": message})
 }
 
 // handleOpenAPI serves the OpenAPI 3.0 specification for the dashboard API.

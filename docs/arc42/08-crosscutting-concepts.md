@@ -248,8 +248,17 @@ and `degraded` are not equivalent to an implemented change, even where
 they count as breaker success. Retrying model/auth configuration errors
 without changing configuration cannot repair them.
 
-File-backed DLQ replay reloads cross-process state before picking up replay
-requests. Provider cooldown is separate from per-agent circuit breaking
+File-backed DLQ mutations read current disk membership under a three-second
+sidecar lock budget, apply only their delta, atomically replace, then publish
+cache state (ADR-280). Lock/write/read failure never authorizes an unlocked
+write or successful acknowledgement. Read-only consumers reload with error
+handling. Replay persists a random exact claim before dispatch; interrupted,
+unrecorded or typed terminal execution is held indefinitely. Ordinary requeue,
+scanner, purge and capacity eviction cannot clear it, and stale cooperating
+writers cannot resurrect a removed entry. Unreadable/invalid state is preserved
+in place and closes admission until explicit repair. The legacy void wrappers
+are not acknowledgement APIs. In-memory queues have no restart guarantee;
+mixed legacy writers, volume/power loss and operator transport remain open. Provider cooldown is separate from per-agent circuit breaking
 (§8.19). Panic recovery is not automatic goroutine restart; code that
 recovers outside a ticker loop can still lose that background activity.
 

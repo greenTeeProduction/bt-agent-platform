@@ -27,6 +27,7 @@ runtime details in §§5–8 and decision history in [§9](09-decisions.md).
 | **Completed workflow prefix** | Healthy child work already performed before the surrounding workflow/container stopped. A typed partial stop prevents automatic replay of that prefix; no rollback or durable resume is implied (ADR-270). |
 | **Condition** | A behavior-tree leaf that tests state and returns success/failure without selecting a new architecture policy. |
 | **Crisis Detector** | Evolution component identifying stagnation/diversity symptoms that can trigger configured recovery interventions. |
+| **DLQ replay claim** | Durable exact attempt identity committed before replay dispatch. It survives process exit and cannot expire or be removed by ordinary maintenance; trusted reconciliation requires quiescence and outcome evidence (ADR-280). |
 | **Dead Letter Queue (DLQ)** | Persistent failed-work records retained for inspection and replay. Insertion, retryability and retention are caller/policy-specific. |
 | **DefaultTree** | The platform's general fallback tree. A failed generated-tree lookup must not be confused with successful execution of the requested tree. |
 | **Deferred Outcome** | An expected pause, such as provider quota carryover, recorded separately from ordinary success/failure. Scheduler behavior is defined in [§6.4](06-runtime-view.md#64-self-improvement-cycle-goap-fusion-loop). |

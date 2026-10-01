@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -2277,9 +2278,9 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 
-	// ─── DEAD LETTER QUEUE (drop-safe replay, c8094002 ms3) ───────────────
+	// ─── DEAD LETTER QUEUE (durable replay admission) ───────────────
 
-	server.RegisterTool("bt_dlq_list", "List retained dead-letter entries (failed agent runs kept for inspection and drop-safe replay): id, agent, task, error, category, attempts, requeue/abandon state",
+	server.RegisterTool("bt_dlq_list", "List retained dead-letter entries (failed agent runs kept for inspection and recovery-fenced replay): id, agent, task, error, category, attempts, requeue/abandon state",
 		map[string]engine.Property{
 			"limit": {Type: "integer", Description: "Maximum entries to return, newest last (default: 50)"},
 		},
@@ -2295,7 +2296,9 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			if params.Limit <= 0 {
 				params.Limit = 50
 			}
-			engine.TaskDLQ.Reload()
+			if err := engine.TaskDLQ.ReloadWithError(); err != nil {
+				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: `{"error":"dead letter storage unavailable"}`}}}
+			}
 			entries := engine.TaskDLQ.List()
 			total := len(entries)
 			if len(entries) > params.Limit {
@@ -2304,14 +2307,17 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			out := make([]map[string]any, 0, len(entries))
 			for _, e := range entries {
 				item := map[string]any{
-					"id":        e.ID,
-					"agent":     e.Agent,
-					"task":      truncateDLQField(e.Task, 140),
-					"error":     truncateDLQField(e.Error, 200),
-					"category":  e.Category,
-					"attempts":  e.Attempts,
-					"failed_at": e.FailedAt,
-					"abandoned": e.Abandoned,
+					"id":                e.ID,
+					"agent":             e.Agent,
+					"task":              truncateDLQField(e.Task, 140),
+					"error":             truncateDLQField(e.Error, 200),
+					"category":          e.Category,
+					"attempts":          e.Attempts,
+					"failed_at":         e.FailedAt,
+					"abandoned":         e.Abandoned,
+					"replay_in_flight":  e.ReplayInFlight,
+					"recovery_required": e.RecoveryRequired,
+					"recovery_reason":   e.RecoveryReason,
 				}
 				if !e.RequeuedAt.IsZero() {
 					item["requeued_at"] = e.RequeuedAt
@@ -2322,7 +2328,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 
-	server.RegisterTool("bt_dlq_replay", "Requeue a dead-letter entry for drop-safe re-execution — the entry is removed only after the replay succeeds. wait=true replays synchronously through this instance's executor and reports the outcome; otherwise the daemon's background scan consumes the requeue flag",
+	server.RegisterTool("bt_dlq_replay", "Requeue an unclaimed dead-letter entry; recovery-held work cannot be retried. Durable admission precedes execution and removal follows recorded success. wait=true replays synchronously through this instance's executor and reports the outcome; otherwise the daemon's background scan consumes the requeue flag",
 		map[string]engine.Property{
 			"id":   {Type: "string", Description: "DLQ entry id"},
 			"wait": {Type: "boolean", Description: "Replay synchronously and report the outcome (default: false)"},
@@ -2338,36 +2344,30 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			}
 			_ = json.Unmarshal(args, &params)
 			result := map[string]any{}
-			// Requeue merge-saves from this instance's in-memory view; reload
-			// first so sibling stamps on the shared file aren't overwritten
-			// with stale state.
-			engine.TaskDLQ.Reload()
-			if _, ok := engine.TaskDLQ.Requeue(params.ID); !ok {
+			_, requeueErr := engine.TaskDLQ.RequeueWithError(params.ID)
+			if requeueErr != nil {
 				result["requeued"] = false
-				result["reason"] = "unknown id, abandoned entry, or replay attempts exhausted"
+				result["reason"] = requeueErr.Error()
+				result["recovery_required"] = errors.Is(requeueErr, reliability.ErrReplayRecovery)
 				data, _ := json.Marshal(result)
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 			}
 			result["requeued"] = true
 			if params.Wait {
-				if entry, ok := engine.TaskDLQ.Replay(params.ID); ok {
-					result["replayed"] = true
+				entry, replayErr := engine.TaskDLQ.ReplayWithError(params.ID)
+				result["replayed"] = replayErr == nil
+				result["execution_completed"] = replayErr == nil || (reliability.IsExecutionPersistenceError(replayErr) && !reliability.IsExecutionUncertainError(replayErr) && !reliability.IsExecutionStoppedError(replayErr))
+				if entry != nil {
 					result["agent"] = entry.Agent
-				} else {
-					result["replayed"] = false
-					result["reason"] = "replay did not succeed (executor missing in this instance, or the task failed again); entry retained"
-					// A failed attempt stamps LastReplayError on the retained
-					// entry; surface it so the caller sees the actual failure
-					// instead of the ambiguous canned reason. No stamp means
-					// the executor was missing and no attempt ran.
-					for _, e := range engine.TaskDLQ.List() {
-						if e.ID == params.ID && e.LastReplayError != "" {
-							result["reason"] = "replay failed again; entry retained"
-							result["last_replay_error"] = e.LastReplayError
-							result["last_replay_at"] = e.LastReplayAt.Format(time.RFC3339)
-							break
-						}
+					result["recovery_required"] = entry.RecoveryRequired
+					if entry.LastReplayError != "" {
+						result["last_replay_error"] = entry.LastReplayError
+						result["last_replay_at"] = entry.LastReplayAt.Format(time.RFC3339)
 					}
+				}
+				if replayErr != nil {
+					result["reason"] = replayErr.Error()
+					result["error_kind"] = reliability.ExecutionErrorKind(replayErr)
 				}
 			} else {
 				result["note"] = "the daemon's background scan will replay this entry"

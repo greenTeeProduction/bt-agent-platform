@@ -1079,19 +1079,23 @@ func DashboardRoutes() []Route {
 			JSONResponse(200, "DLQ entries list", ObjectSchema(map[string]*Schema{
 				"count": IntSchema("Number of dead letter entries"),
 				"entries": ArraySchema(ObjectSchema(map[string]*Schema{
-					"id":        StringSchema("Entry unique identifier"),
-					"task":      StringSchema("Original task text"),
-					"agent":     StringSchema("Agent name"),
-					"error":     StringSchema("Failure error message"),
-					"attempts":  IntSchema("Number of retry attempts made"),
-					"failed_at": StringSchema("ISO 8601 failure timestamp"),
-					"circuit":   StringSchema("Circuit breaker identifier (optional)"),
+					"id":                StringSchema("Entry unique identifier"),
+					"task":              StringSchema("Original task text"),
+					"agent":             StringSchema("Agent name"),
+					"error":             StringSchema("Failure error message"),
+					"attempts":          IntSchema("Number of retry attempts made"),
+					"failed_at":         StringSchema("ISO 8601 failure timestamp"),
+					"circuit":           StringSchema("Circuit breaker identifier (optional)"),
+					"replay_claim":      StringSchema("Durable replay identity; not an authorization credential"),
+					"replay_in_flight":  BoolSchema("Replay admitted without a recorded terminal outcome"),
+					"recovery_required": BoolSchema("Explicit reconciliation required before retry"),
+					"recovery_reason":   StringSchema("Reason replay is held"),
 				}), "List of dead letter entries"),
-			}, "count", "entries")).WithAuth().Build(),
+			}, "count", "entries")).ErrorResponse(503, "Dead letter storage unavailable").WithAuth().Build(),
 
 		NewRoute("/api/dlq/replay", POST).
 			Summary("Requeue a dead letter entry").
-			Description("Flags a specific DLQ entry for retry (stamping requeued_at) without removing it, so bt-agent's executor picks it up on its next scan.").
+			Description("Durably flags an unclaimed entry for retry. Held or exhausted work is rejected; bt-agent persists a unique claim before dispatch.").
 			Tags("Reliability").
 			OperationID("postDLQReplay").
 			QueryParam("id", "DLQ entry identifier", true, StringSchema("Entry UUID")).
@@ -1108,17 +1112,20 @@ func DashboardRoutes() []Route {
 				"pending": IntSchema("Remaining entries in DLQ"),
 			}, "status", "entry", "pending")).
 			ErrorResponse(400, "Missing id parameter").
-			ErrorResponse(404, "Entry not found").WithAuth().Build(),
+			ErrorResponse(404, "Entry not found").
+			ErrorResponse(409, "Recovery reconciliation required or attempts exhausted").
+			ErrorResponse(503, "Dead letter storage unavailable").WithAuth().Build(),
 
 		NewRoute("/api/dlq/purge", DELETE).
 			Summary("Purge dead letter queue").
-			Description("Removes all entries from the dead letter queue. IRREVERSIBLE.").
+			Description("Removes unclaimed entries after committing the purge; retains all recovery-held work.").
 			Tags("Reliability").
 			OperationID("deleteDLQPurge").
 			JSONResponse(200, "Purge confirmation", ObjectSchema(map[string]*Schema{
 				"status":  StringSchema("'purged' on success"),
-				"cleared": IntSchema("Number of entries cleared"),
-			}, "status", "cleared")).WithAuth().Build(),
+				"removed": IntSchema("Number of unclaimed entries removed"),
+				"pending": IntSchema("Retained recovery-held entries"),
+			}, "status", "removed", "pending")).ErrorResponse(503, "Dead letter storage unavailable").WithAuth().Build(),
 
 		// Session Management
 		NewRoute("/api/login", POST).

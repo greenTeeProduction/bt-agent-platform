@@ -303,6 +303,7 @@ Navigation and provenance:
 | ADR-277 | [Conservative Process Restart Recovery Holds](#adr-277) | Accepted implementation | 2026-10-01 |
 | ADR-278 | [Atomic Dashboard Restart Admission and Detached Ownership](#adr-278) | Accepted implementation | 2026-10-01 |
 | ADR-279 | [Target-Owned Sibling Restart and Uncertain Handoff Seals](#adr-279) | Accepted implementation | 2026-10-01 |
+| ADR-280 | [Durable DLQ Replay Claims and Current-Disk Transactions](#adr-280) | Accepted — fixture-tested; production/rollout partial | 2026-10-01 |
 
 <a id="adr-001"></a>
 
@@ -6424,6 +6425,64 @@ handoff. [Actual gardener cycle and iteration](../../internal/gardener/restart_a
 retain ownership through blocked cycle dependencies and post-cycle analysis.
 Private version/systemctl scripts are controlled fixtures; no model provider
 or deployed service restart is invoked.
+
+<a id="adr-280"></a>
+## ADR-280: Durable DLQ Replay Claims and Current-Disk Transactions
+
+**Status:** Accepted (2026-10-01). Process-restart/sibling fixtures; production
+rollout, authenticated operator reconciliation and power/volume loss are open.
+
+**Context:** A real DLQ action could succeed, fail to save removal and run again
+in a fresh process. Uncertainty and immediate exit had the same failure. Failed
+admission storage also dispatched work. Whole-snapshot cache merges could erase
+another owner's replay marker or resurrect entries it had removed. Quarantining
+malformed state as empty loses the only possible evidence of interrupted work.
+
+**Decision:** Extract one lower-layer transaction owner. Read current membership
+under a bounded three-second sidecar lock; apply a delta, atomically replace,
+then publish cache. Failure reports an error and never falls back to an unlocked
+write. Replay persists a random exact claim and recovery marker before dispatch;
+healthy completion commits removal. Ordinary proven failure records/releases;
+typed terminal/uncertain outcomes and failed final records retain the claim.
+Panic is uncertain. Initial scheduler/engine terminal diagnostics also enter
+with a durable hold; DLQ replay cannot bypass their original execution stop.
+Known completion remains a persistence diagnostic if both executor and DLQ
+recording fail. Restart/scanner/requeue, purge and capacity cannot release a
+claim. Invalid/unreadable bytes remain in place and close admission. Scheduler,
+engine escalation, MCP and dashboard ACK paths use error-returning APIs. HTTP
+returns 409 for held/exhausted entries and 503 for unavailable storage; purge
+reports committed removed/pending counts. Void wrappers remain compatibility
+fire-and-report seams, not persistence acknowledgements.
+
+`ResolveReplayRecovery` accepts an exact claim and a completed or provably
+unstarted decision. The caller independently establishes owner quiescence and
+evidence. Completion removes metadata; unstarted resolution clears admission
+without requeue or dispatch. Active local owners and stale claims are rejected.
+No authenticated operator endpoint or automatic timeout resolution is added.
+
+**Alternatives:** In-process result repair disappears on exit. Expiring leases,
+quarantine-to-empty and purge cannot establish that an action did not occur.
+Whole-snapshot merge preserves neither deletion nor ownership. A new database
+would not make external actions atomic and violates the repository constraint.
+
+**Consequences:** Conservative holds sacrifice availability when evidence is
+missing. Output not recorded before exit can be lost. The guarantee requires
+persisted state and cooperating new writers: stop/drain old consumers before
+rollout; old writers or rollback can erase unfamiliar markers. Lock deadlines
+do not preempt arbitrary filesystem I/O. In-memory queues, state-volume/power
+loss, full distributed journals and deployed recovery remain outside these
+fixtures. No higher-layer engine import or new hook is introduced.
+
+**Evidence:** [Separate-process red/green fixture](../../internal/reliability/dlq_restart_safety_test.go)
+uses a synced real local action counter and two fresh recovery processes;
+successful/uncertain recording failure and immediate exit retain exactly one
+action, failed admission executes zero. [Sibling/transaction/recovery tests](../../internal/reliability/dead_letter_transaction_test.go)
+cover stale claim preservation/deletion, exact resolution, lock/write failure,
+panic and capacity. [Actual authenticated HTTP/schema tests](../../cmd/bt-dashboard/dlq_recovery_http_test.go)
+cover hold rejection, storage failure and retained purge counts.
+[Engine escalation failure](../../internal/engine/ops_actions_test.go) stops
+without falsely reporting durable insertion. Durable snapshot/gate evidence is
+recorded in [the durable DLQ report](../verification/2026-10-01-dlq-recovery/README.md).
 
 ---
 

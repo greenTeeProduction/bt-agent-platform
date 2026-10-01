@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -717,7 +718,10 @@ func main() {
 					_, dlqSpan := tracing.StartSpan(dlqParent, "agent.dlq_push")
 					dlqSpan.SetAttribute("agent", ctx.AgentName)
 					dlqSpan.RecordError(err)
-					dlq.Push(schedulerDeadLetter(ctx.AgentName, task, err, attempts, buildID.Revision))
+					if pushErr := dlq.PushExecutionFailureWithError(schedulerDeadLetter(ctx.AgentName, task, err, attempts, buildID.Revision), err); pushErr != nil {
+						err = errors.Join(err, &reliability.ExecutionUncertainError{Err: fmt.Errorf("persist dead letter: %w", pushErr)})
+						engine.Error("failed to persist dead letter; execution requires reconciliation", "error", pushErr)
+					}
 					dlqSpan.End()
 				}
 
@@ -982,11 +986,17 @@ func main() {
 // would silently end all future scan ticks.
 func runDLQReplayScanOnce(dlq *reliability.DeadLetterQueue) {
 	_ = reliability.Recover("dlq-replay-scan-tick", func() {
-		dlq.Reload()
+		if err := dlq.ReloadWithError(); err != nil {
+			engine.Error("dlq: replay scan storage unavailable", "error", err)
+			return
+		}
 		for _, id := range dlq.RequeuedReady() {
-			if entry, ok := dlq.Replay(id); ok {
-				engine.Info("dlq: replayed requeued entry", "id", entry.ID, "agent", entry.Agent)
+			entry, err := dlq.ReplayWithError(id)
+			if err != nil {
+				engine.Error("dlq: replay not acknowledged", "id", id, "error_kind", reliability.ExecutionErrorKind(err), "error", err)
+				continue
 			}
+			engine.Info("dlq: replayed requeued entry", "id", entry.ID, "agent", entry.Agent)
 		}
 	})
 }

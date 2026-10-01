@@ -37,7 +37,7 @@ personalization renumbering. Every open risk has a closure criterion.
 | R21 | Low / open | **Speculative search defaults on for most trees.** Non-archetype trees cannot fall below the current affinity threshold, adding evaluations and potentially changing which mutation wins. | Evolution maintainer: compare cost/fitness with search disabled, then adjust strategy only with reproducible benchmark evidence (QS24/QS25). |
 | R22 | Resolved (2026-10-01) | **Persisted cursor bounds.** Sequence/task loops restart invalid negative/high/JSON cursors at zero; exact sequence completion is supported. | Preserve [cursor regressions](../../internal/engine/cursor_regression_test.go) and MemSelector coverage (QS26). |
 | R11 | Low / open | **Dormant scaffolding may fail when first wired.** Unit-tested components are not proof of production reachability or integration. | Maintainer: add a representative runtime scenario and evidence at the entrypoint before marking a feature implemented. |
-| R12 | Low / open | **Worktree, artifact and DLQ growth.** Retained failure evidence competes with finite disk capacity; premature cleanup can destroy diagnosis data. | Operator: measure usage, set retention per artifact type and test recovery before pruning; preserve referenced run evidence. |
+| R12 | Low / open | **Worktree, artifact and DLQ growth.** Durable DLQ recovery claims cannot be expired, purged or evicted without an explicit outcome decision (ADR-280). Retained failure evidence competes with finite disk capacity; premature cleanup can destroy diagnosis data. | Operator: measure usage, set retention per artifact type and test recovery before pruning; preserve referenced run evidence. |
 | R5 | Low / partial | **HTTP/browser coverage remains selective.** Login/session/logout and browser expiry now have behavioral tests; pipeline rooted selection/inventory and enforced authentication now have real handler coverage (ADR-272); other management routes and real network deployment still need risk-based coverage. | Dashboard maintainer: map remaining state-changing routes to behavior tests and negative authorization cases ([current tests](../../cmd/bt-dashboard/security_test.go), QS27/QS34). |
 | R1 | Resolved historically | **Mutation death spiral.** Sandbox, gate and score changes corrected the recorded failure. This does not close newer adoption-path risks. | Evolution maintainer: preserve regressions; see R23 for the current separate gap. |
 | R14 | Mitigated | **Generated trees were not executable.** Scoped persisted-tree resolution now connects creation to execution. | [Resolver tests](../../internal/agentexec/wiring_test.go); identity residual is R29, not missing resolution. |
@@ -66,6 +66,13 @@ Historic utility extraction, default-tree splitting, old scaffold activation
 and individual bug-fix narratives remain in [the ADR log](09-decisions.md).
 Their old test counts, line counts and coverage numbers are not current
 architectural constraints.
+
+DLQ recovery advances C09 without closing R30: independent-process and sibling
+fixtures prove conservative replay fencing while state is present. Mixed old
+writers can erase claims, and the trusted Go resolution API does not establish
+remote owner quiescence or provide an authenticated recovery transport. Stop/
+drain rollout, operator evidence handling, full transport journals and
+power/volume-loss qualification remain prioritized acceptance.
 
 ---
 

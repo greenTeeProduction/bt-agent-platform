@@ -335,7 +335,22 @@ success metric.
    without retry or DLQ insertion.
 4. An operator can request DLQ replay. The daemon reloads shared on-disk
    replay state before scanning so dashboard/MCP requests are visible.
-5. The execution owner retries the queued item and records its new outcome.
+5. The execution owner commits a unique durable claim before dispatch. Healthy
+   completion removes the entry only after recording succeeds. Ordinary proven
+   failure records its outcome and releases the claim; terminal/uncertain
+   execution retains recovery authority. Failed terminal recording or immediate
+   process exit leaves the claim held through restart (ADR-280).
+
+Independent-process [DLQ restart fixtures](../../internal/reliability/dlq_restart_safety_test.go)
+append and sync a real local action counter, fail result recording or exit
+immediately, then start two fresh consumers against unchanged queue bytes.
+Scanner selection, ordinary requeue and direct replay execute no second action.
+Admission write failure executes nothing. Sibling deltas, purge and capacity
+cannot erase the fence. Malformed state remains in place and closes admission;
+quarantining it as an empty queue could discard unknown work. Exact-claim
+`ResolveReplayRecovery` commits a trusted completed/provably-unstarted decision
+without dispatch. Its caller must establish quiescence and outcome independently;
+this is not a production-verified recovery workflow.
 
 Process restart is a separate recovery boundary (ADR-277). A scheduled or
 manual scheduler execution with a persistent JobStore must commit an in-flight
