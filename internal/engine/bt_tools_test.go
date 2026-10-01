@@ -2,9 +2,18 @@ package engine
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestProcessCheck_TreatsShellSyntaxLiterally(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "injected")
+	_ = ProcessCheck().Call("'; touch " + marker + "; #")
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatalf("process query executed shell syntax: %v", err)
+	}
+}
 
 func TestTool_Name(t *testing.T) {
 	tool := Tool{name: "test_tool", desc: "a test tool", call: func(s string) string { return s }}

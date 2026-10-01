@@ -1,0 +1,9 @@
+{
+  "architecture": "aarch64",
+  "fixture": "restart-red-green.fixture",
+  "os": "Linux",
+  "permission_fault_skipped_if_root": true,
+  "qualification": "Red reproduces every permission/admission/result failure on this non-root Linux ARM64 host; green exact fixture executed in the same environment. No power loss, real provider, real supervision or remote account boundary.",
+  "sha256": "27a2302f12b3881168d5f7300ca85664a50e1ae765556ab0dfd8e104358f2ffc",
+  "unprivileged": true
+}

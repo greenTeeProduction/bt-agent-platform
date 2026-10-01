@@ -1,0 +1,128 @@
+{
+  "canonical_payload_sha256": "64b00b5f468f17799f66f068b2be8b42fa7e7abdd0ed5d580f1db213a5588bbb",
+  "payload": {
+    "base_commit": "a1b4ff7f60c5b5327bf01dbb1040122a02040b8e",
+    "excludes": [
+      "Derived graph files",
+      "This increment verification evidence (avoids self-reference)"
+    ],
+    "files": [
+      {
+        "path": "cmd/bt-agent/main.go",
+        "sha256": "026e65e88367b6182b58be74edbd1ac91c7d194fe37c0e572b812149a0e708ca"
+      },
+      {
+        "path": "cmd/bt-agent/main_test.go",
+        "sha256": "20ae5858d11324973862c180760359936dad9c59e6aa2a7e112e8eeeedc608eb"
+      },
+      {
+        "path": "cmd/bt-dashboard/deploy_activity.go",
+        "sha256": "2c4d78f8cf9550814a89591264dbf14132f5071a193b673b688cac71bff9120b"
+      },
+      {
+        "path": "cmd/bt-dashboard/main.go",
+        "sha256": "6d900614a67a527a600bef6ef246a5919536461d57fac0e11c4a5feddd3d0f38"
+      },
+      {
+        "path": "cmd/bt-dashboard/restart_control_process_test.go",
+        "sha256": "c8034e0d1654977f61d435e7ea5bc139aa4fab2bdf65cc072dab4e17e08d7e08"
+      },
+      {
+        "path": "cmd/bt-gardener/main.go",
+        "sha256": "50bf531257c6d338ff693b93f271318c45c83650c9d54aa9c13fcb9dfeaf2693"
+      },
+      {
+        "path": "docs/arc42/03-context-scope.md",
+        "sha256": "8c9813ed4c9502623aad724fe57fa7bbfbb96aba915a0ef4f4a82da2e3fab880"
+      },
+      {
+        "path": "docs/arc42/05-building-blocks.md",
+        "sha256": "3c139773598612c616107e60fe01f23b3f8fa29d47caaae3921e5416ae10bf3e"
+      },
+      {
+        "path": "docs/arc42/06-runtime-view.md",
+        "sha256": "7307cf290d43946e3f07b7077f42d8f8de275c813a882cef74c534208988dca7"
+      },
+      {
+        "path": "docs/arc42/07-deployment.md",
+        "sha256": "ef4f809de81ca1bbf6d55aa18f5e729ed5ffe759ffa5f022a985b1ead8f5498c"
+      },
+      {
+        "path": "docs/arc42/08-crosscutting-concepts.md",
+        "sha256": "56c9297287d78ba6751411dc73178f3641d07b20c61a9fa61d1c03bb3eb1e129"
+      },
+      {
+        "path": "docs/arc42/09-decisions.md",
+        "sha256": "398d82480f5c3fe62e6cfe3745274ae2da491b4c82b3e6c1248a7854102ccfb8"
+      },
+      {
+        "path": "docs/arc42/10-quality.md",
+        "sha256": "fa849d0973b810ae386f0435c2af9bcd266e252cf0021290e9251d2ba3e9232b"
+      },
+      {
+        "path": "docs/arc42/11-risks-debt.md",
+        "sha256": "8cd520c3a3a21fee4f1c13b7e379ffa65b3050fe0e08e1059e537daac5d2e891"
+      },
+      {
+        "path": "docs/arc42/12-glossary.md",
+        "sha256": "9e393a4b1aae1aba177bbd286c125f95173fab64400d88c6b667a2c7ae0d0502"
+      },
+      {
+        "path": "docs/plans/2026-09-30-arc42-cleanup.md",
+        "sha256": "baa165665175e4760b84cd76a6c05c7918500eb17965814fcdf999d28c86c65c"
+      },
+      {
+        "path": "internal/agent/deploy_drift.go",
+        "sha256": "48843b6544dd60c6affc1c351929e9ccdaf8e83c746bb41db93db689c4c7781f"
+      },
+      {
+        "path": "internal/agent/deploy_drift_churn_test.go",
+        "sha256": "5637ce066ad22a67649153da3a7439ef7d8f58c56564df6bd2c0b020f07263c5"
+      },
+      {
+        "path": "internal/agent/deploy_drift_restart_test.go",
+        "sha256": "239a13e4f8094f8c3d28fabc7adb19b9d53d9e34bdf380111f9b19cdb44fd7f3"
+      },
+      {
+        "path": "internal/agent/restart_control.go",
+        "sha256": "6eeaff89708ba79bf344966f9c27e61952f361be2c2477084c20fa8222c0cc5c"
+      },
+      {
+        "path": "internal/agent/restart_control_linux.go",
+        "sha256": "94400123948416a2c8336696be12416ec249430cbb5cf1766a8c6c1932ffa48b"
+      },
+      {
+        "path": "internal/agent/restart_control_linux_test.go",
+        "sha256": "100f78681355d373709b3d7c07c9e89315e92faddbbe2e386f09d27fcb0cc11d"
+      },
+      {
+        "path": "internal/agent/restart_control_other.go",
+        "sha256": "89da6ba016cd149003c8cd44f81242655d7cd3cc26bc4b8eaedfc7dc5b2e468e"
+      },
+      {
+        "path": "internal/agent/restart_control_regression_test.go",
+        "sha256": "327b699ddb43fafc2a1f60e0f2307c94ae40ff5f869bba285283a8a8894f1a2d"
+      },
+      {
+        "path": "internal/gardener/evolve_v2.go",
+        "sha256": "4e74ecf410b273bb90e7555d57a89e669c5f33b3a6da25a984a6fe3c0e6e5101"
+      },
+      {
+        "path": "internal/gardener/gardener.go",
+        "sha256": "c8e075191a0f3243814f7729ee2745d92f70a280649995ef267ad8447179628e"
+      },
+      {
+        "path": "internal/gardener/restart_admission_test.go",
+        "sha256": "17e038251e708bee393a370e5967c83b9fb82e73fd1e9bce3878da0bfa81c855"
+      },
+      {
+        "path": "internal/reliability/restart_admission.go",
+        "sha256": "cf885493a56d5fc92c894ad684f789a64c201b6aa224bf3e79568aa12b290b8b"
+      },
+      {
+        "path": "internal/reliability/restart_admission_test.go",
+        "sha256": "906f66148b387bfd1123d6fa41e0da0e116b57e08db4283a2bd6ae81e41670f0"
+      }
+    ]
+  }
+}

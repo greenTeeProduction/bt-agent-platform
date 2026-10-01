@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
@@ -298,7 +299,7 @@ func newDefaultConfig() *Config {
 // Zero values in the file are skipped — defaults take precedence.
 // Only file-specified fields override defaults; env vars are applied later.
 func loadFile(path string, c *Config) error {
-	data, err := os.ReadFile(path)
+	data, err := util.ReadPersistenceFile(path)
 	if err != nil {
 		return fmt.Errorf("read: %w", err)
 	}
@@ -431,22 +432,22 @@ func mergeFileConfig(c *Config, file *Config) {
 	}
 }
 
-// hasExplicitField checks whether a JSON file explicitly set a boolean field.
-// Since Go's json decoder treats missing bools as false, we re-parse into
-// a raw map to check field presence for booleans.
+// hasExplicitField preserves the legacy Config merge rule: these boolean
+// fields have non-omitempty JSON tags, including when false. Inspecting the
+// tags avoids serializing credentials just to check a field name. Tracking
+// original JSON presence is a separate compatibility change in the backlog.
 func hasExplicitField(cfg *Config, field string) bool {
-	// Re-marshal and check — this is only called for booleans
-	// where false is a valid explicit setting.
-	data, err := json.Marshal(cfg)
-	if err != nil {
+	if cfg == nil {
 		return false
 	}
-	var raw map[string]any
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return false
+	typ := reflect.TypeFor[Config]()
+	for f := range typ.Fields() {
+		tag := strings.Split(f.Tag.Get("json"), ",")
+		if tag[0] == field && f.Type.Kind() == reflect.Bool {
+			return true
+		}
 	}
-	_, ok := raw[field]
-	return ok
+	return false
 }
 
 // applyEnvOverrides applies environment variable overrides on top of c.
@@ -697,7 +698,7 @@ func applyDotEnvFiles(c *Config) {
 //   - Export prefix: export KEY=value is normalized to KEY=value
 //   - Multiline values are NOT supported
 func LoadDotEnv(path string) (map[string]string, error) {
-	data, err := os.ReadFile(path)
+	data, err := util.ReadPersistenceFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read: %w", err)
 	}
@@ -989,13 +990,10 @@ func (c *Config) FeatureFlags() map[string]bool {
 	}
 }
 
-// SaveFile writes the current configuration to a JSON file for sharing/review.
+// SaveFile atomically writes private configuration, including credentials.
+// Use Sanitized for configuration displayed or shared outside the owner path.
 func (c *Config) SaveFile(path string) error {
-	data, err := json.MarshalIndent(c, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal config: %w", err)
-	}
-	if err := os.WriteFile(path, data, 0644); err != nil {
+	if err := util.SaveJSONAtomic(path, c); err != nil {
 		return fmt.Errorf("write config: %w", err)
 	}
 	return nil

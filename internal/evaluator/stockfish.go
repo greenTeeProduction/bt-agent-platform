@@ -234,7 +234,7 @@ type TranspositionTable struct {
 
 // NewTranspositionTable creates or loads a TT from disk.
 func NewTranspositionTable(dir string, maxSize int) (*TranspositionTable, error) {
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0750); err != nil {
 		return nil, err
 	}
 	tt := &TranspositionTable{

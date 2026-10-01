@@ -1,0 +1,57 @@
+{
+  "qualification": "Pre-commit dirty-worktree binaries used by local build checks; clean operational binaries recorded separately.",
+  "binaries": [
+    {
+      "name": "benchcmp",
+      "sha256": "69b87872eeadc3433dd479196f6bb8bddccc23230bad5fba0bc8aaee1a99196a"
+    },
+    {
+      "name": "bt-agent",
+      "sha256": "51e3947993210abd8f0bcadf5caa22b2dbe8e01269312030769b8aac7b169177"
+    },
+    {
+      "name": "bt-agent-cli",
+      "sha256": "3dadbc5bcc6a762aa2b19d9a55a654ea1f50c940a199d9d31397eedf4e32edf8"
+    },
+    {
+      "name": "bt-assistant",
+      "sha256": "d86301f40fde7a237e517ef89d4c062aee46bff3d310899f3cf914676172e4b3"
+    },
+    {
+      "name": "bt-ci-doctor",
+      "sha256": "2a26ef9cd6367fd75c7d7424f74cca947858d08db797dff9ab63c40b64665216"
+    },
+    {
+      "name": "bt-dashboard",
+      "sha256": "4cf85e8e09f97166cdbca839e6a8a994a68ee5c9ff10c48a2093d60be091d898"
+    },
+    {
+      "name": "bt-evaluator",
+      "sha256": "d1f0c384f656aaee26480720639ea4d73331d0fa07984df11cc7c56feac9239f"
+    },
+    {
+      "name": "bt-gardener",
+      "sha256": "5cd61f3b6474c619de5f962abfc09bb96aa3ab8a567ccd4018f3bc05ec14fcaf"
+    },
+    {
+      "name": "bt-langagent",
+      "sha256": "e522f73e0f252fd1bc72d9ca2524a968e928d5af7bc954bdd313a952b2b98351"
+    },
+    {
+      "name": "bt-notebooklm-auth",
+      "sha256": "8a0bb8e6b249908dd2e4ba5e63bfd87cc6d7baf78328b7305639147556b33964"
+    },
+    {
+      "name": "bt-scalability-probe",
+      "sha256": "9601a1390c8229de6d79289698cbd95833b94001cb27bdc684a9cf77c7d4df62"
+    },
+    {
+      "name": "bt-security-probe",
+      "sha256": "529296bdcc42f6148442e60d37c80e80c9b9772cf27633ffb3e24d1d169ebf53"
+    },
+    {
+      "name": "bt-tree-integration",
+      "sha256": "63feca0c45a1b807228ac1a30345dc9ebf1592ddc0192b4237776ce10361d519"
+    }
+  ]
+}

@@ -1,0 +1,57 @@
+{
+  "binaries": [
+    {
+      "name": "benchcmp",
+      "sha256": "70e947a4d0748b402ff7b0cc0371d3823230445bd4993dacc02998c4cbdda90a"
+    },
+    {
+      "name": "bt-agent",
+      "sha256": "e18fc4e53c3bb0630f30ab97c4337148810a3e03d4c26945b9a7069d10657ecb"
+    },
+    {
+      "name": "bt-agent-cli",
+      "sha256": "ad8c173075a2d57d33ef2dd346f246861109922f586ed6c1eac0308e70aa3a63"
+    },
+    {
+      "name": "bt-assistant",
+      "sha256": "4a7eacde1d1f5e8959ca69a023f8d3d0428341cc62fbc63e96c12f5c0b44506b"
+    },
+    {
+      "name": "bt-ci-doctor",
+      "sha256": "f81ba849527ba61b7224d3f0d6608aad25a7eec354bff31fdba9deb3c3054091"
+    },
+    {
+      "name": "bt-dashboard",
+      "sha256": "967db395b19d4334ba9d8b1c96dcb47e202b625ff4ea7d03967c20dcc5f50519"
+    },
+    {
+      "name": "bt-evaluator",
+      "sha256": "4e04fa072d8f636bc7c21d03bcb21f45eccfeb27beee92038699e137b2b183a4"
+    },
+    {
+      "name": "bt-gardener",
+      "sha256": "9c0784f857d50c92d799b6d15cb712fa22c4f1553737757993b34616113685dd"
+    },
+    {
+      "name": "bt-langagent",
+      "sha256": "6fa7c8166f23946f2b17b67cc8252b0ea3d4d706f64ae26f4d3379f621daaad2"
+    },
+    {
+      "name": "bt-notebooklm-auth",
+      "sha256": "0af5023531de6dd0b2478c8865efcea71ce18b19362106d1a469af4760f8e10b"
+    },
+    {
+      "name": "bt-scalability-probe",
+      "sha256": "97c7ca67f748ab188fef1fc7157d6af6b5c24e8ca5c3996f5a3bcf67258fcb3b"
+    },
+    {
+      "name": "bt-security-probe",
+      "sha256": "b9874d1e7a3b496a8b5a662841a1fb71284e32e9b12907c11ed9bea407a901bd"
+    },
+    {
+      "name": "bt-tree-integration",
+      "sha256": "e204802e43718bc053dc36d5fe54ac0a9457af8147653b72cd2a527a4f05cc30"
+    }
+  ],
+  "scope": "dirty-worktree build gate artifacts; not deployed"
+}

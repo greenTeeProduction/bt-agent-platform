@@ -1,0 +1,23 @@
+{
+  "source_commit": "78d973da85d3e85fa7063735be858a62be903461",
+  "cli_version": "0.153.4",
+  "provider": "codex",
+  "test": "TestCodexDelegationWritesArtifactOptIn",
+  "sandbox": "workspace-write",
+  "failed_attempt": {
+    "model": "gpt-6.1-sol",
+    "outcome": "HTTP 400: model unsupported with this ChatGPT account",
+    "artifact_produced": false
+  },
+  "successful_attempt": {
+    "model": "gpt-5.5",
+    "outcome": "passed",
+    "duration_seconds": 42.94,
+    "final_message": "DONE",
+    "artifact_sha256": "47ac8e44861d485d36f5cf501a70c5f2f599030c70e625696434e64086ea6103"
+  },
+  "qualification": "Host execution through real BT Codex adapter and account, with private test overlay; not a deployed complete GOAP workflow.",
+  "shared_configuration_changed": false,
+  "claude_invoked": false,
+  "official_model_availability_source": "https://learn.chatgpt.com/docs/models"
+}

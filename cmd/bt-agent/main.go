@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -603,9 +604,12 @@ func main() {
 				// path skipped siblings, rebuilt sibling units would keep
 				// running their old binaries (live case 2026-07-16 23:46).
 				RestartSiblings: true,
-				Targets:         agent.DefaultRebuildTargets(repoDir),
-				Binary:          "bt-agent",
-				Backoff:         agent.NewRebuildBackoff(),
+				SiblingRestartFn: func(unit, revision string) error {
+					return agent.RequestOwnedRestart(agent.HomeDir(), unit, revision)
+				},
+				Targets: agent.DefaultRebuildTargets(repoDir),
+				Binary:  "bt-agent",
+				Backoff: agent.NewRebuildBackoff(),
 				// Post-rebuild restart re-check; nil-safe: no scheduler yet
 				// means "assume busy" and defer the restart.
 				InFlightFn: func() bool { return globalSched == nil || globalSched.AnyInFlight() },
@@ -718,7 +722,10 @@ func main() {
 					_, dlqSpan := tracing.StartSpan(dlqParent, "agent.dlq_push")
 					dlqSpan.SetAttribute("agent", ctx.AgentName)
 					dlqSpan.RecordError(err)
-					dlq.Push(schedulerDeadLetter(ctx.AgentName, task, err, attempts, buildID.Revision))
+					if pushErr := dlq.PushExecutionFailureWithError(schedulerDeadLetter(ctx.AgentName, task, err, attempts, buildID.Revision), err); pushErr != nil {
+						err = errors.Join(err, &reliability.ExecutionUncertainError{Err: fmt.Errorf("persist dead letter: %w", pushErr)})
+						engine.Error("failed to persist dead letter; execution requires reconciliation", "error", pushErr)
+					}
 					dlqSpan.End()
 				}
 
@@ -741,10 +748,13 @@ func main() {
 				// Fleet owner: only THIS watcher restarts sibling units after
 				// a sweep (bt-dashboard's watcher rebuilds its own binary only).
 				RestartSiblings: true,
-				Targets:         agent.DefaultRebuildTargets(repoDir),
-				Binary:          "bt-agent",
-				Backoff:         agent.NewRebuildBackoff(),
-				InFlightFn:      globalSched.AnyInFlight,
+				SiblingRestartFn: func(unit, revision string) error {
+					return agent.RequestOwnedRestart(agent.HomeDir(), unit, revision)
+				},
+				Targets:    agent.DefaultRebuildTargets(repoDir),
+				Binary:     "bt-agent",
+				Backoff:    agent.NewRebuildBackoff(),
+				InFlightFn: globalSched.AnyInFlight,
 			}, agent.DefaultDriftCheckInterval)
 		}
 	}
@@ -980,11 +990,17 @@ func main() {
 // would silently end all future scan ticks.
 func runDLQReplayScanOnce(dlq *reliability.DeadLetterQueue) {
 	_ = reliability.Recover("dlq-replay-scan-tick", func() {
-		dlq.Reload()
+		if err := dlq.ReloadWithError(); err != nil {
+			engine.Error("dlq: replay scan storage unavailable", "error", err)
+			return
+		}
 		for _, id := range dlq.RequeuedReady() {
-			if entry, ok := dlq.Replay(id); ok {
-				engine.Info("dlq: replayed requeued entry", "id", entry.ID, "agent", entry.Agent)
+			entry, err := dlq.ReplayWithError(id)
+			if err != nil {
+				engine.Error("dlq: replay not acknowledged", "id", id, "error_kind", reliability.ExecutionErrorKind(err), "error", err)
+				continue
 			}
+			engine.Info("dlq: replayed requeued entry", "id", entry.ID, "agent", entry.Agent)
 		}
 	})
 }

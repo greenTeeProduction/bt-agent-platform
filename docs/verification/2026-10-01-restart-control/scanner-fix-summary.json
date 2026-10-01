@@ -1,0 +1,22 @@
+{
+  "command": "GOFLAGS=-p=2 gosec -no-fail -fmt sarif -out <private>/scanner-fix-medium.sarif -severity medium ./...",
+  "exit_code": 0,
+  "initial_findings": 256,
+  "qualification": "Three actual PR annotations removed locally; remaining baseline is not a clean scan. Actual GitHub results remain separate.",
+  "raw_private_sha256": "9bf0334ac6135e744b5fb61017ac6864e688f870e852eec06d90eef6791f5c6b",
+  "remaining_findings": 253,
+  "rules": {
+    "G115": 15,
+    "G124": 4,
+    "G204": 23,
+    "G301": 54,
+    "G302": 11,
+    "G304": 64,
+    "G306": 55,
+    "G401": 1,
+    "G404": 12,
+    "G505": 1,
+    "G703": 12,
+    "G704": 1
+  }
+}

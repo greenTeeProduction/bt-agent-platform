@@ -1,0 +1,5 @@
+=== RUN   TestCodexDelegationWritesArtifactOptIn
+    superpowers_codex_acceptance_test.go:44: selected Codex backend produced final answer DONE and verified file BT_CODEX_WRITE_OK
+--- PASS: TestCodexDelegationWritesArtifactOptIn (42.94s)
+PASS
+ok  	github.com/nico/go-bt-evolve/internal/engine	43.009s

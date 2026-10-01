@@ -132,7 +132,8 @@ func (e *AgentExecutor) recordTaskMetric(agentName string, res *agent.RunResult,
 		return
 	}
 	success := agent.IsBreakerSuccess(res.Outcome, runErr)
-	RecordTask(agentName, success, uint64(res.Duration.Milliseconds()))
+	durationMs := max(res.Duration.Milliseconds(), 0)
+	RecordTask(agentName, success, uint64(durationMs))
 }
 
 // recordBlockFitnessMetric reports a bt_block_fitness_score gauge for the
@@ -190,7 +191,7 @@ func (e *AgentExecutor) runViaHermesWithContext(ctx context.Context, task, treeI
 		}
 	}
 
-	cmd := exec.CommandContext(ctx,
+	cmd := exec.CommandContext(ctx, // #nosec G204 -- operator-selected executable; prompt passed as argv, never interpolated into a shell.
 		hermesPath, "chat",
 		"-q", prompt,
 		"--yolo",

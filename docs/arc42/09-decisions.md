@@ -303,6 +303,9 @@ Navigation and provenance:
 | ADR-275 | [Sprint Result Commit and Metadata Reconciliation](#adr-275) | Accepted implementation | 2026-10-01 |
 | ADR-276 | [Sprint Capacity Reservation and Owned Batch Budgets](#adr-276) | Accepted implementation | 2026-10-01 |
 | ADR-277 | [Conservative Process Restart Recovery Holds](#adr-277) | Accepted implementation | 2026-10-01 |
+| ADR-278 | [Atomic Dashboard Restart Admission and Detached Ownership](#adr-278) | Accepted implementation | 2026-10-01 |
+| ADR-279 | [Target-Owned Sibling Restart and Uncertain Handoff Seals](#adr-279) | Accepted implementation | 2026-10-01 |
+| ADR-280 | [Durable DLQ Replay Claims and Current-Disk Transactions](#adr-280) | Accepted — fixture-tested; production/rollout partial | 2026-10-01 |
 
 <a id="adr-001"></a>
 
@@ -6313,6 +6316,175 @@ commit-before-release operator reconciliation.
 lose all transient diagnostics after completed-action/result failure or immediate
 exit, repair storage availability and reject automatic dispatch/reapproval.
 No coding/model provider is invoked by these fixtures.
+
+---
+
+<a id="adr-278"></a>
+## ADR-278: Atomic Dashboard Restart Admission and Detached Ownership
+
+**Status:** Accepted implementation, 2026-10-01. Fleet automatic adoption and
+production restart qualification remain open under R13/R30 and QS31.
+
+**Context:** HTTP completion can precede actual sprint/pipeline execution or
+cleanup of canceled agent execution. The dashboard's old HTTP-only drift check
+reported idle while an accepted action was running. Even a correct snapshot
+check permits admission between the check and `systemctl --no-block restart`.
+
+**Decision:** One process-local dashboard gate owns requests, capacity waits and
+detached execution through final evidence, cancellation cleanup and panic
+handling. Restart handoff seals that gate atomically only when idle. Rejected
+handoff reopens admission; accepted handoff stays sealed until process exit.
+All sealed HTTP requests return documented JSON 503 with Retry-After and an
+explicit non-admission header. Existing pool/limiter/running-record diagnostics
+supplement leases; persisted queues and non-live waiting records do not.
+Start the watcher only after execution owners initialize.
+
+The optional `DriftWatchConfig.RestartGuardFn` supplies that handshake without
+changing legacy daemon behavior. `SafeGoWithCleanup` preserves existing
+SafeGo compatibility and releases pipeline ownership after panic handling,
+even if the handler itself panics. No engine dependency or new hook is added.
+
+**Alternatives:** Counting HTTP requests loses detached ownership. Sampling
+pool/limiter counts leaves check-to-handoff admission races and misses fallback
+execution. Releasing after HTTP cancellation assumes an action stopped.
+Cross-process lease coordination is needed for fleet ownership but exceeds this
+local correction; do not infer it from this gate.
+
+**Consequences:** Long-lived requests and uncooperative callbacks defer adoption.
+Accepted but ineffective supervision can leave admission closed until an
+operator restarts the process. Failed panic metadata finalization may leave a
+conservative running diagnostic; retention/reconciliation remain backlog work.
+`bt-agent` sibling restarts still bypass the dashboard gate; other daemons retain
+snapshot checks. Automatic restart remains unqualified across the fleet.
+
+**Evidence:** [Dashboard ownership tests](../../cmd/bt-dashboard/deploy_activity_regression_test.go)
+run actual local actions through sprint, canceled fallback agent and authenticated
+pipeline handlers after HTTP completion; admission/seal races admit exactly one
+owner and all route schemas accept the sealed response.
+[Drift handoff tests](../../internal/agent/deploy_drift_restart_test.go) exercise
+busy deferral, failed handoff reopening and accepted handoff sealing with fake
+systemd. [Panic cleanup ordering](../../internal/reliability/panic_handler_test.go)
+holds ownership while panic handling blocks. No provider or actual restart is
+invoked; the prior independent process-recovery evidence remains ADR-277.
+
+---
+
+<a id="adr-279"></a>
+## ADR-279: Target-Owned Sibling Restart and Uncertain Handoff Seals
+
+**Status:** Accepted implementation, 2026-10-01. Daemon-wide bt-agent self
+ownership and production handoff qualification remain C09/C12 and R13/R30.
+
+**Context:** The bt-agent fleet sweep invoked systemd for sibling units after
+checking only its own scheduler. This bypassed the dashboard's local gate.
+A command failure after dispatch also does not prove systemd rejected restart.
+Cycle-only gardener snapshots miss analysis/tools and final iteration metadata.
+
+**Decision:** Both bt-agent sibling paths request the target process's ownership
+through a Linux abstract Unix socket scoped by configured home, UID and unit.
+Both ends check kernel peer credentials. Production owner/default restart
+also require the configured systemd unit MainPID to equal this process; a
+query failure/inactive/wrong unit rejects before dispatch. Bounded JSON framing accepts only a
+full lowercase Git revision; only known units are addressed. Dashboard/gardener
+listeners respect their own auto-restart flag, atomically seal admission when
+idle, verify their configured artifact's exact unit/revision/clean identity,
+then request their own bounded systemd restart. Missing/busy/disabled/wrong
+owners never authorize direct fallback. An already-current live owner avoids
+another restart. Client/framing, artifact and command budgets are 5/20/15 seconds.
+
+The shared reliability gate owns all leases through cleanup. Gardener cycles
+and complete periodic rescan/analysis/tool/metadata iterations use it, with
+nested ownership retained. Both target watchers start after initialization.
+Proven rejection reopens admission. Lost replies, unexpected owner failure and
+post-start command errors/timeouts retain uncertainty and the seal until exit.
+No operator repair is inferred from a timeout. Non-Linux control defers safely.
+
+**Alternatives:** Sibling systemd calls cannot observe the target's atomic gate.
+HTTP liveness/counter snapshots do not own detached work. Shared file locks
+alone release on controller death while a target restart may remain pending.
+An owner-mediated request keeps admission exclusion in the target process.
+This adds no database and no engine dependency/injection hook.
+
+**Consequences:** Same UID is trusted operator authority, not multi-tenant
+identity. Production MainPID attestation prevents another/manual process
+from approving or restarting a canonical unit. Abstract sockets leave no stale
+files and avoid path-length limits. A lost reply may conceal an accepted restart;
+controllers must not bypass or infer rejection. Adopted stamps remain advisory.
+Mixed old/new controllers are unsafe; upgrade with flags disabled first.
+The bt-agent self path still samples scheduler state and needs daemon-wide
+scheduler/A2A/DLQ leases. Power/volume loss and deployed stateful handoff are not
+established by these fixtures.
+
+**Evidence:** [No-owner bypass regression](../../internal/agent/restart_control_regression_test.go)
+was red with direct sibling calls. [Control/identity tests](../../internal/agent/restart_control_linux_test.go)
+cover disabled/busy/current/accepted/rejected/uncertain dispositions, framing,
+peer UID, wrong/inactive unit PID, missing owners, clean artifact identity, lost reply and panic seals.
+[Actual dashboard process fixture](../../cmd/bt-dashboard/restart_control_process_test.go)
+holds a real local authenticated sprint action in a separate owner process,
+defers restart, then accepts its own fake-systemd handoff and rejects new HTTP/
+execution admission. A second process with the current revision does not repeat
+handoff. [Actual gardener cycle and iteration](../../internal/gardener/restart_admission_test.go)
+retain ownership through blocked cycle dependencies and post-cycle analysis.
+Private version/systemctl scripts are controlled fixtures; no model provider
+or deployed service restart is invoked.
+
+<a id="adr-280"></a>
+## ADR-280: Durable DLQ Replay Claims and Current-Disk Transactions
+
+**Status:** Accepted (2026-10-01). Process-restart/sibling fixtures; production
+rollout, authenticated operator reconciliation and power/volume loss are open.
+
+**Context:** A real DLQ action could succeed, fail to save removal and run again
+in a fresh process. Uncertainty and immediate exit had the same failure. Failed
+admission storage also dispatched work. Whole-snapshot cache merges could erase
+another owner's replay marker or resurrect entries it had removed. Quarantining
+malformed state as empty loses the only possible evidence of interrupted work.
+
+**Decision:** Extract one lower-layer transaction owner. Read current membership
+under a bounded three-second sidecar lock; apply a delta, atomically replace,
+then publish cache. Failure reports an error and never falls back to an unlocked
+write. Replay persists a random exact claim and recovery marker before dispatch;
+healthy completion commits removal. Ordinary proven failure records/releases;
+typed terminal/uncertain outcomes and failed final records retain the claim.
+Panic is uncertain. Initial scheduler/engine terminal diagnostics also enter
+with a durable hold; DLQ replay cannot bypass their original execution stop.
+Known completion remains a persistence diagnostic if both executor and DLQ
+recording fail. Restart/scanner/requeue, purge and capacity cannot release a
+claim. Invalid/unreadable bytes remain in place and close admission. Scheduler,
+engine escalation, MCP and dashboard ACK paths use error-returning APIs. HTTP
+returns 409 for held/exhausted entries and 503 for unavailable storage; purge
+reports committed removed/pending counts. Void wrappers remain compatibility
+fire-and-report seams, not persistence acknowledgements.
+
+`ResolveReplayRecovery` accepts an exact claim and a completed or provably
+unstarted decision. The caller independently establishes owner quiescence and
+evidence. Completion removes metadata; unstarted resolution clears admission
+without requeue or dispatch. Active local owners and stale claims are rejected.
+No authenticated operator endpoint or automatic timeout resolution is added.
+
+**Alternatives:** In-process result repair disappears on exit. Expiring leases,
+quarantine-to-empty and purge cannot establish that an action did not occur.
+Whole-snapshot merge preserves neither deletion nor ownership. A new database
+would not make external actions atomic and violates the repository constraint.
+
+**Consequences:** Conservative holds sacrifice availability when evidence is
+missing. Output not recorded before exit can be lost. The guarantee requires
+persisted state and cooperating new writers: stop/drain old consumers before
+rollout; old writers or rollback can erase unfamiliar markers. Lock deadlines
+do not preempt arbitrary filesystem I/O. In-memory queues, state-volume/power
+loss, full distributed journals and deployed recovery remain outside these
+fixtures. No higher-layer engine import or new hook is introduced.
+
+**Evidence:** [Separate-process red/green fixture](../../internal/reliability/dlq_restart_safety_test.go)
+uses a synced real local action counter and two fresh recovery processes;
+successful/uncertain recording failure and immediate exit retain exactly one
+action, failed admission executes zero. [Sibling/transaction/recovery tests](../../internal/reliability/dead_letter_transaction_test.go)
+cover stale claim preservation/deletion, exact resolution, lock/write failure,
+panic and capacity. [Actual authenticated HTTP/schema tests](../../cmd/bt-dashboard/dlq_recovery_http_test.go)
+cover hold rejection, storage failure and retained purge counts.
+[Engine escalation failure](../../internal/engine/ops_actions_test.go) stops
+without falsely reporting durable insertion. Durable snapshot/gate evidence is
+recorded in [the durable DLQ report](../verification/2026-10-01-dlq-recovery/README.md).
 
 ---
 

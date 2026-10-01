@@ -1,0 +1,112 @@
+{
+  "canonical_payload_sha256": "121c9dca911fd891bca33bb9dad472d84b3bc1d8e4f800d6977a3c917cf92ae9",
+  "payload": {
+    "base_commit": "78d973da85d3e85fa7063735be858a62be903461",
+    "files": [
+      {
+        "path": "cmd/bt-dashboard/pipeline_handlers.go",
+        "sha256": "9cc13d0ff19f575fdbca4e70a18e049fd00e3499ad33fd21b511b95f2c12fc07"
+      },
+      {
+        "path": "docs/arc42/08-crosscutting-concepts.md",
+        "sha256": "14e1d502f884dab738e55bf24807c63bfaad4e86876e9b682cbc542325b02966"
+      },
+      {
+        "path": "docs/plans/2026-09-30-arc42-cleanup.md",
+        "sha256": "f9ed91f7721fe221123a72b758e5b58455d3cd8cab494be0b4a996c305e4c838"
+      },
+      {
+        "path": "internal/blackboard/persist.go",
+        "sha256": "557d10a9d68d84064fee9e328de5c83a014bc5ffbc0386bd9d67a2a11eb5240c"
+      },
+      {
+        "path": "internal/config/config.go",
+        "sha256": "4a5ab9cf88a12b130f9d70cdfbaff3a2413807a5a273dfa106cb6f1e68a1caf7"
+      },
+      {
+        "path": "internal/config/config_test.go",
+        "sha256": "4e7fd35c7b6fbb8ba4056a4dcc0bb48350deba005db1567330ec50524244429b"
+      },
+      {
+        "path": "internal/dashboard/executor.go",
+        "sha256": "d8307cabe6eb47a5c27c41e4a9cef3a1ac298504956029a419d84769b50fbf55"
+      },
+      {
+        "path": "internal/engine/actions_goap_fusion_prod_additions.go",
+        "sha256": "f9647f5c340c64fbccb27cd5992f1b0ff94a0e25d6e537ecaf70b75a2cec596c"
+      },
+      {
+        "path": "internal/engine/actions_superpowers_prod.go",
+        "sha256": "544ee7bcc4ace21c1766ff4756db7ba8a4d9d0655e726c73564e90f13ca95b28"
+      },
+      {
+        "path": "internal/engine/app_logger.go",
+        "sha256": "e2bf75493c6265987fa39f3db63fa96e26eda90cfad62f95a3347395c637206b"
+      },
+      {
+        "path": "internal/engine/bt_tools.go",
+        "sha256": "5c625522dee4622a0bfa5aa771e57e8d692f47f1802706bdda7f10a8225b67d5"
+      },
+      {
+        "path": "internal/engine/bt_tools_test.go",
+        "sha256": "b5074661b7e2d3abab3cb290aea205b9a14aefc8eb0a0b3e538040842674e454"
+      },
+      {
+        "path": "internal/engine/superpowers_apply.go",
+        "sha256": "db671d4cb92be7c08e60851bd83edabd55c907a51a5a8ad61529d966c3ac506a"
+      },
+      {
+        "path": "internal/engine/superpowers_runner.go",
+        "sha256": "66f038c3eb309864537470e60caab556ef5a670a647e64e222a38977876e8460"
+      },
+      {
+        "path": "internal/evaluator/stockfish.go",
+        "sha256": "690c117b9333913fe8eeb6c2317a2e70dea7c37dd0ed5d3a0b360cfde23c21ea"
+      },
+      {
+        "path": "internal/evolution/mcts_mutate.go",
+        "sha256": "8f23bf2e7a07e2af37210c5794a965dc8516e9fe2d291fbda053d6f547d50d6d"
+      },
+      {
+        "path": "internal/factory/factory.go",
+        "sha256": "024310b1a87d3462cc2da8180e435eb78cd3055fe8dc987c3f94d47309b8a83b"
+      },
+      {
+        "path": "internal/gardener/evolve_v2_test.go",
+        "sha256": "2598d5bb572417985237d60e08def2f386c334aa292942edb1d2faf891391418"
+      },
+      {
+        "path": "internal/gardener/gardener.go",
+        "sha256": "53de2194ddef968f797605d688fbd879318ed672d83d3253a81ac1914724c5d5"
+      },
+      {
+        "path": "internal/gardener/gardener_test.go",
+        "sha256": "ed9dd4041da81fa6c18152d3c020eaf6a27fa01ffa4981a744a53cbcc548594f"
+      },
+      {
+        "path": "internal/knowledge/feedback_persist.go",
+        "sha256": "28e8271d3bf368fe91ba978daa96f4c0e61cdc6f3446e680f4134587b486f3dc"
+      },
+      {
+        "path": "internal/reliability/errors.go",
+        "sha256": "bb8e1c2a3e4f2244a57e834cee41fecbbc212d2cf51920c3b0a0cde8f1db53b0"
+      },
+      {
+        "path": "internal/reliability/reliability.go",
+        "sha256": "7c25fa332553be60d7d0a4348f9562fe2b7943a15716275a1d1ee74b2044ee14"
+      },
+      {
+        "path": "internal/reliability/reliability_test.go",
+        "sha256": "0d3685287ed873247c19ad64f8bbcbb1ba0fd896087fc1ae452d88a383ffdf14"
+      },
+      {
+        "path": "internal/util/persist.go",
+        "sha256": "faaf961e6133c3c03c46d6b69f7b44adae445ecce76c974b59a1268c25859bf1"
+      }
+    ],
+    "excluded": [
+      "graphify-out/",
+      "docs/verification/"
+    ]
+  }
+}

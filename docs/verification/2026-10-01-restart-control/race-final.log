@@ -1,0 +1,6 @@
+ok  	github.com/nico/go-bt-evolve/internal/agent	33.519s
+ok  	github.com/nico/go-bt-evolve/internal/reliability	18.673s
+ok  	github.com/nico/go-bt-evolve/internal/gardener	3.818s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-dashboard	23.685s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-agent	18.260s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-gardener	3.500s

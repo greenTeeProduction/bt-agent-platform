@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nico/go-bt-evolve/internal/util"
 	btcore "github.com/rvitorper/go-bt/core"
 )
 
@@ -165,7 +166,7 @@ func registerSuperpowersProductionActions() {
 			bb.Result = "## Design Validation Failed\n\nNo Superpowers design path in run state."
 			return -1
 		}
-		data, err := os.ReadFile(run.DesignPath)
+		data, err := util.ReadPersistenceFile(run.DesignPath)
 		if err != nil {
 			bb.Result = "## Design Validation Failed\n\n" + err.Error()
 			return -1
@@ -202,7 +203,7 @@ func registerSuperpowersProductionActions() {
 			bb.Result = "## Grill Design Failed\n\nNo Superpowers design path in run state."
 			return -1
 		}
-		data, err := os.ReadFile(run.DesignPath)
+		data, err := util.ReadPersistenceFile(run.DesignPath)
 		if err != nil {
 			bb.Result = "## Grill Design Failed\n\n" + err.Error()
 			return -1
@@ -212,7 +213,7 @@ func registerSuperpowersProductionActions() {
 		if run.Mode == SuperpowersModeDryRun {
 			dryMarkdown := "\n## Grill Q&A\n\n_DRY RUN: question generation and answerers skipped._\n\n" +
 				"**Q (dry-run, N/A):** N/A\n\n**A:** OPEN-dry-run\n\n"
-			if err := os.WriteFile(run.DesignPath, []byte(designContent+dryMarkdown), 0o644); err != nil {
+			if err := util.SavePersistenceFile(run.DesignPath, []byte(designContent+dryMarkdown)); err != nil {
 				bb.Result = "## Grill Design Failed\n\n" + err.Error()
 				return -1
 			}
@@ -262,7 +263,7 @@ func registerSuperpowersProductionActions() {
 
 		// Round-tagged, append-only Q&A appendix.
 		section := grillRoundHeading(round) + strings.TrimPrefix(res.Markdown, "\n## Grill Q&A\n\n")
-		if err := os.WriteFile(run.DesignPath, []byte(designContent+section), 0o644); err != nil {
+		if err := util.SavePersistenceFile(run.DesignPath, []byte(designContent+section)); err != nil {
 			bb.Result = "## Grill Design Failed\n\n" + err.Error()
 			return -1
 		}
@@ -338,7 +339,7 @@ func registerSuperpowersProductionActions() {
 		defer cancel()
 		cmd := "/usr/local/go/bin/go build ./cmd/bt-agent ./cmd/bt-agent-cli"
 		res := runShellCommand(c, defaultSuperpowersCommandRunner, run.WorktreePathOrRepo(), cmd)
-		_ = os.WriteFile(filepath.Join(run.ArtifactDir, "verification", "baseline-build.txt"), []byte(formatCommandResult(res)), 0o644)
+		_ = util.SavePersistenceFile(filepath.Join(run.ArtifactDir, "verification", "baseline-build.txt"), []byte(formatCommandResult(res)))
 		if res.Err != nil {
 			bb.Result = "## Baseline Failed\n\n" + res.Output
 			return -1
@@ -389,7 +390,7 @@ func registerSuperpowersProductionActions() {
 			bb.Result = "## Plan Validation Failed\n\nNo plan path in Superpowers run state."
 			return -1
 		}
-		data, err := os.ReadFile(run.PlanPath)
+		data, err := util.ReadPersistenceFile(run.PlanPath)
 		if err != nil {
 			bb.Result = "## Plan Validation Failed\n\n" + err.Error()
 			return -1
@@ -764,7 +765,7 @@ func registerSuperpowersProductionActions() {
 		run.Phase = SuperpowersPhaseFinish
 		finish := buildSuperpowersFinishReport(run)
 		path := filepath.Join(run.ArtifactDir, "finish.md")
-		if err := os.WriteFile(path, []byte(finish), 0o644); err != nil {
+		if err := util.SavePersistenceFile(path, []byte(finish)); err != nil {
 			bb.Result = "## Finish Failed\n\n" + err.Error()
 			return -1
 		}
@@ -932,7 +933,7 @@ func recoverGoapFusionPendingPatchesInDir(ctx context.Context, runner CommandRun
 		if strings.TrimSpace(listed.Output) == "" {
 			continue // branch gone; nothing left to recover
 		}
-		planText, _ := os.ReadFile(run.PlanPath)
+		planText, _ := util.ReadPersistenceFile(run.PlanPath)
 		if superpowersPlanAlreadyImplemented(string(planText)) {
 			continue // superseded: this work already landed out-of-band
 		}
@@ -1114,7 +1115,7 @@ func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboar
 		return -1
 	}
 	run.PlanPath = planPath
-	data, err := os.ReadFile(planPath)
+	data, err := util.ReadPersistenceFile(planPath)
 	if err != nil {
 		bb.Result = "## GOAP Superpowers Runtime Failed\n\n" + err.Error()
 		return -1
@@ -1211,7 +1212,7 @@ func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboar
 	// never reset work whose ownership this cycle cannot establish.
 	if err := applySuperpowersRunToMainRepo(c, defaultSuperpowersCommandRunner, run); err != nil {
 		finishPath := filepath.Join(run.ArtifactDir, "finish.md")
-		_ = os.WriteFile(finishPath, []byte(buildSuperpowersFinishReport(run)), 0o644)
+		_ = util.SavePersistenceFile(finishPath, []byte(buildSuperpowersFinishReport(run)))
 		bb.Result = "## GOAP Superpowers Pending Patch\n\n" + err.Error()
 		bb.Outcome = "pending_patch"
 		return -1
@@ -1219,7 +1220,7 @@ func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboar
 	run.Phase = SuperpowersPhaseFinish
 	_ = writeSuperpowersRunJSON(run)
 	finishPath := filepath.Join(run.ArtifactDir, "finish.md")
-	_ = os.WriteFile(finishPath, []byte(buildSuperpowersFinishReport(run)), 0o644)
+	_ = util.SavePersistenceFile(finishPath, []byte(buildSuperpowersFinishReport(run)))
 	// Produce the durable consecutive no-op-patch streak the CIRCUITPOLICY loop
 	// runner reads via goapFusionNoopPatchStreak: a run that applied but changed
 	// no tracked files (empty ChangedFiles AND no commit) increments the streak;

@@ -136,7 +136,7 @@ func TestDriftWatchOnce_SiblingRestartSkippedWhenAlreadyAdopted(t *testing.T) {
 	}
 	res, err := DriftWatchOnce(DriftWatchConfig{
 		RepoDir: "/r", RunningRevision: "abc", AutoRebuild: true, AutoRestart: true,
-		RestartSiblings: true, Targets: targets, Binary: "bt-agent", Backoff: NewRebuildBackoff(),
+		RestartSiblings: true, SiblingRestartFn: func(unit, _ string) error { return driftRestartFn(unit) }, Targets: targets, Binary: "bt-agent", Backoff: NewRebuildBackoff(),
 	})
 	if err != nil || !res.Restarted {
 		t.Fatalf("res=%+v err=%v", res, err)

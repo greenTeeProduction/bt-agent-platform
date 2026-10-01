@@ -36,6 +36,13 @@ flowchart LR
 | Research vault / host filesystem | Research context and persisted state | Analysis, plans, run artifacts and coordinated state writes. |
 | systemd / monitoring / subscribers | Start/stop/restart and operational probes | Logs, build/run metrics and configured webhook events. |
 
+Local restart coordination is an internal daemon interface (ADR-279), distinct
+from public dashboard/A2A HTTP. On Linux, the configured platform-home/unit
+namespace uses abstract Unix sockets and kernel same-UID credentials at both
+ends. The owning process seals admission and requests its own systemd restart.
+The UID is the trusted operator boundary, not end-user identity or service
+readiness. Production control also checks that systemd MainPID is this process. Unsupported/missing owners defer without fallback.
+
 ## 3.2 Technical Context
 
 | Interface | Channel / endpoint | Contract and source of truth |
@@ -71,6 +78,12 @@ within the configured workflows root; escaping symlinks are unavailable.
 Protected route definitions carry standard 401/403 error schemas. Validation
 uses the exact status or an explicit default, preserving authentication
 dispositions instead of applying success shapes ([ADR-272](09-decisions.md#adr-272)).
+
+DLQ replay acknowledges a committed requeue, not completed execution.
+`/api/dlq/replay` rejects recovery-held/exhausted entries with 409 and unavailable
+storage with 503. Listing also reports storage failure. Purge removes only
+unclaimed entries and returns `removed`/`pending`; it cannot clear a replay fence.
+These are shared-operator controls, not reconciliation authority (ADR-280).
 
 **Scope limits.** The implemented deployment is a supervised collection of
 processes on one host, with optional remote A2A peers. It is not a proven

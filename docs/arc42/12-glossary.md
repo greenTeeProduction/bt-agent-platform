@@ -29,6 +29,7 @@ runtime details in §§5–8 and decision history in [§9](09-decisions.md).
 | **Completed workflow prefix** | Healthy child work already performed before the surrounding workflow/container stopped. A typed partial stop prevents automatic replay of that prefix; no rollback or durable resume is implied (ADR-270). |
 | **Condition** | A behavior-tree leaf that tests state and returns success/failure without selecting a new architecture policy. |
 | **Crisis Detector** | Evolution component identifying stagnation/diversity symptoms that can trigger configured recovery interventions. |
+| **DLQ replay claim** | Durable exact attempt identity committed before replay dispatch. It survives process exit and cannot expire or be removed by ordinary maintenance; trusted reconciliation requires quiescence and outcome evidence (ADR-280). |
 | **Dead Letter Queue (DLQ)** | Persistent failed-work records retained for inspection and replay. Insertion, retryability and retention are caller/policy-specific. |
 | **DefaultTree** | The platform's general fallback tree. A failed generated-tree lookup must not be confused with successful execution of the requested tree. |
 | **Deferred Outcome** | An expected pause, such as provider quota carryover, recorded separately from ordinary success/failure. Scheduler behavior is defined in [§6.4](06-runtime-view.md#64-self-improvement-cycle-goap-fusion-loop). |
@@ -86,6 +87,7 @@ runtime details in §§5–8 and decision history in [§9](09-decisions.md).
 | **Superpowers Run** | Durable artifacts for a coding workflow, including plan, tasks, implementation and verification evidence. The historical name is provider-neutral. |
 | **Sprint batch budget** | A five-minute context owned by accepted asynchronous work, including queue time. Expiry stops new dispatch and returns only proven unstarted claims; capacity stays owned until actual cleanup (ADR-276). |
 | **Recovery hold** | Persisted inactive scheduler disposition requiring trusted operator reconciliation after interrupted or unrecorded execution. Restart, registry sync and ordinary scheduling do not prove side effects failed (ADR-277). |
+| **Restart admission seal** | Process-local exclusion of new owned work during accepted or uncertain restart handoff; proven rejection reopens admission. Shared dashboard/gardener gates and target-owned sibling requests use it; it is not a durable recovery claim or protection from arbitrary systemd calls (ADR-278/279). |
 | **Sprint metadata reconciliation** | Retrying a retained observed task result against its original in-progress owner without running the action again. Failed/conflicting writes and execution uncertainty block new admission; evidence is process-local (ADR-275). |
 | **Task Approval (dashboard)** | The dashboard task workflow's execution decision. It is separate from login authentication and may be distinct from an engine HITL request. |
 | **Tick** | One evaluation step of a behavior tree returning success, failure or running; a synchronous tick can contain slow work. |

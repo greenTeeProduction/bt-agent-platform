@@ -36,7 +36,7 @@ type execCommandRunner struct{}
 
 func (execCommandRunner) Run(ctx context.Context, dir string, name string, args ...string) CommandResult {
 	start := time.Now()
-	cmd := exec.CommandContext(ctx, name, args...)
+	cmd := exec.CommandContext(ctx, name, args...) // #nosec G204 -- authorized command runner, including explicit shell-command actions.
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	return CommandResult{
@@ -104,7 +104,7 @@ func (r execClaudeRunner) RunClaude(ctx context.Context, repoDir string, prompt 
 	}
 	args := r.buildClaudeArgs(prompt)
 	start := time.Now()
-	cmd := exec.CommandContext(ctx, bin, args...)
+	cmd := exec.CommandContext(ctx, bin, args...) // #nosec G204 -- operator-selected executable; prompt passed as argv, never interpolated into a shell.
 	cmd.Dir = repoDir
 	cmd.Env = append(os.Environ(), "PATH=/usr/local/go/bin:"+os.Getenv("HOME")+"/go/bin:"+os.Getenv("PATH"))
 	// Match Codex: cancellation must stop delegated child commands as well

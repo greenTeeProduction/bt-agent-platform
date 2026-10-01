@@ -1,0 +1,6 @@
+2026/10/01 10:37:47 INFO sprint: running task task=drift-owned agent=owned tree=godev
+--- FAIL: TestDashboardDriftGuardRetainsDetachedSprint (0.01s)
+    deploy_activity_regression_test.go:54: guard reports idle while detached sprint action is running
+FAIL
+FAIL	github.com/nico/go-bt-evolve/cmd/bt-dashboard	0.043s
+FAIL

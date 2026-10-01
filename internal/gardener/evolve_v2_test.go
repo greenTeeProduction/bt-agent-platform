@@ -371,8 +371,8 @@ func TestEvolveTreeV2_MetricsSaved(t *testing.T) {
 // RunCycleV2 currently discards every MetricsTracker.Save() error behind
 // `_ = g.cfg.MetricsTracker.Save()` (evolve_v2.go lines 633 and 654), so a
 // corrupted-write metrics snapshot is silently treated as successfully
-// persisted. Pointing MetricsTracker at a path inside a directory that does
-// not exist makes every Save() call fail at write time; RunCycleV2 must
+// persisted. Pointing MetricsTracker at a path under a regular file that cannot
+// allow a child file makes every Save() call fail at write time; RunCycleV2 must
 // surface that failure through its existing error return instead of
 // swallowing it.
 func TestRunCycleV2_MetricsSaveFailurePropagates(t *testing.T) {
@@ -396,9 +396,12 @@ func TestRunCycleV2_MetricsSaveFailurePropagates(t *testing.T) {
 	}
 	reg.mu.Unlock()
 
-	// mt.path points inside a directory that is never created, so every
-	// os.WriteFile inside MetricsTracker.Save() fails.
-	mt := &MetricsTracker{path: filepath.Join(dir, "missing-subdir", "gardener-metrics.json")}
+	// A regular file blocks parent creation as well as atomic replacement.
+	blocked := filepath.Join(dir, "blocked-parent")
+	if err := os.WriteFile(blocked, []byte("fixture"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	mt := &MetricsTracker{path: filepath.Join(blocked, "gardener-metrics.json")}
 
 	cfg := Config{
 		Registry:                 reg,

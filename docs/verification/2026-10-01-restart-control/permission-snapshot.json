@@ -1,0 +1,20 @@
+{
+  "canonical_payload_sha256": "8f208864c5a7b0c209c482bed95c8e1516e855b73badb82869dcd5d5ee138c6e",
+  "payload": {
+    "base_commit": "1127c804e7c8cc90c9fa3012c518b8e9f2fcf042",
+    "excludes": [
+      "This increment verification evidence",
+      "Derived graph"
+    ],
+    "files": [
+      {
+        "path": "docs/plans/2026-09-30-arc42-cleanup.md",
+        "sha256": "cd09293ea17a0793e841a2c6e51d8de333400188a8e90e2778c556ccf88e0056"
+      },
+      {
+        "path": "internal/agent/scheduler.go",
+        "sha256": "8ab336e01c64790bbbf4ade925acd32f28974eb90b157183bb0e7fad55e80c74"
+      }
+    ]
+  }
+}

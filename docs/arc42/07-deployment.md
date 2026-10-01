@@ -144,12 +144,30 @@ cycle. See the [current policy](../sol-model-policy.md#host-deployment).
    the target matching the unit's `ExecStart`. The automatic implementation
    is [`agent/rebuild.go`](../../internal/agent/rebuild.go).
 4. Coordinate with in-flight work, restart the owning units and respawn
-   affected MCP children. All three daemon mains supply in-flight callbacks
-   to drift adoption (ADR-228), but a review fixture shows the dashboard HTTP
-   request counter misses accepted asynchronous sprint work. Qualify the
-   asynchronous ownership guard before enabling its automatic restart.
+   affected MCP children. Dashboard self-adoption owns HTTP requests and
+   detached agent/sprint/pipeline work through cleanup, then atomically seals
+   admission through asynchronous restart handoff (ADR-278/279). Sibling
+   requests now require dashboard/gardener target ownership; missing owners
+   defer with no systemd fallback. Gardener owns cycles and periodic analysis/
+   metadata. The bt-agent self path still samples scheduler state. Qualify
+   daemon-wide ownership and bounded real handoff before enabling automatic
+   restart (ADR-228, R13).
 5. Confirm service activity, actual executable revision, a meaningful
    authenticated smoke test and the next relevant workflow outcome.
+
+**Coordinated rollout (ADR-279):** upgrade controllers and both target owners
+with automatic restart disabled. Older controllers retain direct sibling
+restart behavior, so mixed versions do not establish safety. A target requires
+its own `BT_AUTO_RESTART_ON_DRIFT=1` before accepting requests; a controller's
+flag does not override that policy. The private Linux control namespace requires
+the same UID and configured platform home; the owner/default restart also
+require the canonical unit MainPID to match this process. Identity queries
+and client/framing deadlines are five
+seconds, artifact probes twenty seconds and systemd commands fifteen seconds;
+a lost client reply does not cancel an accepted owner operation. Accepted or
+uncertain handoff stays sealed until process exit/operator restart. This is
+bounded fixture behavior, not deployed restart acceptance. Unknown version,
+dirty or wrong-revision artifacts are not accepted by the owner.
 
 **Evidence levels:** `/api/health` proves HTTP process liveness, not model
 readiness or successful GOAP implementation. Use `bt_build_info`/startup
@@ -170,7 +188,7 @@ source/state/vault/secret sets, restore into a separate location, and prove
 agent registration, tree resolution, approval state, pending work and
 snapshot recovery before production use. Atomic writes provide single-file
 integrity; they are not backups or cross-store transactions. This review
-does not claim that a production restore drill has passed.
+does not claim full host-loss or complete production restore qualification; the bounded 2026-10-01 evidence below covers actual-state hashes and dashboard reads.
 
 **Process recovery contract, 2026-10-01 (ADR-277):** persisted scheduled/manual
 admissions interrupted before final recording remain inactive and require
@@ -220,6 +238,38 @@ establish ownership behavior, not production termination or capacity targets
 
 
 Benchmark qualification on 2026-10-01 installed `gemma3:270m` and `qwen2.5:0.5b` in the host Ollama store. The latter is the default benchmark model after the smaller model failed an arithmetic correctness probe. This is a benchmark-only exception to ordinary Sol inference. Source changes and live qualification are isolated in `codex/runtime-impact-20261001`; they do not establish adoption by the deployed BT services. See [benchmark policy](../sol-model-policy.md).
+### Bounded operational qualification — 2026-10-01
+
+The [durable checkpoint](../verification/2026-10-01-checkpoint/README.md)
+qualifies a clean f60dcf42 dashboard artifact briefly served by the canonical
+user unit, plus service reads from an isolated restore of actual offline state.
+Executable hash, version and build_info agree; tasks and definition names
+match their persisted contents; unauthenticated task reads return 401. The
+unit needed a temporary supported generic-provider EnvironmentFile because
+host BT_LLM_PROVIDER=codex is unsupported by this committed snapshot. Global
+settings were preserved and the three BT units returned to their initial
+inactive state. This is read/identity acceptance, not as-is deployment readiness.
+
+A controlled actual host Codex adapter execution with private gpt-5.5 produced
+the expected artifact; that account rejected gpt-6.1-sol. Backup/restoration
+matched every file/link in evolve/reflections/gardener roots, with no escaping
+restored links. Existing work was not dispatched. Full deployed coding or
+evolution, provider authentication restore, external vault/worktrees, power-loss,
+retention and numeric RPO/RTO remain open. Implemented restart holds and their
+separate-process fault fixtures do not establish those operational guarantees.
+
+**DLQ rollout and recovery (ADR-280):** stop and drain every writer/consumer
+before adopting the new replay protocol. Older complete-snapshot writers can
+erase unknown claim fields; mixed versions and rollback to those writers are
+unsafe. Preserve the state file and backup before restart. Do not purge,
+quarantine, expire or reapprove held work to make it runnable. Establish owner
+quiescence and action evidence, then record an exact-claim decision through the
+trusted Go seam. If outcome cannot be proved, retain the hold. Claims do not
+recover lost output or protect against deleting/replacing the state volume.
+Automatic rebuild/restart flags remain disabled pending daemon-wide ownership
+and real handoff qualification. The current DLQ code is fixture-tested, not
+qualified in a deployed service; prior operational evidence remains scoped to
+[the f60dcf42 checkpoint](../verification/2026-10-01-checkpoint/README.md).
 
 ---
 

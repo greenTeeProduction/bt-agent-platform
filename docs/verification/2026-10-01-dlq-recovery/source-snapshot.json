@@ -1,0 +1,116 @@
+{
+  "base_commit": "7da5b8a7f20846d3ca9806fcb85f4c433600dcf8",
+  "canonical_sha256": "00615fd5e0164399381ebf790118eeaf8af302b96e90c4cd3c6eab621c23a067",
+  "excludes": [
+    "graphify-out/",
+    "docs/verification/"
+  ],
+  "files": [
+    {
+      "path": "cmd/bt-agent/dlq_origin_restart_test.go",
+      "sha256": "f1ed7bd48509482fed7554ef2bff470fe8fc7c26813b49deeda8ec8786bb76ab"
+    },
+    {
+      "path": "cmd/bt-agent/dlq_tools_recovery_test.go",
+      "sha256": "94bda46d946c398d20f2d8b719a7a8e1c69ee4617a737f0dea8c11729205e9db"
+    },
+    {
+      "path": "cmd/bt-agent/main.go",
+      "sha256": "d61df8db40f0bae4c167b5ea906aad2e0843a3df489e345aefcbcc26069c86c2"
+    },
+    {
+      "path": "cmd/bt-agent/main_test.go",
+      "sha256": "a6e0ee067f718c6984138cd7b50e9a0ee7ba1e4a469507843c9bdbab035545a9"
+    },
+    {
+      "path": "cmd/bt-agent/tools.go",
+      "sha256": "725c8980be98b31e76cedc96e6e9d0665e4a49f881bf016266e18c143cd7a693"
+    },
+    {
+      "path": "cmd/bt-dashboard/dlq_recovery_http_test.go",
+      "sha256": "26a1feb923d1751d3eee45d895347af9903cb08234fa90ae82b9679231de82e0"
+    },
+    {
+      "path": "cmd/bt-dashboard/main.go",
+      "sha256": "69402886381b2461261c77c9f8049623cc538dae978353c436f01179a39a222e"
+    },
+    {
+      "path": "docs/arc42/03-context-scope.md",
+      "sha256": "ff1b076492c15aaf3eaff8257518905e52a6b09abd1d58f1ebaa4084bce6eca2"
+    },
+    {
+      "path": "docs/arc42/05-building-blocks.md",
+      "sha256": "525c10c5e968b950f43ad6bb7dda948da05dede49f68b4c2d9d6c9aba25c7e9f"
+    },
+    {
+      "path": "docs/arc42/06-runtime-view.md",
+      "sha256": "6c5547ce33c8e8d7e29351c7d63b5945a95168307ab8fd80339d286a2271f99b"
+    },
+    {
+      "path": "docs/arc42/07-deployment.md",
+      "sha256": "de038fe15d2dff650bbabf2e0a1033e8a78e5688e247484f2f3f6e0145970ae3"
+    },
+    {
+      "path": "docs/arc42/08-crosscutting-concepts.md",
+      "sha256": "76bf40d0677024efdc77a7ca2c76dbfa2bcb243820ef194be45c990a73c98dc1"
+    },
+    {
+      "path": "docs/arc42/09-decisions.md",
+      "sha256": "459a69122a6dd03a5e225a58ff44d9d908359ecbbf1ccba3c1af8f9c196b7cb5"
+    },
+    {
+      "path": "docs/arc42/10-quality.md",
+      "sha256": "8fde7dcb91dbf7f1fe86efc3d9a438348a9aae88d2991cad624199a04ca0455f"
+    },
+    {
+      "path": "docs/arc42/11-risks-debt.md",
+      "sha256": "6c78a37a72e9ffc084689dcb319f0a07c35c69889b0a20fd202f3e4d9e9e0fa6"
+    },
+    {
+      "path": "docs/arc42/12-glossary.md",
+      "sha256": "65a70d07b0a1e2e49b59537c36c070eacb0e4e9f2915e60821a55d751607183a"
+    },
+    {
+      "path": "docs/arc42/README.md",
+      "sha256": "209b40847d1235b58f6b24d59b7b355ca0a994bc3cf712ecece6896d009c5aca"
+    },
+    {
+      "path": "docs/plans/2026-09-30-arc42-cleanup.md",
+      "sha256": "7962a712b31be4f63d806c6402835f55e6af85a3bc6631ee4646063142acbfde"
+    },
+    {
+      "path": "internal/api/openapi.go",
+      "sha256": "1945fff348624ff9b55fa79e62bd0bf78fe704300f284d7e575d42d8ebbeaecc"
+    },
+    {
+      "path": "internal/engine/ops_actions.go",
+      "sha256": "97fa8a39cdbf1a4dfdea46885635e0e254f1fbcfbcd179fb65fbdae755c7ecc5"
+    },
+    {
+      "path": "internal/engine/ops_actions_test.go",
+      "sha256": "e0ebf813084de1dfa72eb2e34994d23fa1d625501eff46d5909bc74e1beef9a3"
+    },
+    {
+      "path": "internal/reliability/dead_letter.go",
+      "sha256": "cce35a5a9a8858b9281852268a01cd6ef03e0a4585f926f084621cef9fe232f9"
+    },
+    {
+      "path": "internal/reliability/dead_letter_transaction_test.go",
+      "sha256": "088e6cb9ae834427c552524ed7303f474e1df90953ac047ac1d65ed2e29b1258"
+    },
+    {
+      "path": "internal/reliability/dlq_restart_safety_test.go",
+      "sha256": "7600f741fa6e51d1d7c1406bf243ef914de851333db7b57e000824cb90b4e36a"
+    },
+    {
+      "path": "internal/reliability/reliability.go",
+      "sha256": "b4746740577178a2fd6d670fa1225fbc3dc97b0117b3a8dd655639f1cb9064e2"
+    },
+    {
+      "path": "internal/reliability/reliability_test.go",
+      "sha256": "2785eb6844aa23ff0a0db4b087e3a6340b5dfc82fd367dc8d640d2d2a60364f4"
+    }
+  ],
+  "implementation_commit": "0017825211f90d6bc8a2d24715b58496474c9fd2",
+  "scope": "changed implementation, tests and current architecture; source bytes at settled code state before committing"
+}

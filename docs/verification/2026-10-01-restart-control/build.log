@@ -1,0 +1,33 @@
+=== build-quality (runs before each local build) ===
+
+→ go vet
+  ✓ go vet
+
+→ gofmt check
+  ✓ gofmt
+
+→ go mod tidy check
+  ✓ go mod tidy
+
+→ golangci-lint config verify
+  ✓ golangci-lint config verify
+
+→ golangci-lint run
+0 issues.
+  ✓ golangci-lint run
+
+→ gosec high (exclude=G404,G304,G703,G704,G115)
+  ✓ gosec high
+
+→ build binaries
+  ✓ build
+
+→ graphify update
+Re-extracting code files in . (no LLM needed)...
+  AST extraction: 1161/1161 files (100%)
+[graphify watch] Skipped graph.html: Graph has 14584 nodes - too large for HTML viz (limit: 5000). Use --no-viz, raise GRAPHIFY_VIZ_NODE_LIMIT, or reduce input size.
+[graphify watch] Rebuilt: 14584 nodes, 28899 edges, 710 communities
+[graphify watch] graph.json and GRAPH_REPORT.md updated in graphify-out
+Code graph updated. For doc/paper/image changes run /graphify --update in your AI assistant.
+Tip: set GEMINI_API_KEY or GOOGLE_API_KEY to use Gemini for semantic extraction.
+  ✓ graphify update

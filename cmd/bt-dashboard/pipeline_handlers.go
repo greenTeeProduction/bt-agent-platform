@@ -192,6 +192,17 @@ func handlePipelineRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	endActivity, admitErr := dashActivity.acquire()
+	if admitErr != nil {
+		writeDashboardRestarting(w)
+		return
+	}
+	transferred := false
+	defer func() {
+		if !transferred {
+			endActivity()
+		}
+	}()
 	runID := newRunID()
 	runner, initErr := newPipelineRunner(runID, "pipeline", pipeline.Name)
 	if initErr != nil {
@@ -214,7 +225,7 @@ func handlePipelineRun(w http.ResponseWriter, r *http.Request) {
 
 	slog.Info("pipeline: starting execution", "run_id", runID, "pipeline", pipeline.Name)
 
-	reliability.SafeGo(fmt.Sprintf("pipeline-run[%s]", runID), func() {
+	reliability.SafeGoWithCleanup(fmt.Sprintf("pipeline-run[%s]", runID), func() {
 		if dashTaskQueue != nil {
 			defer dashTaskQueue.Dequeue()
 		}
@@ -228,7 +239,7 @@ func handlePipelineRun(w http.ResponseWriter, r *http.Request) {
 			if runErr != nil {
 				rec.Error = runErr.Error()
 			}
-			slog.Info("pipeline: waiting", "run_id", runID, "outcome", result.Outcome)
+			slog.Info("pipeline: waiting", "run_id", runID, "status", rec.Status)
 		} else if runErr != nil || result == nil || !agent.IsHealthyOutcome(result.Outcome) {
 			rec.Status = "failed"
 			if runErr != nil {
@@ -238,10 +249,10 @@ func handlePipelineRun(w http.ResponseWriter, r *http.Request) {
 			} else {
 				rec.Error = "pipeline returned no result"
 			}
-			slog.Warn("pipeline: execution stopped", "run_id", runID, "error", rec.Error)
+			slog.Warn("pipeline: execution stopped", "run_id", runID, "status", rec.Status)
 		} else {
 			rec.Status = "complete"
-			slog.Info("pipeline: execution complete", "run_id", runID, "outcome", result.Outcome)
+			slog.Info("pipeline: execution complete", "run_id", runID, "status", rec.Status)
 		}
 		rec.Result = result
 	}, func(panicVal any, panicCtx string) {
@@ -250,7 +261,8 @@ func handlePipelineRun(w http.ResponseWriter, r *http.Request) {
 		defer pipelineRunsMu.Unlock()
 		rec.Status = "failed"
 		rec.Error = fmt.Sprintf("panic: %v", panicVal)
-	})
+	}, endActivity)
+	transferred = true
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)

@@ -16,12 +16,19 @@ import (
 
 // LoadPipeline reads a workflow YAML from agent.WorkflowsDir().
 func LoadPipeline(name string) (dashboard.Pipeline, error) {
+	if !filepath.IsLocal(name) {
+		return dashboard.Pipeline{}, fmt.Errorf("workflow name must stay within its configured root")
+	}
 	filename := name
 	if !strings.HasSuffix(filename, ".yaml") {
 		filename += ".yaml"
 	}
-	path := filepath.Join(agent.WorkflowsDir(), filename)
-	data, err := os.ReadFile(path)
+	root, err := os.OpenRoot(agent.WorkflowsDir())
+	if err != nil {
+		return dashboard.Pipeline{}, err
+	}
+	defer root.Close()
+	data, err := root.ReadFile(filename)
 	if err != nil {
 		return dashboard.Pipeline{}, err
 	}
@@ -58,7 +65,8 @@ func RunPipelineWithID(ctx context.Context, d *agent.RunDeps, pipeline dashboard
 			outcome, output, _, err := agent.RunAgent(stepCtx, d, agentName, task, "", opts)
 			// Shared classifier: healthy non-"success" outcomes count as
 			// metric successes, matching the executor's recordTaskMetric.
-			dashboard.RecordTask(agentName, agent.IsBreakerSuccess(outcome, err), uint64(time.Since(start).Milliseconds()))
+			durationMs := max(time.Since(start).Milliseconds(), 0)
+			dashboard.RecordTask(agentName, agent.IsBreakerSuccess(outcome, err), uint64(durationMs))
 			return outcome, output, err
 		},
 		WaitApproval: dashboard.WorkflowApprovalWait,

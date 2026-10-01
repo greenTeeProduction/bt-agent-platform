@@ -48,22 +48,22 @@ var kg *knowledge.KnowledgeGraph
 var sharedLLM llm.LLM
 var dashAgentRunner *agent.RunDeps
 
-// dashRequestsInFlight counts HTTP requests currently being served. Plugged
-// into agent.DriftWatchConfig.InFlightFn (via dashAnyInFlight) so the
-// deploy-drift AutoRestart wiring below can never SIGTERM the dashboard
-// mid-request, mirroring bt-agent's Scheduler.AnyInFlight guard and
-// gardener.Gardener.AnyInFlight.
+// dashRequestsInFlight exposes HTTP lifetime for diagnostics. Restart safety
+// also owns detached execution through dashActivity's admission leases.
 var dashRequestsInFlight atomic.Int64
 
-// dashAnyInFlight reports whether an HTTP request is currently being served.
 func dashAnyInFlight() bool {
-	return dashRequestsInFlight.Load() > 0
+	return dashRequestsInFlight.Load() > 0 || dashActivity.busy() || dashBackgroundBusy()
 }
 
-// inFlightMiddleware tracks requests for dashAnyInFlight for the full
-// duration each request spends in the handler chain it wraps.
 func inFlightMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		release, err := dashActivity.acquire()
+		if err != nil {
+			writeDashboardRestarting(w)
+			return
+		}
+		defer release()
 		dashRequestsInFlight.Add(1)
 		defer dashRequestsInFlight.Add(-1)
 		next.ServeHTTP(w, r)
@@ -247,22 +247,6 @@ func main() {
 	slog.Info("DLQ initialized", "path", dlqPath, "entries", dlq.Len())
 	dashboard.DLQCategoriesFn = dlq.CategoryCounts
 
-	// Deploy-drift watcher (program 94b0b31) — detection-only by default; WARNs
-	// when this binary falls behind repo HEAD. BT_AUTO_REBUILD_ON_DRIFT=1 opts
-	// into out-of-place rebuild+swap.
-	if repoDir, wdErr := os.Getwd(); wdErr == nil {
-		agent.StartDriftWatcher(context.Background(), agent.DriftWatchConfig{
-			RepoDir:         repoDir,
-			RunningRevision: dashboard.ReadBuildIdentity().Revision,
-			AutoRebuild:     agent.AutoRebuildEnabled(),
-			AutoRestart:     agent.AutoRestartEnabled(),
-			Targets:         agent.DashboardRebuildTargets(repoDir),
-			Binary:          "bt-dashboard",
-			Backoff:         agent.NewRebuildBackoff(),
-			InFlightFn:      dashAnyInFlight,
-		}, agent.DefaultDriftCheckInterval)
-	}
-
 	// Scalability components: worker pool and concurrency limiter for agent tasks
 	dashWorkerPool = reliability.NewWorkerPool(4)                 // 4 concurrent agent workers
 	dashConcurrencyLimiter = reliability.NewConcurrencyLimiter(2) // max 2 concurrent LLM-bound agent executions
@@ -440,6 +424,35 @@ func main() {
 		os.Exit(1)
 	}
 	server := security.NewHTTPServer(addr, handler)
+
+	// Start only after execution owners are initialized; the watcher reads them.
+	// Deploy-drift watcher (program 94b0b31) — detection-only by default; WARNs
+	// when this binary falls behind repo HEAD. BT_AUTO_REBUILD_ON_DRIFT=1 opts
+	// into out-of-place rebuild+swap.
+	if repoDir, wdErr := os.Getwd(); wdErr == nil {
+		stopControl, controlErr := agent.StartRestartControl(agent.RestartControlConfig{
+			Home: agent.HomeDir(), Unit: "bt-dashboard", Revision: dashboard.ReadBuildIdentity().Revision,
+			BinaryPath: agent.DashboardRebuildTargets(repoDir)[0].OutPath,
+			Enabled:    agent.AutoRestartEnabled(), BeginRestart: dashActivity.beginRestart,
+		})
+		if controlErr != nil {
+			slog.Error("dashboard restart control unavailable; sibling requests will defer", "error", controlErr)
+		} else {
+			defer stopControl()
+		}
+		agent.StartDriftWatcher(context.Background(), agent.DriftWatchConfig{
+			RepoDir:         repoDir,
+			RunningRevision: dashboard.ReadBuildIdentity().Revision,
+			AutoRebuild:     agent.AutoRebuildEnabled(),
+			AutoRestart:     agent.AutoRestartEnabled(),
+			Targets:         agent.DashboardRebuildTargets(repoDir),
+			Binary:          "bt-dashboard",
+			Backoff:         agent.NewRebuildBackoff(),
+			InFlightFn:      dashAnyInFlight,
+			RestartGuardFn:  dashActivity.beginRestart,
+		}, agent.DefaultDriftCheckInterval)
+	}
+
 	if tlsEnabled {
 		slog.Info("BT Studio Dashboard ready (TLS)", "addr", addr)
 		if err := server.ListenAndServeTLS(tlsCert, tlsKey); err != nil {
@@ -1376,7 +1389,10 @@ func handleDLQ(w http.ResponseWriter, r *http.Request) {
 
 	// The executor process mutates the shared file as it replays; reload so
 	// the panel lists the current queue, not this process's boot-time view.
-	dlq.Reload()
+	if err := dlq.ReloadWithError(); err != nil {
+		writeDLQError(w, err)
+		return
+	}
 	entries := dlq.List()
 	resp := map[string]any{
 		"count":      len(entries),
@@ -1408,15 +1424,9 @@ func handleDLQReplay(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Reload from disk so we requeue against the executor's latest view rather
-	// than a stale in-memory copy that could clobber concurrent changes.
-	dlq.Reload()
-
-	entry, ok := dlq.Requeue(id)
-	if !ok {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusNotFound)
-		_ = encodeJSON(w, map[string]string{"error": "entry not found", "id": id})
+	entry, err := dlq.RequeueWithError(id)
+	if err != nil {
+		writeDLQError(w, err)
 		return
 	}
 
@@ -1436,15 +1446,33 @@ func handleDLQPurge(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	count := dlq.Len()
-	dlq.Purge()
+	count, err := dlq.PurgeWithError()
+	if err != nil {
+		writeDLQError(w, err)
+		return
+	}
 	resp := map[string]any{
 		"status":  "purged",
 		"removed": count,
-		"pending": 0,
+		"pending": dlq.Len(),
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = encodeJSON(w, resp)
+}
+
+func writeDLQError(w http.ResponseWriter, err error) {
+	status, message := http.StatusServiceUnavailable, "dead letter storage unavailable"
+	if errors.Is(err, reliability.ErrDeadLetterNotFound) {
+		status, message = http.StatusNotFound, "entry not found"
+	} else if errors.Is(err, reliability.ErrReplayRecovery) {
+		status, message = http.StatusConflict, "entry requires explicit recovery reconciliation"
+	} else if errors.Is(err, reliability.ErrReplayExhausted) {
+		status, message = http.StatusConflict, "entry abandoned or replay attempts exhausted"
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set(reliability.ExecutionAdmissionHeader, "false")
+	w.WriteHeader(status)
+	_ = encodeJSON(w, map[string]string{"error": message})
 }
 
 // handleOpenAPI serves the OpenAPI 3.0 specification for the dashboard API.

@@ -1,0 +1,57 @@
+{
+  "code_commit": "f60dcf420baafe5a65bf91f2a9e8661808d977f2",
+  "binaries": [
+    {
+      "name": "benchcmp",
+      "sha256": "2afcaad4a5a084609db97090b7ac427f4265e68f0c94dec413a4b148ed600999"
+    },
+    {
+      "name": "bt-agent",
+      "sha256": "693c6b3739928deb67eb40955bca1bb47fb46eb6ef97e0785c266930c20c46be"
+    },
+    {
+      "name": "bt-agent-cli",
+      "sha256": "c78c3298f05fd00250008bde123628465d1c1c837b068cd9547b5d22d4cc9142"
+    },
+    {
+      "name": "bt-assistant",
+      "sha256": "62a86c8a36d4c323c60d0caaff5039d2b8bfe498c5760ff71239dd10f408d4b3"
+    },
+    {
+      "name": "bt-ci-doctor",
+      "sha256": "bc4ae3fcb22c689e52dd935f8ebaec8bdc851bdbb7774b57c7d868c3bfc62629"
+    },
+    {
+      "name": "bt-dashboard",
+      "sha256": "9ac15f02aeb3e7c5f83b9b59b176f28d0a801c4f97c10f12d1b535e90734cbd5"
+    },
+    {
+      "name": "bt-evaluator",
+      "sha256": "7dc41f9732b820b0a7a94c38562d152677584a34e9ed7564bb20a69d361f1793"
+    },
+    {
+      "name": "bt-gardener",
+      "sha256": "083d2c8b4455a53a13c8f61b5c08babd168554830bc421d02daa464ff03cb720"
+    },
+    {
+      "name": "bt-langagent",
+      "sha256": "3260c7dc7b51e5a9d9056cf04174b2911eb66baf69bb19f7aef6f724a12c98b7"
+    },
+    {
+      "name": "bt-notebooklm-auth",
+      "sha256": "835262b80438c87c9bfd1734578ce37af539fea74a3d87bc4dffed6457b26b25"
+    },
+    {
+      "name": "bt-scalability-probe",
+      "sha256": "e9c5b397b33e1ea46f7ef3a1eb348f01471dccaf4a83815a20d789664c542b0d"
+    },
+    {
+      "name": "bt-security-probe",
+      "sha256": "50b790896d3e7f4192a1d6074025d5457416832acbe5f7be9d505b7cbefebab5"
+    },
+    {
+      "name": "bt-tree-integration",
+      "sha256": "c1f11024ae1386b0b98c0e6fecce26ba759b4788155b3c09d23ce7e14494ba6a"
+    }
+  ]
+}

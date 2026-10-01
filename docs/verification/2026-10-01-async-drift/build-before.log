@@ -1,0 +1,21 @@
+=== build-quality (runs before each local build) ===
+
+→ go vet
+  ✓ go vet
+
+→ gofmt check
+  ✓ gofmt
+
+→ go mod tidy check
+  ✓ go mod tidy
+
+→ golangci-lint config verify
+  ✓ golangci-lint config verify
+
+→ golangci-lint run
+internal/api/openapi.go:1554:30: "503" can be replaced by http.StatusServiceUnavailable (usestdlibvars)
+			if response.StatusCode == 503 {
+			                          ^
+1 issues:
+* usestdlibvars: 1
+make: *** [Makefile:15: build] Error 1

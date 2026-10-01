@@ -42,7 +42,7 @@ routine bug fix.
 
 The review found several implementation/operations gaps that remain open:
 
-unverified network isolation/TLS and backup recovery, incomplete evolution
+unverified network isolation/TLS and full recovery scope, incomplete evolution
 provenance and cooperative cancellation. The 2026-10-01 cleanup adds cursor bounds, shared feedback transactions,
 validated commit and proposal replay controls (ADR-262), recoverable approval
 commit/admission and nested gate isolation (ADR-263), serialized snapshot revision
@@ -58,7 +58,8 @@ safe presentation (ADR-273), blackboard owner admission and atomic run promotion
 (ADR-274), sprint task-result acknowledgement and metadata-only repair
 (ADR-275), shared sprint capacity and owned batch budgets
 (ADR-276), conservative process-restart recovery holds
-(ADR-277), island acceptance
+(ADR-277), durable DLQ replay claims and current-disk deltas
+(ADR-280), island acceptance
 and the Codex-only policy (ADR-261). The hardcoded health toolchain
 field was corrected on 2026-09-16 (D7).
 Provider/model readiness and clean-repository preconditions also require

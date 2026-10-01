@@ -50,7 +50,7 @@ func ShellExec() Tool {
 			ctx, cancel := context.WithTimeout(parent, 30*time.Second)
 			defer cancel()
 
-			cmd := exec.CommandContext(ctx, "bash", "-c", input)
+			cmd := exec.CommandContext(ctx, "bash", "-c", input) // #nosec G204 -- explicit shell tool executes authorized commands by contract.
 			bindToolCommandCancellation(cmd)
 			var stdout, stderr bytes.Buffer
 			cmd.Stdout = &stdout
@@ -115,18 +115,23 @@ func ProcessCheck() Tool {
 			ctx, cancel := context.WithTimeout(parent, 5*time.Second)
 			defer cancel()
 
-			cmd := exec.CommandContext(ctx, "bash", "-c",
-				fmt.Sprintf("ps aux | grep -v grep | grep -i '%s' || echo 'NOT RUNNING'", input))
+			cmd := exec.CommandContext(ctx, "ps", "aux")
 			bindToolCommandCancellation(cmd)
 			out, err := cmd.Output()
 			if err != nil {
 				return fmt.Sprintf("process check failed: %v", err)
 			}
-			result := strings.TrimSpace(string(out))
-			if result == "NOT RUNNING" || result == "" {
+			var matches []string
+			needle := strings.ToLower(input)
+			for line := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
+				if strings.Contains(strings.ToLower(line), needle) {
+					matches = append(matches, line)
+				}
+			}
+			if len(matches) == 0 {
 				return fmt.Sprintf("NOT RUNNING: no process matching '%s' found", input)
 			}
-			return result
+			return strings.Join(matches, "\n")
 		},
 	}
 }
@@ -242,7 +247,7 @@ func SandboxedShell() Tool {
 			ctx, cancel := context.WithTimeout(parent, 30*time.Second)
 			defer cancel()
 
-			cmd := exec.CommandContext(ctx, "bash", "-c", input)
+			cmd := exec.CommandContext(ctx, "bash", "-c", input) // #nosec G204 -- explicit shell tool; validation precedes the authorized command.
 			bindToolCommandCancellation(cmd)
 			var stdout, stderr bytes.Buffer
 			cmd.Stdout = &stdout

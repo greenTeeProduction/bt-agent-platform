@@ -1344,6 +1344,11 @@ func (g *Gardener) adoptIslandWinner(entry TreeEntry, records []evolution.Record
 
 // RunCycleV2 executes one full evolution cycle using the v2 pipeline.
 func (g *Gardener) RunCycleV2(cfg EvolveV2Config) ([]CycleMetrics, error) {
+	endActivity, admitErr := g.restartAdmission.Acquire()
+	if admitErr != nil {
+		return nil, admitErr
+	}
+	defer endActivity()
 	g.cycleInFlight.Store(true)
 	defer g.cycleInFlight.Store(false)
 

@@ -1,0 +1,36 @@
+{
+  "canonical_payload_sha256": "c6d72b251b69eda4899e71a17ba0fa1caa50ab9985ba3e632cd87ac0036dcaaa",
+  "payload": {
+    "base_commit": "f7fa8dc65756a6be0cc91a2f88d2d156f99620ec",
+    "excludes": [
+      "This increment evidence",
+      "Derived graph"
+    ],
+    "files": [
+      {
+        "path": "docs/arc42/08-crosscutting-concepts.md",
+        "sha256": "ed88d613d309e52f5cbe6f9f8dd47b8a179c5b620fed3d54fe6ab11a36c92586"
+      },
+      {
+        "path": "docs/arc42/10-quality.md",
+        "sha256": "1368bac17d886a9ef57f4784b4981711178d415aa089e69bc34cb375d18baaa5"
+      },
+      {
+        "path": "docs/plans/2026-09-30-arc42-cleanup.md",
+        "sha256": "3ea5b1681d614ba947132fce1294d3c45ff287ceeb7702d4cd2a13a294803c0b"
+      },
+      {
+        "path": "internal/agent/deploy_drift.go",
+        "sha256": "8276eae8ca0d82253f1eb3f8ad2419a185921de79acc6bf1120a0e0868ff1960"
+      },
+      {
+        "path": "internal/agentexec/pipeline.go",
+        "sha256": "cc4e22e9fb3121a795e78ba55c686459cd17408f9df3b8dc8cc448d9519d5835"
+      },
+      {
+        "path": "internal/agentexec/pipeline_root_test.go",
+        "sha256": "a561f7b3869c4d082e82d82a3c56a115cb71636cae82d15b049a5c0b7e976281"
+      }
+    ]
+  }
+}

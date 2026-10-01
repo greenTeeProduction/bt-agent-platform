@@ -1,0 +1,22 @@
+{
+  "command": "GOFLAGS=-p=2 gosec -no-fail -fmt sarif -out <private>/medium-parity.sarif -severity medium ./...",
+  "exit_code": 0,
+  "findings": 252,
+  "new_dlq_owner_findings": 0,
+  "qualification": "Medium SARIF upload parity; -no-fail zero is not clean acceptance or separate GitHub check proof.",
+  "raw_private_sha256": "b4cb387e5688d661031d81cc78a3a831f121c063d7912135ef45457d5c4fad11",
+  "rules": {
+    "G115": 15,
+    "G124": 4,
+    "G204": 23,
+    "G301": 53,
+    "G302": 11,
+    "G304": 64,
+    "G306": 55,
+    "G401": 1,
+    "G404": 12,
+    "G505": 1,
+    "G703": 12,
+    "G704": 1
+  }
+}

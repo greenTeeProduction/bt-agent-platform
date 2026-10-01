@@ -1,0 +1,9 @@
+{
+  "source_commit": "78d973da",
+  "original_test_sha256": "814355004ac0068c6c33eec2b6e658899276ed3ed0b6a7ce6b0078678415f86d",
+  "overlay_sha256": "f2564b495ed843b3e03a0e1aa0c08eb94d460cb342380fe90ad1dfad994348fd",
+  "only_changes": [
+    "Retain the verified artifact before disposable repository cleanup.",
+    "Pin gpt-5.5 for this single probe; leave shared/global configuration unchanged."
+  ]
+}

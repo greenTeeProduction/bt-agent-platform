@@ -1,0 +1,9 @@
+{
+  "code_commit": "2693548055f9f710701305e0b0a75d11a2690198",
+  "file_count": 1055,
+  "full_manifest_location": "Private scanner-fix-go-files.json",
+  "github_full_race_qualification": "Actual Test (short) check 110338804579 passes at exact corrected code commit 2693548055f9f710701305e0b0a75d11a2690198; see github-qualified.json.",
+  "go_manifest_sha256": "c02d8620f2c78231757474bed9af6c1694fc992160c4376ff8168061c6ddd6ac",
+  "local_race_scope": "Changed agentexec and agent packages; initial full suite was f7fa8dc6 before rooted-loader correction. Corrected-head GitHub full race must be qualified separately.",
+  "scope": "All Go files plus go.mod/go.sum"
+}

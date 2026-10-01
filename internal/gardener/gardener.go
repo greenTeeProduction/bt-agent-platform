@@ -35,6 +35,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/evaluator"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/knowledge"
+	"github.com/nico/go-bt-evolve/internal/reliability"
 	"github.com/nico/go-bt-evolve/internal/util"
 )
 
@@ -121,7 +122,7 @@ func (r *Registry) loadAll() {
 			continue
 		}
 		path := filepath.Join(r.dir, name)
-		data, err := os.ReadFile(path)
+		data, err := util.ReadPersistenceFile(path)
 		if err != nil {
 			continue
 		}
@@ -326,7 +327,7 @@ type MetricsTracker struct {
 
 // NewMetricsTracker creates a tracker with persistent storage.
 func NewMetricsTracker(dir string) (*MetricsTracker, error) {
-	_ = os.MkdirAll(dir, 0755)
+	_ = os.MkdirAll(dir, 0750)
 	mt := &MetricsTracker{path: filepath.Join(dir, "gardener-metrics.json")}
 	mt.load()
 	return mt, nil
@@ -389,20 +390,11 @@ func (mt *MetricsTracker) Save() error {
 	if doc.TotalDeepSearchCycles > 0 {
 		doc.AvgTTHitRate = math.Round(ttHitRateSum/float64(doc.TotalDeepSearchCycles)*10000) / 10000
 	}
-	data, err := json.MarshalIndent(doc, "", "  ")
-	if err != nil {
-		return err
-	}
-	tmp := mt.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0644); err != nil {
-		_ = os.Remove(tmp)
-		return fmt.Errorf("write metrics %q: %w", mt.path, err)
-	}
-	return os.Rename(tmp, mt.path)
+	return util.SaveJSONAtomic(mt.path, doc)
 }
 
 func (mt *MetricsTracker) load() {
-	data, err := os.ReadFile(mt.path)
+	data, err := util.ReadPersistenceFile(mt.path)
 	if err != nil {
 		return
 	}
@@ -587,7 +579,8 @@ type Gardener struct {
 	// so the deploy-drift AutoRestart wiring in cmd/bt-gardener/main.go can
 	// defer a self-restart until the current evolution cycle finishes,
 	// mirroring bt-agent's Scheduler.AnyInFlight guard.
-	cycleInFlight atomic.Bool
+	cycleInFlight    atomic.Bool
+	restartAdmission reliability.RestartAdmissionGate
 
 	// cycleCount is the 1-based number of RunCycleV2 cycles this gardener has
 	// started, driving the periodic island-exploration pass's due check (see
@@ -604,7 +597,25 @@ func NewGardener(cfg Config) *Gardener {
 // Plugged into agent.DriftWatchConfig.InFlightFn so an out-of-place rebuild
 // or AutoRestart can never SIGTERM the gardener mid-cycle.
 func (g *Gardener) AnyInFlight() bool {
-	return g.cycleInFlight.Load()
+	return g.restartAdmission.Busy() || g.cycleInFlight.Load()
+}
+
+// BeginRestart atomically seals new cycle admission only after owned cycles
+// and their evidence/cleanup finish. Uncertain handoff remains sealed.
+func (g *Gardener) BeginRestart() (func(bool), bool) {
+	return g.restartAdmission.BeginRestart(func() bool { return g.cycleInFlight.Load() })
+}
+
+// WithActivity owns a daemon iteration, including registry rescan, analysis,
+// tools and final metadata. Nested RunCycleV2 calls retain their own leases.
+func (g *Gardener) WithActivity(fn func()) error {
+	release, err := g.restartAdmission.Acquire()
+	if err != nil {
+		return err
+	}
+	defer release()
+	fn()
+	return nil
 }
 
 // The v1 RunCycle/evolveTree pipeline was retired in ADR-133 Phase 6.

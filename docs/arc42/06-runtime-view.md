@@ -337,7 +337,22 @@ success metric.
    without retry or DLQ insertion.
 4. An operator can request DLQ replay. The daemon reloads shared on-disk
    replay state before scanning so dashboard/MCP requests are visible.
-5. The execution owner retries the queued item and records its new outcome.
+5. The execution owner commits a unique durable claim before dispatch. Healthy
+   completion removes the entry only after recording succeeds. Ordinary proven
+   failure records its outcome and releases the claim; terminal/uncertain
+   execution retains recovery authority. Failed terminal recording or immediate
+   process exit leaves the claim held through restart (ADR-280).
+
+Independent-process [DLQ restart fixtures](../../internal/reliability/dlq_restart_safety_test.go)
+append and sync a real local action counter, fail result recording or exit
+immediately, then start two fresh consumers against unchanged queue bytes.
+Scanner selection, ordinary requeue and direct replay execute no second action.
+Admission write failure executes nothing. Sibling deltas, purge and capacity
+cannot erase the fence. Malformed state remains in place and closes admission;
+quarantining it as an empty queue could discard unknown work. Exact-claim
+`ResolveReplayRecovery` commits a trusted completed/provably-unstarted decision
+without dispatch. Its caller must establish quiescence and outcome independently;
+this is not a production-verified recovery workflow.
 
 Process restart is a separate recovery boundary (ADR-277). A scheduled or
 manual scheduler execution with a persistent JobStore must commit an in-flight
@@ -361,6 +376,33 @@ reached durable storage, cross-store ACID or safety after losing the state volum
 [panic handling](../../internal/reliability/panic_handler.go),
 [scheduler](../../internal/agent/scheduler.go). Recovery from process/host
 loss also requires the deployment and backup procedures in §7.
+
+Dashboard self-adoption has a separate process-local ownership contract
+(ADR-278). HTTP requests, capacity waits and detached agent/sprint/pipeline
+callbacks own leases until actual evidence/cleanup and panic handling finish.
+An idle restart seals the same admission mutex before requesting systemd
+restart. Rejected handoff reopens admission; accepted asynchronous handoff
+keeps it sealed until process exit. Sealed requests return JSON 503,
+`Retry-After: 1` and `X-BT-Execution-Admitted: false`. Persisted waiting records
+are not live workers. Sibling restarts and other daemon admission remain outside
+this local contract; automatic fleet adoption is not qualified.
+
+Sibling drift adoption now requests the target owner instead of invoking
+systemd directly (ADR-279). Dashboard and gardener control listeners authenticate
+same-UID peers, attest the configured systemd MainPID, validate a bounded
+revision request, and respect the target's
+auto-restart policy. A live already-current owner avoids a second restart.
+Otherwise the owner seals admission while idle, verifies its configured
+artifact's exact unit/revision/clean version output and requests its own restart.
+Busy, disabled, missing or mismatched owners defer without direct fallback.
+Lost replies and post-start systemd acknowledgement failures remain uncertain;
+the target keeps its admission seal. Only proven rejection reopens admission.
+
+Gardener RunCycleV2 owns cycle admission through evidence and cleanup. Its
+periodic iteration additionally owns registry rescan, analysis/tools and final
+metadata, including nested cycles. The watcher starts after owner/analysis
+initialization. The bt-agent self path still has only scheduler snapshots;
+daemon-wide scheduler/A2A/DLQ admission remains separate C09 acceptance.
 
 ## 6.6 Browser Authentication and Session Expiry
 

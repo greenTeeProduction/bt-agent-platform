@@ -1,0 +1,69 @@
+{
+  "binaries": [
+    {
+      "name": "benchcmp",
+      "qualification": "Local dirty-worktree build gate artifact; not deployed.",
+      "sha256": "c40f878c295a6856b954b887ba7edbd5b4333f1ba4fcf7525d1249899c41f35d"
+    },
+    {
+      "name": "bt-agent",
+      "qualification": "Local dirty-worktree build gate artifact; not deployed.",
+      "sha256": "e38309ac531c3f38c690a39e2960566c8147f5cafafd73f976b7e30bc6cde4bc"
+    },
+    {
+      "name": "bt-agent-cli",
+      "qualification": "Local dirty-worktree build gate artifact; not deployed.",
+      "sha256": "5337cad34b223963b09107a5a58b569de7df9932d708f274b322d8fcdeff8d16"
+    },
+    {
+      "name": "bt-assistant",
+      "qualification": "Local dirty-worktree build gate artifact; not deployed.",
+      "sha256": "26377cb43e71137c54f1ed877ba4d379b23d04d6c53070e5f624635b37cc9cfe"
+    },
+    {
+      "name": "bt-ci-doctor",
+      "qualification": "Local dirty-worktree build gate artifact; not deployed.",
+      "sha256": "59d7c3aafe70517e96a9f307105a05be4c3b2329fa0923730287cb157adbcabf"
+    },
+    {
+      "name": "bt-dashboard",
+      "qualification": "Local dirty-worktree build gate artifact; not deployed.",
+      "sha256": "3501dafeb413cdf36fadae1ee930ae7fe19780b2c43be931e75a190399de21a8"
+    },
+    {
+      "name": "bt-evaluator",
+      "qualification": "Local dirty-worktree build gate artifact; not deployed.",
+      "sha256": "70fa01f7b65ee1c7b7ec9ee9a1655795c0410e62e85efc20d9bca0eabd72c98c"
+    },
+    {
+      "name": "bt-gardener",
+      "qualification": "Local dirty-worktree build gate artifact; not deployed.",
+      "sha256": "bfdd7e6cc0182ec2ffbfe63114c9263a7cb2bfef111344fb158a54f551326b7f"
+    },
+    {
+      "name": "bt-langagent",
+      "qualification": "Local dirty-worktree build gate artifact; not deployed.",
+      "sha256": "6bb81c75dc29d3e0f700e20cb685d3a9a3ef012cffa6b867342ff2d742703c2f"
+    },
+    {
+      "name": "bt-notebooklm-auth",
+      "qualification": "Local dirty-worktree build gate artifact; not deployed.",
+      "sha256": "dc9d919f4b4297cdfc09c2732c54902eaf9357b3ba1b0ad1abd9374073197268"
+    },
+    {
+      "name": "bt-scalability-probe",
+      "qualification": "Local dirty-worktree build gate artifact; not deployed.",
+      "sha256": "9c5cc6573b19a1c0967ce1c88dbd33ed2d20ef3707695dd79cbd30ef16b57a40"
+    },
+    {
+      "name": "bt-security-probe",
+      "qualification": "Local dirty-worktree build gate artifact; not deployed.",
+      "sha256": "93b436981dee2379aacd26ff69b477d0b3b357692a2c23da8a3d883be3ecb56c"
+    },
+    {
+      "name": "bt-tree-integration",
+      "qualification": "Local dirty-worktree build gate artifact; not deployed.",
+      "sha256": "ef31ea6655369e08049520ba06ca66a2a95ea3a9f81d5324a03cf191bbd23af9"
+    }
+  ]
+}

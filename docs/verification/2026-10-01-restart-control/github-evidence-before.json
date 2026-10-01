@@ -1,0 +1,78 @@
+{
+  "code_commit": "1127c804e7c8cc90c9fa3012c518b8e9f2fcf042",
+  "checks": [
+    {
+      "name": "Release",
+      "id": 110342768479,
+      "head_sha": "1127c804e7c8cc90c9fa3012c518b8e9f2fcf042",
+      "status": "completed",
+      "conclusion": "skipped",
+      "details_url": "https://github.com/greenTeeProduction/bt-agent-platform/actions/runs/36853789822/job/110342768479",
+      "completed_at": "2026-10-01T11:15:27Z"
+    },
+    {
+      "name": "gosec",
+      "id": 110342342627,
+      "head_sha": "1127c804e7c8cc90c9fa3012c518b8e9f2fcf042",
+      "status": "completed",
+      "conclusion": "failure",
+      "details_url": "https://github.com/greenTeeProduction/bt-agent-platform/runs/110342342627",
+      "completed_at": "2026-10-01T11:14:15Z"
+    },
+    {
+      "name": "CodeQL",
+      "id": 110342082151,
+      "head_sha": "1127c804e7c8cc90c9fa3012c518b8e9f2fcf042",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/greenTeeProduction/bt-agent-platform/runs/110342082151",
+      "completed_at": "2026-10-01T11:13:30Z"
+    },
+    {
+      "name": "Analyze (go)",
+      "id": 110341355682,
+      "head_sha": "1127c804e7c8cc90c9fa3012c518b8e9f2fcf042",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/greenTeeProduction/bt-agent-platform/actions/runs/36853789878/job/110341355682",
+      "completed_at": "2026-10-01T11:13:41Z"
+    },
+    {
+      "name": "Test (short)",
+      "id": 110341355657,
+      "head_sha": "1127c804e7c8cc90c9fa3012c518b8e9f2fcf042",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/greenTeeProduction/bt-agent-platform/actions/runs/36853789822/job/110341355657",
+      "completed_at": "2026-10-01T11:14:55Z"
+    },
+    {
+      "name": "Lint",
+      "id": 110341355603,
+      "head_sha": "1127c804e7c8cc90c9fa3012c518b8e9f2fcf042",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/greenTeeProduction/bt-agent-platform/actions/runs/36853789822/job/110341355603",
+      "completed_at": "2026-10-01T11:12:48Z"
+    },
+    {
+      "name": "Build",
+      "id": 110341355583,
+      "head_sha": "1127c804e7c8cc90c9fa3012c518b8e9f2fcf042",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/greenTeeProduction/bt-agent-platform/actions/runs/36853789822/job/110341355583",
+      "completed_at": "2026-10-01T11:12:00Z"
+    },
+    {
+      "name": "Security Scan",
+      "id": 110341355493,
+      "head_sha": "1127c804e7c8cc90c9fa3012c518b8e9f2fcf042",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/greenTeeProduction/bt-agent-platform/actions/runs/36853789822/job/110341355493",
+      "completed_at": "2026-10-01T11:15:27Z"
+    }
+  ],
+  "qualification": "Evidence-only head preserved corrected Go bytes, but separate gosec reported a further scheduler G301 error; see retained annotations."
+}

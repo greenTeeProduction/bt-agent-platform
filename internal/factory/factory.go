@@ -13,6 +13,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/llm"
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 // AgentFactory orchestrates skill → behavior tree → runnable agent.
@@ -51,7 +52,7 @@ func NewAgentFactoryWithReflections(llmClient llm.LLM, refDir string) (*AgentFac
 
 // CreateFromFile loads a SKILL.md file and produces a GeneratedAgent.
 func (f *AgentFactory) CreateFromFile(skillPath string) (*GeneratedAgent, error) {
-	content, err := os.ReadFile(skillPath)
+	content, err := util.ReadPersistenceFile(skillPath)
 	if err != nil {
 		return nil, fmt.Errorf("read skill file: %w", err)
 	}

@@ -1,0 +1,7 @@
+{
+  "code_commit": "f60dcf420baafe5a65bf91f2a9e8661808d977f2",
+  "scope": "All tracked Go files plus go.mod/go.sum",
+  "file_count": 1043,
+  "canonical_file_manifest_sha256": "d5e60d95c3b0f8faff4d4f4faa210c9f2ca5fb0b1f0f91cba9319dc3e0e6271c",
+  "full_file_manifest_location": "Private checkpoint artifact qualified-code-files.json; Git at code_commit is the durable full snapshot."
+}
