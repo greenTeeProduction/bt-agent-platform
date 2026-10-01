@@ -1,6 +1,7 @@
 package agentexec
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -51,8 +52,40 @@ func init() {
 	// requesting user so a deterministic slug ID (goal:automate_<slug>) can
 	// never resolve to a different user's tree.
 	domains.DynamicResolveForUserFn = ResolveGeneratedTreeForUser
+	domains.ActiveVersionResolveFn = ResolveRuntimeVersion
 	// Learned Selector reordering (opt-in, BT_SELECTOR_REORDER=1).
 	wireSelectorReorder()
+}
+
+// RuntimeReleaseStore shares the configured reflection root with the gardener.
+// Owner and tree IDs are hashed by the store, never interpolated into paths.
+func RuntimeReleaseStore() (*evolution.RuntimeReleaseStore, error) {
+	root, err := ReflectionsPath()
+	if err != nil {
+		return nil, err
+	}
+	return evolution.NewRuntimeReleaseStore(filepath.Join(root, "runtime-versions")), nil
+}
+
+func ResolveRuntimeVersion(user, id string) (*evolution.SerializableNode, error) {
+	if id == "" {
+		return nil, nil
+	}
+	store, err := RuntimeReleaseStore()
+	if err != nil {
+		return nil, err
+	}
+	tree, _, err := store.Resolve(id, user)
+	if err == nil && tree == nil && user != "" {
+		tree, _, err = store.Resolve(id, "")
+	}
+	if err == nil && tree != nil && AutomationBlocked(user, id) {
+		return nil, fmt.Errorf("automation %q is not approved for execution", id)
+	}
+	if err != nil {
+		engine.Warn("runtime version unavailable", "tree", id, "user", user, "error", err)
+	}
+	return tree, err
 }
 
 // wireSelectorReorder wires learned Selector reordering at resolve time —

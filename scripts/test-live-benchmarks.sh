@@ -15,6 +15,6 @@ mkdir -p -- "$(dirname -- "$BT_BENCHMARK_REPORT")"
 go test ./internal/benchmark -count=1 -timeout 300s -v \
   -run '^(TestLive|TestRunSuite_PathMatchRate|TestRunSuiteReportsUnsupported|TestABTest_|TestScoreMutation_|TestQuickValidate|TestLoadBFCLSuiteAndEvaluate|TestBFCLV3LoadFlattenAndEvaluate|TestGAIABuiltinAndEvaluation)'
 go test ./cmd/bt-gardener -count=1 -timeout 120s -v \
-  -run '^TestGardenerRunCycleTool_CallAppliesLearnedSelectorOrdering'
+  -run '^TestGardenerRunCycleTool_RejectsUnqualifiedSelectorOrdering'
 go test ./cmd/bt-agent -count=1 -timeout 180s -v \
-  -run '^TestLiveFactoryCreatesResolvesAndExecutesTask$'
+  -run '^TestLiveFactory(CreatesResolvesAndExecutesTask|EvolutionPromotesAndRollsBackMeasuredVersion)$'

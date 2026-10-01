@@ -1,0 +1,3 @@
+ok  	github.com/nico/go-bt-evolve/internal/agentexec	2.930s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-agent	25.123s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-gardener	1.534s

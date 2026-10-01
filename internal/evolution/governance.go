@@ -91,7 +91,7 @@ func AssessGovernance(tree *SerializableNode) GovernanceAssessment {
 				ctx.contractChecked = ctx.contractChecked || len(contract.JSONFields) > 0 || len(contract.RequiredKeys) > 0
 			}
 			ctx.checked = ctx.checked || len(n.Children) > 0
-			if len(n.Children) > 1 && boundedRecovery(&n.Children[1]) {
+			if len(n.Children) > 1 && (boundedRecovery(&n.Children[1]) || (n.Children[1].Type == "ChainAction" && strings.HasPrefix(n.Children[1].Name, "llm_call:") && hasExecutionBudget(&n.Children[1]))) {
 				ctx.recoverable = true
 			}
 		case "CheckpointVerifier":

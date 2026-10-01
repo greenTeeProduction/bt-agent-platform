@@ -15,9 +15,17 @@ type treeDefinition struct{ id, version, expandedVersion string }
 type definitionCommand struct {
 	inner      btcore.Command[Blackboard]
 	definition treeDefinition
+	owner      string
 }
 
-func (c *definitionCommand) Run(ctx *btcore.BTContext[Blackboard]) int { return c.inner.Run(ctx) }
+func (c *definitionCommand) Run(ctx *btcore.BTContext[Blackboard]) int {
+	if c.owner != "" && ctx.Blackboard.User != c.owner {
+		ctx.Blackboard.Outcome = "failure"
+		ctx.Blackboard.Result = "tree execution owner mismatch"
+		return -1
+	}
+	return c.inner.Run(ctx)
+}
 
 func bindTreeDefinition(command btcore.Command[Blackboard], source, expanded *evolution.SerializableNode, treeID string) (btcore.Command[Blackboard], error) {
 	version, err := evolution.TreeVersion(source)
@@ -31,7 +39,8 @@ func bindTreeDefinition(command btcore.Command[Blackboard], source, expanded *ev
 	if treeID == "" {
 		treeID = source.Name
 	}
-	return &definitionCommand{inner: command, definition: treeDefinition{treeID, version, expandedVersion}}, nil
+	owner, _ := source.Metadata["user"].(string)
+	return &definitionCommand{inner: command, definition: treeDefinition{treeID, version, expandedVersion}, owner: owner}, nil
 }
 
 // Shared only to collect a reflection request from parallel branches. Final
@@ -47,6 +56,17 @@ type runEvidence struct {
 	reflect       bool
 	finalized     bool
 	err           error
+}
+
+// EvidenceExecutionVersions returns a detached list of definitions actually
+// executed during this run. Qualification rejects mixed or unpinned versions.
+func (bb *Blackboard) EvidenceExecutionVersions() []string {
+	if bb.runEvidence == nil {
+		return nil
+	}
+	bb.runEvidence.mu.Lock()
+	defer bb.runEvidence.mu.Unlock()
+	return append([]string(nil), bb.runEvidence.versions...)
 }
 
 func beginRunEvidence(bb *Blackboard, command btcore.Command[Blackboard], started time.Time) {

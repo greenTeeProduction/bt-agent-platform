@@ -235,10 +235,16 @@ func lastFailureTask(records []evolution.Record) string {
 // evolveTreeV2 runs the v2 evolution pipeline on a single tree:
 // cascade quick-check → ordered candidates → block filter → per-candidate
 // benchmark + pre-score + quality gate → apply → validation-gated persist.
-func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetrics {
+func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) (metrics CycleMetrics) {
 	if entry.Tree == nil {
 		return CycleMetrics{TreeName: entry.Name, Improved: false}
 	}
+	metricEntry := entry
+	metricEntry.Tree = cloneTreeForGardener(entry.Tree)
+	g.cfg.Registry.mu.Lock()
+	delete(g.cfg.Registry.qualifications, entry.FilePath)
+	g.cfg.Registry.mu.Unlock()
+	defer g.applyMeasuredMetrics(metricEntry, &metrics)
 	// Work on a detached candidate. Readers retain the committed predecessor
 	// until persistence succeeds, including when optional passes alter the tree.
 	tree := cloneTreeForGardener(entry.Tree)
@@ -600,7 +606,10 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 	if applied > 0 || reordered > 0 || localSearchDelta > 0 || eliteReseed {
 		if err := g.cfg.Registry.SaveTree(TreeEntry{Name: entry.Name, Tree: tree, FilePath: entry.FilePath}); err != nil {
 			slog.Error("gardener/v2: saving evolved tree failed, evolution result is not durably persisted", "tree", entry.Name, "error", err)
-			saveFailed = true
+			saveFailed = !errors.Is(err, ErrCandidateUnqualified)
+			if !saveFailed {
+				rejected++
+			}
 			*tree = *originalTree
 			newFitness = baseFitness
 			improved = false
@@ -611,7 +620,11 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 		} else {
 			*entry.Tree = *cloneTreeForGardener(tree)
 			for _, experience := range pendingExperience {
-				if err := bank.AddFromProposal(experience.tree, experience.proposal, experience.before, experience.after, nil, lastFailureTask(records)); err != nil {
+				before, after, attributable := g.experienceScores(entry, experience.tree, len(pendingExperience), experience.before, experience.after)
+				if !attributable {
+					continue
+				}
+				if err := bank.AddFromProposal(experience.tree, experience.proposal, before, after, nil, lastFailureTask(records)); err != nil {
 					slog.Warn("gardener/v2: recording committed mutation experience failed", "tree", entry.Name, "error", err)
 				}
 			}
@@ -680,7 +693,7 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 						}
 					}
 					if err := g.cfg.Registry.SaveTree(TreeEntry{Name: entry.Name, Tree: candidate, FilePath: entry.FilePath}); err != nil {
-						saveFailed = true
+						saveFailed = !errors.Is(err, ErrCandidateUnqualified)
 						return err
 					}
 					return nil
@@ -697,7 +710,11 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 					improved = newFitness.Composite > baseFitness.Composite
 					if bank != nil {
 						for _, experience := range deepExperience {
-							if err := bank.AddFromProposal(experience.tree, experience.proposal, experience.before, experience.after, nil, lastFailureTask(records)); err != nil {
+							before, after, attributable := g.experienceScores(entry, experience.tree, len(deepExperience), experience.before, experience.after)
+							if !attributable {
+								continue
+							}
+							if err := bank.AddFromProposal(experience.tree, experience.proposal, before, after, nil, lastFailureTask(records)); err != nil {
 								slog.Warn("gardener/v2: recording committed deep-search experience failed", "tree", entry.Name, "error", err)
 							}
 						}

@@ -767,6 +767,32 @@ bank. [Terminal writer](../../internal/engine/run_evidence.go),
 [live result recording](../../internal/benchmark/live_evidence_test.go) cover
 these contracts. These source changes do not establish deployed adoption.
 
+
+### Runtime qualification and immutable versions
+
+Gardener persistence now uses [paired qualification](../../internal/benchmark/runtime_qualification.go)
+and a [version store](../../internal/evolution/runtime_release.go) (ADR-281).
+Factory response trees use their original fixed task and declared expected
+JSON values. Other suites must provide independent result-value contracts and
+isolated capability fixtures. Missing contracts, missing inference, changed
+execution definitions or provider-mixed comparisons cannot publish a version.
+At least three paired trials must show strictly more passing outcomes and no
+regression; every candidate trial must pass. Rejected outputs are retained.
+
+Definitions and accepted proofs are content addressed. A bounded sidecar lock
+protects the compare-and-swap of `active.json`; prepared events alone do not
+prove adoption. Rollback restores an exact retained ancestor without rerunning
+work. Scoped runtime resolvers prefer personal authority, then shared authority,
+and refuse corrupt managed definitions. Promoted versions skip unqualified
+resolve-time reordering. Owner-bound engine commands reject another user.
+
+Returned gardener improvement metrics use measured pass counts and definition
+versions. Single-mutation experience can inherit that measured gain; a batch
+cannot assign its entire gain to each individual operation. Legacy search
+ranking still uses heuristic/history estimates and can miss useful candidates.
+Unmanaged manual/genetic publication, complete external-task corpora, legacy
+file concurrency during first adoption and deployed rollout remain open.
+
 ---
 
 Workflow loading in `internal/agentexec.LoadPipeline` validates a local name and

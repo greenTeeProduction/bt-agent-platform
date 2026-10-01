@@ -207,14 +207,10 @@ func TestGardenerDeactivateAllTool_CallDeactivatesAllTrees(t *testing.T) {
 	}
 }
 
-// TestGardenerRunCycleTool_CallAppliesLearnedSelectorOrdering pins the second
-// half of the same gap: even once the daemon's timer-driven cycle uses a
-// SelectorOrdering-enabled EvolveV2Config, the langchain gardener_run_cycle
-// tool built its own gardener.DefaultEvolveV2Config() fresh on every call
-// (the original GardenerRunCycleTool.Call), silently disabling the pass for
-// every MCP-triggered cycle. The tool must reuse the daemon's wired config
-// instead of constructing a disabled default.
-func TestGardenerRunCycleTool_CallAppliesLearnedSelectorOrdering(t *testing.T) {
+// Telemetry can propose reordering, but cannot establish task-result impact.
+// These real-model entrypoint tests preserve the authored tree without an
+// independent task contract, for both legacy and per-tree telemetry.
+func TestGardenerRunCycleTool_RejectsUnqualifiedSelectorOrdering(t *testing.T) {
 	_ = benchmark.RealLLM(t) // Live qualification is required before the reordered tree can persist.
 	treeDir := t.TempDir()
 	tree := selectorOrderingTree()
@@ -269,29 +265,18 @@ func TestGardenerRunCycleTool_CallAppliesLearnedSelectorOrdering(t *testing.T) {
 		t.Fatal("selector_tree not found in registry after cycle")
 	}
 
+	saved, readErr := os.ReadFile(filepath.Join(treeDir, "tree-selector_tree.json"))
+	if readErr != nil || string(saved) != string(data) {
+		t.Fatalf("unqualified candidate changed saved tree: %v", readErr)
+	}
 	names := routerChildNames(t, got)
-	want := []string{"Reliable", "Cheap", "Fallback"}
+	want := []string{"Cheap", "Reliable", "Fallback"}
 	if !reflect.DeepEqual(names, want) {
-		t.Fatalf("gardener_run_cycle tool did not apply learned Selector ordering: Router children = %v, want %v", names, want)
+		t.Fatalf("unqualified ordering changed runtime: Router children = %v, want %v", names, want)
 	}
 }
 
-// TestGardenerRunCycleTool_CallAppliesLearnedSelectorOrdering above pins the
-// mechanism by seeding stats directly at cfg.SelectorStatsPath — the exact
-// single global file wireSelectorOrdering points at
-// (metricsDir/selector-stats.json). In production, no writer in the repo ever
-// produces that file: the real telemetry writer, RunDeps.flushSelectorTelemetry
-// (internal/agent/selector_flush.go), only ever writes PER-TREE files via
-// agent.SelectorStatsFile(treeID) under agent.HomeDir()/selector-stats/ — a
-// different directory tree entirely (metricsDir is ~/.go-bt-gardener,
-// agent.HomeDir() is ~/.go-bt-evolve). So applyLearnedSelectorOrdering's single
-// shared g.cfg.SelectorStatsPath can never resolve to a file the real writer
-// populates, and the pass is a permanent no-op outside tests that hand-seed
-// the global path. This test seeds telemetry only at the real per-tree
-// location (mirroring the actual production writer) and leaves
-// cfg.SelectorStatsPath unseeded, pinning the requirement that the gardener
-// read real per-tree telemetry instead.
-func TestGardenerRunCycleTool_CallAppliesLearnedSelectorOrdering_PerTreeTelemetryFile(t *testing.T) {
+func TestGardenerRunCycleTool_RejectsUnqualifiedSelectorOrdering_PerTreeTelemetryFile(t *testing.T) {
 	_ = benchmark.RealLLM(t) // Live qualification is required before the reordered tree can persist.
 	t.Setenv("BT_AGENT_HOME", t.TempDir())
 
@@ -357,10 +342,14 @@ func TestGardenerRunCycleTool_CallAppliesLearnedSelectorOrdering_PerTreeTelemetr
 		t.Fatal("selector_tree not found in registry after cycle")
 	}
 
+	saved, readErr := os.ReadFile(filepath.Join(treeDir, "tree-selector_tree.json"))
+	if readErr != nil || string(saved) != string(data) {
+		t.Fatalf("unqualified candidate changed saved tree: %v", readErr)
+	}
 	names := routerChildNames(t, got)
-	want := []string{"Reliable", "Cheap", "Fallback"}
+	want := []string{"Cheap", "Reliable", "Fallback"}
 	if !reflect.DeepEqual(names, want) {
-		t.Fatalf("gardener_run_cycle tool did not apply learned Selector ordering from the real per-tree telemetry file %q: Router children = %v, want %v", perTreePath, names, want)
+		t.Fatalf("unqualified ordering changed runtime from telemetry file %q: Router children = %v, want %v", perTreePath, names, want)
 	}
 }
 

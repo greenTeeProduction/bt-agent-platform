@@ -118,7 +118,7 @@ node, distinct repeated runs, outer agent quality rejection, live-mutation
 version history, and persistence failure without replay. Result-contract tests
 reject wrong JSON fields/values in primary and recovery output and reject
 malformed gateway declarations. These strengthen QS2/QS12 evidence integrity;
-they do not complete version-specific promotion or fleet impact.
+fleet impact still requires representative execution evidence.
 
 
 The response factory now has a real-model creation→persistence→owner-scoped
@@ -126,9 +126,32 @@ resolution→execution regression in [task factory tests](../../cmd/bt-agent/tas
 The retained arithmetic sample used Qwen 2.5 0.5B, independently checked the
 answer and matched the saved definition hash to terminal execution evidence.
 It establishes this response-task path, not general assistant capability or
-an adopted evolutionary improvement. External-tool task fixtures, persistent
-promotion/adoption/rollback and broader task coverage remain open. The same
+broad assistant capability. The bounded promotion/adoption/rollback cycle below
+adds one controlled evolution case; external-tool fixtures and broader task
+coverage remain open. The same
 live test is included in `make test-live-benchmarks`.
+
+
+### Bounded versioned-evolution evidence
+
+[The live promotion regression](../../cmd/bt-agent/runtime_promotion_test.go)
+now verifies the response-factory cycle with real Qwen 2.5 0.5B inference:
+three failing baseline trials become three passing candidate trials, a fresh
+agent run independently verifies 17 + 25 = 42, registry reload preserves the
+active definition, and rollback restores the predecessor's hash and failure.
+The recorded rejected attempt returned 37 in all three recovery outputs;
+qualification refused it. Recovery now recomputes independently instead of
+copying the invalid result. `BT_PROMOTION_REPORT` retains definitions, paired
+outputs, model/call counts, terminal adoption and rollback evidence.
+
+This is repeated measurement of one controlled task, not three independent
+tasks or general assistant quality. [Release transaction tests](../../internal/evolution/runtime_release_test.go)
+cover concurrent promotion, stale predecessors, bounded locks, owner isolation,
+proof corruption and rejection retention. [Resolver tests](../../internal/agentexec/runtime_version_test.go)
+cover shared/personal precedence and refusal to fall back from corrupt personal
+authority. Routing telemetry without an independent task contract must preserve
+the authored version. These cases run in `make test-live-benchmarks`; short
+unit tests do not stand in for model evidence.
 
 ---
 

@@ -306,6 +306,7 @@ Navigation and provenance:
 | ADR-278 | [Atomic Dashboard Restart Admission and Detached Ownership](#adr-278) | Accepted implementation | 2026-10-01 |
 | ADR-279 | [Target-Owned Sibling Restart and Uncertain Handoff Seals](#adr-279) | Accepted implementation | 2026-10-01 |
 | ADR-280 | [Durable DLQ Replay Claims and Current-Disk Transactions](#adr-280) | Accepted — fixture-tested; production/rollout partial | 2026-10-01 |
+| ADR-281 | [Measured Runtime Tree Publication and Exact Rollback](#adr-281) | Accepted — gardener implemented; broader rollout partial | 2026-10-01 |
 
 <a id="adr-001"></a>
 
@@ -6485,6 +6486,47 @@ cover hold rejection, storage failure and retained purge counts.
 [Engine escalation failure](../../internal/engine/ops_actions_test.go) stops
 without falsely reporting durable insertion. Durable snapshot/gate evidence is
 recorded in [the durable DLQ report](../verification/2026-10-01-dlq-recovery/README.md).
+
+
+<a id="adr-281"></a>
+## ADR-281: Measured Runtime Tree Publication and Exact Rollback
+
+**Date:** 2026-10-01
+**Status:** Accepted for gardener publication; broader rollout remains partial.
+
+**Context:** A structural score or a predecessor's execution history does not
+establish that a proposed tree performs its task better. Mutable legacy files
+also fail to identify which definition a runtime actually adopted.
+
+**Decision:** Production gardener saves must qualify both exact definitions
+against the same independently declared task contracts using the real benchmark
+provider. Require at least three paired trials, strict pass-count improvement,
+no regression and all candidate trials passing. Preserve declared governance,
+owner and fixed factory task. Retain rejected trial outputs. A provider switch
+invalidates the mixed comparison and restarts it on the settled provider.
+
+Store immutable definitions/proofs and atomically update an owner/tree-scoped
+active pointer under a bounded lock, checking the measured predecessor against
+the currently active version. The first publication retains the inspected
+legacy predecessor. Runtime resolution loads the managed definition directly,
+without further heuristic reordering, and refuses integrity failure. Rollback
+selects a retained ancestor without replaying task effects. Report pass counts,
+version hashes and the qualification reference rather than proxy fitness as
+measured improvement. Detailed bounded recovery earns structural credit only
+when it remains within a result-checking gateway; task improvement still needs
+actual outputs.
+
+**Consequences:** The response factory has an end-to-end controlled real-model
+cycle. Domain suites lacking independent task contracts cannot publish merely
+from routing/length checks. Search ranking, manual/genetic unmanaged paths,
+legacy-writer first-adoption races, representative corpora and deployed rollout
+remain follow-up work. The private version store is a trusted internal evidence
+boundary, not external model attestation or a power-loss durability guarantee.
+
+**Evidence:** [Live factory/gardener/runtime/rollback regression](../../cmd/bt-agent/runtime_promotion_test.go),
+[transaction and integrity regressions](../../internal/evolution/runtime_release_test.go),
+[scoped runtime authority](../../internal/agentexec/runtime_version_test.go),
+and [qualification implementation](../../internal/benchmark/runtime_qualification.go).
 
 ---
 

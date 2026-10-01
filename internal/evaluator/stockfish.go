@@ -353,6 +353,9 @@ type MutationCandidate = evolution.ScoredMutation
 //  5. add_fallback for selectors with few children
 func OrderMutations(tree *evolution.SerializableNode, records []evolution.Record, fitness FitnessScore) []MutationCandidate {
 	candidates := make([]MutationCandidate, 0, 16)
+	for _, target := range evolution.ContractRecoveryTargets(tree) {
+		candidates = append(candidates, MutationCandidate{Op: evolution.MutationOp{Operation: "add_contract_recovery", Target: target}, Score: 0.97, Reason: "repair a rejected task result under the same immutable quality contract"})
+	}
 	var proposeControls func(*evolution.SerializableNode)
 	proposeControls = func(n *evolution.SerializableNode) {
 		if n == nil {

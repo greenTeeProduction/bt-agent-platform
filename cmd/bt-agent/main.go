@@ -33,6 +33,11 @@ import (
 )
 
 func resolveTree(id string) *evolution.SerializableNode {
+	if tree, err := agentexec.ResolveRuntimeVersion("", id); err != nil {
+		return &evolution.SerializableNode{Type: "UnavailableRuntimeVersion", Name: id, Description: err.Error()}
+	} else if tree != nil {
+		return tree
+	}
 	if t := agent.LoadMutatedTreeOverride(id); t != nil {
 		// A persisted runtime mutation shadows the code-defined tree until its
 		// override file is removed — surface that, or code changes to this

@@ -207,6 +207,9 @@ func applyOp(tree *SerializableNode, op MutationOp) bool {
 		return applyGovernanceWrapper(tree, op.Target, "QualityGate")
 	case "guard_task":
 		return applyGovernanceWrapper(tree, op.Target, "Sequence")
+	case "add_contract_recovery":
+		task, _ := tree.Metadata["task"].(string)
+		return addContractRecovery(tree, op.Target, task)
 	case "add_fallback":
 		if op.Node != nil {
 			return applyAddFallback(tree, op.Target, *op.Node)

@@ -34,15 +34,16 @@ import (
 
 // TaskCase is a single benchmark task with expected routing.
 type TaskCase struct {
-	Task            string         `json:"task"`
-	ExpectedPath    string         `json:"expected_path"`              // which strategy path should handle this
-	PossiblePaths   []string       `json:"possible_paths,omitempty"`   // multiple acceptable paths for ambiguous tasks
-	MinResultLen    int            `json:"min_result_len"`             // minimum output length expected
-	ShouldSucceed   bool           `json:"should_succeed"`             // expected outcome
-	ShouldReject    bool           `json:"should_reject"`              // PreGate should reject this
-	MinQualityScore float64        `json:"min_quality_score,omitzero"` // minimum quality score expected
-	ExpectedJSON    map[string]any `json:"expected_json,omitempty"`    // exact required fields in the result object
-	Difficulty      string         `json:"difficulty,omitempty"`       // easy | medium | hard | adversarial
+	ResultContract  *evolution.ResultContract `json:"result_contract,omitempty"`
+	Task            string                    `json:"task"`
+	ExpectedPath    string                    `json:"expected_path"`              // which strategy path should handle this
+	PossiblePaths   []string                  `json:"possible_paths,omitempty"`   // multiple acceptable paths for ambiguous tasks
+	MinResultLen    int                       `json:"min_result_len"`             // minimum output length expected
+	ShouldSucceed   bool                      `json:"should_succeed"`             // expected outcome
+	ShouldReject    bool                      `json:"should_reject"`              // PreGate should reject this
+	MinQualityScore float64                   `json:"min_quality_score,omitzero"` // minimum quality score expected
+	ExpectedJSON    map[string]any            `json:"expected_json,omitempty"`    // exact required fields in the result object
+	Difficulty      string                    `json:"difficulty,omitempty"`       // easy | medium | hard | adversarial
 }
 
 // Suite is a collection of benchmark tasks for a specific domain.
@@ -99,8 +100,11 @@ func RunSuite(tree *evolution.SerializableNode, suite Suite, model llm.LLM) *Run
 
 	for _, tc := range suite.Tasks {
 		start := time.Now()
+		owner, _ := tree.Metadata["user"].(string)
 
 		bb := &engine.Blackboard{
+			TreeID:        tree.Name,
+			User:          owner,
 			Task:          tc.Task,
 			LLM:           model,
 			NodeAdmission: benchmarkAdmission,
@@ -201,6 +205,9 @@ func taskContractPassed(tc TaskCase, outcome, result string, quality float64) bo
 		return outcome == "failure" || outcome == "quality_gate_failed"
 	}
 	if outcome != "success" || len(result) < tc.MinResultLen || quality < tc.MinQualityScore {
+		return false
+	}
+	if tc.ResultContract != nil && tc.ResultContract.Verify(result) != nil {
 		return false
 	}
 	if len(tc.ExpectedJSON) > 0 {
@@ -368,6 +375,18 @@ func QuickValidate(tree *evolution.SerializableNode, suite Suite, model llm.LLM,
 // QuickValidateCandidate rejects a whole-tree candidate that regresses task
 // success or routing on the same bounded evidence used by QuickValidate.
 func QuickValidateCandidate(baseline, candidate *evolution.SerializableNode, suite Suite, model llm.LLM) bool {
+	if baseline != nil {
+		if kind, _ := baseline.Metadata["factory_kind"].(string); kind == "response" {
+			tasks, contracts, err := QualificationCases(baseline, suite)
+			if err != nil {
+				return false
+			}
+			for i := range tasks {
+				tasks[i].ResultContract = &contracts[i]
+			}
+			suite = Suite{Name: "declared_factory_task", Tasks: tasks}
+		}
+	}
 	if baseline == nil || candidate == nil || len(suite.Tasks) == 0 {
 		return false
 	}

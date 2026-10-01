@@ -1,0 +1,6 @@
+=== RUN   TestLiveFactoryEvolutionPromotesAndRollsBackMeasuredVersion
+    runtime_promotion_test.go:47: recovery governance before=95.00 after=100.00
+    runtime_promotion_test.go:173: measured task passes 0% -> 100%; runtime adopted sha256:7e7171845f9f24237c8d6fdab167306880a7284c14fd7aedfbf3e2ec190160d2, rollback restored sha256:de35d14352695ed8962db2633fa8866f4275c8db0a56bf5a44da9caf98ac22b3
+--- PASS: TestLiveFactoryEvolutionPromotesAndRollsBackMeasuredVersion (11.18s)
+PASS
+ok  	github.com/nico/go-bt-evolve/cmd/bt-agent	11.215s

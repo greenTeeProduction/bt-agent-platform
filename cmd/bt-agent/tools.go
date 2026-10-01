@@ -473,6 +473,15 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			deps.bb.KgResults = ""
 			deps.bb.CachedResult = ""
 			injectPersonaContextLocked(deps, params.User)
+			if active, err := agentexec.ResolveRuntimeVersion(params.User, deps.bb.TreeID); err != nil {
+				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: fmt.Sprintf(`{"error": %q}`, err.Error())}}}
+			} else if active != nil {
+				command, err := engine.BuildAndValidate(active, deps.bb)
+				if err != nil {
+					return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: fmt.Sprintf(`{"error": %q}`, err.Error())}}}
+				}
+				*deps.bt = command
+			}
 			result := engine.RunTask(deps.bb, *deps.bt)
 			duration := time.Since(start)
 			recordPersonaInteraction(deps, params.User, params.Task, deps.bb.EvidenceTreeID(), deps.bb.Outcome, duration.Milliseconds())

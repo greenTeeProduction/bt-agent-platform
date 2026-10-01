@@ -6,13 +6,17 @@
 package gardener
 
 import (
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
+	"github.com/nico/go-bt-evolve/internal/persona"
 )
 
 // loadUserTreesLocked scans every user workspace under usersRoot and appends
@@ -33,8 +37,10 @@ func (r *Registry) loadUserTreesLocked() {
 	}
 
 	seen := make(map[string]bool, len(r.entries))
+	seenPaths := make(map[string]bool, len(r.entries))
 	for i := range r.entries {
 		seen[r.entries[i].Name] = true
+		seenPaths[r.entries[i].FilePath] = true
 	}
 
 	for _, u := range users {
@@ -53,6 +59,9 @@ func (r *Registry) loadUserTreesLocked() {
 				continue
 			}
 			path := filepath.Join(treesDir, name)
+			if seenPaths[path] {
+				continue
+			}
 			data, err := os.ReadFile(path)
 			if err != nil {
 				continue
@@ -60,6 +69,14 @@ func (r *Registry) loadUserTreesLocked() {
 			var tree evolution.SerializableNode
 			if json.Unmarshal(data, &tree) != nil {
 				continue
+			}
+			owner := user
+			if declared, _ := tree.Metadata["user"].(string); declared != "" {
+				if persona.SanitizeUserID(declared) != user {
+					slog.Warn("personal tree owner does not match workspace", "path", path)
+					continue
+				}
+				owner = declared
 			}
 			entryName := strings.TrimSpace(tree.Name)
 			if entryName == "" {
@@ -70,12 +87,13 @@ func (r *Registry) loadUserTreesLocked() {
 			}
 			seen[entryName] = true
 			r.entries = append(r.entries, TreeEntry{
+				TreeID:      tree.Name,
 				Name:        entryName,
 				Description: "Personal tree (user " + user + ")",
 				Tree:        &tree,
 				FilePath:    path,
 				Active:      true,
-				User:        user,
+				User:        owner,
 			})
 		}
 	}
@@ -87,11 +105,11 @@ func (r *Registry) loadUserTreesLocked() {
 // display name. Missing history stays missing for the evidence gate.
 func recordsForEntry(allRecords []evolution.Record, entry TreeEntry) []evolution.Record {
 	names := evidenceTreeNames(entry.Name)
+	if id := runtimeTreeID(entry); id != "" && !slices.Contains(names, id) {
+		names = append(names, id)
+	}
 	if entry.User != "" {
-		names = []string{entry.Name}
-		if entry.Tree != nil && strings.TrimSpace(entry.Tree.Name) != "" {
-			names = []string{entry.Tree.Name}
-		}
+		names = []string{runtimeTreeID(entry)}
 	}
 	filtered := make([]evolution.Record, 0, len(allRecords))
 	for _, name := range names {
@@ -127,7 +145,13 @@ func (g *Gardener) bankFor(entry TreeEntry) *evolution.ExperienceBank {
 	if bank, ok := g.userBanks[entry.User]; ok {
 		return bank
 	}
-	bank, err := evolution.NewExperienceBank(filepath.Join(g.cfg.UserExperienceRoot, entry.User, "experience"))
+	bankDir := filepath.Join(g.cfg.UserExperienceRoot, persona.SanitizeUserID(entry.User), "experience")
+	if persona.SanitizeUserID(entry.User) != entry.User {
+		// Distinct raw owner IDs can share a sanitized workspace name. Never
+		// share their learning bank or guess ownership of the legacy bank.
+		bankDir = filepath.Join(bankDir, fmt.Sprintf("owner-%x", sha256.Sum256([]byte(entry.User))))
+	}
+	bank, err := evolution.NewExperienceBank(bankDir)
 	if err != nil {
 		slog.Warn("personal experience unavailable", "user", entry.User, "error", err)
 		return nil

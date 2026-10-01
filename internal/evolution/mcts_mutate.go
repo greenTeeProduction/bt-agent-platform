@@ -110,6 +110,7 @@ var AllMutationOps = []string{
 	"add_tool",
 	"wrap_quality_gate",
 	"guard_task",
+	"add_contract_recovery",
 	"improve_prompt",
 }
 
@@ -340,6 +341,11 @@ func (m *MCTSMutator) concreteMutationOp(op string, tree *SerializableNode) Muta
 	}
 	unique := fmt.Sprintf("MCTS_%s_%d", op, m.randomIntn(1_000_000))
 	switch op {
+	case "add_contract_recovery":
+		if targets := ContractRecoveryTargets(tree); len(targets) > 0 {
+			target = targets[m.randomIntn(len(targets))]
+		}
+		return MutationOp{Operation: op, Target: target}
 	case "wrap_quality_gate", "guard_task":
 		bit := uint8(2)
 		if op == "guard_task" {

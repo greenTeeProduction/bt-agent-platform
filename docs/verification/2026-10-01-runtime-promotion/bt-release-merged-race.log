@@ -1,0 +1,16 @@
+ok  	github.com/nico/go-bt-evolve/internal/gardener	4.005s
+# github.com/nico/go-bt-evolve/internal/agentexec
+# [github.com/nico/go-bt-evolve/internal/agentexec]
+vet: internal/agentexec/wiring.go:82:15: undefined: fmt
+# github.com/nico/go-bt-evolve/cmd/bt-gardener.test
+$WORK/b589/_testmain.go:43:72: undefined: _test.TestGardenerRunCycleTool_CallAppliesLearnedSelectorOrdering
+$WORK/b589/_testmain.go:45:93: undefined: _test.TestGardenerRunCycleTool_CallAppliesLearnedSelectorOrdering_PerTreeTelemetryFile
+ok  	github.com/nico/go-bt-evolve/internal/evolution	79.444s
+ok  	github.com/nico/go-bt-evolve/internal/engine	92.140s
+ok  	github.com/nico/go-bt-evolve/internal/evaluator	2.970s
+ok  	github.com/nico/go-bt-evolve/internal/benchmark	1.511s
+FAIL	github.com/nico/go-bt-evolve/internal/agentexec [build failed]
+ok  	github.com/nico/go-bt-evolve/internal/domains	4.467s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-agent	25.961s
+FAIL	github.com/nico/go-bt-evolve/cmd/bt-gardener [build failed]
+FAIL
