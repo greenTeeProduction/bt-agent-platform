@@ -262,9 +262,8 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 	// personal trees in ADR-133 Phase 5): a tree with no reflection records
 	// has no run-derived fitness gradient, so mutation is a blind coin flip
 	// that only burns benchmark compute. Personal trees use strict filtering
-	// (recordsForEntry), so a freshly compiled tree relies on its seed
-	// reflection to pass this gate.
-	if len(records) == 0 && !g.cfg.EvolveWithoutReflections {
+	// (recordsForEntry). A compile seed or feedback is not execution evidence.
+	if len(evolution.ExecutionRecords(records)) == 0 && !g.cfg.EvolveWithoutReflections {
 		return CycleMetrics{
 			TreeName: entry.Name, Improved: false,
 			BaseFitness: baseFitness.Composite, NewFitness: baseFitness.Composite,
@@ -1280,7 +1279,7 @@ func (g *Gardener) adoptIslandWinner(entry TreeEntry, records []evolution.Record
 	// Evidence gate, mirroring evolveTreeV2: with no reflection records the
 	// scores below are computed over an empty corpus, so "the winner beats the
 	// live tree" is noise rather than a measured improvement.
-	if len(records) == 0 && !g.cfg.EvolveWithoutReflections {
+	if len(evolution.ExecutionRecords(records)) == 0 && !g.cfg.EvolveWithoutReflections {
 		return false
 	}
 

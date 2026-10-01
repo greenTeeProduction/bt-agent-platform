@@ -1091,30 +1091,12 @@ func verifyNotebookLMEvidenceAction(ctx *btcore.BTContext[Blackboard]) int {
 
 func reflectOnOutcomeAction(ctx *btcore.BTContext[Blackboard]) int {
 	bb := ctx.Blackboard
-	if bb.LLM != nil {
-		wentWell, toImprove := bb.LLM.Reflect(bb.Task, bb.Outcome, bb.Plan)
-
-		// Validate output quality — mark as failure if output is garbage
-		if !validateOutputQuality(bb) {
-			bb.Outcome = string(evolution.Failure)
-			bb.Result = fmt.Sprintf("OUTPUT QUALITY FAILED (score=%.1f): %s", bb.QualityScore, bb.Result)
-			toImprove = "Output quality below threshold — retry with more detail"
-		}
-
-		// Save reflection record (don't overwrite bb.Result; task result is already set)
-		if bb.Reflections != nil {
-			record := &evolution.Record{
-				Task:          bb.Task,
-				Plan:          bb.Plan,
-				WhatWentWell:  []string{wentWell},
-				WhatToImprove: []string{toImprove},
-				Outcome:       evolution.Outcome(bb.Outcome),
-				DurationMs:    bb.DurationMs,
-			}
-			if err := bb.Reflections.Save(record); err != nil {
-				fmt.Fprintf(os.Stderr, "engine: failed to save reflection record for %q: %v\n", bb.Task, err)
-			}
-		}
+	bb.requestOutcomeReflection()
+	// This node still enforces its output gate. Reflection inference and storage
+	// happen once the complete tree (and any outer agent gates) has finished.
+	if !validateOutputQuality(bb) {
+		bb.Outcome = string(evolution.Failure)
+		bb.Result = fmt.Sprintf("OUTPUT QUALITY FAILED (score=%.1f): %s", bb.QualityScore, bb.Result)
 	}
 	return 1
 }

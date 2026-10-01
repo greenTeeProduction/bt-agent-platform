@@ -1,23 +1,35 @@
 package evolution
 
-import "strings"
+import (
+	"encoding/json"
+	"slices"
+	"strings"
+)
 
 // GovernanceAssessment describes controls attached to actual task work. It is
 // a structural selection signal, not evidence that a task or a gate succeeded.
 // Counts saturate per work node: duplicate gates and decorative depth earn no
 // credit. A recovery-only tree has no task work and receives zero credit.
 type GovernanceAssessment struct {
-	WorkNodes     int     `json:"work_nodes"`
-	InputGuarded  int     `json:"input_guarded"`
-	ResultChecked int     `json:"result_checked"`
-	Guided        int     `json:"guided"`
-	Bounded       int     `json:"bounded"`
-	Recoverable   int     `json:"recoverable"`
-	Score         float64 `json:"score"`
-	controls      map[string][]uint8
+	WorkNodes       int     `json:"work_nodes"`
+	InputGuarded    int     `json:"input_guarded"`
+	ResultChecked   int     `json:"result_checked"`
+	ContractChecked int     `json:"contract_checked"`
+	Guided          int     `json:"guided"`
+	Bounded         int     `json:"bounded"`
+	Recoverable     int     `json:"recoverable"`
+	Score           float64 `json:"score"`
+	controls        map[string][]governanceControl
+}
+
+type governanceControl struct {
+	flags     uint8
+	contracts []string
 }
 
 type governanceContext struct {
+	contractChecked                                bool
+	contracts                                      []string
 	guarded, checked, bounded, recoverable, masked bool
 }
 
@@ -27,7 +39,7 @@ type governanceContext struct {
 // input guards must precede work on a mandatory sequence path.
 func AssessGovernance(tree *SerializableNode) GovernanceAssessment {
 	var report GovernanceAssessment
-	report.controls = make(map[string][]uint8)
+	report.controls = make(map[string][]governanceControl)
 	var visit func(*SerializableNode, governanceContext)
 	visit = func(n *SerializableNode, ctx governanceContext) {
 		if n == nil {
@@ -61,11 +73,23 @@ func AssessGovernance(tree *SerializableNode) GovernanceAssessment {
 				controls |= 16
 			}
 			key := n.Type + ":" + n.Name
-			report.controls[key] = append(report.controls[key], controls)
+			required := slices.Clone(ctx.contracts)
+			if ctx.masked || !ctx.checked {
+				required = nil
+			}
+			if len(required) > 0 && ctx.contractChecked {
+				report.ContractChecked++
+			}
+			report.controls[key] = append(report.controls[key], governanceControl{flags: controls, contracts: required})
 			return // Action nodes cannot execute decorative children.
 		}
 		switch n.Type {
 		case "QualityGate":
+			if contract, err := ParseResultContract(n); err == nil && contract != nil {
+				data, _ := json.Marshal(contract)
+				ctx.contracts = append(slices.Clone(ctx.contracts), string(data))
+				ctx.contractChecked = ctx.contractChecked || len(contract.JSONFields) > 0 || len(contract.RequiredKeys) > 0
+			}
 			ctx.checked = ctx.checked || len(n.Children) > 0
 			if len(n.Children) > 1 && boundedRecovery(&n.Children[1]) {
 				ctx.recoverable = true
@@ -96,6 +120,8 @@ func AssessGovernance(tree *SerializableNode) GovernanceAssessment {
 				for j := i + 1; j < len(n.Children); j++ {
 					if subtreeHasTaskWork(&n.Children[j]) {
 						childCtx.checked = false
+						childCtx.contracts = nil
+						childCtx.contractChecked = false
 						break
 					}
 				}
@@ -125,7 +151,7 @@ func AssessGovernance(tree *SerializableNode) GovernanceAssessment {
 	visit(tree, governanceContext{})
 	if report.WorkNodes > 0 {
 		n := float64(report.WorkNodes)
-		report.Score = (25*float64(report.InputGuarded) + 35*float64(report.ResultChecked) +
+		report.Score = (25*float64(report.InputGuarded) + 25*float64(report.ResultChecked) + 10*float64(report.ContractChecked) +
 			20*float64(report.Guided) + 15*float64(report.Bounded) + 5*float64(report.Recoverable)) / n
 	}
 	return report
@@ -166,11 +192,11 @@ func PreservesGovernance(before, after *SerializableNode) bool {
 		return false
 	}
 	for key, required := range a.controls {
-		available := append([]uint8(nil), b.controls[key]...)
+		available := slices.Clone(b.controls[key])
 		for _, control := range required {
 			found := false
 			for i, candidate := range available {
-				if candidate&control == control {
+				if candidate.flags&control.flags == control.flags && preservesContracts(control.contracts, candidate.contracts) {
 					available = append(available[:i], available[i+1:]...)
 					found = true
 					break
@@ -302,4 +328,16 @@ func hasAgentGuidance(n *SerializableNode) bool {
 		return len(strings.Fields(prompt)) >= 4
 	}
 	return nonemptyMetadata(n, "prompt")
+}
+
+// Automatic evolution must retain the declared task contract on the same work.
+// Stronger additional gates are allowed; rewriting the contract requires an
+// explicit task-definition change rather than a fitness optimization.
+func preservesContracts(required, available []string) bool {
+	for _, contract := range required {
+		if !slices.Contains(available, contract) {
+			return false
+		}
+	}
+	return true
 }

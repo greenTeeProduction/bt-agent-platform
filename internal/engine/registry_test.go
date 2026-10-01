@@ -430,13 +430,13 @@ func TestReflectOnOutcomeAction_WithMockLLM(t *testing.T) {
 	if result != 1 {
 		t.Errorf("reflectOnOutcomeAction with mock LLM should return 1, got %d", result)
 	}
-	// A reflection record should have been saved
+	// A node cannot publish an outcome before the enclosing run terminates.
 	records, err := refStore.LoadAll()
 	if err != nil {
 		t.Fatalf("LoadAll failed: %v", err)
 	}
-	if len(records) == 0 {
-		t.Error("reflectOnOutcomeAction should save a reflection record")
+	if len(records) != 0 {
+		t.Error("reflectOnOutcomeAction must defer persistence until run completion")
 	}
 }
 

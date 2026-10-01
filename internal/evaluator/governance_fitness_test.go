@@ -10,8 +10,8 @@ func governedReportTree() *evolution.SerializableNode {
 	return &evolution.SerializableNode{Type: "Sequence", Name: "report", Children: []evolution.SerializableNode{
 		{Type: "Condition", Name: "ValidateInput"},
 		{Type: "Timeout", Name: "ReportBudget", TimeoutMs: 30000, Children: []evolution.SerializableNode{
-			{Type: "QualityGate", Name: "VerifyReport", Children: []evolution.SerializableNode{
-				{Type: "ChainAction", Name: "llm_call:Produce the requested report using the supplied evidence.", Description: "Produce the requested report and cite its evidence.", Metadata: map[string]any{"max_tokens": float64(1024)}},
+			{Type: "QualityGate", Name: "VerifyReport", Metadata: map[string]any{"result_contract": map[string]any{"required_keys": []string{"summary", "sources"}}}, Children: []evolution.SerializableNode{
+				{Type: "ChainAction", Name: "llm_call:Produce the requested report as JSON with summary and sources fields using the supplied evidence.", Description: "Produce the requested report and cite its evidence.", Metadata: map[string]any{"max_tokens": float64(1024)}},
 			}},
 		}},
 	}}

@@ -7,6 +7,7 @@ package gardener
 
 import (
 	"encoding/json"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -96,19 +97,28 @@ func recordsForEntry(allRecords []evolution.Record, entry TreeEntry) []evolution
 	for _, name := range names {
 		filtered = append(filtered, evolution.FilterByTreeOwner(allRecords, name, entry.User)...)
 	}
-	return filtered
+	out := filtered[:0]
+	for _, record := range filtered {
+		if record.EvidenceKind != evolution.EvidenceCompilation {
+			out = append(out, record)
+		}
+	}
+	return out
 }
 
 // bankFor resolves the experience bank for a tree: the shared bank for
 // builtin/shared trees, the user's own bank (<UserExperienceRoot>/<user>/
-// experience, lazily opened and cached) for personal trees. Falls back to the
-// shared bank when the per-user bank cannot be opened or no root is
-// configured, so evolution never silently loses experience recording.
+// experience, lazily opened and cached) for personal trees. Missing owner
+// storage never grants access to shared learning state.
 func (g *Gardener) bankFor(entry TreeEntry) *evolution.ExperienceBank {
-	if entry.User == "" || g.cfg.UserExperienceRoot == "" {
+	if entry.User == "" {
 		return g.cfg.ExperienceBank
 	}
 
+	if g.cfg.UserExperienceRoot == "" {
+		slog.Warn("personal experience unavailable: owner storage not configured", "user", entry.User)
+		return nil
+	}
 	g.userBanksMu.Lock()
 	defer g.userBanksMu.Unlock()
 	if g.userBanks == nil {
@@ -119,10 +129,8 @@ func (g *Gardener) bankFor(entry TreeEntry) *evolution.ExperienceBank {
 	}
 	bank, err := evolution.NewExperienceBank(filepath.Join(g.cfg.UserExperienceRoot, entry.User, "experience"))
 	if err != nil {
-		// Do not cache: the open error may be transient (e.g. a path
-		// temporarily blocked), and caching the shared bank here would
-		// permanently strand the user on it even after the error clears.
-		return g.cfg.ExperienceBank
+		slog.Warn("personal experience unavailable", "user", entry.User, "error", err)
+		return nil
 	}
 	g.userBanks[entry.User] = bank
 	return bank

@@ -157,16 +157,16 @@ func TestEvolveTreeV2_UserTreeWithoutEvidenceIsSkipped(t *testing.T) {
 		t.Errorf("mutations = %d, want 0 for evidence-gated tree", metrics.Mutations)
 	}
 
-	// A seed reflection (what compile-time seeding writes) unfreezes it.
+	// Compile-time validation cannot substitute for an observed task outcome.
 	if err := refStore.Save(&evolution.Record{
 		TaskID: "seed-goal_automate_reports", TreeName: "goal:automate_reports",
-		Task: "compile-time validation", User: "nico", Outcome: evolution.Success,
+		Task: "compile-time validation", User: "nico", Outcome: evolution.Success, EvidenceKind: evolution.EvidenceCompilation,
 	}); err != nil {
 		t.Fatalf("save seed reflection: %v", err)
 	}
 	metrics = g.evolveTreeV2(entry, DefaultEvolveV2Config())
-	if metrics.SkippedNoEvidence {
-		t.Error("seed reflection should satisfy the evidence gate")
+	if !metrics.SkippedNoEvidence {
+		t.Error("compile seed must not satisfy the execution evidence gate")
 	}
 }
 
@@ -254,8 +254,8 @@ func TestBankFor_TransientOpenErrorDoesNotPermanentlyCacheSharedBank(t *testing.
 	g := newOrchestrationTestGardener(t, Config{ExperienceBank: sharedBank, UserExperienceRoot: usersRoot})
 
 	got := g.bankFor(TreeEntry{Name: "goal:x", User: "nico"})
-	if got != sharedBank {
-		t.Fatalf("expected fallback to shared bank while the per-user path is blocked")
+	if got != nil {
+		t.Fatalf("personal storage failure must not expose the shared bank")
 	}
 
 	// Clear the transient failure — the user's own bank can now open.
@@ -269,13 +269,13 @@ func TestBankFor_TransientOpenErrorDoesNotPermanentlyCacheSharedBank(t *testing.
 	}
 }
 
-func TestBankFor_NoUserRootFallsBackToShared(t *testing.T) {
+func TestBankFor_NoUserRootDoesNotExposeShared(t *testing.T) {
 	sharedBank, err := evolution.NewExperienceBank(t.TempDir())
 	if err != nil {
 		t.Fatalf("shared bank: %v", err)
 	}
 	g := newOrchestrationTestGardener(t, Config{ExperienceBank: sharedBank})
-	if got := g.bankFor(TreeEntry{Name: "goal:x", User: "nico"}); got != sharedBank {
-		t.Error("without UserExperienceRoot personal trees must fall back to the shared bank")
+	if got := g.bankFor(TreeEntry{Name: "goal:x", User: "nico"}); got != nil {
+		t.Error("without owner storage personal trees must not use the shared bank")
 	}
 }

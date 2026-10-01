@@ -56,8 +56,8 @@ func TestEvaluateTree_NoFeedbackLeavesCompositeUnchanged(t *testing.T) {
 func TestEvaluateTree_FeedbackShiftsComposite(t *testing.T) {
 	tree := evolution.DefaultTree()
 
-	liked := EvaluateTree(tree, satisfactionRecords(4, 0, 0))
-	disliked := EvaluateTree(tree, satisfactionRecords(0, 4, 0))
+	liked := EvaluateTree(tree, satisfactionRecords(4, 0, 3))
+	disliked := EvaluateTree(tree, satisfactionRecords(0, 4, 3))
 
 	if liked.UserSatisfaction != 1.0 {
 		t.Errorf("all-positive UserSatisfaction = %v, want 1.0", liked.UserSatisfaction)
@@ -66,10 +66,9 @@ func TestEvaluateTree_FeedbackShiftsComposite(t *testing.T) {
 		t.Errorf("all-negative UserSatisfaction = %v, want 0.0", disliked.UserSatisfaction)
 	}
 
-	// Same tree, and the negative records also fail, so the success-rate gap
-	// already separates them; the satisfaction term must widen that gap by
-	// its full 10-point swing on top of the 90% base rescale.
-	mixed := EvaluateTree(tree, satisfactionRecords(2, 2, 0))
+	// Both groups have the same executed tasks. Feedback changes satisfaction,
+	// while measured success rate and latency stay identical.
+	mixed := EvaluateTree(tree, satisfactionRecords(2, 2, 3))
 	if mixed.UserSatisfaction != 0.5 {
 		t.Errorf("mixed UserSatisfaction = %v, want 0.5", mixed.UserSatisfaction)
 	}
@@ -83,5 +82,15 @@ func TestEvaluateTree_EmptyRecordsSatisfactionUnknown(t *testing.T) {
 	fitness := EvaluateTree(evolution.DefaultTree(), nil)
 	if fitness.UserSatisfaction != -1 {
 		t.Errorf("UserSatisfaction = %v, want -1 for empty history", fitness.UserSatisfaction)
+	}
+}
+
+func TestFeedbackAndCompileChecksCannotInventTaskPerformance(t *testing.T) {
+	tree := evolution.DefaultTree()
+	evidence := satisfactionRecords(4, 0, 0)
+	evidence = append(evidence, evolution.Record{EvidenceKind: evolution.EvidenceCompilation, Outcome: evolution.Success})
+	fitness := EvaluateTree(tree, evidence)
+	if fitness.SuccessRate != 0 || fitness.AvgDurationMs != 0 || fitness.Composite != 0 {
+		t.Fatalf("non-execution evidence fabricated performance: %+v", fitness)
 	}
 }

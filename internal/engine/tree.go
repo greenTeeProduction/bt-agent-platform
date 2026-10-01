@@ -104,19 +104,25 @@ func (bb *Blackboard) ChildTicks() []ChildTick {
 
 // Blackboard is the shared state passed through the behavior tree.
 type Blackboard struct {
-	parallelStates map[*parallelCommand]*parallelState
-	Task           string
-	Complexity     string
-	Plan           string
-	Result         string
-	Outcome        string
-	DurationMs     int64
-	KgResults      string
-	CachedResult   string
-	FailureCount   int
-	Reflections    *evolution.Store
-	TreeStore      *evolution.TreeStore
-	LLM            llm.LLM
+	// TreeID and User are supplied by the resolver/caller, never inferred from task text.
+	TreeID           string
+	User             string
+	DeferRunEvidence bool
+	EvidenceError    error `json:"-"`
+	runEvidence      *runEvidence
+	parallelStates   map[*parallelCommand]*parallelState
+	Task             string
+	Complexity       string
+	Plan             string
+	Result           string
+	Outcome          string
+	DurationMs       int64
+	KgResults        string
+	CachedResult     string
+	FailureCount     int
+	Reflections      *evolution.Store
+	TreeStore        *evolution.TreeStore
+	LLM              llm.LLM
 
 	// Langchain integration — chain primitives accessible from BT nodes.
 	// Use interface{} to avoid circular imports; chain runners cast to concrete types.
@@ -233,7 +239,7 @@ func BuildAndValidate(serTree *evolution.SerializableNode, bb *Blackboard) (btco
 	if !info.Valid() {
 		return nil, fmt.Errorf("tree validation failed: %v", info.Errors)
 	}
-	return buildNode(expanded, bb, ""), nil
+	return bindTreeDefinition(buildNode(expanded, bb, ""), serTree, expanded, bb.TreeID)
 }
 
 // buildNode builds the node and wraps it with the per-node observability
@@ -568,8 +574,16 @@ func stripFencedBlocks(s string) string {
 	return out.String()
 }
 
-func RunTask(bb *Blackboard, tree btcore.Command[Blackboard]) string {
+func RunTask(bb *Blackboard, tree btcore.Command[Blackboard]) (result string) {
 	start := time.Now()
+	beginRunEvidence(bb, tree, start)
+	defer func() {
+		bb.DurationMs = time.Since(start).Milliseconds()
+		if !bb.DeferRunEvidence {
+			_ = FinalizeRunEvidence(bb)
+		}
+		result = bb.Result
+	}()
 	if bb.executionStop == nil {
 		bb.executionStop = &executionStop{}
 	}

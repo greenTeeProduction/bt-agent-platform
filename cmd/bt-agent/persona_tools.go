@@ -195,6 +195,7 @@ func personaEmbedder(deps *mcpDeps) func(string) ([]float64, error) {
 // Callers must be registered via server.RegisterBlackboardTool so the whole
 // call runs under the Server-wide blackboard lock (internal/engine/mcp_server.go).
 func injectPersonaContextLocked(deps *mcpDeps, user string) {
+	deps.bb.User = strings.TrimSpace(user)
 	if deps.bb.ChainState == nil {
 		deps.bb.ChainState = map[string]any{}
 	}

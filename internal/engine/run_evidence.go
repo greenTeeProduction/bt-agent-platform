@@ -1,0 +1,162 @@
+package engine
+
+import (
+	"crypto/rand"
+	"errors"
+	"fmt"
+	"sync"
+	"time"
+
+	"github.com/nico/go-bt-evolve/internal/evolution"
+	btcore "github.com/rvitorper/go-bt/core"
+)
+
+type treeDefinition struct{ id, version, expandedVersion string }
+type definitionCommand struct {
+	inner      btcore.Command[Blackboard]
+	definition treeDefinition
+}
+
+func (c *definitionCommand) Run(ctx *btcore.BTContext[Blackboard]) int { return c.inner.Run(ctx) }
+
+func bindTreeDefinition(command btcore.Command[Blackboard], source, expanded *evolution.SerializableNode, treeID string) (btcore.Command[Blackboard], error) {
+	version, err := evolution.TreeVersion(source)
+	if err != nil {
+		return nil, err
+	}
+	expandedVersion, err := evolution.TreeVersion(expanded)
+	if err != nil {
+		return nil, err
+	}
+	if treeID == "" {
+		treeID = source.Name
+	}
+	return &definitionCommand{inner: command, definition: treeDefinition{treeID, version, expandedVersion}}, nil
+}
+
+// Shared only to collect a reflection request from parallel branches. Final
+// outcome and persistence belong to the run owner, after all gates finish.
+type runEvidence struct {
+	mu            sync.Mutex
+	id            string
+	started       time.Time
+	definition    treeDefinition
+	versions      []string
+	checks        []evolution.ResultCheck
+	checksDropped int
+	reflect       bool
+	finalized     bool
+	err           error
+}
+
+func beginRunEvidence(bb *Blackboard, command btcore.Command[Blackboard], started time.Time) {
+	token := make([]byte, 16)
+	// crypto/rand.Read fills the buffer or terminates on an unrecoverable failure.
+	_, _ = rand.Read(token)
+	e := &runEvidence{id: fmt.Sprintf("run-%x", token), started: started}
+	if bound, ok := command.(*definitionCommand); ok {
+		e.definition = bound.definition
+		e.versions = []string{bound.definition.expandedVersion}
+	} else {
+		e.definition.id = bb.TreeID
+	}
+	bb.runEvidence = e
+	bb.EvidenceError = nil
+}
+
+func (bb *Blackboard) requestOutcomeReflection() {
+	if bb.runEvidence == nil {
+		return
+	}
+	bb.runEvidence.mu.Lock()
+	bb.runEvidence.reflect = true
+	bb.runEvidence.mu.Unlock()
+}
+
+func (bb *Blackboard) recordExecutionVersion(tree *evolution.SerializableNode) {
+	if bb.runEvidence == nil {
+		return
+	}
+	version, err := evolution.TreeVersion(tree)
+	if err != nil {
+		return
+	} // mutated trees have already passed JSON validation
+	e := bb.runEvidence
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if len(e.versions) == 0 || e.versions[len(e.versions)-1] != version {
+		e.versions = append(e.versions, version)
+	}
+}
+
+// FinalizeRunEvidence persists one final record, including outer quality gates
+// when a caller sets DeferRunEvidence. Repeated calls never replay inference or
+// retry a completed task. Persistence failure leaves the task outcome intact.
+func FinalizeRunEvidence(bb *Blackboard, diagnostics ...error) error {
+	if bb == nil || bb.runEvidence == nil {
+		return nil
+	}
+	e := bb.runEvidence
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if e.finalized {
+		return e.err
+	}
+	e.finalized = true
+	if bb.Reflections == nil || bb.Sandbox {
+		return nil
+	}
+	record := &evolution.Record{
+		TaskID: e.id, RunID: bb.RunID, TreeName: e.definition.id,
+		TreeVersion: e.definition.version, ExecutionVersions: append([]string(nil), e.versions...),
+		EvidenceKind: evolution.EvidenceExecution, User: bb.User,
+		ResultChecks:        append([]evolution.ResultCheck(nil), e.checks...),
+		ResultChecksDropped: e.checksDropped,
+		Task:                bb.Task, Plan: bb.Plan, Result: bb.Result,
+		Outcome: evolution.Outcome(bb.Outcome), QualityScore: bb.QualityScore,
+		Path: bb.CurrentPath,
+	}
+	if record.RunID == "" {
+		record.RunID = e.id
+	}
+	if diagnostic := errors.Join(append(diagnostics, bb.ExecutionError())...); diagnostic != nil {
+		record.Error = diagnostic.Error()
+	}
+	if e.reflect && bb.LLM != nil {
+		record.WhatWentWell, record.WhatToImprove = terminalReflection(bb)
+	}
+	bb.DurationMs = time.Since(e.started).Milliseconds()
+	record.DurationMs = bb.DurationMs
+	e.err = bb.Reflections.Save(record)
+	bb.EvidenceError = e.err
+	if e.err != nil {
+		bb.Log().Error("terminal run evidence not saved", "tree", record.TreeName, "run_id", record.RunID, "error", e.err)
+	}
+	return e.err
+}
+
+func terminalReflection(bb *Blackboard) (well, improve []string) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			improve = []string{fmt.Sprintf("terminal reflection failed: %v", recovered)}
+		}
+	}()
+	good, bad := bb.LLM.Reflect(bb.Task, bb.Outcome, bb.Plan+"\nResult:\n"+bb.Result)
+	return []string{good}, []string{bad}
+}
+
+// EvidenceTreeID returns the identity bound to the command that actually ran.
+func (bb *Blackboard) EvidenceTreeID() string {
+	if bb.runEvidence != nil {
+		return bb.runEvidence.definition.id
+	}
+	return bb.TreeID
+}
+
+// EvidenceTreeVersion returns the source definition fingerprint for this run.
+func (bb *Blackboard) EvidenceTreeVersion() string {
+	if bb.runEvidence != nil {
+		return bb.runEvidence.definition.version
+	}
+	return ""
+}

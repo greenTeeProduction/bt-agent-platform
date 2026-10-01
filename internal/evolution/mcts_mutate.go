@@ -351,7 +351,7 @@ func (m *MCTSMutator) concreteMutationOp(op string, tree *SerializableNode) Muta
 		collect = func(n *SerializableNode) {
 			if IsTaskWork(n) {
 				for _, flags := range assessment.controls[n.Type+":"+n.Name] {
-					if flags&bit == 0 {
+					if flags.flags&bit == 0 {
 						targets = append(targets, n.Name)
 						break
 					}

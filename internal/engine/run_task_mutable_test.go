@@ -141,9 +141,17 @@ func newGateBB(task string) (*Blackboard, chan struct{}) {
 func TestRunTaskMutableGraftExecutesSameRun(t *testing.T) {
 	tree := &evolution.SerializableNode{Type: "Sequence", Name: "root",
 		Children: []evolution.SerializableNode{{Type: "Action", Name: "muttest_self_graft"}}}
-	bb := &Blackboard{Task: "graft test"}
+	store, err := evolution.NewStore(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	bb := &Blackboard{Task: "graft test", Reflections: store}
 	if _, err := RunTaskMutable(bb, tree, LiveRunInfo{Agent: "t", TreeID: "graftcase"}); err != nil {
 		t.Fatal(err)
+	}
+	records, err := store.LoadAll()
+	if err != nil || len(records) != 1 || len(records[0].ExecutionVersions) < 2 {
+		t.Fatalf("missing live version history: records=%+v err=%v", records, err)
 	}
 	marks := marksOf(bb)
 	if len(marks) == 0 || marks[len(marks)-1] != "grafted" {

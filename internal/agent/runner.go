@@ -85,6 +85,7 @@ type RunOptions struct {
 type RunResult struct {
 	AgentName      string             `json:"agent_name"`
 	TreeID         string             `json:"tree_id"`
+	TreeVersion    string             `json:"tree_version,omitempty"`
 	Task           string             `json:"task"`
 	Outcome        string             `json:"outcome"`
 	Output         string             `json:"output"`
@@ -210,9 +211,25 @@ func (d *RunDeps) RunOnce(ctx context.Context, agentName, task string, opts RunO
 	}
 
 	bb := &engine.Blackboard{
-		Reflections: d.RefStore,
-		TreeStore:   d.TreeStore,
+		Reflections:      d.RefStore,
+		TreeID:           result.TreeID,
+		DeferRunEvidence: true,
+		TreeStore:        d.TreeStore,
 	}
+
+	if def != nil {
+		bb.User = def.Metadata["user"]
+	}
+	defer func() {
+		if result != nil && result.Outcome != "" {
+			bb.Outcome = result.Outcome
+			bb.Result = result.Output
+			bb.QualityScore = result.Quality
+		}
+		if evidenceErr := engine.FinalizeRunEvidence(bb, err); evidenceErr != nil {
+			err = errors.Join(err, &reliability.ExecutionPersistenceError{Err: evidenceErr})
+		}
+	}()
 
 	// Engine nodes flatten LLM errors into blackboard strings, severing the
 	// error chain. The recorder preserves the typed error (e.g. RateLimitError
@@ -287,6 +304,7 @@ func (d *RunDeps) RunOnce(ctx context.Context, agentName, task string, opts RunO
 	}
 	runSpan.End()
 
+	result.TreeVersion = bb.EvidenceTreeVersion()
 	result.Output = bb.Result
 	result.Outcome = bb.Outcome
 	result.NodePaths = bb.VisitedPaths

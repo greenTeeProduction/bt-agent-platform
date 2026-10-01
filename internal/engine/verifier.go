@@ -93,6 +93,11 @@ func walkValidate(node *evolution.SerializableNode, info *evolution.NodeValidati
 	}
 
 	switch node.Type {
+	case "QualityGate":
+		if _, err := parseResultContract(node); err != nil {
+			info.Errors = append(info.Errors, fmt.Sprintf("node %q: %v", node.Name, err))
+		}
+
 	case "Action":
 		info.ActionName = node.Name
 		if !isKnownActionName(node.Name) {

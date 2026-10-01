@@ -43,12 +43,14 @@ type FitnessScore struct {
 
 // EvaluateTree computes a multi-dimensional fitness score for a tree given its history.
 func EvaluateTree(tree *evolution.SerializableNode, records []evolution.Record) FitnessScore {
+	allRecords := records
+	records = evolution.ExecutionRecords(records)
 	n := len(records)
 	if n == 0 {
 		return FitnessScore{
 			NodeCount:         evolution.CountNodes(tree),
 			StructuralQuality: estimateStructuralQuality(tree),
-			UserSatisfaction:  -1,
+			UserSatisfaction:  estimateUserSatisfaction(allRecords),
 			Composite:         0,
 		}
 	}
@@ -97,7 +99,7 @@ func EvaluateTree(tree *evolution.SerializableNode, records []evolution.Record) 
 	// bt_feedback. Only applied when feedback exists — the composite is then
 	// rescaled (90% base + 10% satisfaction) so the 0–100 scale is preserved
 	// and pre/post-mutation comparisons over the same records stay consistent.
-	userSatisfaction := estimateUserSatisfaction(records)
+	userSatisfaction := estimateUserSatisfaction(allRecords)
 	if userSatisfaction >= 0 {
 		composite = composite*0.9 + userSatisfaction*10
 	}

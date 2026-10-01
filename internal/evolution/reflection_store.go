@@ -24,18 +24,36 @@ const (
 	Failure Outcome = "failure"
 )
 
-// Record captures a completed task execution and its reflection.
+// ResultCheck records an executed gate's verdict and the output it checked.
+type ResultCheck struct {
+	Gate         string `json:"gate"`
+	Passed       bool   `json:"passed"`
+	OutputDigest string `json:"output_digest"`
+	Reason       string `json:"reason,omitempty"`
+}
+
+// Record captures evidence with its origin and execution identity.
 type Record struct {
-	TaskID           string   `json:"task_id"`
-	Timestamp        int64    `json:"timestamp"`
-	Task             string   `json:"task"`
-	Plan             string   `json:"plan"`
-	TreeName         string   `json:"tree_name,omitempty"`
-	WhatWentWell     []string `json:"what_went_well"`
-	WhatToImprove    []string `json:"what_to_improve"`
-	AdjustedBehavior string   `json:"adjusted_behavior"`
-	Outcome          Outcome  `json:"outcome"`
-	DurationMs       int64    `json:"duration_ms"`
+	ResultChecks        []ResultCheck `json:"result_checks,omitempty"`
+	ResultChecksDropped int           `json:"result_checks_dropped,omitempty"`
+	RunID               string        `json:"run_id,omitempty"`
+	TreeVersion         string        `json:"tree_version,omitempty"`
+	ExecutionVersions   []string      `json:"execution_versions,omitempty"`
+	EvidenceKind        string        `json:"evidence_kind,omitempty"`
+	Result              string        `json:"result,omitempty"`
+	QualityScore        float64       `json:"quality_score,omitempty"`
+	Path                string        `json:"path,omitempty"`
+	Error               string        `json:"error,omitempty"`
+	TaskID              string        `json:"task_id"`
+	Timestamp           int64         `json:"timestamp"`
+	Task                string        `json:"task"`
+	Plan                string        `json:"plan"`
+	TreeName            string        `json:"tree_name,omitempty"`
+	WhatWentWell        []string      `json:"what_went_well"`
+	WhatToImprove       []string      `json:"what_to_improve"`
+	AdjustedBehavior    string        `json:"adjusted_behavior"`
+	Outcome             Outcome       `json:"outcome"`
+	DurationMs          int64         `json:"duration_ms"`
 	// User attributes the record to a persona (ADR-133 Phase 5); empty for
 	// anonymous/system runs.
 	User string `json:"user,omitempty"`
@@ -159,7 +177,7 @@ func (s *Store) CountFailures() int {
 		return 0
 	}
 	n := 0
-	for _, r := range records {
+	for _, r := range ExecutionRecords(records) {
 		if r.Outcome == Failure {
 			n++
 		}
@@ -173,6 +191,7 @@ func (s *Store) RecentFailures(n int) []Record {
 	if err != nil {
 		return nil
 	}
+	records = ExecutionRecords(records)
 	var failures []Record
 	for i := len(records) - 1; i >= 0 && len(failures) < n; i-- {
 		if records[i].Outcome == Failure {

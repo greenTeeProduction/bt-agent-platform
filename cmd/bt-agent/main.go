@@ -557,6 +557,10 @@ func main() {
 		LLM:         llmClient,
 	}
 
+	bb.TreeID = tree.Name
+	if tree.Name == evolution.DefaultTree().Name {
+		bb.TreeID = "default"
+	}
 	bt := engine.BuildTree(tree, bb)
 
 	// ── Agent Platform ─────────────────────────────────────────────────────

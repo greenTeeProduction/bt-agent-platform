@@ -41,7 +41,10 @@ func RunTaskMutable(bb *Blackboard, serTree *evolution.SerializableNode, info Li
 	}
 	cur := cloneNode(expanded)
 	bb.buildCapture = map[*evolution.SerializableNode]btcore.Command[Blackboard]{}
-	cmd := buildNode(cur, bb, "")
+	cmd, err := bindTreeDefinition(buildNode(cur, bb, ""), serTree, expanded, info.TreeID)
+	if err != nil {
+		return "", err
+	}
 	lr := registerLiveRun(bb, info)
 	lr.cur, lr.capture = cur, bb.buildCapture
 	defer deregisterLiveRun(lr.runID)
@@ -159,6 +162,7 @@ func (lr *liveRun) applyPending(ctx *btcore.BTContext[Blackboard], bb *Blackboar
 	gen := lr.generation
 	lr.mu.Unlock()
 	lr.cur, lr.capture = working, newCapture
+	bb.recordExecutionVersion(working)
 	bb.Log().Info("tree mutated at tick boundary", "run", lr.runID, "applied", applied, "generation", gen)
 	if bb.EventBus != nil {
 		bb.EventBus.Publish("tree_mutated", EventMessage{

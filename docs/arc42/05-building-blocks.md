@@ -176,6 +176,11 @@ Per-tree evidence and archive state must not be conflated with global
 runtime success. Gardener reflection selection requires the tree and owner
 to match; missing evidence never borrows the global record pool. Shared
 catalog names recognize their historical underscore/runtime colon aliases.
+The engine owns terminal run evidence; the agent runner supplies canonical tree
+identity/owner and defers publication until outer quality gates finish. Source
+and executed definition versions are retained. Compilation and feedback are
+separate evidence kinds, and personal experience-store errors never select the
+shared bank. Exact-version promotion is still incomplete (see §8).
 The ordinary mutation competition, deep search, local
 refinement and island adoption retain path-specific evidence. Island adoption
 now includes quick benchmark/meta-validation and a configured predecessor

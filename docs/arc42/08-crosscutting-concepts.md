@@ -170,7 +170,8 @@ other trees' outcomes. See [attribution regressions](../../internal/gardener/evi
 ### Governance fitness and live benchmark evidence
 
 [Governance assessment](../../internal/evolution/governance.go) scores controls
-on executable task paths: input guards (25%), result checks (35%), agent
+on executable task paths: input guards (25%), result checks (25%), declared
+JSON task contracts (10%), agent
 instructions actually consumed at runtime (20%), execution bounds (15%) and
 bounded recovery (5%). Coverage saturates per work node. Node count,
 decorative depth, documentation-only descriptions and unconditional checks
@@ -683,6 +684,41 @@ fairness. Nil pool/limiter injection retains the existing standalone fallback;
 the dashboard startup wires shared controls. Process restart, generic filesystem
 preemption, fleet-wide budgets and operational capacity/SLO qualification remain
 separate risks; this does not create durable sprint resume.
+
+
+### Terminal evidence and executable result contracts
+
+`QualityGate.metadata.result_contract` declares `json_fields` (required values),
+`required_keys` (required JSON fields), and/or `min_length`. Both primary and
+recovery outputs must pass the declared constraints and ordinary output checks.
+Malformed/unknown contract fields are validation errors. Enforced JSON task
+contracts earn additional governance credit; automatic evolution cannot remove
+or rewrite an existing contract on the protected work to improve its score.
+See [contract implementation](../../internal/evolution/result_contract.go),
+[runtime gate tests](../../internal/engine/result_contract_test.go), and
+[governance protection](../../internal/evolution/result_contract_test.go).
+
+Run evidence is written once after terminal execution, rather than from an
+intermediate `ReflectOnOutcome` node. Agent runs defer finalization until their
+outer output/quality contracts have settled. Records retain owner, canonical
+caller tree ID (root name only when unspecified), source-definition SHA-256,
+expanded/executed versions, actual result, elapsed time, outcome, diagnostics,
+and output-digest-linked gate verdicts. A live mutation records every version
+that actually executes at a tick boundary. More than one version cannot count
+as an unchanged-version sample. Gate-verdict storage is bounded to 1024 entries;
+omission counts prevent a truncated record from qualifying as complete evidence.
+Persistence failures are reported without replaying completed work.
+
+Compilation and feedback records have explicit evidence kinds. Neither counts
+as task success/latency or satisfies the gardener's execution-evidence gate.
+Historical records remain inspectable; missing identity/version is never filled
+in retrospectively. `FilterByTreeVersion` provides strict version selection;
+full migration of gardener scoring/promotion from tree-level legacy history
+remains open. Personal experience-store failures never fall back to the shared
+bank. [Terminal writer](../../internal/engine/run_evidence.go),
+[outer quality regression](../../internal/agent/run_evidence_test.go), and
+[live result recording](../../internal/benchmark/live_evidence_test.go) cover
+these contracts. These source changes do not establish deployed adoption.
 
 ---
 

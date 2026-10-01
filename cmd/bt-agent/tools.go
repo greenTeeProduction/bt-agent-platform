@@ -322,9 +322,8 @@ func persistGeneratedTreeForUser(deps *mcpDeps, user, treeID string, tree *evolu
 }
 
 // seedCompileReflection writes the compile-time plan validation as the tree's
-// first reflection record (ADR-133 Phase 5). Freshly compiled trees would
-// otherwise carry zero evidence and stay frozen behind the gardener's
-// evidence gate forever. The TaskID includes the owner and tree ID, so
+// compilation record (ADR-133 Phase 5). This is design evidence; only a
+// subsequent execution can satisfy the gardener's run-evidence gate. The TaskID includes the owner and tree ID, so
 // recompiling replaces only that owner's seed. Compilation evidence must
 // remain distinguishable from an observed execution outcome.
 func seedCompileReflection(deps *mcpDeps, user, treeID, goalName string, planSteps []string) {
@@ -334,11 +333,12 @@ func seedCompileReflection(deps *mcpDeps, user, treeID, goalName string, planSte
 	user, treeID = strings.TrimSpace(user), strings.TrimSpace(treeID)
 	identity := sha256.Sum256([]byte(user + "\x00" + treeID))
 	rec := &evolution.Record{
-		TaskID:   fmt.Sprintf("seed-%x", identity),
-		Task:     "Compile-time validation for goal: " + goalName,
-		Plan:     strings.Join(planSteps, " → "),
-		TreeName: treeID,
-		User:     user,
+		TaskID:       fmt.Sprintf("seed-%x", identity),
+		EvidenceKind: evolution.EvidenceCompilation,
+		Task:         "Compile-time validation for goal: " + goalName,
+		Plan:         strings.Join(planSteps, " → "),
+		TreeName:     treeID,
+		User:         user,
 		WhatWentWell: []string{
 			"GOAP planner reached the goal state",
 			"compiled tree passed full engine validation",
@@ -474,7 +474,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			injectPersonaContextLocked(deps, params.User)
 			result := engine.RunTask(deps.bb, *deps.bt)
 			duration := time.Since(start)
-			recordPersonaInteraction(deps, params.User, params.Task, "", deps.bb.Outcome, duration.Milliseconds())
+			recordPersonaInteraction(deps, params.User, params.Task, deps.bb.EvidenceTreeID(), deps.bb.Outcome, duration.Milliseconds())
 			// Interaction-time autopilot (ADR-133 Phase 4): after a good
 			// user-attributed run, check whether a recurring habit should
 			// become an automation proposal. Best-effort by design.
@@ -490,9 +490,12 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			} else {
 				engine.Info("bt_run_task: completed", "task", params.Task, "outcome", deps.bb.Outcome, "duration_ms", duration.Milliseconds())
 			}
-			response := fmt.Sprintf(`{"result": %q, "outcome": %q, "complexity": %q, "duration_ms": %d, "plan": %q}`,
-				result, deps.bb.Outcome, deps.bb.Complexity, deps.bb.DurationMs, deps.bb.Plan)
-			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: response}}}
+			payload := map[string]any{"result": result, "outcome": deps.bb.Outcome, "complexity": deps.bb.Complexity, "duration_ms": deps.bb.DurationMs, "plan": deps.bb.Plan, "tree_id": deps.bb.EvidenceTreeID(), "tree_version": deps.bb.EvidenceTreeVersion()}
+			if deps.bb.EvidenceError != nil {
+				payload["evidence_error"] = deps.bb.EvidenceError.Error()
+			}
+			response, _ := json.Marshal(payload)
+			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(response)}}}
 		})
 
 	server.RegisterTool("bt_get_tree", "Get the current behavior tree definition",
@@ -594,6 +597,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 		func(args json.RawMessage) *engine.ToolResult {
 			tree := evolution.GoDeveloperTree()
 			_ = deps.treeStore.Save(tree)
+			deps.bb.TreeID = "godev"
 			newBt := engine.BuildTree(tree, deps.bb)
 			*deps.bt = newBt
 			result := map[string]any{"switched": true, "tree": "GoDeveloperTree", "node_count": evolution.CountNodes(tree), "strategies": 5}
@@ -619,6 +623,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: fmt.Sprintf(`{"error": "unknown agent", "available": %q}`, names.String())}}}
 			}
 			_ = deps.treeStore.Save(tree)
+			deps.bb.TreeID = "finance:" + params.Agent
 			*deps.bt = engine.BuildTree(tree, deps.bb)
 			result := map[string]any{"switched": true, "agent": params.Agent, "description": evolution.AgentDescriptions[params.Agent], "node_count": evolution.CountNodes(tree)}
 			data, _ := json.Marshal(result)
@@ -660,6 +665,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: `{"error": "unknown variant, use: deep_research, quick_research"}`}}}
 			}
 			_ = deps.treeStore.Save(tree)
+			deps.bb.TreeID = "research:" + params.Variant
 			*deps.bt = engine.BuildTree(tree, deps.bb)
 			result := map[string]any{"switched": true, "variant": params.Variant, "description": evolution.Descriptions[params.Variant], "node_count": evolution.CountNodes(tree)}
 			data, _ := json.Marshal(result)
@@ -684,6 +690,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: fmt.Sprintf(`{"error": "unknown tree", "available": %q}`, names.String())}}}
 			}
 			_ = deps.treeStore.Save(tree)
+			deps.bb.TreeID = "domain:" + params.Tree
 			*deps.bt = engine.BuildTree(tree, deps.bb)
 			// domains.DescriptionFor spans all three description maps; indexing
 			// domains.Descriptions directly would confirm the switch with an
@@ -810,6 +817,8 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: fmt.Sprintf(`{"error":"unknown tree: %s"}`, params.Tree)}}}
 			}
 			deps.bb.Task = params.Task
+			deps.bb.TreeID = params.Tree
+			injectPersonaContextLocked(deps, "")
 			*deps.bt = engine.BuildTree(tree, deps.bb)
 			output := engine.RunTask(deps.bb, *deps.bt)
 			result := map[string]any{"delegated_to": params.Tree, "outcome": deps.bb.Outcome, "output": output}
