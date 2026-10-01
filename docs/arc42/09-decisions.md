@@ -311,6 +311,7 @@ Navigation and provenance:
 | ADR-283 | [Evidence-Preserving Offline Recovery of Collapsed Trees](#adr-283) | Accepted — observed data repair; service rollout open | 2026-10-01 |
 | ADR-284 | [Transactional Automation Reservations and Exact Activation](#adr-284) | Accepted — approval boundary; task effects remain open | 2026-10-01 |
 | ADR-285 | [Executable Personal File Tasks and Version-Bound Consent](#adr-285) | Accepted — real file fixture; broader capabilities/rollout open | 2026-10-01 |
+| ADR-286 | [Typed Checkpoints and Observed GOAP Agent State](#adr-286) | Accepted — verification boundary; generic effect observers open | 2026-10-01 |
 
 <a id="adr-001"></a>
 
@@ -6717,6 +6718,52 @@ the ordinary provider; fast real Ollama remains the authorized benchmark excepti
 [filesystem lifecycle failures](../../internal/engine/file_task_test.go),
 [effect-contract preservation](../../internal/evolution/file_task_test.go),
 and [autopilot task/version tests](../../cmd/bt-agent/autopilot_test.go).
+
+---
+
+
+
+<a id="adr-286"></a>
+
+## ADR-286: Typed Checkpoints and Observed GOAP Agent State
+
+**Context:** The GOAP checkpoint wrapper converted `task_status=completed` to
+`false`, while its engine decorator silently discarded non-boolean metadata and
+read `world_state` instead of GOAP's `goap_world_state`. A `Running` child lost its
+attempt snapshot and retry count on the next tick. The standalone GOAP agent
+published predicted effects into live state even when its executor returned a
+different observed state. Dynamic GOAP also synthesized completion without an LLM.
+
+**Decision:** Use a shared typed checkpoint contract with an explicit state source,
+one child, nonempty scalar facts and exact JSON numeric comparisons. Preserve
+postcondition numbers during tree decoding. Malformed/empty contracts fail before
+execution and cannot earn governance credit; mutations cannot redirect the state
+source or replace declared facts. Keep snapshots and retry budgets across ticks,
+cache terminal disposition within a run, and preserve typed execution stops.
+A failed gate after a recorded committed effect is uncertain and cannot restore or
+replay the external work. The standalone GOAP agent publishes the executor's actual
+returned state before callbacks, including removed facts, and rejects missing
+promised effects without automatically repeating the completed action. Dynamic
+GOAP with no executor stops without advancing the step or synthesizing effects.
+
+**Status:** Accepted (2026-10-01); generic effect observers and rollout remain open.
+
+**Validation:** [Contract persistence tests](../../internal/evolution/checkpoint_contract_test.go),
+[checkpoint runtime tests](../../internal/engine/checkpoint_contract_test.go),
+[actual file-effect lifecycle tests](../../internal/engine/file_task_test.go),
+[observed agent-state tests](../../internal/goap/observed_state_test.go), and
+[dynamic GOAP missing-executor regression](../../internal/engine/goap_nodes_test.go).
+These verify control semantics and actual file replay disposition, not model
+capability. They do not use mock inference to qualify an improvement.
+
+**Limits:** Generic compiled `ApplyGoapEffects` and dynamic model-output effect
+assertions still need independently wired effect observers. A checkpoint checks
+its selected facts; it cannot establish that their producer observed reality.
+Only effects with retained committed receipts receive this replay protection.
+Snapshots are process-local and do not establish cross-process resume or external
+rollback. Existing persisted GOAP wrappers need explicit contract/version review
+before adoption; changes to authoring helpers do not migrate saved definitions.
+Broader task qualification, research attribution and deployed rollout remain open.
 
 ---
 

@@ -439,28 +439,21 @@ func TestAction_ExecuteGoapStep_LLMFailure(t *testing.T) {
 
 func TestAction_ExecuteGoapStep_NoLLM(t *testing.T) {
 	fn := GetAction("ExecuteGoapStep")
-	if fn == nil {
-		t.Fatal("ExecuteGoapStep action not registered")
+	bb := &Blackboard{Task: "build a pipeline", ChainState: map[string]any{
+		"goap_step_index":  0,
+		"goap_steps":       []string{"build"},
+		"goap_world_state": goap.WorldState{"built": false},
+		"goap_plan":        &goap.Plan{Steps: []goap.Action{{Name: "build", Effects: goap.WorldState{"built": true}}}},
+	}}
+	ctx := btcore.NewBTContext(t.Context(), bb)
+	if result := fn(ctx); result != -1 || bb.Outcome != "failure" {
+		t.Fatalf("missing executor accepted: status=%d outcome=%q", result, bb.Outcome)
 	}
-	bb := &Blackboard{
-		Task: "build a pipeline",
-		// No LLM — should fall through to no-LLM path
-		ChainState: map[string]any{
-			"goap_step_index": 0,
-			"goap_steps":      []string{"analyze_requirements"},
-		},
+	if bb.ChainState["goap_step_index"] != 0 || goapWorldStateFrom(bb)["built"] != false || len(getStepResults(bb.ChainState)) != 0 {
+		t.Fatalf("missing executor claimed work: %+v", bb.ChainState)
 	}
-	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
-	result := fn(ctx)
-	if result != 1 {
-		t.Errorf("expected 1 without LLM, got %d", result)
-	}
-	if bb.Outcome != "running" {
-		t.Errorf("expected outcome 'running', got %q", bb.Outcome)
-	}
-	lastResult, ok := bb.ChainState["goap_last_step_result"].(string)
-	if !ok || !stringContains(lastResult, "marked complete") {
-		t.Errorf("expected no-LLM fallback message, got %q", lastResult)
+	if !bb.applyExecutionStop() {
+		t.Fatal("failure could be masked by a fallback")
 	}
 }
 

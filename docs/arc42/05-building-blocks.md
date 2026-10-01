@@ -156,6 +156,12 @@ flowchart LR
 The familiar PreGate → StrategyRouter → OutcomeSelector scaffold is a common
 tree pattern, not a mandatory shape of every valid tree.
 
+`evolution.CheckpointContract` defines the typed state contract used by the engine
+checkpoint decorator. The GOAP wrapper explicitly selects `goap_world_state`;
+legacy boolean callers select `world_state`. The standalone `goap.Agent` exposes
+observed executor state and rejects unobserved effects before success callbacks.
+These checks do not supply generic GOAP effect observers (ADR-286).
+
 ## 5.3 Evolution Engine
 
 The gardener orchestrates evidence collection and adoption; `evaluator`

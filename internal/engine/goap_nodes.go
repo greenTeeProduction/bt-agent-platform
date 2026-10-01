@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/nico/go-bt-evolve/internal/goap"
+	"github.com/nico/go-bt-evolve/internal/reliability"
 	btcore "github.com/rvitorper/go-bt/core"
 )
 
@@ -274,9 +275,10 @@ func registerGoapNodes() {
 			cs["goap_last_step_result"] = result
 			stepOutput = result
 		} else {
-			fallback := "step " + stepName + " marked complete (no LLM)"
-			cs["goap_last_step_result"] = fallback
-			stepOutput = fallback
+			err := fmt.Errorf("GOAP step %q has no configured executor", stepName)
+			b.stopExecution(err.Error(), &reliability.ExecutionStoppedError{Outcome: "failure", Err: err})
+			b.applyExecutionStop()
+			return -1
 		}
 
 		// Accumulate step result for multi-step reasoning context

@@ -243,9 +243,23 @@ and score together, so population sorting cannot corrupt their correspondence.
 uses a repeat decorator that re-executes successful work.
 
 `QualityGate`, including typed quality edges, validates recovery output and
-resumes running recovery without replaying primary work. Declared checkpoint
-postconditions fail when world-state evidence is missing. Both gates preserve
-typed execution stops. See [gate regressions](../../internal/engine/governance_gate_test.go).
+resumes running recovery without replaying primary work. `CheckpointVerifier`
+requires one child and a nonempty boolean/string/number contract. Its `state_key`
+is explicitly `world_state` (legacy default) or `goap_world_state`; the GOAP wrapper
+selects the latter. String facts remain strings, numeric facts retain exact JSON
+values through persistence, and missing facts never satisfy expected false.
+Malformed declarations fail authoring validation and execution before the child.
+Evolution preserves the selected map and every declared fact (ADR-286).
+
+The checkpoint retains its attempt snapshot and retry budget across `Running`
+ticks and caches terminal disposition within a run. Snapshots restore only the
+selected in-memory state; a committed effect receipt followed by a failed gate
+causes an uncertain execution stop and forbids replay. Both gate types preserve
+typed execution stops. See [gate regressions](../../internal/engine/governance_gate_test.go)
+and [typed checkpoint regressions](../../internal/engine/checkpoint_contract_test.go).
+The facts still depend on their producer: a matching map alone does not prove an
+external action, and the generic compiled/dynamic GOAP paths still need independent
+effect observers before their assertions can establish task impact.
 
 | Path | Current acceptance behavior | Remaining boundary |
 |---|---|---|

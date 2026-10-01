@@ -2,7 +2,7 @@ package evolution
 
 import "encoding/json"
 
-// UnmarshalJSON preserves result-contract numbers exactly across persistence.
+// UnmarshalJSON preserves result/checkpoint contract numbers exactly across persistence.
 // Other metadata keeps its existing float64 representation for compatibility.
 func (n *SerializableNode) UnmarshalJSON(data []byte) error {
 	type plainNode SerializableNode
@@ -18,7 +18,7 @@ func (n *SerializableNode) UnmarshalJSON(data []byte) error {
 	if fields.Metadata != nil {
 		decoded.Metadata = make(map[string]any, len(fields.Metadata))
 		for key, raw := range fields.Metadata {
-			if key == "result_contract" {
+			if key == "result_contract" || key == "postconditions" {
 				decoded.Metadata[key] = raw
 				continue
 			}

@@ -1,0 +1,52 @@
+{
+  "directory": "/home/nico/.go-bt-reflections",
+  "checkpoints": [
+    {
+      "file": "/home/nico/.go-bt-reflections/tree-domain_goap_devops.json",
+      "name": "GoapDevops_Main_Verified",
+      "metadata": {
+        "postconditions": {
+          "has_result": true,
+          "task_status": false
+        }
+      },
+      "sha256": "1ec661a2057c1c7c332dbbefad2c72c1bb377ded0295481b09e0e98229e508ee"
+    },
+    {
+      "file": "/home/nico/.go-bt-reflections/tree-domain_goap_fusion.json",
+      "name": "GoapFusion_Main_Verified",
+      "metadata": {
+        "postconditions": {
+          "has_result": true,
+          "task_status": false
+        }
+      },
+      "sha256": "9ea452a2ae04505c715066f6dd2f8f7915809f614ce40db5633f710ec7525ff2"
+    },
+    {
+      "file": "/home/nico/.go-bt-reflections/tree-domain_goap_planning.json",
+      "name": "GoapPlanning_Main_Verified",
+      "metadata": {
+        "postconditions": {
+          "has_result": true,
+          "task_status": false
+        }
+      },
+      "sha256": "729aae046801baa288f9531ed6d0739ecf0ab5614b521c89bf9b7daf667f31a8"
+    },
+    {
+      "file": "/home/nico/.go-bt-reflections/tree-domain_goap_research.json",
+      "name": "GoapResearch_Main_Verified",
+      "metadata": {
+        "postconditions": {
+          "has_result": true,
+          "task_status": false
+        }
+      },
+      "sha256": "1ff98be98a95f7c5c39b5f24dbbf00d4fa8ba1d9784f4cacee6e735b13f4351b"
+    }
+  ],
+  "observed_utc": "2026-10-01T17:50:25.733824+00:00",
+  "scope": "Read-only inventory of tree-*.json directly under the recovered reflections directory; not a scan of every personal/archive directory.",
+  "migration": "Review each exact tree and its actual fact producer; do not mechanically rewrite task_status or infer an external effect from a matching map."
+}

@@ -83,7 +83,7 @@ func TestCheckpointVerifier_RetryOnPostconditionMismatch(t *testing.T) {
 	}
 
 	// Verify final world state matches postconditions.
-	ws := extractWorldState(bb)
+	ws := bb.ChainState["world_state"].(map[string]bool)
 	if !ws["door_open"] {
 		t.Fatal("expected door_open to be true after retry")
 	}
@@ -180,7 +180,7 @@ func TestCheckpointVerifier_StateRestorationOnChildFailure(t *testing.T) {
 	}
 
 	// Verify final world state matches postconditions.
-	ws := extractWorldState(bb)
+	ws := bb.ChainState["world_state"].(map[string]bool)
 	if !ws["balance"] {
 		t.Fatal("expected balance to be true after retry")
 	}
@@ -208,7 +208,7 @@ func TestCheckpointVerifier_RunningPropagation(t *testing.T) {
 	verifier := NewCheckpointVerifier(
 		child,
 		3,
-		map[string]bool{},
+		map[string]bool{"done": true},
 	)
 
 	ctx := &btcore.BTContext[Blackboard]{Blackboard: bb}
@@ -232,21 +232,9 @@ func TestCheckpointVerifier_DefaultMaxRetries(t *testing.T) {
 }
 
 func TestCheckpointVerifier_NilPostconditions(t *testing.T) {
-	// Nil postconditions should be converted to an empty map.
-	verifier := NewCheckpointVerifier(
-		btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return 1 }),
-		1,
-		nil,
-	)
-	if verifier.Postconditions == nil {
-		t.Fatal("expected non-nil Postconditions after constructor")
-	}
-	if len(verifier.Postconditions) != 0 {
-		t.Fatalf("expected empty postconditions, got %d entries", len(verifier.Postconditions))
-	}
-
-	// With empty postconditions, verifyPostconditions should always return true.
-	if !verifier.verifyPostconditions(map[string]bool{}) {
-		t.Fatal("expected empty postconditions to verify successfully")
+	calls := 0
+	verifier := NewCheckpointVerifier(btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { calls++; return 1 }), 1, nil)
+	if code := verifier.Run(btcore.NewBTContext(t.Context(), &Blackboard{})); code != -1 || calls != 0 {
+		t.Fatalf("empty contract executed: status=%d calls=%d", code, calls)
 	}
 }

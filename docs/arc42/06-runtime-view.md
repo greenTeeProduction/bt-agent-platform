@@ -404,6 +404,14 @@ metadata, including nested cycles. The watcher starts after owner/analysis
 initialization. The bt-agent self path still has only scheduler snapshots;
 daemon-wide scheduler/A2A/DLQ admission remains separate C09 acceptance.
 
+Checkpoint recovery retains the original attempt's typed state snapshot through
+`Running` ticks and keeps one bounded retry budget for the run. A missing/string-
+mismatched fact fails verification; a completed file write followed by a failed
+checkpoint stops as uncertain instead of treating state restoration as undo.
+The standalone GOAP agent publishes returned observations before callbacks and
+rejects unestablished effects; dynamic GOAP without an executor cannot advance.
+Generic model-driven effect assertion remains open (ADR-286).
+
 ## 6.6 Browser Authentication and Session Expiry
 
 ```mermaid

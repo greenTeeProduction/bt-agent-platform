@@ -376,8 +376,7 @@ func buildNodeInner(node *evolution.SerializableNode, bb *Blackboard, parentName
 			return btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return -1 })
 		}
 		child := buildNode(&node.Children[0], bb, node.Name)
-		postconditions := readPostconditions(node)
-		return NewCheckpointVerifier(child, node.MaxRetries, postconditions)
+		return newCheckpointVerifier(child, node)
 	case "HumanApprovalGate":
 		return buildHumanApprovalGate(node, bb, parentName)
 	case "ClaudeErrorHandler":

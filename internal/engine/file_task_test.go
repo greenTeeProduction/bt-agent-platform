@@ -13,7 +13,7 @@ import (
 // Filesystem lifecycle fixtures do not evaluate model quality. The end-to-end
 // automation benchmark uses RealLLM and the production task factory/runner.
 func TestFileTaskRejectsWrongOutputAndChangedInputBeforeWriting(t *testing.T) {
-	for _, mode := range []string{"wrong_result", "changed_input", "valid"} {
+	for _, mode := range []string{"wrong_result", "changed_input", "valid", "checkpoint_after_commit"} {
 		t.Run(mode, func(t *testing.T) {
 			root := t.TempDir()
 			prev := ArtifactRootFn
@@ -46,6 +46,11 @@ func TestFileTaskRejectsWrongOutputAndChangedInputBeforeWriting(t *testing.T) {
 				}
 			})
 			tree := &evolution.SerializableNode{Type: "FileTask", Name: "file-task", Metadata: map[string]any{"user": "alice", "task": "Compute the total", "file_task": evolution.FileTaskSpec{Input: "input.json", Output: "reports/total.json"}, "result_contract": json.RawMessage(`{"json_fields":{"total":42}}`)}, Children: []evolution.SerializableNode{{Type: "Action", Name: name}}}
+			if mode == "checkpoint_after_commit" {
+				tree = &evolution.SerializableNode{Type: "CheckpointVerifier", Name: "downstream_gate", MaxRetries: 3,
+					Metadata: map[string]any{"postconditions": map[string]any{"external_confirmation": true}},
+					Children: []evolution.SerializableNode{*tree}}
+			}
 			bb := &Blackboard{User: "alice", Task: "Compute the total"}
 			command, err := BuildAndValidate(tree, bb)
 			if err != nil {
@@ -54,13 +59,17 @@ func TestFileTaskRejectsWrongOutputAndChangedInputBeforeWriting(t *testing.T) {
 			RunTask(bb, command)
 			receipts := bb.EvidenceEffects()
 			data, err := os.ReadFile(filepath.Join(root, "reports/total.json"))
-			if mode != "valid" {
+			if mode == "wrong_result" || mode == "changed_input" {
 				if err == nil || bb.Outcome == "success" || len(receipts) != 0 {
 					t.Fatalf("invalid task wrote output: %s %s %+v", data, bb.Outcome, receipts)
 				}
 				return
 			}
-			if err != nil || bb.Outcome != "success" || len(receipts) != 1 || !receipts[0].Verified || !receipts[0].WriteCommitted {
+			wantOutcome := "success"
+			if mode == "checkpoint_after_commit" {
+				wantOutcome = "uncertain"
+			}
+			if err != nil || bb.Outcome != wantOutcome || len(receipts) != 1 || !receipts[0].Verified || !receipts[0].WriteCommitted {
 				t.Fatalf("missing verified effect: %s %s %+v %v", data, bb.Outcome, receipts, err)
 			}
 			command.Run(&btcore.BTContext[Blackboard]{Blackboard: bb})

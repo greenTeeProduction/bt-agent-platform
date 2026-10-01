@@ -95,7 +95,11 @@ func AssessGovernance(tree *SerializableNode) GovernanceAssessment {
 				ctx.recoverable = true
 			}
 		case "CheckpointVerifier":
-			ctx.checked = ctx.checked || hasPostconditionContract(n)
+			if contract, err := ParseCheckpointContract(n); err == nil {
+				data, _ := json.Marshal(contract)
+				ctx.contracts = append(slices.Clone(ctx.contracts), "checkpoint:"+string(data))
+				ctx.checked = true
+			}
 		case "HumanApprovalGate":
 			ctx.guarded = true
 		}
@@ -271,16 +275,8 @@ func isMandatoryResultCheck(n *SerializableNode) bool {
 }
 
 func hasPostconditionContract(n *SerializableNode) bool {
-	conditions, ok := n.Metadata["postconditions"].(map[string]any)
-	if !ok || len(conditions) == 0 {
-		return false
-	}
-	for key, value := range conditions {
-		if _, ok := value.(bool); !ok || strings.TrimSpace(key) == "" {
-			return false
-		}
-	}
-	return true
+	_, err := ParseCheckpointContract(n)
+	return err == nil
 }
 
 func nonemptyMetadata(n *SerializableNode, key string) bool {

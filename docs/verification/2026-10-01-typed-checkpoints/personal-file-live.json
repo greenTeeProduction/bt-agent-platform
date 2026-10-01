@@ -1,0 +1,137 @@
+{
+  "changed_version_blocked": true,
+  "created": {
+    "action": "created",
+    "artifact_directory": "/tmp/TestLivePersonalFileAutomation3121371222/001/users/personal-file-benchmark/artifacts/acfcefba45b87ca7b554527a298859de52a9039f2ae4763a82943d04cd9c5f1d",
+    "file": "/tmp/TestLivePersonalFileAutomation3121371222/001/users/personal-file-benchmark/trees/tree-factory_core_8202394b892d5b8d13fa85faa3ba7d58.json",
+    "kind": "file_task",
+    "node_count": 6,
+    "owner": "personal-file-benchmark",
+    "persisted": true,
+    "qualification": "unexecuted; creation and validation are not task-performance evidence",
+    "qualified": false,
+    "registered": false,
+    "tree_id": "factory:core_8202394b892d5b8d13fa85faa3ba7d58",
+    "tree_version": "sha256:b19b36bf6f5aab70b8195a927c4b688df39793371feda4fc8289e32919dcc69b"
+  },
+  "dispatch": "Scheduler.RunNow -\u003e production RunOnce; cron wall-clock dispatch not observed",
+  "independent_readback_passed": true,
+  "input": {
+    "expenses": [
+      {
+        "amount": 12
+      },
+      {
+        "amount": 9
+      },
+      {
+        "amount": 4
+      }
+    ]
+  },
+  "missing_ledger_blocked": true,
+  "model": {
+    "backend": "ollama",
+    "model": "qwen2.5:1.5b",
+    "calls": 3,
+    "fallbacks": 0,
+    "errors": 0
+  },
+  "negative_preserved_existing_file": true,
+  "negative_run": {
+    "agent_name": "negative-report",
+    "tree_id": "factory:core_08f392741b0795096d4dfe7bf92ef3ff",
+    "tree_version": "sha256:1d9d1419c8c6397dba74f8389c50ac203080a2ffed9b6599483c2764a64e292b",
+    "task": "Read the supplied expenses JSON. Sum every amount and count the entries. Return only a JSON object with total and count.",
+    "outcome": "failure",
+    "output": "```json\n{\n  \"count\": 3,\n  \"total\": 25\n}\n```",
+    "quality": 0.6,
+    "quality_passed": true,
+    "output_passed": true,
+    "Duration": 3381562521,
+    "StartedAt": "2026-10-01T19:51:30.802322386+02:00",
+    "EndedAt": "2026-10-01T19:51:34.183884939+02:00"
+  },
+  "proposal": {
+    "count": 0,
+    "file": "/tmp/TestLivePersonalFileAutomation3121371222/001/users/personal-file-benchmark/trees/tree-factory_automation_17b62c15b5359e0989e6eeefedffec99.json",
+    "hitl_id": "hitl-9b07cab0",
+    "owner": "personal-file-benchmark",
+    "pattern": "Read the supplied expenses JSON. Sum every amount and count the entries. Return only a JSON object with total and count.",
+    "persisted": true,
+    "proposed": true,
+    "schedule": "0 9 * * *",
+    "signature": "task-493e41d8914dd0dc32479cb70d1caf92ae32b1716d54e8d0ff08919b4ab7d1d2",
+    "status": "pending",
+    "tree_id": "factory:automation_17b62c15b5359e0989e6eeefedffec99",
+    "tree_version": "sha256:514d37d08f5e271b1b984f99e5b834a6643ed7fcdd013a579f3f50b1a5b70337"
+  },
+  "readback": {
+    "count": 3,
+    "total": 25
+  },
+  "record": {
+    "effects": [
+      {
+        "kind": "file",
+        "input": "expenses.json",
+        "input_digest": "sha256:1356cfb90a59064e7eb426511698de0a513a95e240e72ab0025ff8ae51dfc496",
+        "output": "reports/summary.json",
+        "output_digest": "sha256:12d97b483f1cad520cb8d6e092e46b0f3a70ef44dfac3b2eb949b2ba275db79d",
+        "write_committed": true,
+        "verified": true
+      }
+    ],
+    "result_checks": [
+      {
+        "gate": "VerifyTaskStep1",
+        "passed": true,
+        "output_digest": "sha256:76d7ab7ccabda029fb2e3990c68be415f5b6592422f308a6c42516e7305ccf7f"
+      }
+    ],
+    "run_id": "run_1790877088986399421",
+    "tree_version": "sha256:514d37d08f5e271b1b984f99e5b834a6643ed7fcdd013a579f3f50b1a5b70337",
+    "execution_versions": [
+      "sha256:514d37d08f5e271b1b984f99e5b834a6643ed7fcdd013a579f3f50b1a5b70337"
+    ],
+    "evidence_kind": "execution",
+    "result": "{\"count\":3,\"total\":25}\n",
+    "quality_score": 0.5,
+    "task_id": "run-fee845c5a5b8de90e3130e16b3e1564f",
+    "timestamp": 1790877090796,
+    "task": "Read the supplied expenses JSON. Sum every amount and count the entries. Return only a JSON object with total and count.",
+    "plan": "",
+    "tree_name": "factory:automation_17b62c15b5359e0989e6eeefedffec99",
+    "what_went_well": null,
+    "what_to_improve": null,
+    "adjusted_behavior": "",
+    "outcome": "success",
+    "duration_ms": 1810,
+    "user": "personal-file-benchmark"
+  },
+  "run": {
+    "effects": [
+      {
+        "kind": "file",
+        "input": "expenses.json",
+        "input_digest": "sha256:1356cfb90a59064e7eb426511698de0a513a95e240e72ab0025ff8ae51dfc496",
+        "output": "reports/summary.json",
+        "output_digest": "sha256:12d97b483f1cad520cb8d6e092e46b0f3a70ef44dfac3b2eb949b2ba275db79d",
+        "write_committed": true,
+        "verified": true
+      }
+    ],
+    "agent_name": "auto-71718efbd0d264567ddd83f53145df5c",
+    "tree_id": "factory:automation_17b62c15b5359e0989e6eeefedffec99",
+    "tree_version": "sha256:514d37d08f5e271b1b984f99e5b834a6643ed7fcdd013a579f3f50b1a5b70337",
+    "task": "Read the supplied expenses JSON. Sum every amount and count the entries. Return only a JSON object with total and count.",
+    "outcome": "success",
+    "output": "{\"count\":3,\"total\":25}\n",
+    "quality": 0.5,
+    "quality_passed": true,
+    "output_passed": true,
+    "Duration": 1811629563,
+    "StartedAt": "2026-10-01T19:51:28.984776103+02:00",
+    "EndedAt": "2026-10-01T19:51:30.796405634+02:00"
+  }
+}

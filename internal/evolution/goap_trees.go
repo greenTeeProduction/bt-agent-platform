@@ -1,6 +1,7 @@
 package evolution
 
 import (
+	"encoding/json"
 	"strings"
 
 	"github.com/nico/go-bt-evolve/internal/goap"
@@ -16,15 +17,29 @@ import (
 //   - postconditions: comma-separated key=value pairs, e.g. "has_result=true,task_status=completed"
 func WrapWithCheckpointVerifier(tree *SerializableNode, maxRetries int, postconditions string) *SerializableNode {
 	pcMap := make(map[string]any)
-	if postconditions != "" {
-		for pair := range strings.SplitSeq(postconditions, ",") {
-			parts := strings.SplitN(strings.TrimSpace(pair), "=", 2)
-			if len(parts) == 2 {
-				// Parse boolean values; non-"true" values default to true for string
-				// postconditions like "task_status=completed" that represent factual states.
-				pcMap[parts[0]] = parts[1] == "true"
-			}
+	valid := true
+	for pair := range strings.SplitSeq(postconditions, ",") {
+		parts := strings.SplitN(strings.TrimSpace(pair), "=", 2)
+		if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" {
+			valid = false
+			break
 		}
+		key, text := strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
+		if _, exists := pcMap[key]; exists || text == "" {
+			valid = false
+			break
+		}
+		value, err := decodeContractValue(json.RawMessage(text))
+		if err != nil || !json.Valid([]byte(text)) {
+			value = text
+		}
+		pcMap[key] = value
+	}
+	var declaration any = pcMap
+	if !valid {
+		// Keep malformed declarations visible to validation; never silently
+		// drop a requested fact and turn a broken gate into a weaker one.
+		declaration = postconditions
 	}
 
 	return &SerializableNode{
@@ -33,7 +48,8 @@ func WrapWithCheckpointVerifier(tree *SerializableNode, maxRetries int, postcond
 		Description: "Checkpoint verifier: re-run " + tree.Name + " until the blackboard postconditions hold, up to the retry limit",
 		MaxRetries:  maxRetries,
 		Metadata: map[string]any{
-			"postconditions": pcMap,
+			"postconditions": declaration,
+			"state_key":      "goap_world_state",
 		},
 		Children: []SerializableNode{*tree},
 	}
