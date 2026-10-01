@@ -1,0 +1,11 @@
+[Unit]
+Description=Keep the NotebookLM session active
+
+[Timer]
+OnStartupSec=2min
+OnUnitInactiveSec=15min
+RandomizedDelaySec=30s
+Unit=bt-notebooklm-auth.service
+
+[Install]
+WantedBy=timers.target

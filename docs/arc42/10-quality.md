@@ -1,5 +1,7 @@
 # 10. Quality Requirements
 
+Acceptance tests cover Sol selection and legacy ordinary-adapter rejection, plus configured embeddings and NotebookLM generation under Sol-only. NotebookLM tests cover deadlines, ambiguous-generation non-replay, full JSON, account mismatch, network failure and validated renewal, keepalive backoff and later-expiry detection with the installed 0.14.0 API. See [evidence](../sol-model-policy.md); fixture results do not establish live workflow readiness.
+
 The goals in [§1.2](01-introduction-goals.md#12-quality-goals) are realized by
 [§4](04-solution-strategy.md) and refined below. These are acceptance
 contracts, with evidence and limitations stated separately. A test reference

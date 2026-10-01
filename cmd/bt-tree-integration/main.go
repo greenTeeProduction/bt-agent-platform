@@ -141,9 +141,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 
-	llmClient, err := llm.NewClient(llm.DefaultConfig())
+	llmClient, err := llm.NewConfigured()
 	if err != nil {
-		fmt.Fprintf(stderr, "real Ollama LLM unavailable: %v\n", err)
+		fmt.Fprintf(stderr, "configured LLM unavailable: %v\n", err)
 		return 1
 	}
 
@@ -153,7 +153,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		StorageDir:     *storageDir,
 		TotalTrees:     len(entries),
 		MinSuccessRate: *minSuccess,
-		LLMProvider:    "ollama",
+		LLMProvider:    "codex:gpt-6.1-sol",
 		Passed:         true,
 	}
 

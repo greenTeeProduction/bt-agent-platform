@@ -377,7 +377,12 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 	suite := benchmark.SuiteForTree(entry.Name)
 	var selectedLLM llm.LLM
 	if cfg.UseRealLLM {
-		selectedLLM = benchmark.DefaultLLM()
+		var err error
+		selectedLLM, err = benchmark.DefaultLLM()
+		if err != nil {
+			slog.Warn("gardener/v2: inference configuration failed", "tree", entry.Name, "error", err)
+			return CycleMetrics{TreeName: entry.Name, Improved: false}
+		}
 	} else {
 		selectedLLM = benchmark.DefaultMock()
 	}
@@ -1301,7 +1306,12 @@ func (g *Gardener) adoptIslandWinner(entry TreeEntry, records []evolution.Record
 	candidate := cloneTreeForGardener(winner)
 	var model llm.LLM = benchmark.DefaultMock()
 	if cfg.UseRealLLM {
-		model = benchmark.DefaultLLM()
+		var err error
+		model, err = benchmark.DefaultLLM()
+		if err != nil {
+			slog.Warn("gardener/v2: inference configuration failed", "tree", entry.Name, "error", err)
+			return false
+		}
 	}
 	if !benchmark.QuickValidateCandidate(entry.Tree, candidate, benchmark.SuiteForTree(entry.Name), model) {
 		slog.Warn("gardener/v2: benchmark rejected island winner", "tree", entry.Name)

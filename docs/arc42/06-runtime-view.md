@@ -1,5 +1,7 @@
 # 6. Runtime View
 
+Under the [Sol policy](../sol-model-policy.md), ordinary LLM calls spawn a caller-bounded Codex process. NotebookLM generation/research and legacy scripts remain enabled. NotebookLM command deadlines include backoff; only passive reads may retry, successful JSON remains complete, and an open circuit returns immediately. Session renewal validates account and RPC before saving. Successful keepalive is throttled for 15 minutes; transient renewal failure does not invalidate a separately checked working login.
+
 Scenarios use the building blocks from [§5](05-building-blocks.md).
 Durations are budgets or targets where stated, not measured service-level
 guarantees. Code evidence and acceptance criteria are in [§10](10-quality.md).

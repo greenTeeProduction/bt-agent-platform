@@ -23,7 +23,6 @@ import (
 
 	"github.com/tmc/langchaingo/agents"
 	"github.com/tmc/langchaingo/chains"
-	"github.com/tmc/langchaingo/llms/ollama"
 	"github.com/tmc/langchaingo/prompts"
 	"github.com/tmc/langchaingo/tools"
 )
@@ -292,14 +291,10 @@ func main() {
 
 	g = gardener.NewGardener(cfg)
 
-	// Ollama LLM for langchain agent — uses platform config
-	llmCfg := llm.DefaultConfig()
-	ollamaLLM, err := ollama.New(
-		ollama.WithModel(llmCfg.Model),
-		ollama.WithServerURL(llmCfg.ServerURL),
-	)
+	// The LangChain loop uses the same pinned provider as ordinary BT nodes.
+	model, err := llm.NewProvider(platformConfig)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "fatal: ollama: %v\n", err)
+		fmt.Fprintf(os.Stderr, "fatal: llm: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -333,7 +328,7 @@ Question: {{.input}}`,
 		[]string{"input", "agent_scratchpad"},
 	)
 
-	agent := agents.NewOneShotAgent(ollamaLLM, agentTools, agents.WithPrompt(prompt))
+	agent := agents.NewOneShotAgent(llm.LangChainModel{Inner: model}, agentTools, agents.WithPrompt(prompt))
 	executor := agents.NewExecutor(agent, agents.WithMaxIterations(5))
 
 	engine.Info("bt-gardener: initialized",

@@ -1,5 +1,7 @@
 # 12. Glossary
 
+**Sol-only policy:** ordinary built-in BT inference/coding selects `gpt-6.1-sol` through Codex login. NotebookLM generation/research, external embeddings/session indexing and legacy memory extraction are explicit exceptions. **Session renewal:** validated cookie rotation that reduces expiry without guaranteeing permanent access. See [model policy](../sol-model-policy.md).
+
 Canonical terms used across the architecture, sorted alphabetically. Keep
 runtime details in §§5–8 and decision history in [§9](09-decisions.md).
 

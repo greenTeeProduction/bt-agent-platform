@@ -192,6 +192,7 @@ func TestNewProvider_BuildsFallbackChainFromConfiguredModels(t *testing.T) {
 		FallbackModels: "deepseek:fallback-a,deepseek/fallback-b",
 	}
 
+	t.Setenv("BT_LLM_SOL_ONLY", "false")
 	client, err := NewProvider(cfg)
 	if err != nil {
 		t.Fatalf("NewProvider returned error: %v", err)

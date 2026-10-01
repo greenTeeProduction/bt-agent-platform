@@ -301,13 +301,13 @@ func main() {
 	}()
 
 	var err error
-	sharedLLM, err = llm.NewClient(llm.DefaultConfig())
+	sharedLLM, err = llm.NewProvider(cfg)
 	if err != nil {
-		slog.Warn("Ollama unavailable", "error", err)
+		slog.Warn("LLM provider unavailable", "error", err)
 		sharedLLM = nil
 	}
 
-	slog.Info("Configuration loaded", "llm_provider", cfg.LLMProvider, "ollama_model", cfg.OllamaModel)
+	slog.Info("Configuration loaded", "llm_provider", cfg.LLMProvider, "sol_only", config.SolOnly())
 
 	if runner, err := agentexec.NewRunDeps(); err != nil {
 		slog.Warn("In-process agent runner unavailable (pipelines will fail)", "error", err)
@@ -539,6 +539,9 @@ func handleSummary(w http.ResponseWriter, _ *http.Request) {
 	model := "qwen3.6:35b-a3b"
 	if dashConfig != nil && dashConfig.OllamaModel != "" {
 		model = dashConfig.OllamaModel
+	}
+	if config.SolOnly() || (dashConfig != nil && dashConfig.LLMProvider == "codex") {
+		model = config.SolModel
 	}
 	_ = encodeJSON(w, map[string]any{
 		"total_trees": len(kg.Trees),

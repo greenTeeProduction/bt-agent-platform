@@ -86,6 +86,9 @@ func NewClient(cfg Config) (*Client, error) {
 // alongside the existing engine and MCP tracing. maxTokens caps the
 // response length (Ollama's num_predict) when > 0; 0 leaves it unbounded.
 func (c *Client) generateCtx(ctx context.Context, timeout time.Duration, prompt string, maxTokens int) (string, error) {
+	if config.SolOnly() {
+		return "", fmt.Errorf("sol-only policy requires the Codex login provider")
+	}
 	traceCtx, span := tracing.StartSpan(ctx, "llm:generate")
 	defer span.End()
 

@@ -107,7 +107,7 @@ func TestRateLimitFailoverReadOnlyExecutables(t *testing.T) {
 			}
 			codex, _ := os.ReadFile(filepath.Join(dir, "codex.args"))
 			claude, _ := os.ReadFile(filepath.Join(dir, "claude.args"))
-			if !strings.Contains(string(codex), "--sandbox\nread-only") || !strings.Contains(string(codex), "gpt-5.3-codex-spark") {
+			if !strings.Contains(string(codex), "--sandbox\nread-only") || !strings.Contains(string(codex), "gpt-6.1-sol") {
 				t.Fatalf("codex argv=%s", codex)
 			}
 			if !strings.Contains(string(claude), "--allowedTools\nRead") || strings.Contains(string(claude), "--dangerously-skip-permissions") {

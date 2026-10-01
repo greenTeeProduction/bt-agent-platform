@@ -1,0 +1,12 @@
+[Unit]
+Description=Renew and verify the existing NotebookLM session
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=%h/go-bt-evolve/bin/bt-notebooklm-auth
+WorkingDirectory=%h/go-bt-evolve
+TimeoutStartSec=190
+UMask=0077
+NoNewPrivileges=true

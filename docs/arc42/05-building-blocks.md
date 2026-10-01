@@ -1,5 +1,7 @@
 # 5. Building Block View
 
+`internal/llm/CodexClient` supplies ordinary inference; `LangChainModel` adapts it to textual ReAct. The coding runner owns coding permissions. `internal/notebooklmauth` owns validated session renewal and the pinned MCP bridge; external embeddings and legacy scripts retain their provider configuration. See [model policy](../sol-model-policy.md).
+
 This view describes current responsibilities and interfaces. Source links
 identify the owner of a concept; the [ADR log](09-decisions.md) preserves its
 history. Package counts and registry sizes are deliberately not copied here.

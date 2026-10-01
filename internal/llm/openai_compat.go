@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nico/go-bt-evolve/internal/config"
 	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
@@ -91,6 +92,9 @@ func (c *OpenAICompatClient) GenerateWithTimeout(prompt string, timeout time.Dur
 }
 
 func (c *OpenAICompatClient) GenerateWithModel(ctx context.Context, model, system, prompt string) (string, error) {
+	if config.SolOnly() {
+		return "", fmt.Errorf("sol-only policy requires the Codex login provider")
+	}
 	if strings.TrimSpace(model) == "" {
 		model = c.model
 	}

@@ -1,4 +1,4 @@
-"""Read-only installed-0.10.1 compatibility tests. All auth/CDP inputs are fake.
+"""Read-only installed-0.14 compatibility tests. All auth/CDP inputs are fake.
 
 Run with the installed CLI interpreter. Network connects are prohibited, profile
 storage is redirected to a fresh temporary directory before importing the CLI.
@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import httpx
 from unittest.mock import patch
 
 scratch = tempfile.TemporaryDirectory()
@@ -29,19 +30,16 @@ from notebooklm_tools.core import auth
 from notebooklm_tools.core.base import BaseClient
 from notebooklm_tools.core.client import NotebookLMClient
 from notebooklm_tools.utils import cdp
+from notebooklm_tools.utils.config import get_profiles_dir
 
 HTML = '{"SNlM0e":"FAKE_CSRF","FdrFJe":"123","cfb2h":"FAKE_BUILD","oPEP7c":"fixture@example.test"}'
 COOKIES = [{'name':'SID', 'value':'FAKE_ONLY', 'domain':'.google.com', 'path':'/'}]
 
 class InstalledAPI(unittest.TestCase):
     def setUp(self):
-        self.dir = tempfile.TemporaryDirectory(dir=scratch.name)
+        self.dir = tempfile.TemporaryDirectory(dir=get_profiles_dir())
         directory = Path(self.dir.name)
-        class Manager(auth.AuthManager):
-            @property
-            def profile_dir(self):
-                return directory
-        self.manager = Manager('fake-profile')
+        self.manager = auth.AuthManager(directory.name)
         self.manager.save_profile(cookies={'SID':'STALE_FAKE'}, email='fixture@example.test')
         self.before = {p.name:p.read_bytes() for p in directory.iterdir()}
         self.calls = []
@@ -104,6 +102,72 @@ class InstalledAPI(unittest.TestCase):
     def unchanged(self):
         self.assertEqual(self.before, {p.name:p.read_bytes() for p in Path(self.dir.name).iterdir()})
 
+    def renew(self, network_failure=False):
+        real_client = httpx.Client
+        def handle(request):
+            if network_failure:
+                raise httpx.ConnectError('FAKE_SECRET', request=request)
+            if request.url.path == '/RotateCookies':
+                self.assertEqual(request.method, 'POST')
+                return httpx.Response(200, headers={'set-cookie': '__Secure-1PSIDTS=ROTATED_FAKE; Domain=.google.com; Path=/; Secure'})
+            self.assertEqual(request.url.path, '/')
+            return httpx.Response(200, text=self.html)
+        def validate(client, *args, **kwargs):
+            self.unchanged()
+            self.assertEqual(client.csrf_token, 'FAKE_CSRF')
+            self.assertTrue(any(c['value'] == 'ROTATED_FAKE' for c in client.cookies))
+            self.validated = True
+            return None if self.malformed else []
+        def client(**kwargs):
+            return real_client(transport=httpx.MockTransport(handle), **kwargs)
+        with patch.object(auth, 'get_auth_manager', return_value=self.manager), \
+             patch.object(httpx, 'Client', side_effect=client), \
+             patch.object(BaseClient, '_call_rpc', validate):
+            return helper.renew()
+
+    def test_renew_validates_rotated_credentials_before_atomic_save(self):
+        self.assertEqual(self.renew()['status'], 'valid')
+        self.assertTrue(self.validated)
+        cookies = json.loads(self.manager.cookies_file.read_text())
+        self.assertTrue(any(c['value'] == 'ROTATED_FAKE' for c in cookies))
+        for path in (self.manager.cookies_file, self.manager.metadata_file):
+            self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+
+    def test_renew_wrong_account_preserves_profile(self):
+        self.html = HTML.replace('fixture@example.test', 'other@example.test')
+        self.assertEqual(self.renew()['status'], 'auth_error')
+        self.assertFalse(self.validated)
+        self.unchanged()
+
+    def test_renew_login_wall_preserves_profile(self):
+        self.html = '<html>Sign in</html>'
+        self.assertEqual(self.renew()['status'], 'auth_required')
+        self.unchanged()
+
+    def test_renew_network_failure_preserves_profile(self):
+        self.assertEqual(self.renew(network_failure=True)['status'], 'network_error')
+        self.unchanged()
+
+    def test_renew_malformed_rpc_preserves_profile(self):
+        self.malformed = True
+        self.assertEqual(self.renew()['status'], 'auth_error')
+        self.unchanged()
+
+    def test_renew_does_not_overwrite_concurrent_login(self):
+        saved = self.manager.load_profile()
+        self.manager.save_profile(cookies={'SID':'NEWER_LOGIN'}, email=saved.email)
+        with self.assertRaisesRegex(RuntimeError, 'profile changed'):
+            helper.save_renewed_profile(self.manager, saved, cookies=COOKIES, email=saved.email)
+        self.assertEqual(self.manager.load_profile(force_reload=True).cookies, {'SID':'NEWER_LOGIN'})
+
+    def test_patch_updates_supported_but_new_minor_requires_review(self):
+        with patch.object(helper.importlib.metadata, 'version', return_value='0.14.99'):
+            helper.configure()
+        for version in ('0.10.1', '0.15.0', '1.0.0', '0.14.1.dev1'):
+            with patch.object(helper.importlib.metadata, 'version', return_value=version):
+                with self.assertRaisesRegex(helper.UnsupportedCLIError, '0.14.x'):
+                    helper.configure()
+
     def test_success_uses_installed_parsers_client_and_auth_manager(self):
         self.restore()
         self.assertTrue(self.validated)
@@ -146,10 +210,13 @@ class InstalledAPI(unittest.TestCase):
     def test_check_keeps_installed_auth_manager_writes_in_memory(self):
         from notebooklm_tools.cli import main
         original = auth.AuthManager.save_profile
+        original_metadata = auth.AuthManager.update_metadata
         def check():
             self.assertEqual(sys.argv[1:], ['login', '--check'])
             self.manager.save_profile(cookies=COOKIES, email='fixture@example.test')
-        with patch.object(main, 'cli_main', side_effect=check), patch.object(auth.AuthManager, 'save_profile', original):
+            self.manager.update_metadata(email='fixture@example.test')
+        with patch.object(main, 'cli_main', side_effect=check), patch.object(auth.AuthManager, 'save_profile', original), \
+             patch.object(auth.AuthManager, 'update_metadata', original_metadata):
             helper.cli(['login', '--check'])
         self.unchanged()
 

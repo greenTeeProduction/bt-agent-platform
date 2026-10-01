@@ -1,5 +1,7 @@
 # 11. Risks and Technical Debt
 
+Ordinary BT inference shares the Sol account/model dependency with no alternate fallback. NotebookLM generation/research, embeddings/indexing and legacy memory extraction retain their provider dependencies. Consumer Google sessions can still expire or be revoked despite keepalive; a saved browser profile can recover headlessly, while a fully revoked login still needs interactive sign-in. CLI output-token hints are not hard caps. See [model policy](../sol-model-policy.md).
+
 Reviewed against source baseline `012612e1` and selected deployed settings
 on 2026-09-16. Risks below describe remaining uncertainty, not a promise
 that a documented mitigation has been implemented. “Mitigated” means the

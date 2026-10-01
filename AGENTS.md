@@ -2,6 +2,18 @@
 
 ## Current architecture and coding-agent policy
 
+Owner policy (2026-10-01): every BT LLM role uses `gpt-6.1-sol` through the
+existing Codex login, including ordinary inference, planning, reflection,
+evaluation, LangChain agents and coding. `BT_LLM_SOL_ONLY=true` enforces the
+model and prevents alternate-provider fallback. The host CLI is
+`/home/nico/.local/bin/codex` (the old npm CLI cannot access this model).
+Retained legacy adapters are for isolated tests with an explicit policy
+opt-out. Do not restore DeepSeek/Ollama/Claude for ordinary inference or `auto` model
+selection in deployment. Owner-approved exceptions (2026-10-01): NotebookLM generation/research, external
+embeddings/session indexing, and legacy memory extraction retain their own
+configured providers. Do not block those integrations with `BT_LLM_SOL_ONLY`.
+Ordinary BT inference and coding still require Sol with no alternate fallback.
+
 Read `graphify-out/GRAPH_REPORT.md` before source exploration; navigate its
 wiki when available and use graph queries for cross-module relationships.
 The canonical architecture is `docs/arc42/README.md`. Review all twelve
@@ -70,11 +82,13 @@ On VM startup, run `go mod download` from the repo root (see update script). No 
 
 - State files and engine logs follow `BT_AGENT_HOME` (default `~/.go-bt-evolve/`). Shared runner reflections honor `BT_REFLECTIONS_DIR`; their legacy default is `~/.go-bt-reflections/`.
 
-### Optional: Ollama
+### LLM authentication
 
-- LLM-backed flows and some `internal/config` runtime checks expect Ollama at `http://localhost:11434`.
-- Not required for `go test -short`, `make build`, or dashboard shell + non-LLM APIs.
-- Install/run per `docs/TUTORIAL.md` and `docs/runner-setup.md` when testing agents or `make tree-integration`.
+BT LLM flows use `gpt-6.1-sol` through `/home/nico/.local/bin/codex` and the
+existing Codex login. Ordinary Ollama inference adapters remain only for explicit legacy tests;
+external embeddings and legacy memory extraction retain their own configuration.
+Starting Ollama does not authorize ordinary BT inference on Ollama. See
+`docs/sol-model-policy.md`.
 
 ### MCP binaries (`bt-agent`, etc.)
 

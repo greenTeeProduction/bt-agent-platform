@@ -506,7 +506,7 @@ func main() {
 	engine.Info("llm provider initialized", "provider", cfg.LLMProvider)
 
 	// Graceful Degradation: LLM health monitor
-	llmHealth := llm.NewHealthMonitor(cfg.OllamaHost, 30*time.Second)
+	llmHealth := llm.NewProviderHealthMonitor(cfg, 30*time.Second)
 	llmHealth.Start()
 
 	// ── Agent Factory ──────────────────────────────────────────────────────

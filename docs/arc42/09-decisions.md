@@ -1,5 +1,7 @@
 # 9. Architecture Decisions
 
+Owner decision, clarified 2026-10-01: [Sol 6.1 for ordinary inference](../sol-model-policy.md) extends ADR-261. The initial same-day blocking of NotebookLM generation/research, embeddings/indexing and legacy memory extraction is superseded by explicit owner exceptions. Historical decisions below remain the record of their time.
+
 This append-only log preserves the rationale and limitations recorded when
 changes landed. **A historical Accepted status is not a claim that every
 consequence remains true today.** Current structure and behavior are in

@@ -1,5 +1,7 @@
 # 2. Architecture Constraints
 
+The owner requires `gpt-6.1-sol` for ordinary BT inference via Codex login, with no alternate fallback. Explicit exceptions are NotebookLM generation/research, external embeddings/session indexing and legacy memory extraction; their existing configuration is retained. See [Sol policy](../sol-model-policy.md).
+
 Distinguish compatibility requirements and operator policies from design
 choices. The latter belong in [§4](04-solution-strategy.md) and
 [§9](09-decisions.md). Host observations are dated in [§7](07-deployment.md);

@@ -4,23 +4,22 @@
 // It includes:
 //
 //   - Domain suites (GoDev, CodeReview, DevOps, Finance, AgentMonitor) for
-//     per-domain task validation with real Ollama by default
+//     per-domain task validation with configured Sol inference
 //   - External benchmarks: BFCL V1/V3 (tool routing), SWE-bench Lite/Verified
 //     (bug resolution), τ-bench (conversational tool use), ToolBench (API selection),
 //     BTPG (tree quality metrics)
 //   - ScoreMutation — statistical comparison of baseline vs mutated tree output
 //     with Fisher's exact test and bootstrap confidence intervals
-//   - DefaultLLM() — returns real Ollama (qwen3.6:35b) with mock fallback
+//   - DefaultLLM() — returns configured inference or a configuration error
 //
 // All domain suite tasks use DefaultLLM() for production-grade validation.
-// Use testing.Short() guards for Ollama-dependent tests on slow hardware.
+// Use testing.Short() guards for live-inference tests.
 package benchmark
 
 import (
 	"cmp"
 	"context"
 	"fmt"
-	"log/slog"
 	"math"
 	"slices"
 	"strings"
@@ -158,9 +157,12 @@ func RunSuite(tree *evolution.SerializableNode, suite Suite, mock llm.LLM) *RunM
 }
 
 // RunSuiteWithLLM runs a suite using a real LLM client instead of a mock.
-// Falls back to mock if no real LLM is available.
+// Configuration failure is reported without substituting mock evidence.
 func RunSuiteWithLLM(tree *evolution.SerializableNode, suite Suite) *RunMetrics {
-	llmClient := DefaultLLM() // tries Ollama, falls back to mock
+	llmClient, err := DefaultLLM()
+	if err != nil {
+		return &RunMetrics{TotalTasks: len(suite.Tasks), Failures: len(suite.Tasks), Warning: err.Error()}
+	}
 	return RunSuite(tree, suite, llmClient)
 }
 
@@ -499,22 +501,16 @@ func DefaultMock() *MockLLM {
 	}
 }
 
-// DefaultLLM returns a real Ollama LLM client (gemma3:latest on localhost:11434).
-// Falls back to DefaultMock if connection fails (e.g., Ollama not running).
-func DefaultLLM() llm.LLM {
-	client, err := llm.NewClient(llm.DefaultConfig())
-	if err != nil {
-		slog.Warn("benchmark: Ollama unavailable, falling back to mock", "error", err)
-		return DefaultMock()
-	}
-	return client
+// DefaultLLM returns the configured inference provider without a mock fallback.
+func DefaultLLM() (llm.LLM, error) {
+	return llm.NewConfigured()
 }
 
-// RealLLM returns a live Ollama client or skips the test when no LLM is configured.
+// RealLLM returns a configured live client or skips the test when no LLM is configured.
 func RealLLM(t *testing.T) llm.LLM {
 	t.Helper()
 	llm.SkipUnlessIntegration(t)
-	client, err := llm.NewClient(llm.DefaultConfig())
+	client, err := llm.NewConfigured()
 	if err != nil {
 		t.Skipf("skipping: LLM client: %v", err)
 	}

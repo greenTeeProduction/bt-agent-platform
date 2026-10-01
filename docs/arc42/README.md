@@ -1,5 +1,7 @@
 # BT platform architecture
 
+Current owner model policy: [ordinary inference uses Sol 6.1, with approved external exceptions](../sol-model-policy.md).
+
 This is the current architecture specification for the BT Agent Platform.
 The 2026-09-16 alignment review used source baseline `012612e1` and a
 separately identified snapshot of the deployed host. It corrected stale

@@ -47,7 +47,7 @@ var (
 	incremental = flag.Bool("incremental", false, "Only regenerate sections whose sources changed")
 	sections    = flag.String("section", "", "Comma-separated section numbers to regenerate (1-12)")
 	fastMode    = flag.Bool("fast", false, "Skip LLM generation — use template-only output (faster)")
-	llmProvider = flag.String("llm", "ollama", "LLM provider: ollama or deepseek")
+	llmProvider = flag.String("llm", "codex", "LLM provider: codex (Sol 6.1)")
 )
 
 // docgenState tracks the last document generation for incremental mode.
@@ -168,21 +168,17 @@ func main() {
 	var llmClient llm.LLM
 	if !*fastMode {
 		fmt.Println("\n[2/3] Connecting to LLM...")
-		switch *llmProvider {
-		case "deepseek":
-			dsCfg := llm.DefaultDeepSeekConfig()
-			llmClient = llm.NewDeepSeekClient(dsCfg)
-			fmt.Printf("  Using DeepSeek %s\n", dsCfg.Model)
-		default:
-			llmCfg := llm.DefaultConfig()
-			var err error
-			llmClient, err = llm.NewClient(llmCfg)
-			if err != nil {
-				fmt.Printf("Warning: Ollama unavailable (%v)\n", err)
-			} else {
-				fmt.Printf("  Using %s @ %s\n", llmCfg.Model, llmCfg.ServerURL)
-			}
+		if *llmProvider != "codex" {
+			fmt.Fprintln(os.Stderr, "Sol-only policy requires --llm=codex")
+			os.Exit(1)
 		}
+		var err error
+		llmClient, err = llm.NewConfigured()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "LLM configuration failed: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("  Using Codex login / gpt-6.1-sol")
 	} else {
 		fmt.Println("\n[2/3] Fast mode — skipping LLM connection (template-only output)")
 	}

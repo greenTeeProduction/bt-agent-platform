@@ -1,5 +1,7 @@
 # 7. Deployment View
 
+2026-10-01: all three BT units retain Sol-only ordinary inference, `/home/nico/.local/bin/codex` 0.159.3 and disabled alternate fallbacks; services remain stopped. NotebookLM MCP uses `bin/bt-notebooklm-auth --mcp`; a separate user timer renews its existing profile every 15 minutes without starting BT services. The upgraded 0.14.0 integration recovered the existing account headlessly and listed 29 notebooks. See [policy](../sol-model-policy.md) and [auth operations](../../internal/notebooklmauth/README.md).
+
 The reference deployment is a supervised, single-host installation.
 Configuration observations below were checked on **2026-09-16**; source
 defaults are separately identified. Hardware capacity and a VPN address do
@@ -121,11 +123,11 @@ Changing an environment file does not hot-reload an already-running process.
 configuration must be checked after restart without printing secrets.
 
 **Observed launch update, 2026-10-01:** all three BT user units now have a final
-Codex-only drop-in/environment file: provider `codex`, policy `true`, quota
-failover `false`, model `auto`. The shared Hermes launch environment matches.
+Sol-only drop-in/environment file: provider `codex`, policies `true`, quota
+failover `false`, model `gpt-6.1-sol`. The shared Hermes launch environment matches.
 Unit definitions were reloaded; BT units were inactive at inspection. This
 records configuration, not running-binary identity or a completed delivery
-cycle. See the [runbook](../coding-delegation.md#observed-launch-configuration-2026-10-01).
+cycle. See the [current policy](../sol-model-policy.md#host-deployment).
 
 ## 7.3 Release, Recovery and Operational Checks
 

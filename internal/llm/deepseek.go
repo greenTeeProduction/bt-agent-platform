@@ -10,6 +10,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/nico/go-bt-evolve/internal/config"
 	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
@@ -86,6 +87,9 @@ func (d *DeepSeekClient) Generate(prompt string) (string, error) {
 }
 
 func (d *DeepSeekClient) generate(ctx context.Context, prompt string) (string, error) {
+	if config.SolOnly() {
+		return "", fmt.Errorf("sol-only policy requires the Codex login provider")
+	}
 	req := deepseekRequest{
 		Model: d.model,
 		Messages: []deepseekMsg{

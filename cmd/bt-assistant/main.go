@@ -353,12 +353,7 @@ func (a *app) getLLM() (generator, error) {
 	}
 	cfg, err := config.Load()
 	if err != nil {
-		client, clientErr := llm.NewClient(llm.DefaultConfig())
-		if clientErr != nil {
-			return nil, fmt.Errorf("load config: %w; create default LLM: %w", err, clientErr)
-		}
-		a.llm = client
-		return a.llm, nil
+		return nil, fmt.Errorf("load config: %w", err)
 	}
 	provider, err := llm.NewProvider(cfg)
 	if err != nil {

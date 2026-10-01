@@ -1,5 +1,7 @@
 # 3. Context and Scope
 
+Current model boundary: ordinary inference and coding use Codex login with `gpt-6.1-sol`. NotebookLM generation/research, external embeddings and legacy memory extraction use their existing integrations. Codex can access NotebookLM through the installed MCP server and shared profile. See [policy](../sol-model-policy.md).
+
 ## 3.1 Business Context
 
 The system boundary includes the repository's Go binaries, embedded dashboard,

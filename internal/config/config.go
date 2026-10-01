@@ -31,7 +31,7 @@ type Config struct {
 	TLSKey        string `json:"tls_key,omitempty" env:"BT_TLS_KEY" default:""`
 
 	// LLM
-	LLMProvider     string `json:"llm_provider" env:"BT_LLM_PROVIDER" default:"ollama"` // ollama, deepseek, openrouter, acp
+	LLMProvider     string `json:"llm_provider" env:"BT_LLM_PROVIDER" default:"codex"` // codex; legacy adapters require policy opt-out
 	OllamaHost      string `json:"ollama_host" env:"OLLAMA_HOST" default:"http://localhost:11434"`
 	OllamaModel     string `json:"ollama_model" env:"BT_OLLAMA_MODEL" default:"qwen3.6:35b-a3b"`
 	DeepSeekHost    string `json:"deepseek_host" env:"BT_DEEPSEEK_HOST" default:"https://api.deepseek.com/v1"`
@@ -945,8 +945,8 @@ func (c *Config) Validate() error {
 	if c.OllamaModel == "" && c.LLMProvider == "ollama" {
 		errs = append(errs, ValidationError{"OllamaModel", "must not be empty when LLMProvider is ollama"})
 	}
-	if c.LLMProvider != "ollama" && c.LLMProvider != "deepseek" && c.LLMProvider != "openrouter" && c.LLMProvider != "acp" {
-		errs = append(errs, ValidationError{"LLMProvider", "must be 'ollama', 'deepseek', 'openrouter', or 'acp'"})
+	if c.LLMProvider != "codex" && c.LLMProvider != "ollama" && c.LLMProvider != "deepseek" && c.LLMProvider != "openrouter" && c.LLMProvider != "acp" {
+		errs = append(errs, ValidationError{"LLMProvider", "must be 'codex', 'ollama', 'deepseek', 'openrouter', or 'acp'"})
 	}
 	if c.LLMProvider == "ollama" && c.OllamaHost == "" {
 		errs = append(errs, ValidationError{"OllamaHost", "must not be empty when LLMProvider is ollama"})

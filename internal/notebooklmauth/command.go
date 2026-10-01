@@ -21,6 +21,12 @@ func Command(ctx context.Context, args ...string) *exec.Cmd {
 	return helperCommand(ctx, "cli", args...)
 }
 
+// MCPCommand exposes the installed server over stdio with the same unattended
+// browser and credential-write controls as BT CLI calls.
+func MCPCommand(ctx context.Context) *exec.Cmd {
+	return helperCommand(ctx, "mcp")
+}
+
 func helperCommand(ctx context.Context, mode string, args ...string) *exec.Cmd {
 	argv := append([]string{"-B", "-c", helper, mode}, args...)
 	// The executable is pinned and -c receives only the build-time embedded helper.

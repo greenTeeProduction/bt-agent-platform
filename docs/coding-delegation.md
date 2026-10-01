@@ -1,6 +1,11 @@
-# Coding delegation: Codex-only deployment
+# Coding delegation: Sol 6.1 through Codex login
 
 The platform delegates implementation, review and PR repair to Codex CLI.
+The [global Sol policy](sol-model-policy.md) also covers ordinary inference.
+While `BT_LLM_SOL_ONLY` is enabled, all coding model overrides resolve to
+`gpt-6.1-sol` and alternate providers/failover are disabled. The legacy
+configuration behavior below applies only with an explicit global policy
+opt-out. Dated deployment records below are historical.
 Unset `BT_SUPERPOWERS_PROVIDER` selects Codex. The default
 `BT_SUPERPOWERS_CODEX_ONLY` policy rejects Claude selection and direct legacy
 adapter execution. Unset or malformed policy values fail closed. Quota
@@ -11,7 +16,7 @@ failure keeps Codex's cooldown and does not launch Claude.
 | `BT_SUPERPOWERS_PROVIDER` | `codex` |
 | `BT_SUPERPOWERS_CODEX_ONLY` | `true`; set explicitly in BT launch environments |
 | `BT_SUPERPOWERS_RATE_LIMIT_FAILOVER` | `false`; ignored while Codex-only policy is enabled |
-| `BT_SUPERPOWERS_CODEX_MODEL` | Source pins `gpt-5.3-codex-spark`; this deployment sets `auto` |
+| `BT_SUPERPOWERS_CODEX_MODEL` | `gpt-6.1-sol` while global Sol policy is enabled |
 
 The retained legacy transport is available only through an explicit
 `BT_SUPERPOWERS_CODEX_ONLY=false` compatibility configuration. Historical
@@ -59,11 +64,11 @@ review run into a write-capable session.
 
 | Env var | Effect | Default |
 |---|---|---|
-| `BT_SUPERPOWERS_CODEX_BIN` | Codex CLI binary | `/mnt/ssd/npm-global/bin/codex` |
-| `BT_SUPERPOWERS_CODEX_MODEL` | `-m`; `auto`/`default`/`none` omits the flag | `gpt-5.3-codex-spark` |
+| `BT_SUPERPOWERS_CODEX_BIN` | Codex CLI binary | `/home/nico/.local/bin/codex` |
+| `BT_SUPERPOWERS_CODEX_MODEL` | `-m`; `auto`/`default`/`none` omits the flag | `gpt-6.1-sol` |
 | `BT_SUPERPOWERS_CODEX_SANDBOX` | `--sandbox` (implementation seams; review seams always pin `read-only`) | `workspace-write` |
 
-The default passes the exact model ID `gpt-5.3-codex-spark` for both
+The default passes the exact model ID `gpt-6.1-sol` for both
 implementation and read-only review. Unset, empty, or whitespace-only model
 values use this default; an explicit model ID overrides it. Availability is
 account-dependent: an unavailable model fails the delegation without silently
@@ -128,11 +133,9 @@ failover is enabled (it does not silently fall back for missing installations).
 
 The current deployment uses `deploy/systemd/codex-only.conf`.
 The older `deploy/systemd/rate-limit-failover.conf` is a legacy template that enables the
-opt-in and pins Codex to `gpt-5.3-codex-spark`. Validate that the service
+opt-in and pins Codex to `gpt-6.1-sol`. Validate that the service
 account can use the selected model before applying that pin. When the
-account does not support it, explicitly select an available model or set
-`BT_SUPERPOWERS_CODEX_MODEL=auto` to use the Codex CLI's own configuration;
-the source default itself remains unchanged.
+account does not support it, explicitly select an available model or the global Sol policy pins the requested model; `auto` cannot change it.
 
 After integrating the reviewed change into a clean deployed branch,
 install the intended drop-in under each applicable service directory:
@@ -160,7 +163,7 @@ Keep deployed binaries consistent with the intended integrated source and
 preserve in-flight work during restart. Disable failover and restart the
 affected services to roll back routing; this does not revert code or state.
 
-## Observed launch configuration, 2026-10-01
+## Observed launch configuration, 2026-10-01 (before global Sol policy)
 
 All three BT user units have a final `zzzz-codex-only.conf` drop-in with
 provider `codex`, Codex-only `true`, failover `false`, and model `auto`.
@@ -184,7 +187,12 @@ The daemon is the systemd **user** unit `bt-agent.service` (running
 #      BT_SUPERPOWERS_PROVIDER=codex
 #      BT_SUPERPOWERS_CODEX_ONLY=true
 #      BT_SUPERPOWERS_RATE_LIMIT_FAILOVER=false
-#      BT_SUPERPOWERS_CODEX_MODEL=auto
+#      BT_LLM_SOL_ONLY=true
+#      BT_LLM_PROVIDER=codex
+#      BT_FALLBACK_MODELS=
+#      BT_CODEX_BIN=/home/nico/.local/bin/codex
+#      BT_SUPERPOWERS_CODEX_BIN=/home/nico/.local/bin/codex
+#      BT_SUPERPOWERS_CODEX_MODEL=gpt-6.1-sol
 #    (plus any Codex bin/model/sandbox vars you need)
 
 # 2. Reload the unit definition and restart the daemon.
@@ -216,7 +224,7 @@ executable. A successful switch shows:
 ## Scheduled GOAP Fusion Runtime Preflight Passed
 Repository: `/home/nico/go-bt-evolve`
 Delegation provider: `codex`
-Binary: `/mnt/ssd/npm-global/bin/codex`
+Binary: `/home/nico/.local/bin/codex`
 ```
 
 If `BT_SUPERPOWERS_PROVIDER` is set to anything other than `claude`/`codex`,

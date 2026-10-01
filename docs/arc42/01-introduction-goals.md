@@ -1,5 +1,7 @@
 # 1. Introduction and Goals
 
+Owner policy dated 2026-10-01 requires ordinary BT LLM roles to use Sol 6.1 through Codex login. NotebookLM generation/research, external embeddings/session indexing and legacy memory extraction retain their configured providers. See [model policy](../sol-model-policy.md).
+
 ## 1.1 Requirements Overview
 
 The BT Agent Platform (`go-bt-evolve`) executes AI workflows as serializable

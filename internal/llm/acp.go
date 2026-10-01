@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/nico/go-bt-evolve/internal/config"
 	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
@@ -64,6 +65,9 @@ func (c *ACPClient) Generate(prompt string) (string, error) {
 
 // GenerateCtx generates with caller-provided cancellation.
 func (c *ACPClient) GenerateCtx(ctx context.Context, prompt string) (string, error) {
+	if config.SolOnly() {
+		return "", fmt.Errorf("sol-only policy requires the Codex login provider")
+	}
 	if c == nil {
 		return "", fmt.Errorf("acp client is nil")
 	}

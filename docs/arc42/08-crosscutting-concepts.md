@@ -1,5 +1,7 @@
 # 8. Crosscutting Concepts
 
+Global [Sol policy](../sol-model-policy.md) defaults enabled and pins ordinary inference/coding to Sol. Owner-approved NotebookLM, embedding/indexing and memory-extraction integrations retain their own configuration. NotebookLM CLI/MCP share a profile; renewal uses a cross-process lock, bounded checks, account validation and 0.14 storage-mode-aware atomic writes under the upstream profile lock. Historical coding-only opt-outs cannot override the global policy.
+
 These are current shared mechanisms and their boundaries. Historical
 rationales remain in [§9](09-decisions.md); runtime examples are in
 [§6](06-runtime-view.md), acceptance evidence in [§10](10-quality.md).
