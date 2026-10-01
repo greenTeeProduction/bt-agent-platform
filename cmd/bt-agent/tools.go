@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -142,22 +143,30 @@ func sanitizeArchiveTreeID(id string) string {
 // regression deterministically.
 var benchmarkRunSuiteFn = benchmark.RunSuite
 
-// benchmarkGateEvolvedWinner runs both the base tree and an evolved winner
-// through treeID's real internal/benchmark suite (Sandbox mode with a mock
-// LLM — deterministic, no real LLM calls, -short-safe) and reports whether
-// the winner regressed on SuccessRate. The evolve tools' structural fitness
-// (evolution.StructuralMultiFitness and friends) scores mutations from
-// structural heuristics alone and can rate one as elite while it actually
-// performs worse than the untouched base tree, so callers must skip
-// persisting a regressed winner to a durable cross-run archive (Q2
-// Evolvability: gate durable-archive winners through the benchmark suite,
-// not structural fitness alone).
+// benchmarkGateEvolvedWinner qualifies the winner against the same real-model
+// suite as its baseline. Missing capabilities, model errors, lost task controls
+// and contract regressions reject archive promotion.
 func benchmarkGateEvolvedWinner(treeID string, base, winner *evolution.SerializableNode) (rejected bool, baseRate, winnerRate float64) {
 	suite := benchmark.SuiteForTree(treeID)
-	mock := &llm.MockLLM{}
-	baseMetrics := benchmarkRunSuiteFn(base, suite, mock)
-	winnerMetrics := benchmarkRunSuiteFn(winner, suite, mock)
-	return winnerMetrics.SuccessRate < baseMetrics.SuccessRate, baseMetrics.SuccessRate, winnerMetrics.SuccessRate
+	model, err := benchmark.DefaultLLM()
+	if err != nil {
+		return true, 0, 0
+	}
+	baseMetrics := benchmarkRunSuiteFn(base, suite, model)
+	winnerMetrics := benchmarkRunSuiteFn(winner, suite, model)
+	if baseMetrics.ModelEvidence.Fallbacks > 0 || winnerMetrics.ModelEvidence.Fallbacks > 0 {
+		baseMetrics, winnerMetrics = benchmarkRunSuiteFn(base, suite, model), benchmarkRunSuiteFn(winner, suite, model)
+	}
+	if baseMetrics.Warning != "" || winnerMetrics.Warning != "" {
+		return true, baseMetrics.SuccessRate, winnerMetrics.SuccessRate
+	}
+	contractRegression := winnerMetrics.ContractPassRate < baseMetrics.ContractPassRate
+	for i, result := range baseMetrics.Results {
+		if result.ContractPassed && (i >= len(winnerMetrics.Results) || !winnerMetrics.Results[i].ContractPassed) {
+			contractRegression = true
+		}
+	}
+	return !evolution.PreservesGovernance(base, winner) || contractRegression || winnerMetrics.SuccessRate < baseMetrics.SuccessRate || winnerMetrics.PathMatchRate < baseMetrics.PathMatchRate, baseMetrics.SuccessRate, winnerMetrics.SuccessRate
 }
 
 func checkLLMHealth(health *llm.HealthMonitor, toolName string) *engine.ToolResult {
@@ -315,15 +324,17 @@ func persistGeneratedTreeForUser(deps *mcpDeps, user, treeID string, tree *evolu
 // seedCompileReflection writes the compile-time plan validation as the tree's
 // first reflection record (ADR-133 Phase 5). Freshly compiled trees would
 // otherwise carry zero evidence and stay frozen behind the gardener's
-// evidence gate forever. The TaskID is derived from the tree ID, so
-// recompiling the same goal overwrites the seed instead of accumulating
-// synthetic evidence.
+// evidence gate forever. The TaskID includes the owner and tree ID, so
+// recompiling replaces only that owner's seed. Compilation evidence must
+// remain distinguishable from an observed execution outcome.
 func seedCompileReflection(deps *mcpDeps, user, treeID, goalName string, planSteps []string) {
 	if deps.refStore == nil {
 		return
 	}
+	user, treeID = strings.TrimSpace(user), strings.TrimSpace(treeID)
+	identity := sha256.Sum256([]byte(user + "\x00" + treeID))
 	rec := &evolution.Record{
-		TaskID:   "seed-" + goalTreeSlug(treeID),
+		TaskID:   fmt.Sprintf("seed-%x", identity),
 		Task:     "Compile-time validation for goal: " + goalName,
 		Plan:     strings.Join(planSteps, " → "),
 		TreeName: treeID,
@@ -965,7 +976,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			// is wired; a nil bank degrades to plain Evolve inside
 			// EvolveWithExperience, keeping the result shape uniform.
 			retrievalHits := evolution.ExperienceRetrievalHits(deps.expBank, baseTree)
-			best := pop.EvolveWithExperience(params.Generations, structuralFitnessFn, deps.expBank)
+			best := pop.EvolveWithExperience(params.Generations, governedStructuralFitness(baseTree), deps.expBank)
 			bankEntries := 0
 			if deps.expBank != nil {
 				bankEntries = deps.expBank.Count()
@@ -1091,7 +1102,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				expertLoadErr = err.Error()
 			}
 			mp.ExpertKnowledge = ek
-			mp.EvolveMAPElites(params.Generations, structuralFitnessFn)
+			mp.EvolveMAPElites(params.Generations, governedStructuralFitness(baseTree))
 			grid.InsertFromPopulation(mp.Population, params.Domain)
 			// Write the best illuminated elite's structural fitness back into the
 			// knowledge graph so fitness-aware discovery can surface the
@@ -1195,13 +1206,9 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			if baseTree == nil {
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: `{"error":"unknown tree"}`}}}
 			}
-			// Deterministic, LLM-free NSGA-II over the three fixed structural axes,
+			// Deterministic, LLM-free NSGA-II over the executable governance axes,
 			// reusing the shared StructuralMultiFitness (Quick-tier, no LLM calls).
-			dims := []evolution.FitnessDimension{
-				evolution.DimSuccessRate,
-				evolution.DimNodeEfficiency,
-				evolution.DimStability,
-			}
+			dims := evolution.GovernanceDimensions()
 			nsga := evolution.NewNSGAIIPopulation(population, baseTree, dims)
 			nsga.Specialists = evolution.SeedSpecialistRegistry()
 			nsga.Cap = population * 5
@@ -1222,7 +1229,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				expertLoadErr = err.Error()
 			}
 			nsga.ExpertKnowledge = ek
-			best := nsga.Evolve(params.Generations, evolution.StructuralMultiFitness)
+			best := nsga.Evolve(params.Generations, governedMultiFitness(baseTree))
 			// Per-dimension best scores across the final population.
 			dimNames := make([]string, len(dims))
 			dimBests := make(map[string]float64, len(dims))
@@ -1357,13 +1364,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			// newProductionPopulation (not evolution.NewParetoPopulation) so its
 			// seeded specialist registry backs crisis resurrection on this path
 			// too, mirroring bt_evolve_multiobjective.
-			dims := []evolution.FitnessDimension{
-				evolution.DimSuccessRate,
-				evolution.DimPathCoverage,
-				evolution.DimStability,
-				evolution.DimNodeEfficiency,
-				evolution.DimExecutionSpeed,
-			}
+			dims := evolution.GovernanceDimensions()
 			pp := &evolution.ParetoPopulation{
 				Population: newProductionPopulation(population, baseTree),
 				Front:      evolution.NewParetoFront(dims),
@@ -1385,7 +1386,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				expertLoadErr = err.Error()
 			}
 			pp.ExpertKnowledge = ek
-			best := pp.EvolvePareto(params.Generations, evolution.StructuralMultiFitness)
+			best := pp.EvolvePareto(params.Generations, governedMultiFitness(baseTree))
 			// Warm-start a durable Pareto front archive from the evolved
 			// population so Pareto-optimal individuals accumulate across runs
 			// instead of resetting on every call (Q2 Evolvability). This is a
@@ -1404,7 +1405,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				warmStarted = false
 				archiveLoadErr = err.Error()
 			}
-			archive.AddFromPopulation(pp.Population, evolution.StructuralMultiFitness)
+			archive.AddFromPopulation(pp.Population, governedMultiFitness(baseTree))
 			stats := archive.Stats()
 			result := map[string]any{
 				"tree": params.Tree, "generations": pp.Generation,
@@ -1519,7 +1520,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			// structural fitness so the tool stays -short-safe.
 			pop := newProductionPopulation(population, baseTree)
 			searcher := evolution.NewLocalSearcher(searchStrategy)
-			best := pop.MemeticEvolve(params.Generations, structuralFitnessFn, searcher, 2)
+			best := pop.MemeticEvolve(params.Generations, governedStructuralFitness(baseTree), searcher, 2)
 			result := map[string]any{
 				"tree": params.Tree, "strategy": params.Strategy,
 				"generations": pop.Generation, "best_fitness": pop.BestFitness,
@@ -1643,7 +1644,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			rl := evolution.NewReinforcementLearner()
 			rl.Epsilon = epsilon
 			rl.LearningRate = params.LearningRate
-			best := pop.EvolveQLearning(params.Generations, structuralFitnessFn, qt, category, rl, ek)
+			best := pop.EvolveQLearning(params.Generations, governedStructuralFitness(baseTree), qt, category, rl, ek)
 			learned := qt.LearnedActions()
 			result := map[string]any{
 				"tree": params.Tree, "generations": pop.Generation,
@@ -1787,6 +1788,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			im := evolution.NewIslandModel(params.MigrationInterval, params.MigrationRate)
 			im.Bank = deps.expBank
 			var seeded []string
+			islandBases := []*evolution.SerializableNode{baseTree}
 			if params.Domains != "" {
 				var names []string
 				for raw := range strings.SplitSeq(params.Domains, ",") {
@@ -1802,6 +1804,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 						return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(msg)}}}
 					}
 					seeds[name] = domainTree
+					islandBases = append(islandBases, domainTree)
 				}
 				params.Islands = len(names)
 				seeded = names
@@ -1888,7 +1891,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			im.ExpertKnowledge = ek
 			var bestTrees map[string]*evolution.SerializableNode
 			for range params.Generations {
-				bestTrees = im.EvolveAll(structuralFitnessFn)
+				bestTrees = im.EvolveAll(governedStructuralFitness(islandBases...))
 			}
 			stats := im.Stats()
 			// Report per-island bests only for the islands this run seeded:
@@ -1968,7 +1971,12 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			// the durable archive never accumulates a worse tree.
 			gateRejected, baseRate, winnerRate := false, 0.0, 0.0
 			if winnerTree != nil {
-				gateRejected, baseRate, winnerRate = benchmarkGateEvolvedWinner(params.Tree, baseTree, winnerTree)
+				gateTreeID, gateBase := params.Tree, baseTree
+				if params.Domains != "" {
+					gateTreeID = "domain:" + bestDomain
+					gateBase = resolveTree(gateTreeID)
+				}
+				gateRejected, baseRate, winnerRate = benchmarkGateEvolvedWinner(gateTreeID, gateBase, winnerTree)
 				// Record this call's benchmark-gate outcome into the same
 				// shared TrackRecord bt_evolve_qd, bt_evolve_multiobjective,
 				// bt_evolve_pareto, and bt_evolve_qlearning write, regardless
@@ -2147,7 +2155,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				// addFailureContext.
 				// Trees with tunable parameters get CMA-ES parameter tuning;
 				// parameterless trees fall back to structural genetic evolution.
-				if tunedTree, tunedParams, bestFitness, tuned := evolution.TuneTreeParameters(baseTree, population, params.Generations, structuralFitnessFn); tuned {
+				if tunedTree, tunedParams, bestFitness, tuned := evolution.TuneTreeParameters(baseTree, population, params.Generations, governedStructuralFitness(baseTree)); tuned {
 					algorithms["cmaes"]++
 					entry := map[string]any{
 						"tree":           b.TreeID,
@@ -2170,7 +2178,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				// task rather than just its tree type (Q2 Evolvability); an
 				// empty LastFailureTask falls back to RetrieveByTreeType inside
 				// EvolveWithExperienceContext, matching EvolveWithExperience.
-				best := pop.EvolveWithExperienceContext(params.Generations, structuralFitnessFn, deps.expBank, b.LastFailureTask)
+				best := pop.EvolveWithExperienceContext(params.Generations, governedStructuralFitness(baseTree), deps.expBank, b.LastFailureTask)
 				entry := map[string]any{
 					"tree":           b.TreeID,
 					"before_fitness": b.SuccessRate,
@@ -2251,7 +2259,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 					continue
 				}
 				pop := newProductionPopulation(population, baseTree)
-				best := pop.EvolveWithExperience(params.Generations, structuralFitnessFn, deps.expBank)
+				best := pop.EvolveWithExperience(params.Generations, governedStructuralFitness(baseTree), deps.expBank)
 				recordEvolvedFitness(deps, sp.TreeID, pop.BestFitness)
 				entry := map[string]any{
 					"tree":           sp.TreeID,
@@ -3076,35 +3084,32 @@ func resolveEvolvePopulation(population *int) (int, *engine.ToolResult) {
 	return *population, nil
 }
 
-// structuralFitnessFn scores a tree's structural quality without invoking the
-// LLM: it balances node count, depth, and node-type diversity against known
-// anti-patterns. Shared by the deterministic bt_evolve_genetic and bt_evolve_qd
-// evolution paths so both stay -short-safe.
+// structuralFitnessFn ranks executable governance, never size or decorative depth.
 func structuralFitnessFn(t *evolution.SerializableNode) float64 {
-	nodeCount := float64(evolution.CountNodes(t))
-	depth := float64(maxTreeDepth(t, 0))
-	diversity := treeDiversityScore(t)
+	return evolution.AssessGovernance(t).Score
+}
 
-	// Base score: moderate node count (penalize both too small and too large)
-	baseScore := 0.0
-	if nodeCount >= 5 && nodeCount <= 80 {
-		baseScore = nodeCount * 2.0
-	} else if nodeCount < 5 {
-		baseScore = nodeCount * 1.0 // penalize too simple
-	} else {
-		baseScore = 80.0 + (nodeCount-80)*0.5 // diminishing returns on huge trees
+func governedStructuralFitness(bases ...*evolution.SerializableNode) func(*evolution.SerializableNode) float64 {
+	return func(candidate *evolution.SerializableNode) float64 {
+		if !engine.ValidateTreeFull(candidate).Valid() {
+			return -1
+		}
+		for _, base := range bases {
+			if evolution.PreservesGovernance(base, candidate) {
+				return structuralFitnessFn(candidate)
+			}
+		}
+		return -1
 	}
+}
 
-	// Depth bonus (deep trees are better for complex tasks, up to a point)
-	depthBonus := math.Min(depth*3.0, 30.0)
-
-	// Diversity bonus (more node types = more capability)
-	diversityBonus := diversity * 15.0
-
-	// Anti-pattern penalty
-	antiPatternPenalty := detectAntiPatternsInTree(t) * -10.0
-
-	return baseScore + depthBonus + diversityBonus + antiPatternPenalty
+func governedMultiFitness(base *evolution.SerializableNode) func(*evolution.SerializableNode) evolution.MultiFitness {
+	return func(candidate *evolution.SerializableNode) evolution.MultiFitness {
+		if !engine.ValidateTreeFull(candidate).Valid() || !evolution.PreservesGovernance(base, candidate) {
+			return evolution.NewMultiFitness()
+		}
+		return evolution.StructuralMultiFitness(candidate)
+	}
 }
 
 // treeDiversityScore counts unique node types in the tree as a diversity metric.

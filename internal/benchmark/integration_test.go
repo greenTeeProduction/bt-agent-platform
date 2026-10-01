@@ -19,12 +19,11 @@ import (
 // TestFullTreeIntegration_RunsAllTreesWithRealLLM exercises ALL registered trees
 // through the benchmark suite runner with real Ollama (RealLLM()).
 //
-// This is the production validation artifact required to raise Testing from 85%
-// toward 95% under the strict scoring rubric: it validates every tree's routing,
-// output quality, and stability through real LLM inference.
+// This catalog audit reports unavailable fixtures separately from qualified
+// inference. Completion without panic is not task success or production evidence.
 //
 // Guarded by testing.Short() — run with `go test -count=1 -timeout 1800s ./internal/benchmark/`
-// Expected runtime: 15-30 min on Jetson (46 trees × 2-8 tasks × 2-4 min per Ollama call).
+// Runtime depends on qualified paths and provider latency; each inference is bounded.
 func TestFullTreeIntegration_RunsAllTreesWithRealLLM(t *testing.T) {
 	llm.SkipUnlessIntegration(t)
 
@@ -101,6 +100,12 @@ func TestFullTreeIntegration_RunsAllTreesWithRealLLM(t *testing.T) {
 			metrics := RunSuite(nt.tree, suite, llmClient)
 			if metrics != nil {
 				tr.successRate = metrics.SuccessRate
+				if metrics.Warning != "" {
+					t.Logf("UNQUALIFIED %s: %s; model=%+v", nt.name, metrics.Warning, metrics.ModelEvidence)
+				}
+				if metrics.ModelEvidence.Errors > 0 {
+					t.Errorf("%s: inference failed: %+v", nt.name, metrics.ModelEvidence)
+				}
 				tr.totalTasks = metrics.TotalTasks
 				tr.failures = metrics.Failures
 			}
@@ -313,18 +318,10 @@ func hasNodeName(node *evolution.SerializableNode, name string) bool {
 	return false
 }
 
-// TestAllRegisteredSuites_BaselinePathMatchRate closes the loop the 5-milestone
-// SuiteForTree curation program left open: TestSuiteForTree_CoversAllRegisteredTrees
-// above only checks that ExpectedPath strings are real node names statically
-// via hasNodeName — it never runs the suite and never checks the runtime
-// PathMatchRate signal RunSuite now computes. A tree/suite pair can pass that
-// static check yet still fail to route at runtime (e.g. a StrategyRouter
-// condition that never selects the expected branch for the mock LLM's
-// output), and that regression would only surface in ad-hoc unit tests on
-// GoDev, not here. This test runs every registered suite through RunSuite
-// with the shared mock LLM and asserts a real baseline PathMatchRate for any
-// suite that declares at least one non-empty ExpectedPath.
-func TestAllRegisteredSuites_BaselinePathMatchRate(t *testing.T) {
+// TestAllRegisteredSuites_ReportQualificationGaps audits catalog execution.
+// Missing task capabilities are reported and cannot become promotion evidence;
+// only qualified live runs are held to routing thresholds.
+func TestAllRegisteredSuites_ReportQualificationGaps(t *testing.T) {
 	type namedTree struct {
 		name string
 		tree *evolution.SerializableNode
@@ -344,26 +341,11 @@ func TestAllRegisteredSuites_BaselinePathMatchRate(t *testing.T) {
 		allTrees = append(allTrees, namedTree{"domain_" + name, tree})
 	}
 
-	mock := DefaultMock()
+	model := RealLLM(t)
 
 	failures := []string{}
 	for _, nt := range allTrees {
 		if nt.tree == nil {
-			continue
-		}
-		// These trees require real external runtime state that RunSuite's
-		// mock/sandboxed environment can never provide — the exact same set
-		// TestAllDomainTrees in internal/domains/domains_test.go already
-		// carves out as "structure OK (skip runtime)": the arc42 section/
-		// docsync/seeder generators need graphify + a real LLM; goap_fusion,
-		// goap_fusion_loop, and bt_manager gate routing on a reflection store
-		// RunSuite never seeds; hermes_update and self_review shell out to
-		// the real git/claude binaries; superpowers_workflow needs a live
-		// git worktree/HITL/Claude Code session; auction_demo's award stage
-		// needs a live A2A transport. None of these ever reach a
-		// StrategyRouter branch under the mock, so PathMatchRate is
-		// structurally unmeasurable here, not a routing regression.
-		if isStructuralOnlyPathTree(nt.name) {
 			continue
 		}
 		suite := SuiteForTree(nt.name)
@@ -382,9 +364,16 @@ func TestAllRegisteredSuites_BaselinePathMatchRate(t *testing.T) {
 			continue
 		}
 
-		metrics := RunSuite(nt.tree, suite, mock)
+		metrics := RunSuite(nt.tree, suite, model)
 		if metrics == nil {
 			failures = append(failures, fmt.Sprintf("%s: RunSuite returned nil metrics (suite=%s)", nt.name, suite.Name))
+			continue
+		}
+		if metrics.Warning != "" {
+			t.Logf("%s: unqualified — %s", nt.name, metrics.Warning)
+			if QuickValidateCandidate(nt.tree, nt.tree, suite, model) {
+				t.Errorf("%s: unqualified run accepted", nt.name)
+			}
 			continue
 		}
 		if metrics.PathMatchRate < 0.5 {
@@ -405,7 +394,7 @@ func TestAllRegisteredSuites_BaselinePathMatchRate(t *testing.T) {
 
 // isStructuralOnlyPathTree reports whether name (as built by the "domain_"/
 // "finance_"/"research_" prefixing above) names a tree whose routing can
-// never be exercised by RunSuite's offline mock — mirrors the skip list in
+// never be exercised by RunSuite's offline model — mirrors the skip list in
 // internal/domains/domains_test.go's TestAllDomainTrees.
 func isStructuralOnlyPathTree(name string) bool {
 	if strings.HasPrefix(name, "domain_arc42:") || name == "domain_arc42_seeder" {
@@ -421,7 +410,7 @@ func isStructuralOnlyPathTree(name string) bool {
 }
 
 // TestFullTreeIntegration_SmokeCheck validates all trees build and run the
-// first task of their suite without panic using llmBackend LLM. Fast — under 5s.
+// first task with a real model. Unsupported capabilities remain unqualified.
 func TestFullTreeIntegration_SmokeCheck(t *testing.T) {
 	if testing.Short() {
 		// Currently exceeds the pre-commit 120s budget — multi-tick trees
@@ -449,9 +438,9 @@ func TestFullTreeIntegration_SmokeCheck(t *testing.T) {
 		allTrees = append(allTrees, namedTree{"domain_" + name, tree})
 	}
 
-	llm := DefaultMock()
+	llm := RealLLM(t)
 	if llm == nil {
-		t.Fatal("DefaultMock() returned nil")
+		t.Fatal("RealLLM(t) returned nil")
 	}
 
 	for _, nt := range allTrees {
@@ -467,36 +456,24 @@ func TestFullTreeIntegration_SmokeCheck(t *testing.T) {
 				return
 			}
 
-			// Run just the first task of each suite for a fast smoke check.
-			// Some trees (e.g. domain_notebooklm) contain action nodes that
-			// shell out to a real CLI (nlmRun execs `nlm`) regardless of the
-			// injected mock LLM, and those calls can block for minutes. Bound
-			// each tree with a timeout so one external dependency can't hang the
-			// whole suite — mirrors the goroutine+timeout guard in
-			// domains_test.go. A mock-only tree completes in milliseconds.
-			type runResult struct{ metrics *RunMetrics }
-			done := make(chan runResult, 1)
-			firstTask := suite.Tasks[0]
-			firstSuite := Suite{Name: suite.Name + "_first", Tasks: []TaskCase{firstTask}}
-			go func() {
-				done <- runResult{metrics: RunSuite(nt.tree, firstSuite, llm)}
-			}()
-
-			select {
-			case res := <-done:
-				if res.metrics == nil {
-					t.Error("RunSuite returned nil")
-				}
-			case <-time.After(15 * time.Second):
-				// Structural validation already passed (tree built, suite
-				// matched). The tree is blocked on a real external dependency,
-				// which is out of scope for this mock-LLM smoke check.
-				t.Skip("skipping runtime check: tree blocked on external dependency (>15s)")
+			firstSuite := Suite{Name: suite.Name + "_first", Tasks: []TaskCase{suite.Tasks[0]}}
+			metrics := RunSuite(nt.tree, firstSuite, llm)
+			if metrics == nil || len(metrics.Results) != 1 {
+				t.Fatal("RunSuite returned no task result")
+			}
+			if metrics.ModelEvidence.Errors > 0 {
+				t.Fatalf("real inference failed: %+v", metrics.ModelEvidence)
+			}
+			if metrics.Warning != "" {
+				t.Skipf("UNQUALIFIED: %s", metrics.Warning)
+			}
+			if metrics.ModelEvidence.Calls == 0 {
+				t.Fatal("qualified run contains no inference evidence")
 			}
 		})
 	}
 
-	t.Logf("Smoke check completed: %d trees exercised with mock LLM", len(allTrees))
+	t.Logf("Catalog smoke completed: %d trees considered; unavailable fixtures are skipped", len(allTrees))
 }
 
 // TestTreeLoadFromDisk_NodeCount validates that tree JSON files can be written

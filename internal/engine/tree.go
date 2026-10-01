@@ -33,7 +33,6 @@ import (
 
 	btcomp "github.com/rvitorper/go-bt/composite"
 	btcore "github.com/rvitorper/go-bt/core"
-	btdec "github.com/rvitorper/go-bt/decorators"
 	btleaf "github.com/rvitorper/go-bt/leaf"
 )
 
@@ -174,6 +173,9 @@ type Blackboard struct {
 	// tree evaluation can never spawn subprocesses, hit the network, or burn
 	// external API quotas. Conditions still run (routing stays observable).
 	Sandbox bool
+	// NodeAdmission permits a caller to restrict execution to its available
+	// capabilities. Rejection is a typed terminal stop, never simulated success.
+	NodeAdmission func(kind, name string) error `json:"-"`
 
 	TraceContext context.Context `json:"-"`
 	Logger       *slog.Logger    `json:"-"` // run-scoped logger (run_id/agent/tree bound); use Log()
@@ -241,6 +243,7 @@ func BuildAndValidate(serTree *evolution.SerializableNode, bb *Blackboard) (btco
 // produced nothing until this wiring.
 func buildNode(node *evolution.SerializableNode, bb *Blackboard, parentName string) btcore.Command[Blackboard] {
 	inner := buildNodeInner(node, bb, parentName)
+	inner = withNodeAdmission(node, inner, bb)
 	if bb != nil && bb.buildCapture != nil {
 		bb.buildCapture[node] = inner
 	}
@@ -337,7 +340,7 @@ func buildNodeInner(node *evolution.SerializableNode, bb *Blackboard, parentName
 		if times <= 0 {
 			times = 1
 		}
-		return btdec.NewRepeat(child, times)
+		return boundedRetry(child, times)
 	case "Action":
 		return btleaf.NewAction(bb.actionForName(node.Name))
 	case "ChainAction":

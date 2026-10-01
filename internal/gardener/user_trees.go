@@ -80,34 +80,21 @@ func (r *Registry) loadUserTreesLocked() {
 	}
 }
 
-// recordsForEntry selects the reflection evidence a tree is evaluated on.
-// Personal trees use strict tree-name matching: the backward-compat fallback
-// in FilterByTreeName (no match → all records) would score a personal tree on
-// the global pool and blind the evidence gate to its missing history.
-//
-// Matching keys off the tree's real ID (entry.Tree.Name), not the registry's
-// display Name: a colliding entry gets a disambiguating "<user>_" prefix on
-// Name (see loadUserTreesLocked) but its underlying tree — and every
-// reflection Record recorded against it — still carries the bare ID, so
-// keying on Name would leave the renamed entry evidence-starved. Once
-// matched by tree ID, records are further filtered down to the owning user
-// (Record.User) so two users' trees sharing the same real ID never bleed
-// evidence into each other; records with no User (pre-Phase-5 or seed
-// reflections) still count for any owner, preserving backward compat.
+// recordsForEntry selects only this tree's owned evidence. Catalog aliases
+// bridge the gardener's historical domain_name spelling and runtime's
+// domain:name; personal entries use the real ID, never a collision-prefixed
+// display name. Missing history stays missing for the evidence gate.
 func recordsForEntry(allRecords []evolution.Record, entry TreeEntry) []evolution.Record {
-	if entry.User == "" {
-		return evolution.FilterByTreeName(allRecords, entry.Name)
-	}
-	treeID := entry.Name
-	if entry.Tree != nil && strings.TrimSpace(entry.Tree.Name) != "" {
-		treeID = entry.Tree.Name
-	}
-	matched := evolution.FilterByTreeNameStrict(allRecords, treeID)
-	filtered := make([]evolution.Record, 0, len(matched))
-	for _, r := range matched {
-		if r.User == "" || r.User == entry.User {
-			filtered = append(filtered, r)
+	names := evidenceTreeNames(entry.Name)
+	if entry.User != "" {
+		names = []string{entry.Name}
+		if entry.Tree != nil && strings.TrimSpace(entry.Tree.Name) != "" {
+			names = []string{entry.Tree.Name}
 		}
+	}
+	filtered := make([]evolution.Record, 0, len(allRecords))
+	for _, name := range names {
+		filtered = append(filtered, evolution.FilterByTreeOwner(allRecords, name, entry.User)...)
 	}
 	return filtered
 }

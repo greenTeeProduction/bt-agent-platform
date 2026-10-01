@@ -78,7 +78,7 @@ func TestNewGardener(t *testing.T) {
 		MaxMutations: 3,
 		UseRealLLM:   false,
 	}
-	g := NewGardener(cfg)
+	g := newOrchestrationTestGardener(t, cfg)
 	if g == nil {
 		t.Fatal("NewGardener returned nil")
 	}
@@ -540,9 +540,9 @@ func setupGardener(t *testing.T) (*Gardener, *Registry, *MetricsTracker, string)
 		RefStore:       refStore,
 		Interval:       60,
 		MaxMutations:   2,
-		UseRealLLM:     false, // use mock LLM
+		UseRealLLM:     false, // ignored compatibility setting; this is an orchestration unit test
 	}
-	return NewGardener(cfg), registry, mt, dir
+	return newOrchestrationTestGardener(t, cfg), registry, mt, dir
 }
 
 func TestRunCycleV2_NoActiveTrees(t *testing.T) {
@@ -596,7 +596,7 @@ func TestEvolveTreeV2_WithRealTree(t *testing.T) {
 		MaxMutations:   2,
 		UseRealLLM:     false,
 	}
-	g := NewGardener(cfg)
+	g := newOrchestrationTestGardener(t, cfg)
 
 	results, err := g.RunCycleV2(EvolveV2Config{UseRealLLM: false})
 	if err != nil {
@@ -674,42 +674,30 @@ func TestCycleMetricsStruct(t *testing.T) {
 }
 
 // ============================================================================
-// Benchmark integration (mock LLM)
+// Live benchmark integration
 // ============================================================================
 
-func TestBenchmarkMockIntegration(t *testing.T) {
-	// Verify that benchmark.DefaultMock() works as expected
-	mock := benchmark.DefaultMock()
-	if mock.AnalyzeComplexity("any task") != "medium" {
-		t.Error("mock complexity mismatch")
-	}
-	plan, err := mock.Generate("test prompt")
-	if err != nil {
-		t.Errorf("mock Generate error: %v", err)
-	}
-	if plan == "" {
-		t.Error("mock Generate returned empty plan")
-	}
-	ww, ti := mock.Reflect("task", "outcome", "plan")
-	if ww == "" || ti == "" {
-		t.Error("mock Reflect returned empty strings")
+func TestBenchmarkLiveIntegration(t *testing.T) {
+	model := benchmark.RealLLM(t)
+	output, err := model.Generate("Explain in one sentence why an agent result needs verification.")
+	if err != nil || output == "" {
+		t.Fatalf("live benchmark output=%q error=%v", output, err)
 	}
 }
 
-func TestQuickValidate_WithMockLLM(_ *testing.T) {
-	// Test the benchmark.QuickValidate function with mock LLM
-	mock := benchmark.DefaultMock()
-	tree := &evolution.SerializableNode{
-		Type: "Sequence",
-		Name: "TestTree",
-		Children: []evolution.SerializableNode{
-			{Type: "Action", Name: "Step1"},
-		},
+func TestQuickValidate_WithLiveLLM(t *testing.T) {
+	model := benchmark.RealLLM(t)
+	tree := &evolution.SerializableNode{Type: "Sequence", Name: "LiveTask", Children: []evolution.SerializableNode{
+		{Type: "Condition", Name: "ValidateInput"},
+		{Type: "ChainAction", Name: "llm_call:{{.Task}}", Metadata: map[string]any{"max_tokens": float64(48)}},
+	}}
+	suite := benchmark.Suite{Name: "live_arithmetic", Tasks: []benchmark.TaskCase{{Task: "Compute 17 plus 25 and explain the answer in one sentence.", ShouldSucceed: true, MinResultLen: 10}}}
+	if score := benchmark.QuickValidate(tree, suite, model, nil); score != 0 {
+		t.Fatalf("unchanged live fixture scored %v", score)
 	}
-	suite := benchmark.GoDevSuite()
-	score := benchmark.QuickValidate(tree, suite, mock, nil)
-	// We don't assert specific score values, just that it runs without panic
-	_ = score
+	if model.(*benchmark.LiveModel).Evidence().Calls < 2 {
+		t.Fatal("missing baseline/candidate inference")
+	}
 }
 
 // ============================================================================

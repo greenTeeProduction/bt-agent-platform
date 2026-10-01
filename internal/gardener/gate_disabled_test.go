@@ -104,7 +104,7 @@ func TestEvolveTreeV2_GateIsDisabled_Respected(t *testing.T) {
 		ValidationGate: DefaultValidationGateConfig(),
 		MaxMutations:   1,
 	}
-	g := NewGardener(cfg)
+	g := newOrchestrationTestGardener(t, cfg)
 
 	v2cfg := EvolveV2Config{
 		BlocksEnabled: false,

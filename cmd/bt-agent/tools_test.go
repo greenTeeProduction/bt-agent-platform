@@ -1538,7 +1538,7 @@ func TestBTEvolveMultiObjectiveRegisteredAndReturnsParetoMetrics(t *testing.T) {
 	if !ok || len(dims) == 0 {
 		t.Fatalf("bt_evolve_multiobjective result must echo a non-empty 'dimensions' list; got %v", out["dimensions"])
 	}
-	wantDims := map[string]bool{"success_rate": false, "node_efficiency": false, "stability": false}
+	wantDims := map[string]bool{"input_guarding": false, "result_verification": false, "agent_guidance": false, "execution_bounds": false, "recovery_controls": false}
 	for _, d := range dims {
 		if s, isStr := d.(string); isStr {
 			if _, tracked := wantDims[s]; tracked {
@@ -2676,7 +2676,7 @@ func TestBTEvolveBottlenecksPersistsEvolvedWinnerTree(t *testing.T) {
 		t.Fatalf("bt_evolve_bottlenecks genetic-path report entry must carry 'evolved_tree_id' = %q instead of discarding the bred winner after computing fitness; got %v (entry %v)", wantID, entry["evolved_tree_id"], entry)
 	}
 	if persisted, _ := entry["persisted"].(bool); !persisted {
-		t.Errorf("bt_evolve_bottlenecks report entry must report persisted=true for the evolved winner; got %v", entry["persisted"])
+		t.Errorf("bt_evolve_bottlenecks report entry must report persisted=true for the evolved winner; got %+v", entry)
 	}
 
 	loaded, err := treeStore.LoadNamed(wantID)
@@ -3615,7 +3615,7 @@ func TestEvolveToolsRejectDegeneratePopulationAtMCPBoundary(t *testing.T) {
 // actions alongside the evolved winner. epsilon=0 makes the run deterministic
 // once a state has Q-values (pure greedy selection, no exploration), so the
 // learned_actions map must be non-empty and every learned action must be one of
-// the five known mutation categories. An unknown tree id must yield the shared
+// the supported mutation categories. An unknown tree id must yield the shared
 // {"error":"unknown tree"} shape.
 func TestBTEvolveQLearningRegisteredAndLearnsGreedily(t *testing.T) {
 	server := engine.NewServer("test")
@@ -3665,9 +3665,9 @@ func TestBTEvolveQLearningRegisteredAndLearnsGreedily(t *testing.T) {
 	if len(learned) == 0 {
 		t.Fatal("bt_evolve_qlearning 'learned_actions' must be non-empty after learning generations (QTable.Update was never applied)")
 	}
-	validActions := map[string]bool{
-		"add_before": true, "add_after": true, "add_fallback": true,
-		"replace_node": true, "remove_node": true,
+	validActions := map[string]bool{"remove_node": true} // retained archive alias
+	for _, op := range evolution.AllMutationOps {
+		validActions[op] = true
 	}
 	for state, action := range learned {
 		// QTable.GetState encodes states as "<category>:<size-bucket>:<depth>".
@@ -3676,7 +3676,7 @@ func TestBTEvolveQLearningRegisteredAndLearnsGreedily(t *testing.T) {
 		}
 		actionStr, isStr := action.(string)
 		if !isStr || !validActions[actionStr] {
-			t.Errorf("bt_evolve_qlearning learned action for state %q must be one of the five mutation categories; got %v", state, action)
+			t.Errorf("bt_evolve_qlearning learned action for state %q must be one of the supported mutation categories; got %v", state, action)
 		}
 	}
 

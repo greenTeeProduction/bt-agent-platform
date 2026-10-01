@@ -160,12 +160,77 @@ The canonical runtime is [`gardener/evolve_v2.go`](../../internal/gardener/evolv
 Per-tree reflection evidence, structural fitness and genuine runtime fitness
 serve different purposes and must remain attributable to their owner.
 
+Reflection selection is strict for shared and personal trees. Missing
+tree attribution remains inspectable but is not assigned to an unrelated
+tree. Personal records require an exact owner match; an empty owner denotes
+shared evidence, not a wildcard. Catalog aliases reconcile `domain_name`
+with `domain:name` (and the finance/research catalogs) without borrowing
+other trees' outcomes. See [attribution regressions](../../internal/gardener/evidence_attribution_test.go).
+
+### Governance fitness and live benchmark evidence
+
+[Governance assessment](../../internal/evolution/governance.go) scores controls
+on executable task paths: input guards (25%), result checks (35%), agent
+instructions actually consumed at runtime (20%), execution bounds (15%) and
+bounded recovery (5%). Coverage saturates per work node. Node count,
+decorative depth, documentation-only descriptions and unconditional checks
+such as the current `CheckConfidence` earn no control credit. A final check
+covers the last result, not every intermediate worker. Recovery-only trees
+receive zero governance credit.
+
+The history-based composite assigns 10% to this structural governance signal;
+it no longer rewards deleting nodes. Structural quick/Pareto/MCP scorers use
+governance rather than guessed success/speed from tree size. Candidate
+preservation rejects deleted task capabilities or stripped existing controls;
+crossover retains the first parent's contract. Heuristic and MCTS generators
+can propose executable input/result wrappers. Ordinary acceptance requires a
+positive score change, followed by validation. None of these static scores
+prove task impact or version-specific runtime success.
+
+[Live benchmarks](../../internal/benchmark/live_model.go) use
+`BT_BENCHMARK_BACKEND=ollama` and `BT_BENCHMARK_MODEL=qwen2.5:0.5b` by default.
+`BT_BENCHMARK_OLLAMA_URL` scopes the endpoint; `BT_BENCHMARK_TIMEOUT` defaults
+to 15 seconds per local call. Timeout/unavailability selects Sol 6.1 through
+Codex login without changing the ordinary Sol-only policy. Paired comparisons
+are repeated after a provider switch. Records retain model/call provenance,
+actual output and declared JSON-field/length/quality/outcome contract results. Short tests
+skip live-model integration; they do not replace it with synthetic inference.
+
+Live runs use engine `NodeAdmission` to execute supported model actions and
+fail explicitly when a task needs an unavailable isolated capability fixture.
+They no longer make every action succeed through the structural sandbox.
+A zero-model-call or unsupported run cannot qualify a promoted candidate.
+The `bt-tree-integration` command uses the same provider and records per-tree
+model evidence, warnings and task-contract rates; its report verifier rejects
+missing inference, unsupported capabilities and insufficient contract results.
+The [controlled live gate test](../../internal/benchmark/live_governance_test.go)
+verifies bad-output rejection, validated recovery, empty-input rejection and
+an independently checked arithmetic result. It is mechanism evidence, not a
+fleet SLO or proof that domain tool workflows have been qualified.
+
+A/B clones retain prompts, token limits, nested metadata and typed edges.
+External adapters report model provenance and qualification warnings; missing
+inference cannot earn correct-route or task-success credit. Their historical
+output-matching metrics still need task-specific environment/postcondition
+fixtures before they can establish real-world impact.
+
+Population search offers governance mutations alongside block proposals;
+Q-learning uses the same catalog. Pareto and MAP-Elites archives snapshot tree
+and score together, so population sorting cannot corrupt their correspondence.
+`Retry` bounds failed attempts and returns immediately on success; it no longer
+uses a repeat decorator that re-executes successful work.
+
+`QualityGate`, including typed quality edges, validates recovery output and
+resumes running recovery without replaying primary work. Declared checkpoint
+postconditions fail when world-state evidence is missing. Both gates preserve
+typed execution stops. See [gate regressions](../../internal/engine/governance_gate_test.go).
+
 | Path | Current acceptance behavior | Remaining boundary |
 |---|---|---|
 | Ordinary heuristic/MCTS mutation competition | Shared scored proposals; detached definition/expansion and bounded benchmark checks, fitness/quality/meta-validation, configured predecessor snapshot and persist before live/experience publication | Accepted proposal source/score/reason and MCTS search settings are persisted. Complete cycle replay and default-on cost remain R20/R21. |
 | Local parameter refinement | Re-score against target-tree records; whole settled-tree build/benchmark/meta/SLO checks before persistence | A useful parameter fit is not evidence of production task success. |
 | Transposition/deep-search candidate | Replay the complete ordered winning proposal; re-score actual candidate, definition/benchmark/quality/meta/SLO checks, configured predecessor snapshot, then persist before live/experience publication | Cached scores include reflection evidence; a warm-cache winner remains replayable. Runs only when configured/enabled. |
-| Island champion adoption | Evidence, improvement/bloat, validation, whole-tree definition/expansion preflight and quick benchmark, quality/meta-validation, configured predecessor snapshot, then persist before live assignment | Mock/real benchmark mode follows cycle configuration; quick evidence is bounded. Snapshot/write failure preserves the live predecessor. R23 regression contracts apply. |
+| Island champion adoption | Evidence, improvement/bloat, validation, whole-tree definition/expansion preflight and quick benchmark, quality/meta-validation, configured predecessor snapshot, then persist before live assignment | Benchmark evaluation uses a real local Ollama model with Sol fallback; quick evidence is bounded. Snapshot/write failure preserves the live predecessor. R23 regression contracts apply. |
 | Durable-archive MCP evolution tools | Tool-specific archive bounds and benchmark checks before persisting winners | Do not infer daemon wiring from an exported algorithm/tool. |
 
 Snapshot revision allocation holds a per-tree index sidecar lock through
@@ -385,7 +450,7 @@ as `domain:arc42:section1` without advertising unregistered domain IDs.
 **Tested contract:**
 [`TestDomainPrefixedTreesHaveSmokeDescriptionsAndConditionCoverage`](../../internal/domains/domains_test.go)
 derives IDs from the registry and checks resolver identity, smoke-task
-availability, sandboxed mock `BuildTree` construction, canonical-description
+availability, isolated `BuildTree` construction, canonical-description
 parity and descriptions on Condition nodes and guard edges. It also rejects
 description lookup for unregistered domain IDs.
 Registry/AST-derived tests catch newly reachable trees omitted from coverage

@@ -203,6 +203,10 @@ func applyOp(tree *SerializableNode, op MutationOp) bool {
 		}
 	case "wrap_retry":
 		return applyWrapRetry(tree, op.Target)
+	case "wrap_quality_gate":
+		return applyGovernanceWrapper(tree, op.Target, "QualityGate")
+	case "guard_task":
+		return applyGovernanceWrapper(tree, op.Target, "Sequence")
 	case "add_fallback":
 		if op.Node != nil {
 			return applyAddFallback(tree, op.Target, *op.Node)
@@ -243,6 +247,26 @@ func CountNodes(n *SerializableNode) int {
 }
 
 // --- mutation helpers (recursive) ---
+
+// Wrap the work itself, preserving its instruction, tools and children. Unlike
+// arbitrary sibling insertion this cannot place a gate on an optional branch.
+func applyGovernanceWrapper(tree *SerializableNode, target, typ string) bool {
+	if tree.Name == target && IsTaskWork(tree) {
+		work := *tree
+		children := []SerializableNode{work}
+		if typ == "Sequence" {
+			children = []SerializableNode{{Type: "Condition", Name: "ValidateInput"}, work}
+		}
+		*tree = SerializableNode{Type: typ, Name: typ + "_" + target, Children: children}
+		return true
+	}
+	for i := range tree.Children {
+		if applyGovernanceWrapper(&tree.Children[i], target, typ) {
+			return true
+		}
+	}
+	return false
+}
 
 func applyAddBefore(tree *SerializableNode, target string, newNode SerializableNode) bool {
 	for i := range tree.Children {

@@ -44,11 +44,11 @@ func TestStructuralQuickEval(t *testing.T) {
 		wantMax float64
 	}{
 		{"nil tree", nil, 0, 0},
-		{"optimal tree", buildOptimalTree(), 60, 100},
-		{"too small", testTree("small", 1, 1), 10, 60},
-		{"too large", buildDeepTree(10, 50), 5, 60},
-		{"conditions only", testTree("conds", 8, 0), 30, 80},
-		{"actions only", testTree("acts", 0, 8), 30, 80},
+		{"governed tree", governedReportTree(), 90, 100},
+		{"unguarded small tree", testTree("small", 1, 1), 0, 0},
+		{"unguarded large tree", buildDeepTree(10, 50), 0, 0},
+		{"conditions only", testTree("conds", 8, 0), 0, 0},
+		{"actions only", testTree("acts", 0, 8), 0, 0},
 	}
 
 	for _, tt := range tests {
@@ -118,7 +118,7 @@ func TestCascadeEvaluator_BasicFlow(t *testing.T) {
 	ce := NewCascadeEvaluator(cfg, quickFn, benchFn, fullFn)
 
 	individuals := []evolution.Individual{
-		{Tree: testTree("good_tree", 5, 8)},
+		{Tree: governedReportTree()},
 		{Tree: testTree("bad_tree", 1, 1)},
 		{Tree: testTree("medium_tree", 3, 4)},
 	}

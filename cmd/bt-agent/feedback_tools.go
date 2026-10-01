@@ -77,7 +77,7 @@ func recordUserFeedback(deps *mcpDeps, user, treeID, signal, comment string) map
 	// Report the tree's cumulative feedback standing.
 	positives, negatives := 0, 0
 	if all, err := deps.refStore.LoadAll(); err == nil {
-		for _, r := range evolution.FilterByTreeNameStrict(all, treeID) {
+		for _, r := range evolution.FilterByTreeOwner(all, treeID, user) {
 			switch r.UserFeedback {
 			case evolution.FeedbackPositive:
 				positives++

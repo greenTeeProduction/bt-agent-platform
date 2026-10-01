@@ -30,7 +30,7 @@ import (
 type FitnessScore struct {
 	SuccessRate       float64 `json:"success_rate"`       // 0.0–1.0, most important (like material)
 	AvgDurationMs     int64   `json:"avg_duration_ms"`    // lower is better (like tempo)
-	NodeCount         int     `json:"node_count"`         // lower is better (like mobility)
+	NodeCount         int     `json:"node_count"`         // diagnostic size, never an improvement by itself
 	Stability         float64 `json:"stability"`          // 1/variance of success rate (like king safety)
 	PathCoverage      float64 `json:"path_coverage"`      // fraction of strategy paths used (like development)
 	StructuralQuality float64 `json:"structural_quality"` // static safeguards/tooling quality, 0.0-1.0
@@ -84,15 +84,14 @@ func EvaluateTree(tree *evolution.SerializableNode, records []evolution.Record) 
 
 	// Composite (weighted like Stockfish: material=success, positional=others)
 	// Scale: 0–100 "centipawns" where 100 = perfect.
-	// Static structural quality rewards mutations that add verifiable safeguards,
-	// retry bounds, tool access, and prompt discipline before new outcome data exists.
+	// Static governance rewards controls attached to task work. Node count is
+	// diagnostic only: deleting a worker or result gate is not a measured saving.
 	structuralQuality := estimateStructuralQuality(tree)
 	composite := successRate*50 +
 		stability*15 +
 		pathCoverage*15 +
 		(1.0-minFloat64(float64(avgDuration)/120000.0, 1.0))*10 +
-		structuralQuality*8 +
-		(1.0-minFloat64(float64(evolution.CountNodes(tree))/100.0, 1.0))*2
+		structuralQuality*10
 
 	// User satisfaction (ADR-133 Phase 5): explicit 👍/👎 signals recorded by
 	// bt_feedback. Only applied when feedback exists — the composite is then
@@ -156,56 +155,7 @@ func estimatePathCoverage(records []evolution.Record) float64 {
 }
 
 func estimateStructuralQuality(tree *evolution.SerializableNode) float64 {
-	if tree == nil {
-		return 0
-	}
-	var total, validation, retry, prompt, tools, selector float64
-	walkNodes(tree, func(n *evolution.SerializableNode) {
-		total++
-		switch n.Type {
-		case "Condition":
-			if isValidationGate(n.Name) {
-				validation++
-			}
-		case "Retry":
-			if n.MaxRetries > 0 && n.MaxRetries <= 5 && len(n.Children) > 0 {
-				retry++
-			}
-		case "ChainAction":
-			if hasVerifiedPrompt(n) {
-				prompt++
-			}
-			if hasUsefulTooling(n) || hasAdequateIterations(n) {
-				tools++
-			}
-		case "Selector":
-			if len(n.Children) >= 2 || hasNode(n, "DefaultFallback") || hasNode(n, "OutcomeSelector") {
-				selector++
-			}
-		}
-	})
-	if total == 0 {
-		return 0
-	}
-	chainCount := len(findChainAgentNodes(tree))
-	selectorCount := countSelectors(tree)
-	score := 0.0
-	if validation > 0 {
-		score += 0.25
-	}
-	if retry > 0 {
-		score += 0.20
-	}
-	if chainCount == 0 || prompt > 0 {
-		score += 0.20
-	}
-	if chainCount == 0 || tools > 0 {
-		score += 0.20
-	}
-	if selectorCount == 0 || selector > 0 {
-		score += 0.15
-	}
-	return minFloat64(score, 1.0)
+	return evolution.AssessGovernance(tree).Score / 100
 }
 
 func isValidationGate(name string) bool {
@@ -401,6 +351,25 @@ type MutationCandidate = evolution.ScoredMutation
 //  5. add_fallback for selectors with few children
 func OrderMutations(tree *evolution.SerializableNode, records []evolution.Record, fitness FitnessScore) []MutationCandidate {
 	candidates := make([]MutationCandidate, 0, 16)
+	var proposeControls func(*evolution.SerializableNode)
+	proposeControls = func(n *evolution.SerializableNode) {
+		if n == nil {
+			return
+		}
+		if evolution.IsTaskWork(n) {
+			for _, op := range []string{"wrap_quality_gate", "guard_task"} {
+				candidates = append(candidates, MutationCandidate{
+					Op: evolution.MutationOp{Operation: op, Target: n.Name}, Score: 0.90,
+					Reason: "enforce a task input/result contract around executable work",
+				})
+			}
+			return
+		}
+		for i := range n.Children {
+			proposeControls(&n.Children[i])
+		}
+	}
+	proposeControls(tree)
 
 	failurePressure := 1.0 - fitness.SuccessRate
 	if failurePressure < 0 {

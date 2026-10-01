@@ -47,7 +47,10 @@ func TestQTableSelectUpdateBestAction(t *testing.T) {
 		t.Fatalf("greedy selected action = %q", got)
 	}
 
-	allowed := map[string]bool{"add_before": true, "add_after": true, "add_fallback": true, "replace_node": true, "remove_node": true}
+	allowed := map[string]bool{}
+	for _, op := range AllMutationOps {
+		allowed[op] = true
+	}
 	if got := qt.SelectAction("unknown", 1); !allowed[got] {
 		t.Fatalf("exploration returned unexpected mutation %q", got)
 	}

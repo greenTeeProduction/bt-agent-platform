@@ -408,6 +408,9 @@ func TestAllMutationOps_Completeness(t *testing.T) {
 		"prune_node":          true,
 		"increase_iterations": true,
 		"add_tool":            true,
+		"wrap_quality_gate":   true,
+		"guard_task":          true,
+		"improve_prompt":      true,
 	}
 
 	for _, op := range AllMutationOps {

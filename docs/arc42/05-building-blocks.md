@@ -173,7 +173,10 @@ in [`cmd/bt-gardener/config.go`](../../cmd/bt-gardener/config.go) and
 [`evolve_v2.go`](../../internal/gardener/evolve_v2.go) determines live use.
 
 Per-tree evidence and archive state must not be conflated with global
-runtime success. The ordinary mutation competition, deep search, local
+runtime success. Gardener reflection selection requires the tree and owner
+to match; missing evidence never borrows the global record pool. Shared
+catalog names recognize their historical underscore/runtime colon aliases.
+The ordinary mutation competition, deep search, local
 refinement and island adoption retain path-specific evidence. Island adoption
 now includes quick benchmark/meta-validation and a configured predecessor
 snapshot, persisting before updating live state.

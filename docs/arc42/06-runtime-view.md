@@ -400,6 +400,12 @@ Approval finalization activates/schedules the tracked automation; rejection
 keeps it unavailable. Negative feedback can flag and pause an approved
 automation until review finalization.
 
+Explicit-feedback totals and review thresholds are scoped to the exact
+tree/user pair. Another user's same-ID tree and unowned legacy feedback do
+not contribute. Compile-seed identifiers include both owner and tree, so
+recompilation cannot overwrite another user's seed. Compilation remains
+synthetic evidence, not proof that the requested task was completed.
+
 Task approval first persists a reconciliation marker, then resolves the HITL
 audit and clears the marker. Failure is reported and the task remains excluded
 from dispatch until a retry completes synchronization. Nested tree gates bind

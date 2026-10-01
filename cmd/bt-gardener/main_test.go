@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/agent"
+	"github.com/nico/go-bt-evolve/internal/benchmark"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/gardener"
 )
@@ -25,11 +26,12 @@ func selectorOrderingTree() *evolution.SerializableNode {
 	return &evolution.SerializableNode{
 		Type: "Sequence", Name: "Root",
 		Children: []evolution.SerializableNode{
+			{Type: "Condition", Name: "ValidateInput"},
 			{
 				Type: "Selector", Name: "Router",
 				Children: []evolution.SerializableNode{
-					{Type: "Sequence", Name: "Cheap", Children: []evolution.SerializableNode{{Type: "AlwaysSucceed", Name: "CheapDone"}}},
-					{Type: "Sequence", Name: "Reliable", Children: []evolution.SerializableNode{{Type: "AlwaysSucceed", Name: "ReliableDone"}}},
+					{Type: "Sequence", Name: "Cheap", Children: []evolution.SerializableNode{{Type: "ChainAction", Name: "llm_call:Answer concisely using only supplied information: {{.Task}}", Metadata: map[string]any{"max_tokens": float64(64)}}}},
+					{Type: "Sequence", Name: "Reliable", Children: []evolution.SerializableNode{{Type: "ChainAction", Name: "llm_call:Answer concisely using only supplied information: {{.Task}}", Metadata: map[string]any{"max_tokens": float64(64)}}}},
 					{Type: "AlwaysSucceed", Name: "Fallback"},
 				},
 			},
@@ -213,6 +215,7 @@ func TestGardenerDeactivateAllTool_CallDeactivatesAllTrees(t *testing.T) {
 // every MCP-triggered cycle. The tool must reuse the daemon's wired config
 // instead of constructing a disabled default.
 func TestGardenerRunCycleTool_CallAppliesLearnedSelectorOrdering(t *testing.T) {
+	_ = benchmark.RealLLM(t) // Live qualification is required before the reordered tree can persist.
 	treeDir := t.TempDir()
 	tree := selectorOrderingTree()
 	data, err := json.MarshalIndent(tree, "", "  ")
@@ -231,7 +234,8 @@ func TestGardenerRunCycleTool_CallAppliesLearnedSelectorOrdering(t *testing.T) {
 		t.Fatalf("buildGardenerConfig: %v", err)
 	}
 	cfg.Registry = gardener.NewRegistry(treeDir)
-	cfg.MaxMutations = 0 // isolate learned ordering from unrelated search passes
+	cfg.MaxMutations = 0    // isolate learned ordering from unrelated search passes
+	cfg.MetaValidator = nil // this fixture qualifies routing, not a domain archetype
 	cfg.CrisisDetector = nil
 	cfg.TranspositionTablePath = ""
 	cfg.IslandModel = nil
@@ -288,6 +292,7 @@ func TestGardenerRunCycleTool_CallAppliesLearnedSelectorOrdering(t *testing.T) {
 // cfg.SelectorStatsPath unseeded, pinning the requirement that the gardener
 // read real per-tree telemetry instead.
 func TestGardenerRunCycleTool_CallAppliesLearnedSelectorOrdering_PerTreeTelemetryFile(t *testing.T) {
+	_ = benchmark.RealLLM(t) // Live qualification is required before the reordered tree can persist.
 	t.Setenv("BT_AGENT_HOME", t.TempDir())
 
 	treeDir := t.TempDir()
@@ -308,7 +313,8 @@ func TestGardenerRunCycleTool_CallAppliesLearnedSelectorOrdering_PerTreeTelemetr
 		t.Fatalf("buildGardenerConfig: %v", err)
 	}
 	cfg.Registry = gardener.NewRegistry(treeDir)
-	cfg.MaxMutations = 0 // isolate learned ordering from unrelated search passes
+	cfg.MaxMutations = 0    // isolate learned ordering from unrelated search passes
+	cfg.MetaValidator = nil // this fixture qualifies routing, not a domain archetype
 	cfg.CrisisDetector = nil
 	cfg.TranspositionTablePath = ""
 	cfg.IslandModel = nil

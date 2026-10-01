@@ -4,7 +4,7 @@
 // It includes:
 //
 //   - Domain suites (GoDev, CodeReview, DevOps, Finance, AgentMonitor) for
-//     per-domain task validation with configured Sol inference
+//     per-domain task validation with real Ollama and Sol fallback
 //   - External benchmarks: BFCL V1/V3 (tool routing), SWE-bench Lite/Verified
 //     (bug resolution), τ-bench (conversational tool use), ToolBench (API selection),
 //     BTPG (tree quality metrics)
@@ -12,14 +12,15 @@
 //     with Fisher's exact test and bootstrap confidence intervals
 //   - DefaultLLM() — returns configured inference or a configuration error
 //
-// All domain suite tasks use DefaultLLM() for production-grade validation.
+// Runtime qualification requires real inference and the task's actual capabilities.
 // Use testing.Short() guards for live-inference tests.
 package benchmark
 
 import (
 	"cmp"
-	"context"
+	"encoding/json"
 	"fmt"
+	"maps"
 	"math"
 	"slices"
 	"strings"
@@ -33,54 +34,66 @@ import (
 
 // TaskCase is a single benchmark task with expected routing.
 type TaskCase struct {
-	Task            string   `json:"task"`
-	ExpectedPath    string   `json:"expected_path"`              // which strategy path should handle this
-	PossiblePaths   []string `json:"possible_paths,omitempty"`   // multiple acceptable paths for ambiguous tasks
-	MinResultLen    int      `json:"min_result_len"`             // minimum output length expected
-	ShouldSucceed   bool     `json:"should_succeed"`             // expected outcome
-	ShouldReject    bool     `json:"should_reject"`              // PreGate should reject this
-	MinQualityScore float64  `json:"min_quality_score,omitzero"` // minimum quality score expected
-	Difficulty      string   `json:"difficulty,omitempty"`       // easy | medium | hard | adversarial
+	Task            string         `json:"task"`
+	ExpectedPath    string         `json:"expected_path"`              // which strategy path should handle this
+	PossiblePaths   []string       `json:"possible_paths,omitempty"`   // multiple acceptable paths for ambiguous tasks
+	MinResultLen    int            `json:"min_result_len"`             // minimum output length expected
+	ShouldSucceed   bool           `json:"should_succeed"`             // expected outcome
+	ShouldReject    bool           `json:"should_reject"`              // PreGate should reject this
+	MinQualityScore float64        `json:"min_quality_score,omitzero"` // minimum quality score expected
+	ExpectedJSON    map[string]any `json:"expected_json,omitempty"`    // exact required fields in the result object
+	Difficulty      string         `json:"difficulty,omitempty"`       // easy | medium | hard | adversarial
 }
 
 // Suite is a collection of benchmark tasks for a specific domain.
 type Suite struct {
 	Name    string     `json:"name"`
 	Tasks   []TaskCase `json:"tasks"`
-	LLMMode bool       `json:"llm_mode"` // true = use real LLM, false = use mock
+	LLMMode bool       `json:"llm_mode"` // deprecated; all execution uses real inference
 }
 
 // Result is the outcome of running a single task through a tree.
 type Result struct {
-	Task        string `json:"task"`
-	Outcome     string `json:"outcome"`
-	DurationMs  int64  `json:"duration_ms"`
-	ResultLen   int    `json:"result_len"`
-	Path        string `json:"path"`         // which strategy path was taken
-	PathMatched bool   `json:"path_matched"` // whether Path matched the task's declared ExpectedPath/PossiblePaths
-	Success     bool   `json:"success"`
+	Task           string  `json:"task"`
+	Outcome        string  `json:"outcome"`
+	DurationMs     int64   `json:"duration_ms"`
+	ResultLen      int     `json:"result_len"`
+	Path           string  `json:"path"`         // which strategy path was taken
+	PathMatched    bool    `json:"path_matched"` // whether Path matched the task's declared ExpectedPath/PossiblePaths
+	Success        bool    `json:"success"`
+	QualityScore   float64 `json:"quality_score"`
+	ContractPassed bool    `json:"contract_passed"`
+	Output         string  `json:"output,omitempty"`
 }
 
 // RunMetrics aggregates results from running a full suite.
 type RunMetrics struct {
-	TotalTasks    int      `json:"total_tasks"`
-	Successes     int      `json:"successes"`
-	Failures      int      `json:"failures"`
-	SuccessRate   float64  `json:"success_rate"`
-	AvgDurationMs float64  `json:"avg_duration_ms"`
-	AvgResultLen  float64  `json:"avg_result_len"`
-	PathCoverage  float64  `json:"path_coverage"`     // unique paths / total tasks
-	PathMatchRate float64  `json:"path_match_rate"`   // tasks whose Path matched ExpectedPath/PossiblePaths / total tasks
-	LowerCI       float64  `json:"lower_ci"`          // 95% bootstrap CI lower bound
-	UpperCI       float64  `json:"upper_ci"`          // 95% bootstrap CI upper bound
-	Warning       string   `json:"warning,omitempty"` // small-sample or other warnings
-	Results       []Result `json:"results"`
+	TotalTasks       int           `json:"total_tasks"`
+	Successes        int           `json:"successes"`
+	Failures         int           `json:"failures"`
+	SuccessRate      float64       `json:"success_rate"`
+	AvgDurationMs    float64       `json:"avg_duration_ms"`
+	AvgResultLen     float64       `json:"avg_result_len"`
+	PathCoverage     float64       `json:"path_coverage"`     // unique paths / total tasks
+	PathMatchRate    float64       `json:"path_match_rate"`   // tasks whose Path matched ExpectedPath/PossiblePaths / total tasks
+	LowerCI          float64       `json:"lower_ci"`          // 95% bootstrap CI lower bound
+	UpperCI          float64       `json:"upper_ci"`          // 95% bootstrap CI upper bound
+	Warning          string        `json:"warning,omitempty"` // small-sample or other warnings
+	Results          []Result      `json:"results"`
+	ContractPassRate float64       `json:"contract_pass_rate"`
+	ModelEvidence    ModelEvidence `json:"model_evidence"`
 }
 
 // RunSuite executes all tasks in a suite against a tree.
-func RunSuite(tree *evolution.SerializableNode, suite Suite, mock llm.LLM) *RunMetrics {
+func RunSuite(tree *evolution.SerializableNode, suite Suite, model llm.LLM) *RunMetrics {
+	live, ok := model.(*LiveModel)
+	if !ok || live == nil {
+		return &RunMetrics{TotalTasks: len(suite.Tasks), Failures: len(suite.Tasks), Warning: "live benchmark requires DefaultLLM; synthetic or missing models cannot produce evaluation evidence"}
+	}
+	initialEvidence := live.Evidence()
 	results := make([]Result, 0, 32)
 	successes := 0
+	contractsPassed := 0
 	matchedCount := 0
 	paths := make(map[string]int)
 
@@ -88,13 +101,9 @@ func RunSuite(tree *evolution.SerializableNode, suite Suite, mock llm.LLM) *RunM
 		start := time.Now()
 
 		bb := &engine.Blackboard{
-			Task: tc.Task,
-			LLM:  mock,
-			// Benchmark runs must never trigger real side effects (subprocess,
-			// network, external quotas) — production trees contain actions that
-			// shell out to nlm/git/claude. Sandbox simulates action success;
-			// conditions and tree structure still drive routing.
-			Sandbox: true,
+			Task:          tc.Task,
+			LLM:           model,
+			NodeAdmission: benchmarkAdmission,
 		}
 
 		bt := engine.BuildTree(tree, bb)
@@ -103,11 +112,14 @@ func RunSuite(tree *evolution.SerializableNode, suite Suite, mock llm.LLM) *RunM
 
 		success := bb.Outcome == "success"
 		if tc.ShouldReject {
-			// Adversarial rejection tasks: pass when correctly rejected (PreGate blocks them)
-			success = !success
+			success = taskContractPassed(tc, bb.Outcome, output, bb.QualityScore)
 		}
 		if success {
 			successes++
+		}
+		contractPassed := taskContractPassed(tc, bb.Outcome, output, bb.QualityScore)
+		if contractPassed {
+			contractsPassed++
 		}
 
 		// Determine which path was taken (heuristic from result content)
@@ -121,13 +133,16 @@ func RunSuite(tree *evolution.SerializableNode, suite Suite, mock llm.LLM) *RunM
 		}
 
 		results = append(results, Result{
-			Task:        tc.Task,
-			Outcome:     bb.Outcome,
-			DurationMs:  duration,
-			ResultLen:   len(output),
-			Path:        path,
-			PathMatched: matched,
-			Success:     success,
+			Task:           tc.Task,
+			Outcome:        benchmarkOutcome(bb),
+			DurationMs:     duration,
+			ResultLen:      len(output),
+			Path:           path,
+			PathMatched:    matched,
+			Success:        success,
+			QualityScore:   bb.QualityScore,
+			ContractPassed: contractPassed,
+			Output:         output,
 		})
 	}
 
@@ -143,21 +158,81 @@ func RunSuite(tree *evolution.SerializableNode, suite Suite, mock llm.LLM) *RunM
 		totalLen += r.ResultLen
 	}
 
+	evidence := live.Evidence()
+	evidence.Calls -= initialEvidence.Calls
+	evidence.Fallbacks -= initialEvidence.Fallbacks
+	evidence.Errors -= initialEvidence.Errors
+	if evidence.Errors == 0 {
+		evidence.LastError = ""
+	}
+	warning := ""
+	if evidence.Calls == 0 {
+		warning = "no model calls executed; this suite is not live inference evidence"
+	}
+	if evidence.LastError != "" {
+		warning = evidence.LastError
+	}
+	for _, result := range results {
+		if result.Outcome == "benchmark_unsupported" {
+			warning = "missing isolated capability fixture; this suite cannot qualify a candidate"
+			break
+		}
+	}
 	return &RunMetrics{
-		TotalTasks:    n,
-		Successes:     successes,
-		Failures:      n - successes,
-		SuccessRate:   float64(successes) / float64(n),
-		AvgDurationMs: float64(totalDur) / float64(n),
-		AvgResultLen:  float64(totalLen) / float64(n),
-		PathCoverage:  float64(len(paths)) / float64(n),
-		PathMatchRate: float64(matchedCount) / float64(n),
-		Results:       results,
+		TotalTasks:       n,
+		Successes:        successes,
+		Failures:         n - successes,
+		SuccessRate:      float64(successes) / float64(n),
+		AvgDurationMs:    float64(totalDur) / float64(n),
+		AvgResultLen:     float64(totalLen) / float64(n),
+		PathCoverage:     float64(len(paths)) / float64(n),
+		PathMatchRate:    float64(matchedCount) / float64(n),
+		Results:          results,
+		ContractPassRate: float64(contractsPassed) / float64(n),
+		ModelEvidence:    evidence,
+		Warning:          warning,
 	}
 }
 
-// RunSuiteWithLLM runs a suite using a real LLM client instead of a mock.
-// Configuration failure is reported without substituting mock evidence.
+// Contract results are separate from execution success: correctly rejecting an
+// invalid request satisfies a negative case, but is not a completed task.
+func taskContractPassed(tc TaskCase, outcome, result string, quality float64) bool {
+	if tc.ShouldReject || !tc.ShouldSucceed {
+		return outcome == "failure" || outcome == "quality_gate_failed"
+	}
+	if outcome != "success" || len(result) < tc.MinResultLen || quality < tc.MinQualityScore {
+		return false
+	}
+	if len(tc.ExpectedJSON) > 0 {
+		text := strings.TrimSpace(result)
+		if strings.HasPrefix(text, "```json\n") && strings.HasSuffix(text, "```") {
+			text = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(text, "```json\n"), "```"))
+		}
+		var actual map[string]json.RawMessage
+		if json.Unmarshal([]byte(text), &actual) != nil {
+			return false
+		}
+		for key, want := range tc.ExpectedJSON {
+			got, exists := actual[key]
+			if !exists {
+				return false
+			}
+			var decoded any
+			if json.Unmarshal(got, &decoded) != nil {
+				return false
+			}
+			a, err := json.Marshal(decoded)
+			b, expectedErr := json.Marshal(want)
+			if err != nil || expectedErr != nil || string(a) != string(b) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// RunSuiteWithLLM runs a suite using the real benchmark provider.
+// Configuration failure is reported without substituting synthetic evidence.
 func RunSuiteWithLLM(tree *evolution.SerializableNode, suite Suite) *RunMetrics {
 	llmClient, err := DefaultLLM()
 	if err != nil {
@@ -174,42 +249,50 @@ func absDiff(a, b float64) float64 {
 }
 
 type ABTest struct {
-	Before   *RunMetrics `json:"before"`
-	After    *RunMetrics `json:"after"`
-	Delta    ABDelta     `json:"delta"`
-	Improved bool        `json:"improved"`
+	Before    *RunMetrics `json:"before"`
+	After     *RunMetrics `json:"after"`
+	Delta     ABDelta     `json:"delta"`
+	Improved  bool        `json:"improved"`
+	Qualified bool        `json:"qualified"`
+	Regressed bool        `json:"regressed"`
 }
 
 // ABDelta is the difference between before and after.
 type ABDelta struct {
-	SuccessRate   float64 `json:"success_rate_delta"`
-	AvgDurationMs float64 `json:"avg_duration_delta"`
-	AvgResultLen  float64 `json:"avg_result_len_delta"`
-	PathCoverage  float64 `json:"path_coverage_delta"`
-	PathMatchRate float64 `json:"path_match_rate_delta"`
-	EffectSize    float64 `json:"effect_size"` // Cohen's d on success rate
-	Significant   bool    `json:"significant"` // p < 0.05
-	PValue        float64 `json:"p_value"`
+	ContractPassRate float64 `json:"contract_pass_rate_delta"`
+	SuccessRate      float64 `json:"success_rate_delta"`
+	AvgDurationMs    float64 `json:"avg_duration_delta"`
+	AvgResultLen     float64 `json:"avg_result_len_delta"`
+	PathCoverage     float64 `json:"path_coverage_delta"`
+	PathMatchRate    float64 `json:"path_match_rate_delta"`
+	EffectSize       float64 `json:"effect_size"` // Cohen's d on success rate
+	Significant      bool    `json:"significant"` // p < 0.05
+	PValue           float64 `json:"p_value"`
 }
 
 // RunABTest applies a mutation and measures the impact.
-func RunABTest(tree *evolution.SerializableNode, suite Suite, mock llm.LLM, ops []evolution.MutationOp) *ABTest {
+func RunABTest(tree *evolution.SerializableNode, suite Suite, model llm.LLM, ops []evolution.MutationOp) *ABTest {
 	// Clone tree for before measurement
 	beforeTree := cloneTree(tree)
-	before := RunSuite(beforeTree, suite, mock)
+	before := RunSuite(beforeTree, suite, model)
 
 	// Apply mutation to a fresh clone
 	afterTree := cloneTree(tree)
 	applied := evolution.ApplyMutations(afterTree, ops)
-	after := RunSuite(afterTree, suite, mock)
+	after := RunSuite(afterTree, suite, model)
+	if before.ModelEvidence.Fallbacks > 0 || after.ModelEvidence.Fallbacks > 0 {
+		before, after = RunSuite(beforeTree, suite, model), RunSuite(afterTree, suite, model)
+	}
+	qualified := len(suite.Tasks) > 0 && before.Warning == "" && after.Warning == "" && evolution.PreservesGovernance(beforeTree, afterTree)
 
 	// Calculate deltas
 	delta := ABDelta{
-		SuccessRate:   after.SuccessRate - before.SuccessRate,
-		AvgDurationMs: after.AvgDurationMs - before.AvgDurationMs,
-		AvgResultLen:  after.AvgResultLen - before.AvgResultLen,
-		PathCoverage:  after.PathCoverage - before.PathCoverage,
-		PathMatchRate: after.PathMatchRate - before.PathMatchRate,
+		ContractPassRate: after.ContractPassRate - before.ContractPassRate,
+		SuccessRate:      after.SuccessRate - before.SuccessRate,
+		AvgDurationMs:    after.AvgDurationMs - before.AvgDurationMs,
+		AvgResultLen:     after.AvgResultLen - before.AvgResultLen,
+		PathCoverage:     after.PathCoverage - before.PathCoverage,
+		PathMatchRate:    after.PathMatchRate - before.PathMatchRate,
 	}
 
 	// Effect size (Cohen's d for proportions)
@@ -225,44 +308,43 @@ func RunABTest(tree *evolution.SerializableNode, suite Suite, mock llm.LLM, ops 
 	)
 	delta.Significant = delta.PValue < 0.05
 
-	// Only quality improvements should mark a mutation as improved. Runtime speed
-	// alone is not enough because destructive mutations can appear faster by
-	// pruning work while preserving mock outputs. A routing regression (tasks
-	// swallowed into the wrong StrategyRouter branch) must never count as an
-	// improvement even when SuccessRate holds steady, since mocked actions on
-	// the wrong path can still report "success".
-	improved := (delta.SuccessRate > 0 && delta.PathMatchRate >= 0) ||
-		(delta.SuccessRate == 0 && delta.PathMatchRate > 0) ||
-		(delta.SuccessRate == 0 && delta.PathMatchRate == 0 && delta.PathCoverage > 0)
+	// Task contracts govern improvement. More paths or faster execution cannot
+	// compensate for losing a previously passing task or its controls.
+	regression := delta.SuccessRate < 0 || delta.PathMatchRate < 0 || delta.ContractPassRate < 0
+	for i, result := range before.Results {
+		if result.ContractPassed && (i >= len(after.Results) || !after.Results[i].ContractPassed) {
+			regression = true
+		}
+	}
+	improved := qualified && !regression && (delta.ContractPassRate > 0 || delta.SuccessRate > 0 || delta.PathMatchRate > 0)
 
 	return &ABTest{
-		Before:   before,
-		After:    after,
-		Delta:    delta,
-		Improved: improved && applied > 0,
+		Before:    before,
+		After:     after,
+		Delta:     delta,
+		Improved:  improved && applied > 0,
+		Qualified: qualified,
+		Regressed: regression,
 	}
 }
 
 // ScoreMutation returns a quality score for a mutation based on A/B testing.
 // Positive = improvement, zero = neutral (no change), negative = regression.
-func ScoreMutation(tree *evolution.SerializableNode, suite Suite, mock llm.LLM, ops []evolution.MutationOp) float64 {
-	ab := RunABTest(tree, suite, mock, ops)
+func ScoreMutation(tree *evolution.SerializableNode, suite Suite, model llm.LLM, ops []evolution.MutationOp) float64 {
+	ab := RunABTest(tree, suite, model, ops)
+	if !ab.Qualified || ab.Regressed {
+		return -1
+	}
 	if ab.Improved {
 		// Weighted score: success rate improvement is most important
-		score := ab.Delta.SuccessRate*50 +
-			(1.0-minF(ab.Delta.AvgDurationMs/1000.0, 1.0))*10 +
-			ab.Delta.PathCoverage*10 +
+		score := ab.Delta.ContractPassRate*60 + ab.Delta.SuccessRate*20 +
 			ab.Delta.PathMatchRate*20
 		if ab.Delta.Significant {
 			score *= 1.5 // bonus for statistical significance
 		}
 		return score
 	}
-	// Regression: check if it hurt — either success rate or routing correctness
-	// (SuccessRate can hold steady while tasks get swallowed into the wrong
-	// StrategyRouter branch, since mocked actions on the wrong path still
-	// report "success").
-	if ab.Delta.SuccessRate < 0 || ab.Delta.PathMatchRate < 0 {
+	if ab.Delta.SuccessRate < 0 || ab.Delta.PathMatchRate < 0 || ab.Delta.ContractPassRate < 0 {
 		return -1.0
 	}
 	// Neutral: no change (mutation didn't help or hurt)
@@ -289,13 +371,31 @@ func QuickValidateCandidate(baseline, candidate *evolution.SerializableNode, sui
 	if baseline == nil || candidate == nil || len(suite.Tasks) == 0 {
 		return false
 	}
+	if !evolution.PreservesGovernance(baseline, candidate) {
+		return false
+	}
 	if _, err := engine.BuildAndValidate(candidate, &engine.Blackboard{Sandbox: true, ChainState: make(map[string]any)}); err != nil {
 		return false
 	}
 	lite := quickSuite(suite)
 	before := RunSuite(baseline, lite, model)
 	after := RunSuite(candidate, lite, model)
-	return after.SuccessRate >= before.SuccessRate && after.PathMatchRate >= before.PathMatchRate
+	if before.ModelEvidence.Fallbacks > 0 || after.ModelEvidence.Fallbacks > 0 {
+		// Compare the same backend after a switch to Sol; retain no mixed trial.
+		before, after = RunSuite(baseline, lite, model), RunSuite(candidate, lite, model)
+	}
+	if before.Warning != "" || after.Warning != "" {
+		return false
+	}
+	if after.SuccessRate < before.SuccessRate || after.PathMatchRate < before.PathMatchRate {
+		return false
+	}
+	for i := range before.Results {
+		if before.Results[i].ContractPassed && !after.Results[i].ContractPassed {
+			return false
+		}
+	}
+	return true
 }
 
 // --- Statistical helpers ---
@@ -436,7 +536,12 @@ func SmallSampleWarning(name string, totalTasks int) string {
 func AnnotateMetrics(m *RunMetrics) {
 	if m.TotalTasks > 0 {
 		m.LowerCI, m.UpperCI = BootstrapCI(m.Successes, m.TotalTasks)
-		m.Warning = SmallSampleWarning("suite", m.TotalTasks)
+		if sampleWarning := SmallSampleWarning("suite", m.TotalTasks); sampleWarning != "" {
+			if m.Warning != "" {
+				m.Warning += "; "
+			}
+			m.Warning += sampleWarning
+		}
 	}
 }
 
@@ -453,12 +558,24 @@ func cloneTree(tree *evolution.SerializableNode) *evolution.SerializableNode {
 	// Deep copy via node-by-node reconstruction
 	var clone func(n *evolution.SerializableNode) *evolution.SerializableNode
 	clone = func(n *evolution.SerializableNode) *evolution.SerializableNode {
+		if n == nil {
+			return nil
+		}
 		c := &evolution.SerializableNode{
 			Type:        n.Type,
 			Name:        n.Name,
 			Description: n.Description,
 			MaxRetries:  n.MaxRetries,
 			TimeoutMs:   n.TimeoutMs,
+			Edges:       slices.Clone(n.Edges),
+		}
+		if n.Metadata != nil {
+			c.Metadata = evolution.CloneMetadata(n.Metadata)
+		}
+		for i := range c.Edges {
+			if n.Edges[i].Blackboard != nil {
+				c.Edges[i].Blackboard = maps.Clone(n.Edges[i].Blackboard)
+			}
 		}
 		for _, child := range n.Children {
 			c.Children = append(c.Children, *clone(&child))
@@ -468,51 +585,25 @@ func cloneTree(tree *evolution.SerializableNode) *evolution.SerializableNode {
 	return clone(tree)
 }
 
-// --- Mock LLM for benchmarks ---
-
-// MockLLM returns predictable responses for benchmark testing.
-type MockLLM struct {
-	Complexity string
-	Plan       string
-	WentWell   string
-	ToImprove  string
-}
-
-func (m *MockLLM) AnalyzeComplexity(_ string) string { return m.Complexity }
-func (m *MockLLM) GeneratePlan(_, _ string) string   { return m.Plan }
-func (m *MockLLM) Reflect(_, _, _ string) (string, string) {
-	return m.WentWell, m.ToImprove
-}
-func (m *MockLLM) Generate(_ string) (string, error) { return m.Plan, nil }
-func (m *MockLLM) GenerateCtx(_ context.Context, _ string) (string, error) {
-	return m.Plan, nil
-}
-func (m *MockLLM) GenerateWithTimeout(_ string, _ time.Duration) (string, error) {
-	return m.Plan, nil
-}
-
-// DefaultMock returns a standard mock for benchmarks.
-func DefaultMock() *MockLLM {
-	return &MockLLM{
-		Complexity: "medium",
-		Plan:       "1. Analyze input\n2. Execute workflow\n3. Verify output\n4. Report results",
-		WentWell:   "task completed successfully",
-		ToImprove:  "optimize performance",
-	}
-}
-
-// DefaultLLM returns the configured inference provider without a mock fallback.
+// DefaultLLM returns the real benchmark provider with bounded Ollama calls
+// and Sol fallback. It never substitutes synthetic inference.
 func DefaultLLM() (llm.LLM, error) {
-	return llm.NewConfigured()
+	client, err := newLiveModel()
+	if err != nil {
+		return nil, err
+	}
+	return client, nil
 }
 
-// RealLLM returns a configured live client or skips the test when no LLM is configured.
+// RealLLM returns a live client; only explicit short/offline runs skip inference.
 func RealLLM(t *testing.T) llm.LLM {
 	t.Helper()
-	llm.SkipUnlessIntegration(t)
-	client, err := llm.NewConfigured()
+	if testing.Short() || llm.TestsDisabled() {
+		t.Skip("live model benchmark omitted in short/offline mode")
+	}
+	client, err := DefaultLLM()
 	if err != nil {
-		t.Skipf("skipping: LLM client: %v", err)
+		t.Fatalf("benchmark LLM: %v", err)
 	}
 	return client
 }
@@ -1001,16 +1092,9 @@ func AuctionDemoSuite() Suite {
 	}
 }
 
-// BTFusionSuite tests the BT fusion research-and-apply cycle tree routing
-// (domain_bt_fusion, internal/domains/bt_fusion.go). Its StrategyRouter
-// dispatches to the tree's own BTFusion_NoNewResearch/BTFusion_NewResearch
-// Sequence nodes, so ExpectedPath reflects those real node names instead of
-// the keyword-guessed, non-existent "FusionPath" fallback. Benchmark scoring
-// runs actions in Sandbox mode, which stubs SearchForBTPatterns and
-// QueryNotebookLMResearch — the actions that would record new knowledge-store
-// entries — so bt_fusion_research_new_count always reads 0 and every task
-// below reaches BTFusion_NoNewResearch, the only strategy branch a benchmark
-// run can ever take.
+// BTFusionSuite describes the fusion research/apply paths. Runtime qualification
+// requires an isolated knowledge-store and research fixture. RunSuite reports
+// these missing capabilities explicitly; it never simulates research success.
 func BTFusionSuite() Suite {
 	return Suite{
 		Name: "bt_fusion",
@@ -1030,7 +1114,7 @@ func BTFusionSuite() Suite {
 // reflects those real node names instead of the keyword-guessed,
 // non-existent "ManagerPath" fallback. Unlike BTFusion, BTManager's routing
 // conditions (IsDegradedAgent/IsNewAgent/IsHealthy) read directly from the
-// reflection store rather than from Sandboxed action output, but RunSuite
+// reflection store, but RunSuite
 // never seeds bb.Reflections, so an empty store always routes new-agent
 // bootstrapping.
 func BTManagerSuite() Suite {
@@ -1144,7 +1228,7 @@ func Arc42SeederSuite() Suite {
 // `bb.KgResults == ""` — true for every benchmark run since RunSuite never
 // populates KgResults, so KnowledgePath always wins over the CachePath/
 // ExecutionPath siblings regardless of task content. ExpectedPath reflects
-// that real, deterministic mock behavior instead of the keyword-guessed
+// that real, deterministic model behavior instead of the keyword-guessed
 // "ExecutionPath".
 func DefaultSuite() Suite {
 	return Suite{
@@ -1170,7 +1254,7 @@ func DefaultSuite() Suite {
 // the runtime path-tracker never records as CurrentPath — CurrentPath is
 // only ever set to the name of the Sequence branch actually taken under
 // StrategyRouter (including the real GOAP_Root A* planner, which reliably
-// fails under the mock's empty goal state and falls through) — so those two
+// fails under the model's empty goal state and falls through) — so those two
 // values could never match at runtime regardless of task text. PossiblePaths
 // lists every branch a given task legitimately lands on across the three
 // trees; ExpectedPath is used only where all three agree. The structurally

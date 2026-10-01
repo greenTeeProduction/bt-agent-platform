@@ -105,10 +105,10 @@ func TestRecordsForEntry_PersonalTreesUseStrictFiltering(t *testing.T) {
 		evolution.Record{TaskID: "2", TreeName: "", Outcome: evolution.Success},
 	)
 
-	// Shared entry keeps the backward-compat fallback (no match → all).
+	// Shared entries also require attributed evidence.
 	shared := recordsForEntry(records, TreeEntry{Name: "goal:x"})
-	if len(shared) != 2 {
-		t.Errorf("shared entry records = %d, want fallback to all 2", len(shared))
+	if len(shared) != 0 {
+		t.Errorf("shared entry records = %d, want no unrelated evidence", len(shared))
 	}
 
 	// Personal entry must see only its own evidence — here none.
@@ -117,7 +117,7 @@ func TestRecordsForEntry_PersonalTreesUseStrictFiltering(t *testing.T) {
 		t.Errorf("personal entry records = %d, want 0 (strict)", len(personal))
 	}
 
-	records = append(records, evolution.Record{TaskID: "3", TreeName: "goal:x", Outcome: evolution.Success})
+	records = append(records, evolution.Record{TaskID: "3", TreeName: "goal:x", User: "nico", Outcome: evolution.Success})
 	personal = recordsForEntry(records, TreeEntry{Name: "goal:x", User: "nico"})
 	if len(personal) != 1 {
 		t.Errorf("personal entry records = %d, want exactly its own 1", len(personal))
@@ -133,7 +133,7 @@ func TestEvolveTreeV2_UserTreeWithoutEvidenceIsSkipped(t *testing.T) {
 	if err != nil {
 		t.Fatalf("metrics tracker: %v", err)
 	}
-	g := NewGardener(Config{
+	g := newOrchestrationTestGardener(t, Config{
 		Registry:       NewRegistry(t.TempDir()),
 		MetricsTracker: mt,
 		RefStore:       refStore,
@@ -160,7 +160,7 @@ func TestEvolveTreeV2_UserTreeWithoutEvidenceIsSkipped(t *testing.T) {
 	// A seed reflection (what compile-time seeding writes) unfreezes it.
 	if err := refStore.Save(&evolution.Record{
 		TaskID: "seed-goal_automate_reports", TreeName: "goal:automate_reports",
-		Task: "compile-time validation", Outcome: evolution.Success,
+		Task: "compile-time validation", User: "nico", Outcome: evolution.Success,
 	}); err != nil {
 		t.Fatalf("save seed reflection: %v", err)
 	}
@@ -176,7 +176,7 @@ func TestBankFor_PersonalTreesGetPerUserBank(t *testing.T) {
 		t.Fatalf("shared bank: %v", err)
 	}
 	usersRoot := t.TempDir()
-	g := NewGardener(Config{
+	g := newOrchestrationTestGardener(t, Config{
 		ExperienceBank:     sharedBank,
 		UserExperienceRoot: usersRoot,
 	})
@@ -251,7 +251,7 @@ func TestBankFor_TransientOpenErrorDoesNotPermanentlyCacheSharedBank(t *testing.
 		t.Fatalf("write blocking file: %v", err)
 	}
 
-	g := NewGardener(Config{ExperienceBank: sharedBank, UserExperienceRoot: usersRoot})
+	g := newOrchestrationTestGardener(t, Config{ExperienceBank: sharedBank, UserExperienceRoot: usersRoot})
 
 	got := g.bankFor(TreeEntry{Name: "goal:x", User: "nico"})
 	if got != sharedBank {
@@ -274,7 +274,7 @@ func TestBankFor_NoUserRootFallsBackToShared(t *testing.T) {
 	if err != nil {
 		t.Fatalf("shared bank: %v", err)
 	}
-	g := NewGardener(Config{ExperienceBank: sharedBank})
+	g := newOrchestrationTestGardener(t, Config{ExperienceBank: sharedBank})
 	if got := g.bankFor(TreeEntry{Name: "goal:x", User: "nico"}); got != sharedBank {
 		t.Error("without UserExperienceRoot personal trees must fall back to the shared bank")
 	}

@@ -32,6 +32,19 @@ executes the tools. Native function-call schemas and non-text message parts
 are rejected. CLI generation does not expose a verified hard output-token
 cap: LangChain token hints are prompt guidance, not a billing/token guarantee.
 
+## Benchmark-model exception
+
+The owner also authorizes real Ollama inference for benchmark evaluation
+(2026-10-01), with Sol 6.1 through Codex login as the fallback for slow or
+unavailable local inference. This exception does not disable `BT_LLM_SOL_ONLY`
+or change ordinary agents. The dedicated [benchmark client](../internal/benchmark/live_model.go)
+defaults to `qwen2.5:0.5b`, local endpoint `http://127.0.0.1:11434`, and a
+15-second local call deadline. Configure only `BT_BENCHMARK_BACKEND`,
+`BT_BENCHMARK_MODEL`, `BT_BENCHMARK_OLLAMA_URL`, or `BT_BENCHMARK_TIMEOUT` for
+this role. Benchmark results must identify the actual backend and calls;
+synthetic inference cannot qualify a tree. The [live gate test](../internal/benchmark/live_governance_test.go)
+can be run with `PATH=/usr/local/go/bin:$PATH go test ./internal/benchmark -run TestLiveGovernance -v`.
+
 ## External-model features
 
 The owner explicitly exempts NotebookLM generation/research, external embeddings
@@ -153,3 +166,5 @@ success and defers transient renewal failures without invalidating a separately
 validated login. It continues to check saved authentication during renewal
 backoff; an earlier valid result cannot conceal later expiry. Regression tests
 cover all three states: renewed, renewal deferred, and expired authentication.
+
+Run `make test-live-benchmarks` for the bounded live qualification suite. It uses temporary BT state and saves the before/after governance report in `test-results/live-governance.json` (override with `BT_BENCHMARK_REPORT`). This includes actual Ollama inference, Sol fallback, independent result verification and gardener selector-ordering qualification. It does not qualify domain capabilities without their task fixtures.

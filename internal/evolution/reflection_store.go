@@ -52,23 +52,10 @@ const (
 	FeedbackNegative = "negative"
 )
 
-// FilterByTreeName returns records matching the given tree name.
-// An empty treeName matches records that have no TreeName set (backward compat).
+// FilterByTreeName returns only records attributed to the requested tree.
+// Missing history is not permission to borrow unrelated or untagged runs.
 func FilterByTreeName(records []Record, treeName string) []Record {
-	if treeName == "" {
-		return records
-	}
-	var filtered []Record
-	for _, r := range records {
-		if r.TreeName == treeName {
-			filtered = append(filtered, r)
-		}
-	}
-	// If no records match, return all records (backward compat — before TreeName was populated)
-	if len(filtered) == 0 {
-		return records
-	}
-	return filtered
+	return FilterByTreeNameStrict(records, treeName)
 }
 
 // FilterByTreeNameStrict returns only records whose TreeName matches exactly,
@@ -80,6 +67,23 @@ func FilterByTreeNameStrict(records []Record, treeName string) []Record {
 	var filtered []Record
 	for _, r := range records {
 		if r.TreeName == treeName {
+			filtered = append(filtered, r)
+		}
+	}
+	return filtered
+}
+
+// FilterByTreeOwner selects evidence for one exact tree/owner pair. Empty
+// owner denotes shared execution; it is never a wildcard for personal runs.
+// Unattributed legacy records remain inspectable without being assigned to
+// an arbitrary personal tree.
+func FilterByTreeOwner(records []Record, treeName, user string) []Record {
+	var filtered []Record
+	if treeName == "" {
+		return filtered
+	}
+	for _, r := range records {
+		if r.TreeName == treeName && r.User == user {
 			filtered = append(filtered, r)
 		}
 	}

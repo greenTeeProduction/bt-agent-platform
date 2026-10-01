@@ -17,12 +17,17 @@ import (
 type FitnessDimension string
 
 const (
-	DimSuccessRate    FitnessDimension = "success_rate"
-	DimPathCoverage   FitnessDimension = "path_coverage"
-	DimStability      FitnessDimension = "stability"
-	DimNodeEfficiency FitnessDimension = "node_efficiency"
-	DimExecutionSpeed FitnessDimension = "execution_speed"
-	DimComposite      FitnessDimension = "composite"
+	DimInputGuarding      FitnessDimension = "input_guarding"
+	DimResultVerification FitnessDimension = "result_verification"
+	DimAgentGuidance      FitnessDimension = "agent_guidance"
+	DimExecutionBounds    FitnessDimension = "execution_bounds"
+	DimRecoveryControls   FitnessDimension = "recovery_controls"
+	DimSuccessRate        FitnessDimension = "success_rate"
+	DimPathCoverage       FitnessDimension = "path_coverage"
+	DimStability          FitnessDimension = "stability"
+	DimNodeEfficiency     FitnessDimension = "node_efficiency"
+	DimExecutionSpeed     FitnessDimension = "execution_speed"
+	DimComposite          FitnessDimension = "composite"
 	// DimRecoveryRate scores how much of a tree's observed failure volume it
 	// recovered from. Sourced from SLO evidence rather than tree structure, so
 	// StructuralMultiFitness leaves it unset; the gardener's validation gate
@@ -191,7 +196,7 @@ func (pf *ParetoFront) AddFromPopulation(pop *Population, fitnessFn func(*Serial
 	for i := range pop.Individuals {
 		fv := fitnessFn(pop.Individuals[i].Tree)
 		mi := &MultiIndividual{
-			Individual: &pop.Individuals[i],
+			Individual: snapshotIndividual(&pop.Individuals[i]),
 			FitnessVec: fv,
 		}
 		if pf.Add(mi) {
@@ -365,7 +370,7 @@ func (pp *ParetoPopulation) Evaluate(fitnessFn func(*SerializableNode) MultiFitn
 		fv := fitnessFn(pp.Individuals[i].Tree)
 		pp.Individuals[i].Fitness = fv.CompositeScore(nil) // scalar for tournament selection
 		pp.Front.Add(&MultiIndividual{
-			Individual: &pp.Individuals[i],
+			Individual: snapshotIndividual(&pp.Individuals[i]),
 			FitnessVec: fv,
 		})
 	}
@@ -504,79 +509,26 @@ func (pf *ParetoFront) Stats() ParetoStats {
 	return stats
 }
 
-// StructuralMultiFitness computes a multi-objective fitness vector from structural properties only.
-// This is the Quick tier equivalent — no LLM calls.
+// StructuralMultiFitness reports configured controls, never fabricated success,
+// speed or path coverage. Those objectives require observed execution evidence.
 func StructuralMultiFitness(tree *SerializableNode) MultiFitness {
 	mf := NewMultiFitness()
-	if tree == nil {
+	g := AssessGovernance(tree)
+	if g.WorkNodes == 0 {
 		return mf
 	}
-
-	nodeCount := CountNodes(tree)
-	maxDepth := MaxDepth(tree, 0)
-
-	// Success rate proxy: based on structure completeness
-	hasConditions := countConditions(tree)
-	hasActions := countActions(tree)
-	srScore := 0.0
-	if hasConditions >= 3 && hasActions >= 5 {
-		srScore = 60
-	} else if hasConditions >= 1 && hasActions >= 2 {
-		srScore = 40
-	} else {
-		srScore = 20
-	}
-	// Bonus for balanced condition:action ratio
-	if hasActions > 0 && hasConditions > 0 {
-		ratio := float64(hasConditions) / float64(hasActions)
-		if ratio >= 0.3 && ratio <= 1.5 {
-			srScore += 20
-		}
-	}
-	mf.Set(DimSuccessRate, clampScore(srScore))
-
-	// Path coverage: more children = more paths
-	pcScore := float64(len(tree.Children)) * 10
-	if pcScore > 100 {
-		pcScore = 100
-	}
-	mf.Set(DimPathCoverage, clampScore(pcScore))
-
-	// Stability: moderate depth, moderate node count
-	stabScore := 100.0
-	if nodeCount < 5 {
-		stabScore -= 20
-	}
-	if nodeCount > 50 {
-		stabScore -= 30
-	}
-	if maxDepth > 8 {
-		stabScore -= 20
-	}
-	if maxDepth < 2 {
-		stabScore -= 10
-	}
-	mf.Set(DimStability, clampScore(stabScore))
-
-	// Node efficiency: score is higher for moderate node counts
-	neScore := 0.0
-	if nodeCount >= 15 && nodeCount <= 35 {
-		neScore = 80
-	} else if nodeCount >= 5 && nodeCount <= 50 {
-		neScore = 50
-	} else {
-		neScore = 20
-	}
-	mf.Set(DimNodeEfficiency, clampScore(neScore))
-
-	// Execution speed: shallower trees are faster
-	esScore := 100.0 - float64(maxDepth)*8
-	if esScore < 10 {
-		esScore = 10
-	}
-	mf.Set(DimExecutionSpeed, clampScore(esScore))
-
+	n := float64(g.WorkNodes)
+	mf.Set(DimInputGuarding, 100*float64(g.InputGuarded)/n)
+	mf.Set(DimResultVerification, 100*float64(g.ResultChecked)/n)
+	mf.Set(DimAgentGuidance, 100*float64(g.Guided)/n)
+	mf.Set(DimExecutionBounds, 100*float64(g.Bounded)/n)
+	mf.Set(DimRecoveryControls, 100*float64(g.Recoverable)/n)
 	return mf
+}
+
+// GovernanceDimensions returns the structural axes used by proposal searches.
+func GovernanceDimensions() []FitnessDimension {
+	return []FitnessDimension{DimInputGuarding, DimResultVerification, DimAgentGuidance, DimExecutionBounds, DimRecoveryControls}
 }
 
 func countConditions(node *SerializableNode) int {

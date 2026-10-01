@@ -196,56 +196,10 @@ func (cr *CascadeResult) Summary() string {
 
 // ─── Built-in Quick evaluator (structural, no LLM) ───
 
-// StructuralQuickEval scores a tree on structural properties only.
-// Dimensions: node count (in-range bonus), path coverage (children exist),
-// max depth (not too deep), condition coverage (has conditions), action coverage (has actions).
+// StructuralQuickEval measures controls on executable task paths. This is a
+// proposal-ranking signal; runtime quality and task success require benchmarks.
 func StructuralQuickEval(tree *evolution.SerializableNode) float64 {
-	if tree == nil {
-		return 0
-	}
-
-	score := 0.0
-	nodeCount := evolution.CountNodes(tree)
-	maxDepth := maxTreeDepthEval(tree, 0)
-	hasConditions, hasActions := countConditionsActions(tree)
-
-	// Node count: optimal 15-40, penalty outside
-	if nodeCount >= 15 && nodeCount <= 40 {
-		score += 25
-	} else if nodeCount >= 5 && nodeCount <= 60 {
-		score += 15
-	} else {
-		score += 5
-	}
-
-	// Max depth: optimal 3-6, penalty outside
-	if maxDepth >= 3 && maxDepth <= 6 {
-		score += 25
-	} else if maxDepth >= 2 && maxDepth <= 8 {
-		score += 15
-	} else {
-		score += 5
-	}
-
-	// Has conditions (routing capability)
-	if hasConditions > 0 {
-		condScore := float64(hasConditions)
-		if condScore > 10 {
-			condScore = 10
-		}
-		score += condScore * 2.5 // max 25
-	}
-
-	// Has actions (execution capability)
-	if hasActions > 0 {
-		actScore := float64(hasActions)
-		if actScore > 10 {
-			actScore = 10
-		}
-		score += actScore * 2.5 // max 25
-	}
-
-	return score
+	return evolution.AssessGovernance(tree).Score
 }
 
 // countConditionsActions counts condition and action nodes in the tree.

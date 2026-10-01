@@ -4,7 +4,7 @@ import "testing"
 
 func TestConfiguredInferenceDoesNotSubstituteMockEvidence(t *testing.T) {
 	t.Setenv("BT_LLM_SOL_ONLY", "true")
-	t.Setenv("BT_LLM_TIMEOUT", "-1")
+	t.Setenv("BT_BENCHMARK_TIMEOUT", "-1s")
 	if model, err := DefaultLLM(); model != nil || err == nil {
 		t.Fatalf("invalid configuration returned %T, %v", model, err)
 	}

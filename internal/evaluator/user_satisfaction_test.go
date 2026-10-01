@@ -47,8 +47,7 @@ func TestEvaluateTree_NoFeedbackLeavesCompositeUnchanged(t *testing.T) {
 		fitness.Stability*15 +
 		fitness.PathCoverage*15 +
 		(1.0-minFloat64(float64(fitness.AvgDurationMs)/120000.0, 1.0))*10 +
-		fitness.StructuralQuality*8 +
-		(1.0-minFloat64(float64(fitness.NodeCount)/100.0, 1.0))*2
+		fitness.StructuralQuality*10
 	if diff := fitness.Composite - base; diff > 0.0001 || diff < -0.0001 {
 		t.Errorf("Composite = %v, want unrescaled base %v", fitness.Composite, base)
 	}

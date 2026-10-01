@@ -28,10 +28,12 @@ type SWEVerifiedResult struct {
 
 // SWEVerifiedMetrics aggregates evaluation results across SWE-bench Verified entries.
 type SWEVerifiedMetrics struct {
-	TotalEntries int                 `json:"total_entries"`
-	Resolved     int                 `json:"resolved"`
-	ResolveRate  float64             `json:"resolve_rate"`
-	Results      []SWEVerifiedResult `json:"results"`
+	ModelEvidence ModelEvidence       `json:"model_evidence"`
+	Warning       string              `json:"warning,omitempty"`
+	TotalEntries  int                 `json:"total_entries"`
+	Resolved      int                 `json:"resolved"`
+	ResolveRate   float64             `json:"resolve_rate"`
+	Results       []SWEVerifiedResult `json:"results"`
 }
 
 // LoadSWEVerified reads a SWE-bench Verified JSON file and returns entries.
@@ -51,19 +53,24 @@ func LoadSWEVerified(path string) ([]SWEVerifiedEntry, error) {
 // Each entry is formatted as "fix: <repo>\n\n<problem_statement>" and evaluated.
 // Resolution criteria: bb.Outcome == "success" && len(output) > 50.
 func EvaluateSWEVerified(tree *evolution.SerializableNode, entries []SWEVerifiedEntry, llmClient llm.LLM) *SWEVerifiedMetrics {
+	var modelEvidence ModelEvidence
+	var warning string
 	results := make([]SWEVerifiedResult, 0, 32)
 	resolved := 0
 
 	for _, entry := range entries {
 		task := fmt.Sprintf("fix: %s\n\n%s", entry.Repo, entry.ProblemStatement)
-		bb := &engine.Blackboard{
+		bb := &engine.Blackboard{NodeAdmission: benchmarkAdmission,
 			Task: task,
 			LLM:  llmClient,
 		}
-		bt := engine.BuildTree(tree, bb)
-		output := engine.RunTask(bb, bt)
+		output, taskEvidence, taskWarning := executeLiveTask(tree, bb)
+		mergeModelEvidence(&modelEvidence, taskEvidence)
+		if taskWarning != "" {
+			warning = taskWarning
+		}
 
-		isResolved := bb.Outcome == "success" && len(output) > 50
+		isResolved := taskWarning == "" && bb.Outcome == "success" && len(output) > 50
 		if isResolved {
 			resolved++
 		}
@@ -82,7 +89,7 @@ func EvaluateSWEVerified(tree *evolution.SerializableNode, entries []SWEVerified
 		rate = float64(resolved) / float64(n)
 	}
 
-	return &SWEVerifiedMetrics{
+	return &SWEVerifiedMetrics{ModelEvidence: modelEvidence, Warning: warning,
 		TotalEntries: n,
 		Resolved:     resolved,
 		ResolveRate:  rate,

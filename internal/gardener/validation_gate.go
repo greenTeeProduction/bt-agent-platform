@@ -149,13 +149,15 @@ func paretoAcceptance(agentName, treeName string, evidence engine.SLOSnapshot, c
 }
 
 // evidenceTreeNames returns all evidence-file tree names that count for a
-// gardener registry name. The registry names domain trees "domain_<x>" while
-// the agent process records SLO evidence under the engine name "domain:<x>" —
-// both spellings must match or no domain tree can ever find its evidence.
+// gardener registry name. The registry historically uses category_name while
+// runtime uses category:name; exact legacy names remain recognized too.
 func evidenceTreeNames(treeName string) []string {
 	names := []string{treeName}
-	if rest, ok := strings.CutPrefix(treeName, "domain_"); ok {
-		names = append(names, "domain:"+rest)
+	for _, category := range []string{"domain", "finance", "research"} {
+		if rest, ok := strings.CutPrefix(treeName, category+"_"); ok {
+			names = append(names, category+":"+rest)
+			break
+		}
 	}
 	return names
 }

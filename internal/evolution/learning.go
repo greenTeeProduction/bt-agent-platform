@@ -126,7 +126,7 @@ func (p *Population) Evaluate(fitnessFn func(*SerializableNode) float64) {
 	best := 0.0
 	for i := range p.Individuals {
 		p.Individuals[i].Fitness = fitnessFn(p.Individuals[i].Tree)
-		if p.Individuals[i].Fitness > best {
+		if i == 0 || p.Individuals[i].Fitness > best {
 			best = p.Individuals[i].Fitness
 			p.BestTree = p.Individuals[i].Tree
 		}
@@ -158,7 +158,13 @@ func (p *Population) Select() []*SerializableNode {
 
 // Crossover produces an offspring by swapping subtrees.
 func Crossover(a, b *SerializableNode) *SerializableNode {
+	if a == nil {
+		return cloneTree(b)
+	}
 	child := cloneTree(a)
+	if b == nil {
+		return child
+	}
 	// Pick a random node in child and replace with random node from b
 	if len(child.Children) > 0 {
 		childIdx := evoIntn(len(child.Children))
@@ -166,6 +172,11 @@ func Crossover(a, b *SerializableNode) *SerializableNode {
 			bIdx := evoIntn(len(b.Children))
 			child.Children[childIdx] = *cloneTree(&b.Children[bIdx])
 		}
+	}
+	// Arbitrary subtree exchange can erase an entire task path. Keep the
+	// first parent's capabilities and controls unless equivalence is proven.
+	if !PreservesGovernance(a, child) {
+		return cloneTree(a)
 	}
 	return child
 }
@@ -659,9 +670,8 @@ func (qt *QTable) GetState(tree *SerializableNode, category string) string {
 // SelectAction returns best action via epsilon-greedy.
 func (qt *QTable) SelectAction(state string, epsilon float64) string {
 	actions, ok := qt.Values[state]
-	if !ok || rand.Float64() < epsilon {
-		allMutations := []string{"add_before", "add_after", "add_fallback", "replace_node", "remove_node"}
-		return allMutations[rand.Intn(len(allMutations))]
+	if !ok || evoFloat64() < epsilon {
+		return AllMutationOps[evoIntn(len(AllMutationOps))]
 	}
 	best := ""
 	bestVal := -1e9
@@ -952,6 +962,14 @@ func (p *Population) qLearnMutate(
 
 // ─── Helpers ───
 
+// snapshotIndividual keeps an archive entry's tree and score attached when
+// the breeding population is sorted or replaced during crisis recovery.
+func snapshotIndividual(ind *Individual) *Individual {
+	snapshot := *ind
+	snapshot.Tree = cloneTree(ind.Tree)
+	return &snapshot
+}
+
 func cloneTree(t *SerializableNode) *SerializableNode {
 	if t == nil {
 		return nil
@@ -969,6 +987,11 @@ func cloneTree(t *SerializableNode) *SerializableNode {
 	if t.Edges != nil {
 		c.Edges = make([]TypedEdge, len(t.Edges))
 		copy(c.Edges, t.Edges)
+		for i := range c.Edges {
+			if t.Edges[i].Blackboard != nil {
+				c.Edges[i].Blackboard = maps.Clone(t.Edges[i].Blackboard)
+			}
+		}
 	}
 	for _, ch := range t.Children {
 		c.Children = append(c.Children, *cloneTree(&ch))
@@ -1013,22 +1036,17 @@ func hashTree(t *SerializableNode) string {
 }
 
 func randomMutation(tree *SerializableNode) []MutationOp {
-	if ops := tryBlockRandomMutation(tree); len(ops) > 0 {
-		return ops
+	// A registered block library contributes proposals without starving node
+	// mutations. Previously its always-nonempty response prevented every
+	// governance mutation from reaching production populations.
+	if evoIntn(4) == 0 {
+		if ops := tryBlockRandomMutation(tree); len(ops) > 0 {
+			return ops
+		}
 	}
-	// Include all mutation types the expert system recommends
-	allOps := []string{
-		"add_before", "add_after", "add_fallback",
-		"replace_node", "replace_children", "reorder_children",
-		"increase_retries", "prune_node", "increase_iterations", "add_tool",
-	}
-	op := allOps[evoIntn(len(allOps))]
-	// Find a random target node
-	target := randomNodeName(tree, tree.Name)
-	if target == "" {
-		target = tree.Name
-	}
-	return []MutationOp{{Operation: op, Target: target}}
+	mutator := NewMCTSMutator()
+	op := AllMutationOps[evoIntn(len(AllMutationOps))]
+	return []MutationOp{mutator.concreteMutationOp(op, tree)}
 }
 
 func randomNodeName(node *SerializableNode, fallback string) string {

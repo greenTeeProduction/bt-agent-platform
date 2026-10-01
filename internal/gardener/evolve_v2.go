@@ -21,6 +21,17 @@ import (
 	"github.com/nico/go-bt-evolve/internal/util"
 )
 
+// candidateAcceptor separates orchestration decision tests from live model
+// qualification. Each production gardener defaults to the live validator.
+type candidateAcceptor func(*evolution.SerializableNode, *evolution.SerializableNode, benchmark.Suite, llm.LLM) bool
+
+func (g *Gardener) acceptsCandidate(base, candidate *evolution.SerializableNode, suite benchmark.Suite, model llm.LLM) bool {
+	if g.candidateAcceptance != nil {
+		return g.candidateAcceptance(base, candidate, suite, model)
+	}
+	return benchmark.QuickValidateCandidate(base, candidate, suite, model)
+}
+
 // EvolveV2Config controls the v2 evolution pipeline: a structural quick-check
 // cascade, block-protected candidate filtering, and per-candidate pre-scored
 // mutation application.
@@ -36,7 +47,7 @@ type EvolveV2Config struct {
 	BlocksEnabled bool
 	BlockConfig   evolution.BlockConfig
 
-	// Use real LLM or mock
+	// Deprecated compatibility field: benchmark validation always uses a real model.
 	UseRealLLM bool
 
 	// SelectorOrdering, when true, applies learned Selector child ordering from
@@ -107,7 +118,7 @@ func DefaultEvolveV2Config() EvolveV2Config {
 		CascadeCfg:               evaluator.DefaultCascadeConfig(),
 		BlocksEnabled:            true,
 		BlockConfig:              evolution.DefaultBlockConfig(),
-		UseRealLLM:               false, // use mock by default for speed
+		UseRealLLM:               true, // benchmark evaluation always uses a real model
 		SelectorOrderingStrategy: evolution.OrderBySuccessRate,
 		MCTSStructuralSearch:     true,
 		MCTSIterations:           defaultMCTSCandidateIterations,
@@ -375,16 +386,10 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 
 	// ── Apply mutations with benchmark validation ──
 	suite := benchmark.SuiteForTree(entry.Name)
-	var selectedLLM llm.LLM
-	if cfg.UseRealLLM {
-		var err error
-		selectedLLM, err = benchmark.DefaultLLM()
-		if err != nil {
-			slog.Warn("gardener/v2: inference configuration failed", "tree", entry.Name, "error", err)
-			return CycleMetrics{TreeName: entry.Name, Improved: false}
-		}
-	} else {
-		selectedLLM = benchmark.DefaultMock()
+	selectedLLM, err := benchmark.DefaultLLM()
+	if err != nil {
+		slog.Warn("gardener/v2: benchmark configuration failed", "tree", entry.Name, "error", err)
+		return CycleMetrics{TreeName: entry.Name, Improved: false}
 	}
 
 	// Fail closed AND self-heal (Q2 Evolvability milestone 2): a disabled gate
@@ -464,12 +469,12 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 			rejected++
 			continue
 		}
-		if !benchmark.QuickValidateCandidate(tree, candidateTree, suite, selectedLLM) {
+		if !g.acceptsCandidate(tree, candidateTree, suite, selectedLLM) {
 			rejected++
 			continue
 		}
 		candidateFitness := evaluator.EvaluateTree(candidateTree, records)
-		if candidateFitness.Composite < currentFitness.Composite-0.0001 {
+		if candidateFitness.Composite <= currentFitness.Composite+0.0001 {
 			rejected++
 			continue
 		}
@@ -565,7 +570,7 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 		// ── Validation gate — prevent persisting evolved trees that fail
 		// quality thresholds. A rejection skips this tree only.
 		gateErr := ValidationGate(entry.Name, entry.Name, g.cfg.ValidationGate)
-		if gateErr == nil && !benchmark.QuickValidateCandidate(originalTree, tree, suite, selectedLLM) {
+		if gateErr == nil && !g.acceptsCandidate(originalTree, tree, suite, selectedLLM) {
 			gateErr = errors.New("candidate definition or benchmark rejected")
 		}
 		if gateErr == nil && g.cfg.MetaValidator != nil && g.cfg.MetaValidator.ValidateMutation(originalTree, tree, baseFitness.Composite, newFitness.Composite).Decision == evolution.MetaReject {
@@ -657,7 +662,7 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 			candidateFitness := evaluator.EvaluateTree(candidate, records)
 			if candidateApplied > 0 && candidateFitness.Composite > newFitness.Composite+0.0001 {
 				commitErr := func() error {
-					if !benchmark.QuickValidateCandidate(tree, candidate, suite, selectedLLM) {
+					if !g.acceptsCandidate(tree, candidate, suite, selectedLLM) {
 						return errors.New("deep-search candidate definition or benchmark rejected")
 					}
 					if g.cfg.Gate != nil && g.cfg.Gate.ValidateFor(entry.Name, newFitness.Composite, candidateFitness.Composite) != evolution.GateAccepted {
@@ -1304,16 +1309,13 @@ func (g *Gardener) adoptIslandWinner(entry TreeEntry, records []evolution.Record
 
 	// Validate a detached whole-tree candidate before any live mutation.
 	candidate := cloneTreeForGardener(winner)
-	var model llm.LLM = benchmark.DefaultMock()
-	if cfg.UseRealLLM {
-		var err error
-		model, err = benchmark.DefaultLLM()
-		if err != nil {
-			slog.Warn("gardener/v2: inference configuration failed", "tree", entry.Name, "error", err)
-			return false
-		}
+	model, err := benchmark.DefaultLLM()
+	if err != nil {
+		slog.Warn("gardener/v2: benchmark configuration failed", "tree", entry.Name, "error", err)
+		return false
 	}
-	if !benchmark.QuickValidateCandidate(entry.Tree, candidate, benchmark.SuiteForTree(entry.Name), model) {
+
+	if !g.acceptsCandidate(entry.Tree, candidate, benchmark.SuiteForTree(entry.Name), model) {
 		slog.Warn("gardener/v2: benchmark rejected island winner", "tree", entry.Name)
 		return false
 	}

@@ -11,7 +11,10 @@ Retained legacy adapters are for isolated tests with an explicit policy
 opt-out. Do not restore DeepSeek/Ollama/Claude for ordinary inference or `auto` model
 selection in deployment. Owner-approved exceptions (2026-10-01): NotebookLM generation/research, external
 embeddings/session indexing, and legacy memory extraction retain their own
-configured providers. Do not block those integrations with `BT_LLM_SOL_ONLY`.
+configured providers. Owner-approved addition (2026-10-01): benchmark evaluation uses real
+Ollama inference (fast qualified local model) with Sol 6.1 fallback when slow or
+unavailable. Benchmark mocks cannot establish task or promotion evidence.
+Do not block these scoped integrations with `BT_LLM_SOL_ONLY`.
 Ordinary BT inference and coding still require Sol with no alternate fallback.
 
 Read `graphify-out/GRAPH_REPORT.md` before source exploration; navigate its

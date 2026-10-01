@@ -287,7 +287,7 @@ func main() {
 	// wireDTOrdering enables the domain-tree (DT) entropy/Gini-based
 	// reordering pass — mirrors wireSelectorOrdering above.
 	cfg, v2Cfg = wireDTOrdering(cfg, v2Cfg, metricsDir)
-	// v2Cfg.UseRealLLM = false // default — mock for speed, enough for structural validation
+	// Benchmark validation always uses real Ollama inference, with Sol fallback.
 
 	g = gardener.NewGardener(cfg)
 

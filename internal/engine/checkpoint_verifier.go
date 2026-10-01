@@ -104,17 +104,6 @@ func (c *CheckpointVerifier) verifyPostconditions(state map[string]bool) bool {
 	return true
 }
 
-// hasWorldState checks whether a world_state map has been explicitly configured
-// in ChainState. Returns false when no world state tracking is set up, allowing
-// the CheckpointVerifier to gracefully skip postcondition validation.
-func hasWorldState(bb *Blackboard) bool {
-	if bb.ChainState == nil {
-		return false
-	}
-	_, ok := bb.ChainState["world_state"]
-	return ok
-}
-
 // Run executes the child subtree with checkpoint verification.
 // On child success, it verifies postconditions. On mismatch or child failure,
 // it restores the pre-execution snapshot and retries up to MaxRetries.
@@ -128,10 +117,16 @@ func (c *CheckpointVerifier) Run(ctx *btcore.BTContext[Blackboard]) int {
 	}
 
 	for attempt := 0; attempt <= c.MaxRetries; attempt++ {
+		if bb.applyExecutionStop() {
+			return -1
+		}
 		// Take a snapshot before executing the child
 		snap := snapshotState(bb)
 
 		status := c.child.Run(ctx)
+		if bb.applyExecutionStop() {
+			return -1
+		}
 
 		// Child failure → restore and retry
 		if status == -1 {
@@ -148,20 +143,13 @@ func (c *CheckpointVerifier) Run(ctx *btcore.BTContext[Blackboard]) int {
 			return 0
 		}
 
-		// Child succeeded → verify postconditions (skip if world_state not configured)
-		if hasWorldState(bb) {
-			currentState := extractWorldState(bb)
-			if c.verifyPostconditions(currentState) {
-				return 1
-			}
-			// Postcondition mismatch → restore and retry
-			restoreState(bb, snap)
-			if attempt < c.MaxRetries {
-				bb.ChainState["checkpoint_retry_reason"] = fmt.Sprintf("postcondition_mismatch_attempt_%d", attempt+1)
-				continue
-			}
-		} else {
+		// Missing state cannot prove a declared postcondition, including false.
+		if c.verifyPostconditions(extractWorldState(bb)) {
 			return 1
+		}
+		restoreState(bb, snap)
+		if attempt < c.MaxRetries {
+			bb.ChainState["checkpoint_retry_reason"] = fmt.Sprintf("postcondition_mismatch_attempt_%d", attempt+1)
 		}
 	}
 

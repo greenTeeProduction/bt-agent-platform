@@ -549,7 +549,7 @@ func TestEvolveTreeSkipsWhenNoReflectionEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	g := NewGardener(Config{Registry: reg, RefStore: store, MetricsTracker: mt, MaxMutations: 3})
+	g := newOrchestrationTestGardener(t, Config{Registry: reg, RefStore: store, MetricsTracker: mt, MaxMutations: 3})
 
 	var entry TreeEntry
 	for _, e := range reg.List() {
@@ -599,7 +599,7 @@ func deepSearchGardener(t *testing.T, treeName, ttPath string) (*Gardener, TreeE
 	}
 	reg.mu.Unlock()
 
-	g := NewGardener(Config{
+	g := newOrchestrationTestGardener(t, Config{
 		Registry:                 reg,
 		MetricsTracker:           mt,
 		RefStore:                 refStore,
@@ -711,7 +711,7 @@ func TestRunCycleV2_PrioritizesByKGAnalytics(t *testing.T) {
 	// Fitness < 30.
 	kg.Register(&knowledge.TreeMeta{ID: "zzz_bottleneck", Name: "zzz_bottleneck", Category: "domain", Fitness: 10, RunCount: 8})
 
-	g := NewGardener(Config{
+	g := newOrchestrationTestGardener(t, Config{
 		Registry:       reg,
 		MetricsTracker: mt,
 		RefStore:       refStore,
@@ -856,7 +856,7 @@ func TestRunCycleV2_SLOExport_ReadsFileEvidence(t *testing.T) {
 	validationGate.EvidencePath = evidencePath
 	validationGate.AllowUnverified = true
 
-	g := NewGardener(Config{
+	g := newOrchestrationTestGardener(t, Config{
 		Registry:       reg,
 		MetricsTracker: mt,
 		RefStore:       refStore,
@@ -890,7 +890,7 @@ func TestRunCycleV2_SLOExport_ReadsFileEvidence(t *testing.T) {
 // before restarting the daemon's own binary, so a rebuild adoption can no
 // longer SIGTERM the gardener mid-evolution-cycle.
 func TestGardener_AnyInFlight(t *testing.T) {
-	g := NewGardener(Config{})
+	g := newOrchestrationTestGardener(t, Config{})
 
 	if g.AnyInFlight() {
 		t.Fatal("AnyInFlight = true before any cycle started, want false")

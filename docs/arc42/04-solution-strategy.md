@@ -1,6 +1,6 @@
 # 4. Solution Strategy
 
-The [Sol policy](../sol-model-policy.md) selects Sol 6.1 for ordinary inference and coding with separate permissions and no alternate fallback. Owner-approved external integrations retain their configured providers. NotebookLM session renewal belongs to the shared auth coordinator.
+The [Sol policy](../sol-model-policy.md) selects Sol 6.1 for ordinary inference and coding with separate permissions and no alternate fallback. Owner-approved external integrations retain their configured providers. NotebookLM session renewal belongs to the shared auth coordinator. Benchmark inference has its own owner-approved local Ollama/Sol fallback policy; ordinary inference remains Sol-only.
 
 The strategy connects all five quality goals in
 [§1.2](01-introduction-goals.md#12-quality-goals) to concrete mechanisms.

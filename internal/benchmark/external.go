@@ -59,27 +59,32 @@ func LoadBFCLSuite(path string) (*BFCLSuite, error) {
 }
 
 // Evaluate runs all BFCL entries against a tree and returns routing accuracy.
-func (s *BFCLSuite) Evaluate(tree *evolution.SerializableNode, mock llm.LLM) *BFCLMetrics {
+func (s *BFCLSuite) Evaluate(tree *evolution.SerializableNode, model llm.LLM) *BFCLMetrics {
+	var modelEvidence ModelEvidence
+	var warning string
 	results := make([]BFCLEvalResult, 0, 32)
 	correct := 0
 	successes := 0
 
 	for _, entry := range s.Entries {
-		bb := &engine.Blackboard{
+		bb := &engine.Blackboard{NodeAdmission: benchmarkAdmission,
 			Task: entry.Query,
-			LLM:  mock,
+			LLM:  model,
 		}
-		bt := engine.BuildTree(tree, bb)
-		output := engine.RunTask(bb, bt)
+		output, taskEvidence, taskWarning := executeLiveTask(tree, bb)
+		mergeModelEvidence(&modelEvidence, taskEvidence)
+		if taskWarning != "" {
+			warning = taskWarning
+		}
 
 		path := detectPath(output, bb)
-		correctTool := strings.EqualFold(path, entry.ExpectedTool) ||
-			strings.Contains(strings.ToLower(path), strings.ToLower(entry.ExpectedTool))
+		correctTool := taskWarning == "" && (strings.EqualFold(path, entry.ExpectedTool) ||
+			strings.Contains(strings.ToLower(path), strings.ToLower(entry.ExpectedTool)))
 
 		if correctTool {
 			correct++
 		}
-		if bb.Outcome == "success" {
+		if taskWarning == "" && bb.Outcome == "success" {
 			successes++
 		}
 
@@ -89,7 +94,7 @@ func (s *BFCLSuite) Evaluate(tree *evolution.SerializableNode, mock llm.LLM) *BF
 			ExpectedTool: entry.ExpectedTool,
 			ActualPath:   path,
 			Correct:      correctTool,
-			Success:      bb.Outcome == "success",
+			Success:      taskWarning == "" && bb.Outcome == "success",
 		})
 	}
 
@@ -99,7 +104,7 @@ func (s *BFCLSuite) Evaluate(tree *evolution.SerializableNode, mock llm.LLM) *BF
 		accuracy = float64(correct) / float64(n)
 	}
 
-	return &BFCLMetrics{
+	return &BFCLMetrics{ModelEvidence: modelEvidence, Warning: warning,
 		SuiteName:     s.Name,
 		TotalEntries:  n,
 		CorrectRoutes: correct,
@@ -111,6 +116,8 @@ func (s *BFCLSuite) Evaluate(tree *evolution.SerializableNode, mock llm.LLM) *BF
 
 // BFCLMetrics holds aggregate BFCL evaluation results.
 type BFCLMetrics struct {
+	ModelEvidence ModelEvidence    `json:"model_evidence"`
+	Warning       string           `json:"warning,omitempty"`
 	SuiteName     string           `json:"suite_name"`
 	TotalEntries  int              `json:"total_entries"`
 	CorrectRoutes int              `json:"correct_routes"`
@@ -178,6 +185,8 @@ type GAIAEntry struct {
 
 // GAIAMetrics holds GAIA evaluation results.
 type GAIAMetrics struct {
+	ModelEvidence  ModelEvidence            `json:"model_evidence"`
+	Warning        string                   `json:"warning,omitempty"`
 	TotalQuestions int                      `json:"total_questions"`
 	CorrectAnswers int                      `json:"correct_answers"`
 	Accuracy       float64                  `json:"accuracy"`
@@ -206,17 +215,22 @@ func BuiltinGAIADev() []GAIAEntry {
 }
 
 // EvaluateGAIA runs GAIA entries through the deep research tree and compares to ground truth.
-func EvaluateGAIA(tree *evolution.SerializableNode, entries []GAIAEntry, mock llm.LLM) *GAIAMetrics {
+func EvaluateGAIA(tree *evolution.SerializableNode, entries []GAIAEntry, model llm.LLM) *GAIAMetrics {
+	var modelEvidence ModelEvidence
+	var warning string
 	byLevel := map[int]GAIALevelMetrics{}
 	correct := 0
 
 	for _, entry := range entries {
-		bb := &engine.Blackboard{Task: entry.Question, LLM: mock}
-		bt := engine.BuildTree(tree, bb)
-		output := engine.RunTask(bb, bt)
+		bb := &engine.Blackboard{NodeAdmission: benchmarkAdmission, Task: entry.Question, LLM: model}
+		output, taskEvidence, taskWarning := executeLiveTask(tree, bb)
+		mergeModelEvidence(&modelEvidence, taskEvidence)
+		if taskWarning != "" {
+			warning = taskWarning
+		}
 
 		// Simple answer matching: check if output contains the answer
-		isCorrect := strings.Contains(strings.ToLower(output), strings.ToLower(entry.Answer))
+		isCorrect := taskWarning == "" && strings.Contains(strings.ToLower(output), strings.ToLower(entry.Answer))
 		if isCorrect {
 			correct++
 		}
@@ -231,7 +245,7 @@ func EvaluateGAIA(tree *evolution.SerializableNode, entries []GAIAEntry, mock ll
 	}
 
 	n := len(entries)
-	return &GAIAMetrics{
+	return &GAIAMetrics{ModelEvidence: modelEvidence, Warning: warning,
 		TotalQuestions: n,
 		CorrectAnswers: correct,
 		Accuracy:       float64(correct) / float64(max1(n)),

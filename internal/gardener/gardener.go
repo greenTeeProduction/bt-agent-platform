@@ -490,7 +490,7 @@ type Config struct {
 	RefStore       *evolution.Store
 	Interval       time.Duration             // how often to wake up
 	MaxMutations   int                       // max mutations per cycle per tree
-	UseRealLLM     bool                      // use real Ollama for benchmark validation (slow but accurate)
+	UseRealLLM     bool                      // deprecated: validation always uses real benchmark inference
 	Gate           *evolution.QualityGate    // quality gate for regression detection
 	CrisisDetector *evolution.CrisisDetector // crisis detection & diversity injection
 	SnapshotDir    string                    // directory for pre-mutation snapshots
@@ -567,7 +567,8 @@ type Config struct {
 
 // Gardener is the 24/7 tree evolution agent.
 type Gardener struct {
-	cfg Config
+	candidateAcceptance candidateAcceptor
+	cfg                 Config
 
 	// Lazily opened per-user experience banks (see bankFor).
 	userBanksMu sync.Mutex

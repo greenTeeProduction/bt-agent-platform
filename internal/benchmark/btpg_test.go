@@ -133,7 +133,7 @@ func TestBTPG_TaskExecution_FiveTasks(t *testing.T) {
 
 func TestBTPG_EmptyTasks(t *testing.T) {
 	tree := evolution.GoDeveloperTree()
-	llm := DefaultMock()
+	llm := RealLLM(t)
 
 	result := EvaluateBTPG(tree, nil, llm)
 	if len(result.PerTask) != 0 {

@@ -18,18 +18,51 @@ func BuildQualityGate(node *evolution.SerializableNode, bb *Blackboard) btcore.C
 	} else if idx := recoveryChildIndex(node.Edges); idx >= 0 && idx < len(node.Children) {
 		recovery = buildNode(&node.Children[idx], bb, node.Name)
 	}
+	return qualityGateCommand(primary, recovery)
+}
+
+// Recovery is a continuation of the same attempt, and must satisfy the same
+// output contract. Never restart primary work while recovery is still running.
+func qualityGateCommand(primary, recovery btcore.Command[Blackboard]) btcore.Command[Blackboard] {
+	recovering := false
 	return btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int {
-		code := primary.Run(ctx)
+		if ctx.Blackboard.applyExecutionStop() {
+			recovering = false
+			return -1
+		}
+		if !recovering {
+			code := primary.Run(ctx)
+			if ctx.Blackboard.applyExecutionStop() {
+				return -1
+			}
+			if code == 0 {
+				return 0
+			}
+			if code == 1 && validateOutputQuality(ctx.Blackboard) {
+				return 1
+			}
+			ctx.Blackboard.Outcome = "quality_gate_failed"
+			if recovery == nil {
+				return -1
+			}
+			recovering = true
+		}
+		code := recovery.Run(ctx)
+		if ctx.Blackboard.applyExecutionStop() {
+			recovering = false
+			return -1
+		}
 		if code == 0 {
 			return 0
 		}
-		if validateOutputQuality(ctx.Blackboard) {
-			return code
+		recovering = false
+		if code == 1 && validateOutputQuality(ctx.Blackboard) {
+			if ctx.Blackboard.Outcome == "quality_gate_failed" {
+				ctx.Blackboard.Outcome = "success"
+			}
+			return 1
 		}
 		ctx.Blackboard.Outcome = "quality_gate_failed"
-		if recovery != nil {
-			return recovery.Run(ctx)
-		}
 		return -1
 	})
 }

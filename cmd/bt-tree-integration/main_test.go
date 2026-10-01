@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/benchmark"
 )
 
 func TestRunListJSON(t *testing.T) {
@@ -94,11 +96,11 @@ func TestVerifyEvidenceReportPassesFreshOllamaArtifact(t *testing.T) {
 		PassedTrees:    2,
 		FailedTrees:    0,
 		MinSuccessRate: 0.8,
-		LLMProvider:    "ollama",
+		LLMProvider:    "benchmark:live",
 		Passed:         true,
 		Results: []treeResult{
-			{Name: "default", Tasks: 2, SuccessRate: 1, Passed: true},
-			{Name: "godev", Tasks: 2, SuccessRate: 0.9, Passed: true},
+			{Name: "default", Tasks: 2, SuccessRate: 1, ContractPassRate: 1, Passed: true, ModelEvidence: benchmark.ModelEvidence{Backend: "ollama", Model: "qwen2.5:0.5b", Calls: 2}},
+			{Name: "godev", Tasks: 2, SuccessRate: 0.9, ContractPassRate: 0.9, Passed: true, ModelEvidence: benchmark.ModelEvidence{Backend: "sol", Model: "gpt-6.1-sol", Calls: 2}},
 		},
 	})
 	report, err := verifyEvidenceReport(path, 2, time.Hour, now)
@@ -108,7 +110,7 @@ func TestVerifyEvidenceReportPassesFreshOllamaArtifact(t *testing.T) {
 	if !report.Valid || len(report.Errors) != 0 {
 		t.Fatalf("expected valid report, got %+v", report)
 	}
-	if report.Checks == 0 || report.ValidatedTrees != 2 || report.LLMProvider != "ollama" {
+	if report.Checks == 0 || report.ValidatedTrees != 2 || report.LLMProvider != "benchmark:live" {
 		t.Fatalf("unexpected verification metadata: %+v", report)
 	}
 }
@@ -135,7 +137,7 @@ func TestVerifyEvidenceReportRejectsMockPartialAndStaleArtifacts(t *testing.T) {
 		t.Fatalf("expected invalid report")
 	}
 	joined := strings.Join(report.Errors, "\n")
-	for _, want := range []string{"report did not pass", "real Ollama", "validated 1 trees", "older than"} {
+	for _, want := range []string{"report did not pass", "live benchmark provenance", "validated 1 trees", "older than"} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("expected %q in errors, got %q", want, joined)
 		}
@@ -151,9 +153,9 @@ func TestRunVerifyReportJSON(t *testing.T) {
 		ValidatedTrees: 1,
 		PassedTrees:    1,
 		MinSuccessRate: 0.8,
-		LLMProvider:    "ollama",
+		LLMProvider:    "benchmark:live",
 		Passed:         true,
-		Results:        []treeResult{{Name: "default", Tasks: 1, SuccessRate: 1, Passed: true}},
+		Results:        []treeResult{{Name: "default", Tasks: 1, SuccessRate: 1, ContractPassRate: 1, Passed: true, ModelEvidence: benchmark.ModelEvidence{Backend: "ollama", Model: "qwen2.5:0.5b", Calls: 2}}},
 	})
 	var out, errOut bytes.Buffer
 	code := run([]string{"--verify-report", path, "--expect-trees", "1", "--json"}, &out, &errOut)
@@ -200,4 +202,30 @@ func mustParseTime(t *testing.T, value string) time.Time {
 
 func contains(items []string, want string) bool {
 	return slices.Contains(items, want)
+}
+
+// Report-parser fixtures test evidence rejection; no model output is fabricated.
+func TestVerifyEvidenceReportRejectsMissingInferenceAndCapabilities(t *testing.T) {
+	now := time.Now()
+	for _, tc := range []struct {
+		name      string
+		evidence  benchmark.ModelEvidence
+		warning   string
+		contracts float64
+	}{
+		{"no-calls", benchmark.ModelEvidence{Backend: "ollama", Model: "qwen2.5:0.5b"}, "", 1},
+		{"missing-capability", benchmark.ModelEvidence{Backend: "ollama", Model: "qwen2.5:0.5b", Calls: 1}, "missing isolated capability fixture", 1},
+		{"failed-contract", benchmark.ModelEvidence{Backend: "sol", Model: "gpt-6.1-sol", Calls: 1}, "", 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := writeTestReport(t, validationReport{StartedAt: now.Add(-time.Second), FinishedAt: now, TotalTrees: 1, ValidatedTrees: 1, PassedTrees: 1, MinSuccessRate: 0.8, LLMProvider: "benchmark:live", Passed: true, Results: []treeResult{{Name: "candidate", Tasks: 1, SuccessRate: 1, Passed: true, ModelEvidence: tc.evidence, Warning: tc.warning, ContractPassRate: tc.contracts}}})
+			report, err := verifyEvidenceReport(path, 1, time.Hour, now)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if report.Valid {
+				t.Fatal("unqualified evidence accepted")
+			}
+		})
+	}
 }

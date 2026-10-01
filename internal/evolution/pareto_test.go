@@ -154,26 +154,23 @@ func TestParetoFront_DiversityScore(t *testing.T) {
 }
 
 func TestStructuralMultiFitness(t *testing.T) {
-	tree := makeOptimalParetoTree()
+	tree := &SerializableNode{Type: "Sequence", Children: []SerializableNode{
+		{Type: "Condition", Name: "ValidateInput"},
+		{Type: "QualityGate", Children: []SerializableNode{{Type: "ChainAction", Name: "agent", Metadata: map[string]any{"system_msg": "Check evidence", "max_tokens": float64(5)}}}},
+	}}
 	mf := StructuralMultiFitness(tree)
-
-	if mf.Get(DimSuccessRate) <= 0 {
-		t.Error("success rate should be > 0 for optimal tree")
+	for _, dim := range []FitnessDimension{DimInputGuarding, DimResultVerification, DimAgentGuidance, DimExecutionBounds} {
+		if mf.Get(dim) != 100 {
+			t.Errorf("%s = %v, want complete coverage", dim, mf.Get(dim))
+		}
 	}
-	if mf.Get(DimPathCoverage) <= 0 {
-		t.Error("path coverage should be > 0")
+	for _, dim := range []FitnessDimension{DimSuccessRate, DimExecutionSpeed, DimPathCoverage} {
+		if _, ok := mf.Scores[dim]; ok {
+			t.Errorf("structural inspection invented measured %s", dim)
+		}
 	}
-	if mf.Get(DimStability) <= 0 {
-		t.Error("stability should be > 0")
-	}
-	if mf.Get(DimNodeEfficiency) <= 0 {
-		t.Error("node efficiency should be > 0")
-	}
-
-	// Nil tree
-	nilMf := StructuralMultiFitness(nil)
-	if nilMf.Get(DimSuccessRate) != 0 {
-		t.Error("nil tree should have 0 on all dimensions")
+	if len(StructuralMultiFitness(nil).Scores) != 0 {
+		t.Error("nil tree must have no evidence")
 	}
 }
 
