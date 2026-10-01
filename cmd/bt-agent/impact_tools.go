@@ -30,6 +30,19 @@ func impactTests(root, source string) map[string]any {
 
 // registerImpactTools registers the change-impact-analysis MCP surface.
 func registerImpactTools(server *engine.Server, deps *mcpDeps) {
+	server.RegisterBlackboardTool("bt_research_status", "Report this user's research sources, verified code deliveries, and goals needing review. Delivery does not imply runtime adoption or measured impact.",
+		map[string]engine.Property{}, nil, func(_ json.RawMessage) *engine.ToolResult {
+			user := ""
+			if deps.bb != nil {
+				user = deps.bb.User
+			}
+			result, err := engine.ResearchDeliveryStatus(user)
+			if err != nil {
+				result = map[string]any{"error": err.Error()}
+			}
+			data, _ := json.Marshal(result)
+			return textToolResult(string(data))
+		})
 	server.RegisterTool("bt_impact_tests", "Compute the change-impact test list for a changed source file: tests affected via import edges or directory proximity, so a commit can gate on a scoped test list instead of always running the full suite",
 		map[string]engine.Property{
 			"root":   {Type: "string", Description: "Module root directory (contains go.mod); defaults to the current working directory"},

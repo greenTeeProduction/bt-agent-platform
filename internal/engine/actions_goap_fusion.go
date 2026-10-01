@@ -182,6 +182,7 @@ func registerGoapFusionActions() {
 		if program != nil {
 			persistGoapProgram(bb, program, "notebooklm")
 		}
+		recordGoapResearchSource(bb, goals, "notebooklm", answer)
 		appendGoapResearchGoals(bb, goals)
 		goalSummary := strings.Join(goapResearchGoalLines(bb), "\n- ")
 
@@ -405,9 +406,16 @@ func registerGoapFusionActions() {
 		// 2026-07-10). The head SURVIVING goal is stamped so a failed cycle
 		// charges exactly the goal it attempted.
 		goalBudget, _ := research.OpenGoalAttempts(goapGoalAttemptsPath)
+		traces, traceErr := research.OpenTraces(researchTracePath(bb.User), bb.User)
+		if traceErr != nil {
+			setGoapState(bb, "research_trace_error", traceErr.Error())
+		}
 		var abandonedGoals []string
 		researchGoalStamped := false
 		for _, nlmGoal := range goapFusionNotebookLMGoalsFromGaps(gapsStr) {
+			if traces != nil && (traces.Delivered(researchGoalTraceID(nlmGoal)) || traces.NeedsReview(researchGoalTraceID(nlmGoal))) {
+				continue
+			}
 			if goapAbandonedResearchGoal(goalBudget, nlmGoal) {
 				abandonedGoals = append(abandonedGoals, truncateGoap(nlmGoal, 90))
 				continue
@@ -415,9 +423,7 @@ func registerGoapFusionActions() {
 			goals = append(goals, "[P0] NotebookLM research: "+nlmGoal)
 			if !researchGoalStamped {
 				setGoapStateDurable(bb, "research_goal_charged", goapResearchGoalKey(nlmGoal))
-				// The raw goal text rides along so a red-pass closure can
-				// record it goap:implemented (research prompts dedup by
-				// title, not by budget key).
+				// Retain the goal text for review when RED cannot demonstrate the gap.
 				setGoapStateDurable(bb, "research_goal_charged_text", nlmGoal)
 				researchGoalStamped = true
 			}
@@ -645,7 +651,9 @@ func registerGoapFusionActions() {
 		if program := extractGoapProgram(answer); program != nil {
 			persistGoapProgram(bb, program, "grill")
 		}
-		appendGoapResearchGoals(bb, extractGoapResearchGoals(answer))
+		grillGoals := extractGoapResearchGoals(answer)
+		recordGoapResearchSource(bb, grillGoals, "notebooklm:grill", answer)
+		appendGoapResearchGoals(bb, grillGoals)
 		goal, gap := extractGoapNotebookLMRecommendation(answer)
 
 		// Save grill transcript to vault

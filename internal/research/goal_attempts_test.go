@@ -82,8 +82,10 @@ func TestGoalAttempts_FailureTailBounded(t *testing.T) {
 // DefaultGoalAttemptsPath lives beside the other research stores under the
 // ADR-003 home.
 func TestDefaultGoalAttemptsPath(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("BT_AGENT_HOME", root)
 	got := DefaultGoalAttemptsPath()
-	if !strings.HasSuffix(got, filepath.Join(".go-bt-evolve", "research", "goal-attempts.json")) {
+	if got != filepath.Join(root, "research", "goal-attempts.json") {
 		t.Fatalf("DefaultGoalAttemptsPath = %q, want …/.go-bt-evolve/research/goal-attempts.json", got)
 	}
 	if _, err := os.Stat(filepath.Dir(got)); err != nil && !os.IsNotExist(err) {

@@ -1,0 +1,49 @@
+{
+  "user": "owner-a",
+  "id": "delivery-8ece98a6e5796311",
+  "task": "",
+  "mode": "apply",
+  "phase": "",
+  "repo_dir": "/tmp/TestResearchDeliveryLinksSourceToRealCommitWithoutClaimingImpact1346889431/003",
+  "worktree_path": "",
+  "worktree_branch": "",
+  "artifact_dir": "/tmp/TestResearchDeliveryLinksSourceToRealCommitWithoutClaimingImpact1346889431/004",
+  "design_path": "",
+  "plan_path": "",
+  "tasks": [
+    {
+      "index": 1,
+      "title": "task evidence",
+      "objective": "Implement the complete, verified change for this goal: [P0] NotebookLM research: Fix declared task evidence (files: internal/evidence.go)",
+      "files": [
+        "internal/evidence.go"
+      ],
+      "tests": null,
+      "risk": "",
+      "body": "",
+      "artifact_dir": "",
+      "status": "done"
+    }
+  ],
+  "verification": [
+    {
+      "name": "main-focused-tests",
+      "command": "/usr/local/go/bin/go test ./...",
+      "passed": true,
+      "output": "ok  \texample.invalid/delivery\t0.004s\n?   \texample.invalid/delivery/internal\t[no test files]\n",
+      "duration": ""
+    },
+    {
+      "name": "main-build",
+      "command": "/usr/local/go/bin/go build ./...",
+      "passed": true,
+      "output": "",
+      "duration": ""
+    }
+  ],
+  "changed_files": null,
+  "apply_status": "committed",
+  "applied_commit": "24144a8361f3dfeb1618271833c328f45f6194c8",
+  "started_at": "2026-10-01T19:09:18.74750069Z",
+  "updated_at": "0001-01-01T00:00:00Z"
+}

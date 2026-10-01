@@ -312,6 +312,7 @@ Navigation and provenance:
 | ADR-284 | [Transactional Automation Reservations and Exact Activation](#adr-284) | Accepted — approval boundary; task effects remain open | 2026-10-01 |
 | ADR-285 | [Executable Personal File Tasks and Version-Bound Consent](#adr-285) | Accepted — real file fixture; broader capabilities/rollout open | 2026-10-01 |
 | ADR-286 | [Typed Checkpoints and Observed GOAP Agent State](#adr-286) | Accepted — verification boundary; generic effect observers open | 2026-10-01 |
+| ADR-287 | [Research Sources and Verified Code Delivery Are Separate Evidence](#adr-287) | Accepted — adoption and measured impact links open | 2026-10-01 |
 
 <a id="adr-001"></a>
 
@@ -6764,6 +6765,47 @@ Snapshots are process-local and do not establish cross-process resume or externa
 rollback. Existing persisted GOAP wrappers need explicit contract/version review
 before adoption; changes to authoring helpers do not migrate saved definitions.
 Broader task qualification, research attribution and deployed rollout remain open.
+
+<a id="adr-287"></a>
+
+## ADR-287: Research Sources and Verified Code Delivery Are Separate Evidence
+
+**Status:** Accepted (2026-10-01); runtime adoption and measured impact links remain open.
+
+**Context:** The old research index treated any known objective as implemented.
+Two already-passing RED attempts could write the same `goap:implemented` label as
+a real landing. Records retained no commit, owner, source timing or verification
+identity, and stale knowledge/budget saves could erase sibling writes.
+
+**Decision:** Keep a separate owner-scoped delivery ledger. Record research answer
+digests and observation times before planning. Preserve file scope in goal identity.
+Record delivery only for committed apply runs with actual Git ancestry, exact run
+commit subject, changed declared task files and recorded passing verification.
+Persist full commit/tree identity and verification command/output digests. Bind
+only sources observed before the run started; later observations cannot gain
+retroactive delivery credit. Repeated research-goal RED passes require review and
+stop automatic retries without becoming delivered work. Ignore historical source
+labels for delivery decisions. Journal pending attribution before code apply;
+repair metadata before subsequent planning without repeating the completed work.
+Use bounded shared JSON transactions and reject stale legacy knowledge/budget
+snapshots. Superpowers journals also reject stale recovery writers under a bounded
+lock. Expose owner-scoped evidence through `bt_research_status`.
+
+**Validation:** [Real Git/Go delivery integration](../../internal/engine/research_delivery_test.go)
+checks source-to-commit links, idempotence, rejection of dry/no-op/unlanded/unrelated
+changes, scope/owner isolation, late-source exclusion and restart receipt repair.
+[Transaction tests](../../internal/research/trace_test.go) cover concurrent writers,
+corruption, owner mismatch, stale saves and lock deadlines. [MCP regression](../../cmd/bt-agent/impact_tools_test.go)
+checks owner selection and explicit unknown adoption/impact. These tests qualify
+attribution/control behavior, not LLM task performance.
+
+**Limits:** A delivery receipt does not prove that the task's semantic objective
+was fulfilled, that the commit is deployed, or that it improves runtime outcomes.
+Recorded verification is trusted run evidence, not an attestation of an isolated
+build. Legacy program milestone completion on RED prechecks remains separate debt.
+Automatically scoped/rewritten goals can lack exact source links rather than being
+matched speculatively. Historical backfill, program lineage, active build/tree
+adoption, measured task outcomes and deployed rollout remain open.
 
 ---
 

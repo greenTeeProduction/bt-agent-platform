@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/blackboard"
-	"github.com/nico/go-bt-evolve/internal/research"
 	btcore "github.com/rvitorper/go-bt/core"
 )
 
@@ -1487,14 +1486,7 @@ func TestRecoverGoapFusionPendingPatches_SkipsSupersededViaKnowledgeStore(t *tes
 	if err != nil || len(tasks) == 0 {
 		t.Fatalf("test setup: could not parse seeded plan: %v", err)
 	}
-	store, err := research.Open(btFusionKnowledgePath)
-	if err != nil {
-		t.Fatalf("test setup: open knowledge store: %v", err)
-	}
-	store.Record("goap:implemented", tasks[0].Title, stripGoapGoalTransientNotes(tasks[0].Objective))
-	if err := store.Save(); err != nil {
-		t.Fatalf("test setup: save knowledge store: %v", err)
-	}
+	seedResearchDelivery(t, tasks)
 
 	runner := &recoveryScriptRunner{branchExists: true, headBranch: run.WorktreeBranch}
 	recoverGoapFusionPendingPatchesInDir(context.Background(), runner, runsDir)

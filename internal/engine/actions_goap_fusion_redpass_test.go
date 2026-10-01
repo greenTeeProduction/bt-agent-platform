@@ -203,10 +203,8 @@ func knowledgeHasImplemented(t *testing.T, fragment string) bool {
 
 // When no program milestone was charged, the head plan task came from the
 // charged research goal, so red-pass evidence is genuinely about it. The
-// second consecutive red-pass records the goal goap:implemented (research
-// stops re-proposing it) and clears its budget — the research-goal
-// counterpart of the milestone loop-breaker.
-func TestRepeatedRedPassClosesResearchGoalWhenNoMilestoneCharged(t *testing.T) {
+// second consecutive red-pass requires review, without claiming delivery.
+func TestRepeatedRedPassRequiresReviewWithoutDelivery(t *testing.T) {
 	isolateGoapProgramStore(t)
 	isolateBtFusionKnowledge(t)
 	seedGoalBudget(t)
@@ -223,8 +221,12 @@ func TestRepeatedRedPassClosesResearchGoalWhenNoMilestoneCharged(t *testing.T) {
 
 	bb2 := goalRedPassBlackboard("runB", goal)
 	handleGoapRedPassCycleFailure(bb2)
-	if !knowledgeHasImplemented(t, "frobnicator") {
-		t.Fatal("second consecutive red-pass must record the goal goap:implemented")
+	if knowledgeHasImplemented(t, "frobnicator") {
+		t.Fatal("passing RED must not claim implementation")
+	}
+	traces, err := research.OpenTraces(researchTracePath(""), "")
+	if err != nil || !traces.NeedsReview(researchGoalTraceID(goal)) || traces.Delivered(researchGoalTraceID(goal)) {
+		t.Fatalf("expected review without delivery: %v %v", traces, err)
 	}
 	if got := reloadGoalBudget(t).Count(key); got != 0 {
 		t.Fatalf("closed goal's budget must be cleared, count = %d", got)

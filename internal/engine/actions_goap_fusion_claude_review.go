@@ -415,6 +415,7 @@ func runClaudeCodeReviewResearch(bb *Blackboard, deps goapReviewDeps) int {
 	if program != nil {
 		persistGoapProgram(bb, program, "claude_review:"+rc.mode)
 	}
+	recordGoapResearchSource(bb, goals, string(provider)+":review:"+rc.mode, answer)
 	appendGoapResearchGoals(bb, goals)
 	goalSummary := strings.Join(goapResearchGoalLines(bb), "\n- ")
 

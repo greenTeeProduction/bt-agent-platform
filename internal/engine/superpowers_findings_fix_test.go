@@ -25,13 +25,7 @@ func TestResumeSkipsAlreadyImplementedPlan(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	store, _ := research.Open(kpath)
-	for _, task := range tasks {
-		store.Record("goap:implemented", task.Title, task.Objective)
-	}
-	if err := store.Save(); err != nil {
-		t.Fatal(err)
-	}
+	seedResearchDelivery(t, tasks)
 
 	bb := &Blackboard{Task: "improve", ChainState: map[string]any{
 		"goap_fusion_superpowers_plan_path":   "/tmp/some-plan.md",
@@ -59,7 +53,13 @@ func TestSuperpowersPlanAlreadyImplementedRequiresAllTasks(t *testing.T) {
 	tasks, _ := ParseSuperpowersPlan(plan)
 	store, _ := research.Open(kpath)
 	store.Record("goap:implemented", tasks[0].Title, tasks[0].Objective)
-	_ = store.Save()
+	if err := store.Save(); err != nil {
+		t.Fatal(err)
+	}
+	if superpowersPlanAlreadyImplemented(plan) {
+		t.Fatal("legacy source labels cannot establish delivery")
+	}
+	seedResearchDelivery(t, tasks[:1])
 	// Single-task legacy plan: with its only task recorded, it counts as done.
 	if !superpowersPlanAlreadyImplemented(plan) {
 		t.Fatal("plan whose every task objective is recorded must count as implemented")

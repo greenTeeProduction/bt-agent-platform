@@ -385,6 +385,35 @@ entire cycle. NotebookLM authentication is separately diagnosed by
 [`notebooklmauth`](../../internal/notebooklmauth). Program claims and
 charge/refund state need lock-protected updates and explicit retirement.
 
+Research delivery attribution (ADR-287) lives in a separate owner-scoped
+`knowledge.json.trace-<owner SHA-256>.json` ledger. A source records the complete
+answer digest, bounded excerpt and observation time. Goal identity preserves file
+scope while removing transport prefixes and transient planning notes. Completed
+tasks receive a receipt only when the actual Git commit belongs to the run, is
+reachable from the target checkout (or bare repository master), changes declared
+task files and has passing recorded verification. Receipts retain the full commit,
+Git tree, changed files, commands/output digests, run/task identity and times.
+Only sources observed before the run began receive links in its delivery receipt.
+
+`bt_research_status` reads the current blackboard owner's ledger. It distinguishes
+observed goals, deliveries, source-linked deliveries and goals needing review;
+runtime adoption and measured impact explicitly remain `not_linked`. Legacy
+`goap:implemented` labels, mere knowledge deduplication, dry runs, no-op applies and
+repeated passing RED tests do not establish delivery. A research goal with repeated
+passing RED commands is held for review rather than awarded completion credit.
+The older program-milestone RED-precheck path still needs separate reconciliation.
+
+The ledger uses rooted atomic JSON and a five-second transaction lock. Legacy
+knowledge/budget and Superpowers journal saves now reject stale snapshots under the same bounded locking
+convention instead of overwriting sibling evidence. New code-delivery attempts
+journal pending attribution before applying code. Preflight repairs pending
+receipts from run artifacts and Git observations, holding new planning on a repair
+failure without re-executing the landed change. Unreadable or misidentified run
+journals also hold planning. Legacy unmarked history is not
+automatically upgraded. Source write failures remain visible diagnostics, not
+fabricated provenance. See [delivery tests](../../internal/engine/research_delivery_test.go)
+and [store transactions](../../internal/research/trace_test.go).
+
 ## 8.10 Autonomous Landing Pipeline
 
 Superpowers records a run, creates an isolated worktree, executes tasks with

@@ -118,3 +118,19 @@ func TestBTImpactTestsRegistered(t *testing.T) {
 		t.Errorf("tests = %v, want [pkg/file_test.go]", out["tests"])
 	}
 }
+
+func TestBTResearchStatusUsesCurrentOwnerAndDoesNotClaimImpact(t *testing.T) {
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{bb: &engine.Blackboard{User: "research-status-owner"}})
+	res, ok := server.Invoke("bt_research_status", json.RawMessage(`{"user":"another-owner"}`))
+	if !ok || res == nil || len(res.Content) != 1 {
+		t.Fatal("missing research status")
+	}
+	var out map[string]any
+	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+		t.Fatal(err)
+	}
+	if out["user"] != "research-status-owner" || out["runtime_adoption"] != "not_linked" || out["measured_impact"] != "not_linked" {
+		t.Fatalf("misleading or unscoped report: %v", out)
+	}
+}

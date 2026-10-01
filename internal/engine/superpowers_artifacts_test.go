@@ -31,6 +31,30 @@ func TestSafeSlug(t *testing.T) {
 	}
 }
 
+func TestSuperpowersRunJournalRejectsStaleRecoveryWriter(t *testing.T) {
+	run := &SuperpowersRun{ID: "journal", ArtifactDir: t.TempDir(), Phase: SuperpowersPhaseVerification, ResearchDeliveryPending: true}
+	if err := writeSuperpowersRunJSON(run); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(run.ArtifactDir, "run.json")
+	sibling, err := readSuperpowersRunJSON(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run.ResearchDeliveryPending = false
+	if err := writeSuperpowersRunJSON(run); err != nil {
+		t.Fatal(err)
+	}
+	sibling.Phase = SuperpowersPhaseFinish
+	if err := writeSuperpowersRunJSON(sibling); err == nil {
+		t.Fatal("stale recovery journal overwrote current receipt")
+	}
+	stored, err := readSuperpowersRunJSON(path)
+	if err != nil || stored.ResearchDeliveryPending || stored.Phase != SuperpowersPhaseVerification {
+		t.Fatalf("journal overwritten: %v %v", stored, err)
+	}
+}
+
 func TestSuperpowersPlanAttemptSaturatedInDir(t *testing.T) {
 	dir := t.TempDir()
 	task := "repeat me"

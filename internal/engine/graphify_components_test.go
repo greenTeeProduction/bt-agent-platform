@@ -566,38 +566,22 @@ func TestRecordImplementedGoalsStripsTransientEnrichment(t *testing.T) {
 	clean := "Implement the complete, verified change for this goal: [P0] Improve retry coordination (files: internal/engine/x.go)"
 	enrichedV1 := clean + " [REUSE-EXISTING: NewCircuitBreaker() internal/reliability/reliability.go:L59]"
 	enrichedV2 := clean + " [REUSE-EXISTING: NewCircuitBreaker() internal/reliability/reliability.go:L444]"
-	recordImplementedGoals(&SuperpowersRun{Tasks: []SuperpowersTask{{
-		Title:     "Improve retry [REUSE-EXISTING: NewCircuitBreaker() internal/reliability/reliability.go:L59]",
-		Objective: enrichedV1,
-		Status:    "done",
-	}}})
-	// A later cycle re-lands the same goal after a graph rebuild shifted the
-	// hit coordinates: it must dedup onto the SAME entry.
-	recordImplementedGoals(&SuperpowersRun{Tasks: []SuperpowersTask{{
-		Title:     "Improve retry",
-		Objective: enrichedV2,
-		Status:    "done",
-	}}})
-
-	store, err := research.Open(btFusionKnowledgePath)
+	run := seedResearchDelivery(t, []SuperpowersTask{{Title: "Improve retry [REUSE-EXISTING: NewCircuitBreaker() internal/reliability/reliability.go:L59]", Objective: enrichedV1}})
+	run.Tasks[0].Title = "Improve retry"
+	run.Tasks[0].Objective = enrichedV2
+	if err := recordImplementedGoals(run); err != nil {
+		t.Fatal(err)
+	}
+	store, err := research.OpenTraces(researchTracePath(""), "")
 	if err != nil {
-		t.Fatalf("open knowledge store: %v", err)
+		t.Fatal(err)
 	}
-	if !store.Known(clean) {
-		t.Fatal("the stripped objective must be the recorded identity")
+	if !store.Delivered(researchGoalTraceID(clean)) || len(store.Goals) != 1 {
+		t.Fatalf("volatile enrichment forked evidence: %+v", store.Goals)
 	}
-	if store.Known(enrichedV1) || store.Known(enrichedV2) {
-		t.Fatal("enriched objective text must never be a recorded identity")
-	}
-	if store.Len() != 1 {
-		t.Fatalf("volatile enrichment coordinates must not fork entries, got %d", store.Len())
-	}
-	for _, e := range store.Entries {
-		if strings.Contains(e.Title, "[REUSE-EXISTING") {
-			t.Fatalf("persisted title must not carry the transient suffix: %q", e.Title)
-		}
-		if e.SeenCount != 2 {
-			t.Fatalf("re-landing the goal must bump SeenCount on the same entry, got %d", e.SeenCount)
+	for _, g := range store.Goals {
+		if strings.Contains(g.Title, "[REUSE-EXISTING") || len(g.Deliveries) != 1 {
+			t.Fatalf("bad idempotent delivery: %+v", g)
 		}
 	}
 

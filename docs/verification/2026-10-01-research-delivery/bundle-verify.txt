@@ -1,0 +1,5 @@
+docs/verification/2026-10-01-research-delivery/real-git-trace.json.bundle is okay
+The bundle contains this ref:
+24144a8361f3dfeb1618271833c328f45f6194c8 HEAD
+The bundle records a complete history.
+The bundle uses this hash algorithm: sha1

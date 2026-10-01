@@ -332,21 +332,23 @@ func persistGoapProgram(bb *Blackboard, spec *goapProgramSpec, source string) {
 }
 
 // recentImplementedGoals lists the newest implemented-goal titles from the
-// shared research knowledge store, so research prompts can say "already
-// done — do not re-propose". Best-effort: an unreadable store yields nil.
+// verified delivery ledger. Legacy knowledge labels carry no delivery credit. Best-effort: an unreadable store yields nil.
 func recentImplementedGoals(n int) []string {
-	store, err := research.Open(btFusionKnowledgePath)
+	if n <= 0 {
+		return nil
+	}
+	store, err := research.OpenTraces(researchTracePath(""), "")
 	if err != nil {
 		return nil
 	}
-	var entries []*research.Entry
-	for _, e := range store.Entries {
-		if strings.HasPrefix(e.Source, "goap:implemented") {
+	var entries []*research.GoalTrace
+	for _, e := range store.Goals {
+		if len(e.Deliveries) > 0 {
 			entries = append(entries, e)
 		}
 	}
-	slices.SortFunc(entries, func(a, b *research.Entry) int {
-		return b.LastSeen.Compare(a.LastSeen)
+	slices.SortFunc(entries, func(a, b *research.GoalTrace) int {
+		return b.Deliveries[len(b.Deliveries)-1].RecordedAt.Compare(a.Deliveries[len(a.Deliveries)-1].RecordedAt)
 	})
 	var titles []string
 	for _, e := range entries {
@@ -358,52 +360,19 @@ func recentImplementedGoals(n int) []string {
 	return titles
 }
 
-// recordImplementedGoals persists this run's completed task objectives so
-// future research cycles do not re-propose landed work.
-func recordImplementedGoals(run *SuperpowersRun) {
-	store, err := research.Open(btFusionKnowledgePath)
-	if err != nil {
-		return
-	}
-	budget, _ := research.OpenGoalAttempts(goapGoalAttemptsPath)
-	budgetChanged := false
-	for _, task := range run.Tasks {
-		if task.Status != "done" && task.Status != "completed" {
-			continue
-		}
-		// The task text is parsed back from the composed plan, which carries
-		// the TRANSIENT scoping/reuse annotations (failure notes; graphify
-		// REUSE-EXISTING hits whose loc=L<n> coordinates shift on every graph
-		// rebuild). Persist the STRIPPED objective: the store keys on content
-		// (research.Key), so recording enriched text would give the same
-		// landed goal a different key per rebuild — breaking SeenCount dedup
-		// and flooding the newest-N "already done" prompt window.
-		title := stripGoapGoalTransientNotes(task.Title)
-		if len(title) > 120 {
-			title = title[:120]
-		}
-		store.Record("goap:implemented", title, stripGoapGoalTransientNotes(task.Objective))
-		// The goal landed: clear its failure budget so a later re-proposal
-		// starts fresh instead of inheriting stale abandon state.
-		if budget != nil && budget.Clear(goapResearchGoalKey(task.Objective)) {
-			budgetChanged = true
-		}
-	}
-	_ = store.Save()
-	if budget != nil && budgetChanged {
-		_ = budget.Save()
-	}
-}
-
 // superpowersPlanAlreadyImplemented reports whether every task objective in
-// the plan is already recorded as goap:implemented in the knowledge store —
+// the plan has verified delivery evidence in the owner-scoped trace store —
 // the signature of a stale carryover plan that must not be resumed.
-func superpowersPlanAlreadyImplemented(activePlan string) bool {
+func superpowersPlanAlreadyImplemented(activePlan string, owners ...string) bool {
+	user := ""
+	if len(owners) > 0 {
+		user = owners[0]
+	}
 	tasks, err := ParseSuperpowersPlan(activePlan)
 	if err != nil || len(tasks) == 0 {
 		return false
 	}
-	store, err := research.Open(btFusionKnowledgePath)
+	store, err := research.OpenTraces(researchTracePath(user), user)
 	if err != nil {
 		return false
 	}
@@ -411,7 +380,7 @@ func superpowersPlanAlreadyImplemented(activePlan string) bool {
 		// Match recordImplementedGoals: objectives are recorded stripped of
 		// their transient annotations, so the lookup must strip identically or
 		// a re-enriched carryover plan never matches its own recorded landing.
-		if !store.Known(stripGoapGoalTransientNotes(task.Objective)) {
+		if !store.Delivered(researchGoalTraceID(task.Objective)) {
 			return false
 		}
 	}

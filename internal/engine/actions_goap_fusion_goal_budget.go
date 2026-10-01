@@ -81,6 +81,7 @@ func stripGoapGoalScopeSuffix(s string) string {
 // retry plan, and the landed objective all key the same goal identically.
 func goapResearchGoalKey(line string) string {
 	t := stripGoapGoalScopeSuffix(stripGoapGoalTransientNotes(line))
+	t = strings.TrimSpace(strings.TrimPrefix(t, "Implement the complete, verified change for this goal:"))
 	for _, p := range []string{"[P0]", "[P1]", "[P2]"} {
 		if after, ok := strings.CutPrefix(t, p); ok {
 			t = strings.TrimSpace(after)

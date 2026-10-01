@@ -1,0 +1,41 @@
+{
+  "status": "ready_for_commit",
+  "base_commit": "7cba6c599e4b0b1cee47f290d2afe212ec04aec5",
+  "pr83_remote_head": "af780cdbf4745432b4b3a2d890a9c9e88443237e",
+  "scope": "research source / verified code delivery / review separation; no runtime adoption or measured impact claim",
+  "models": "No model qualification performed in this increment. Real provider benchmark proof from the preceding increment is retained separately.",
+  "retained_initial_failures": [
+    "old tests expected source labels or RED passes to count as delivery",
+    "temporary Go fixture used 1.26 instead of project 1.26.5, corrected",
+    "MCP tool inventory comment required 85 tools",
+    "ADR index/anchor required update",
+    "lint required strings.SplitSeq"
+  ],
+  "checks": {
+    "focused_after_fixture_fixes": "passed",
+    "research_engine_cmd_race_before_final_journal_CAS": "passed",
+    "docs": "passed",
+    "final_checks": "normal commit hook required; final result retained in workspace checkpoint",
+    "focused_final_race": "passed: research, engine, cmd/bt-agent",
+    "journal_CAS_short": "passed: engine, cmd/bt-agent",
+    "complete_fixture_git_bundle": "verified; full history retained",
+    "changed_package_lint": "passed: 0 issues for research, engine and cmd/bt-agent",
+    "graph": "updated: 33180 nodes, 42858 edges"
+  },
+  "limits": [
+    "recorded verification is not an isolated build attestation",
+    "commit and changed-file evidence do not prove semantic goal fulfillment",
+    "runtime build/tree adoption and measured task outcomes not yet linked",
+    "program milestone RED-precheck completion remains legacy behavior",
+    "historical labels are not automatically backfilled",
+    "rewritten and automatically scoped goals may remain source-unlinked",
+    "not deployed"
+  ],
+  "updated_utc": "2026-10-01T19:14:55.960379+00:00",
+  "retained_fixture": {
+    "kind": "real temporary Git/Go delivery integration, not model impact evidence",
+    "receipt": "real-git-trace.json",
+    "git_objects": "real-git-trace.json.bundle",
+    "run": "real-git-trace.json.run.json"
+  }
+}

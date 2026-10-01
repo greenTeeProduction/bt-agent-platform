@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "user": "owner-a",
+  "goals": {
+    "d271746cdd04b5be": {
+      "id": "d271746cdd04b5be",
+      "title": "Fix declared task evidence (files: internal/evidence.go)",
+      "sources": [
+        {
+          "id": "53e3353d1cca8c11f9ea5bea5bdd5469c54d06b05ded880096135f59ecfcfeb5",
+          "source": "review",
+          "excerpt": "GOAL: Fix declared task evidence (files: internal/evidence.go)",
+          "observed_at": "2026-10-01T19:09:18.746211113Z"
+        }
+      ],
+      "deliveries": [
+        {
+          "run_id": "delivery-8ece98a6e5796311",
+          "task_index": 1,
+          "commit": "24144a8361f3dfeb1618271833c328f45f6194c8",
+          "tree": "c3ea3455691007a32660250765e015d61fb9218c",
+          "repository": "/tmp/TestResearchDeliveryLinksSourceToRealCommitWithoutClaimingImpact1346889431/003",
+          "files": [
+            "internal/evidence.go"
+          ],
+          "checks": [
+            {
+              "name": "main-build",
+              "command": "/usr/local/go/bin/go build ./...",
+              "output_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+              "name": "main-focused-tests",
+              "command": "/usr/local/go/bin/go test ./...",
+              "output_hash": "c74b4f9351379c774d65829b070c54eaf5be58784cfded7732fb72cd86ff29de"
+            }
+          ],
+          "source_ids": [
+            "53e3353d1cca8c11f9ea5bea5bdd5469c54d06b05ded880096135f59ecfcfeb5"
+          ],
+          "started_at": "2026-10-01T19:09:18.74750069Z",
+          "recorded_at": "2026-10-01T19:09:19.280874631Z"
+        }
+      ],
+      "updated_at": "2026-10-01T19:09:19.31146063Z"
+    }
+  }
+}

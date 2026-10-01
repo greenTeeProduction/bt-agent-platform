@@ -1,0 +1,33 @@
+ok  	github.com/nico/go-bt-evolve/internal/research	0.406s
+ok  	github.com/nico/go-bt-evolve/internal/engine	37.823s
+time=2026-10-01T21:01:27.626+02:00 level=WARN msg="tree flagged for supervised review after repeated negative feedback" tree=goal:shared_local_id user=alice negatives=2
+time=2026-10-01T21:01:27.631+02:00 level=WARN msg="tree flagged for supervised review after repeated negative feedback" tree=goal:automate_reports user=nico negatives=2
+time=2026-10-01T21:01:27.643+02:00 level=WARN msg="tree flagged for supervised review after repeated negative feedback" tree=goal:automate_reports user=nico negatives=2
+time=2026-10-01T21:01:27.647+02:00 level=WARN msg="tree flagged for supervised review after repeated negative feedback" tree=goal:automate_reports user=nico negatives=2
+time=2026-10-01T21:01:27.649+02:00 level=WARN msg="tree flagged for supervised review after repeated negative feedback" tree=goal:automate_reports user=nico negatives=3
+time=2026-10-01T21:01:27.650+02:00 level=WARN msg="tree flagged for supervised review after repeated negative feedback" tree=goal:automate_reports user=nico negatives=4
+time=2026-10-01T21:01:27.652+02:00 level=WARN msg="tree flagged for supervised review after repeated negative feedback" tree=goal:untracked user=nico negatives=2
+time=2026-10-01T21:01:27.655+02:00 level=WARN msg="tree flagged for supervised review after repeated negative feedback" tree=goal:automate_reports user=nico negatives=2
+time=2026-10-01T21:01:27.751+02:00 level=ERROR msg="dlq: replay not acknowledged" id=flaky error_kind=uncertain error="execution outcome unknown; reconcile before retrying: replay executor panicked: simulated replay panic"
+time=2026-10-01T21:01:27.751+02:00 level=INFO msg="dlq: replayed requeued entry" id=healthy agent=a
+--- FAIL: TestRegisterMCPToolsCommentMatchesActualToolCount (0.00s)
+    tools_test.go:76: registerMCPTools comment says 84 MCP tools but 85 are actually registered; correct the comment
+time=2026-10-01T21:01:29.837+02:00 level=INFO msg="bt_run_task: executing" task=concurrent-race-regression-task-number-07
+time=2026-10-01T21:01:29.843+02:00 level=INFO msg="bt_run_task: completed" task=concurrent-race-regression-task-number-07 outcome=success duration_ms=5
+time=2026-10-01T21:01:29.843+02:00 level=INFO msg="bt_run_task: executing" task=concurrent-race-regression-task-number-03
+time=2026-10-01T21:01:29.848+02:00 level=INFO msg="bt_run_task: completed" task=concurrent-race-regression-task-number-03 outcome=success duration_ms=5
+time=2026-10-01T21:01:29.848+02:00 level=INFO msg="bt_run_task: executing" task=concurrent-race-regression-task-number-00
+time=2026-10-01T21:01:29.854+02:00 level=INFO msg="bt_run_task: completed" task=concurrent-race-regression-task-number-00 outcome=success duration_ms=5
+time=2026-10-01T21:01:29.854+02:00 level=INFO msg="bt_run_task: executing" task=concurrent-race-regression-task-number-01
+time=2026-10-01T21:01:29.859+02:00 level=INFO msg="bt_run_task: completed" task=concurrent-race-regression-task-number-01 outcome=success duration_ms=5
+time=2026-10-01T21:01:29.860+02:00 level=INFO msg="bt_run_task: executing" task=concurrent-race-regression-task-number-02
+time=2026-10-01T21:01:29.865+02:00 level=INFO msg="bt_run_task: completed" task=concurrent-race-regression-task-number-02 outcome=success duration_ms=5
+time=2026-10-01T21:01:29.865+02:00 level=INFO msg="bt_run_task: executing" task=concurrent-race-regression-task-number-05
+time=2026-10-01T21:01:29.870+02:00 level=INFO msg="bt_run_task: completed" task=concurrent-race-regression-task-number-05 outcome=success duration_ms=5
+time=2026-10-01T21:01:29.870+02:00 level=INFO msg="bt_run_task: executing" task=concurrent-race-regression-task-number-04
+time=2026-10-01T21:01:29.876+02:00 level=INFO msg="bt_run_task: completed" task=concurrent-race-regression-task-number-04 outcome=success duration_ms=5
+time=2026-10-01T21:01:29.876+02:00 level=INFO msg="bt_run_task: executing" task=concurrent-race-regression-task-number-06
+time=2026-10-01T21:01:29.881+02:00 level=INFO msg="bt_run_task: completed" task=concurrent-race-regression-task-number-06 outcome=success duration_ms=5
+FAIL
+FAIL	github.com/nico/go-bt-evolve/cmd/bt-agent	3.010s
+FAIL

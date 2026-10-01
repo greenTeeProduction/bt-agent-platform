@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"crypto/sha1"
 	"encoding/hex"
 	"encoding/json"
@@ -10,6 +11,9 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/reliability"
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 const superpowersRepoDir = "/home/nico/go-bt-evolve"
@@ -71,16 +75,28 @@ func writeSuperpowersRunJSON(run *SuperpowersRun) error {
 	if err := ensureSuperpowersRunDirs(run); err != nil {
 		return err
 	}
-	run.UpdatedAt = time.Now()
-	data, err := json.MarshalIndent(run, "", "  ")
+	next := *run
+	next.UpdatedAt = time.Now()
+	data, err := json.MarshalIndent(&next, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(run.ArtifactDir, "run.json"), data, 0o644)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	err = reliability.UpdateSharedJSONWithContext(ctx, filepath.Join(run.ArtifactDir, "run.json"), func(current []byte) (any, error) {
+		if string(current) != run.artifactSnapshot {
+			return nil, fmt.Errorf("run journal changed concurrently; reload before updating")
+		}
+		return &next, nil
+	})
+	if err == nil {
+		run.UpdatedAt, run.artifactSnapshot = next.UpdatedAt, string(data)
+	}
+	return err
 }
 
 func readSuperpowersRunJSON(path string) (*SuperpowersRun, error) {
-	data, err := os.ReadFile(path)
+	data, err := util.ReadPersistenceFile(path)
 	if err != nil {
 		return nil, err
 	}
@@ -88,6 +104,7 @@ func readSuperpowersRunJSON(path string) (*SuperpowersRun, error) {
 	if err := json.Unmarshal(data, &run); err != nil {
 		return nil, err
 	}
+	run.artifactSnapshot = string(data)
 	return &run, nil
 }
 
@@ -116,6 +133,9 @@ func safeSlug(s string) string {
 
 func currentSuperpowersRun(bb *Blackboard) (*SuperpowersRun, error) {
 	if run, ok := getSuperpowersRun(bb); ok {
+		if run.User != bb.User {
+			return nil, fmt.Errorf("superpowers run owner mismatch")
+		}
 		// A run that reached finish is consumed: it applied and its worktree
 		// was cleaned. Reusing it sends the next implementation batch into a
 		// deleted directory (12:44:56 on 2026-07-10: a preflight-resumed run
@@ -133,6 +153,7 @@ func currentSuperpowersRun(bb *Blackboard) (*SuperpowersRun, error) {
 	id := newSuperpowersRunID(bb.Task, now)
 	run := &SuperpowersRun{
 		ID:          id,
+		User:        bb.User,
 		Task:        bb.Task,
 		Mode:        superpowersModeFromTask(bb.Task),
 		Phase:       SuperpowersPhaseDesign,

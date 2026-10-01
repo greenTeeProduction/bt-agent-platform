@@ -156,6 +156,10 @@ func TestRecentImplementedGoalsReadsStore(t *testing.T) {
 	if err := store.Save(); err != nil {
 		t.Fatal(err)
 	}
+	if got := recentImplementedGoals(5); len(got) != 0 {
+		t.Fatalf("legacy label counted as delivery: %v", got)
+	}
+	seedResearchDelivery(t, []SuperpowersTask{{Title: "add -short to test commands", Objective: "add -short to test commands"}})
 	got := recentImplementedGoals(5)
 	if len(got) != 1 || !strings.Contains(got[0], "-short") {
 		t.Fatalf("must list only implemented goals, got %v", got)

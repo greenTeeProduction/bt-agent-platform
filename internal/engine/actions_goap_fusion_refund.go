@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -376,15 +377,8 @@ func resetGoapMilestoneRedPassStreak(bb *Blackboard) {
 	}
 }
 
-// recordGoapResearchGoalRedPass tracks red-pass evidence for the charged
-// research goal. Only reached when no program milestone was charged this
-// cycle — milestones lead the queue, so with none charged the head plan task
-// came from the research goal and the red-pass evidence is genuinely about
-// it (a milestone cycle's red-pass must never close the untouched goal
-// queued behind it). At goapRedPassCompleteStreak the goal is recorded
-// goap:implemented — the same record a landed run writes, which research
-// prompts use to stop re-proposing done work — and its failure budget is
-// cleared, mirroring recordImplementedGoals.
+// recordGoapResearchGoalRedPass stops repeated unsuitable RED plans without
+// claiming they implemented a change. The goal remains visible for review.
 func recordGoapResearchGoalRedPass(bb *Blackboard) {
 	if bb == nil || bb.ChainState == nil {
 		return
@@ -395,44 +389,26 @@ func recordGoapResearchGoalRedPass(bb *Blackboard) {
 	}
 	s, err := research.OpenGoalAttempts(goapGoalAttemptsPath)
 	if err != nil {
+		bb.Result += "\n\nCould not read research red-pass evidence: " + err.Error()
 		return
 	}
 	streak := s.RecordRedPass(key)
-	if streak < goapRedPassCompleteStreak {
-		if err := s.Save(); err != nil {
-			return
-		}
-		bb.Result += fmt.Sprintf("\n\n## Red-Pass Recorded\n\nResearch goal `%s`: RED command passed before GREEN (streak %d/%d) — the work may already be landed.", key, streak, goapRedPassCompleteStreak)
-		Info("goap fusion: research-goal red-pass recorded", "goal_key", key, "streak", streak)
-		return
-	}
-	// Closure needs the goal's readable text: the goap:implemented record is
-	// consumed by title in research prompts. A carryover plan without the
-	// text stamp keeps the streak and closes on a later stamped cycle.
-	goalText := strings.TrimSpace(func() string { t, _ := bb.ChainState["goap_fusion_research_goal_charged_text"].(string); return t }())
-	closed := false
-	if goalText != "" {
-		if store, err := research.Open(btFusionKnowledgePath); err == nil {
-			title := goalText
-			if len(title) > 120 {
-				title = title[:120]
-			}
-			store.Record("goap:implemented", title, goalText)
-			if err := store.Save(); err == nil {
-				closed = true
-			}
-		}
-	}
-	if closed {
-		s.Clear(key)
-	}
 	if err := s.Save(); err != nil {
+		bb.Result += "\n\nCould not persist research red-pass evidence: " + err.Error()
 		return
 	}
-	if closed {
-		bb.Result += fmt.Sprintf("\n\n## Research Goal Closed On Red-Pass Evidence\n\nResearch goal `%s`: %d consecutive plans' RED commands passed before GREEN — the predicted regression does not exist at HEAD, so the work is already landed (or untestable as specified). Recorded goap:implemented and cleared its budget instead of retrying.", truncateGoap(goalText, 120), streak)
-		Info("goap fusion: research goal closed on repeated red-pass evidence", "goal_key", key, "streak", streak)
+	goal, _ := bb.ChainState["goap_fusion_research_goal_charged_text"].(string)
+	if streak < goapRedPassCompleteStreak || strings.TrimSpace(goal) == "" {
+		bb.Result += fmt.Sprintf("\n\nRed-pass evidence for goal `%s`: streak %d/%d. No code delivery established.", key, streak, goapRedPassCompleteStreak)
 		return
 	}
-	bb.Result += fmt.Sprintf("\n\n## Red-Pass Recorded\n\nResearch goal `%s`: red-pass streak %d but no goal text available this cycle — closure deferred to the next stamped cycle.", key, streak)
+	err = research.UpdateTraces(context.Background(), researchTracePath(bb.User), bb.User, func(traces *research.TraceStore) error {
+		traces.Goal(researchGoalTraceID(goal), goal).ReviewReason = "Repeated RED commands passed before implementation; the proposed test does not establish the claimed gap. Revise the goal/test before retrying."
+		return nil
+	})
+	if err != nil {
+		bb.Result += "\n\nCould not persist research review requirement: " + err.Error()
+		return
+	}
+	bb.Result += fmt.Sprintf("\n\nResearch goal `%s` needs review after %d consecutive red-pass results. Automatic retries are withheld; no delivery or impact credit was awarded.", truncateGoap(goal, 120), streak)
 }

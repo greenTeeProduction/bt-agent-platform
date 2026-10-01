@@ -1,0 +1,37 @@
+=== Doc Drift Validation ===
+Root: /mnt/ssd/bt-review-worktrees/runtime-impact-20261001
+
+--- API_REFERENCE.md package listing ---
+[32m  All code packages are documented[0m
+[32m  ✓ package listing consistent[0m
+
+--- GETTING_STARTED.md binary listing ---
+[32m  All core binaries mentioned in Getting Started[0m
+
+--- TUTORIAL.md command validation ---
+[32m  All tutorial command references are valid[0m
+
+--- TROUBLESHOOTING.md command validation ---
+[32m  All troubleshooting command references are valid[0m
+
+--- arc42 section validation ---
+[31m  arc42 drift: 09-decisions.md index table max ADR-286 != log max ADR-287[0m
+...........
+----------------------------------------------------------------------
+Ran 11 tests in 0.095s
+
+OK
+arc42: ADR index must link each ID to its own stable record anchor
+arc42: ADR-287: index/record count mismatch
+arc42: ADR-287: missing adjacent stable anchor adr-287
+
+--- VIDEO_WALKTHROUGH.md command syntax check ---
+[32m  All video walkthrough command references are valid[0m
+
+--- Walkthrough evidence artifact ---
+[32m  walkthrough-evidence.md is fresh (9h old)[0m
+
+=== Results ===
+[31m  2 drift error(s) found[0m
+
+Exit code: 2

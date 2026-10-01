@@ -796,6 +796,14 @@ func registerSuperpowersProductionActions() {
 		recoverCtx, recoverCancel := context.WithTimeout(context.Background(), 15*time.Minute)
 		recoverGoapFusionPendingPatchesInDir(recoverCtx, defaultSuperpowersCommandRunner, superpowersRunsDir)
 		recoverCancel()
+		traceCtx, traceCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		traceErr := reconcileResearchDeliveries(traceCtx, superpowersRunsDir, bb.User)
+		traceCancel()
+		if traceErr != nil {
+			bb.Result = "Code delivery metadata needs repair before new planning: " + traceErr.Error()
+			bb.Outcome = "research_attribution_pending"
+			return -1
+		}
 		// Read the saved plan DURABLY: a fresh cron tick's ChainState is empty, so
 		// the only place a rate-limited carryover survives is the agent-scope store.
 		planPath, activePlan := loadSuperpowersPlanState(bb)
@@ -810,9 +818,9 @@ func registerSuperpowersProductionActions() {
 		// implemented is a stale carryover (e.g. saved by a binary that
 		// predated clear-on-success). Resuming it re-implements landed work:
 		// the REDs pass unexpectedly, the run fails, the cycle burns.
-		if superpowersPlanAlreadyImplemented(activePlan) {
+		if superpowersPlanAlreadyImplemented(activePlan, bb.User) {
 			clearSuperpowersPlanState(bb)
-			bb.Result = "## Scheduled GOAP Fusion Cycle\n\nSaved plan's tasks are already implemented (knowledge store); cleared the stale carryover — the main cycle will research fresh goals."
+			bb.Result = "## Scheduled GOAP Fusion Cycle\n\nSaved plan's tasks are already implemented (verified code-delivery ledger); cleared the stale carryover — the main cycle will research fresh goals."
 			return 1
 		}
 		return runSuperpowersRuntimeFromExistingPlanAction(ctx)
@@ -934,7 +942,7 @@ func recoverGoapFusionPendingPatchesInDir(ctx context.Context, runner CommandRun
 			continue // branch gone; nothing left to recover
 		}
 		planText, _ := util.ReadPersistenceFile(run.PlanPath)
-		if superpowersPlanAlreadyImplemented(string(planText)) {
+		if superpowersPlanAlreadyImplemented(string(planText), run.User) {
 			continue // superseded: this work already landed out-of-band
 		}
 		recoverErr := reapplyRunBranchOntoMaster(ctx, runner, run)
@@ -951,6 +959,7 @@ func recoverGoapFusionPendingPatchesInDir(ctx context.Context, runner CommandRun
 		// "committed_unpushed"; either way the run is no longer pending_patch,
 		// so a future cycle will not re-attempt it regardless of its error.
 		_ = ffLandRunBranchAndPush(ctx, runner, run)
+		recordSuperpowersResearchDelivery(run)
 		_ = writeSuperpowersRunJSON(run)
 	}
 }
@@ -1210,6 +1219,11 @@ func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboar
 	// The shared checkout may contain operator edits or another runner's
 	// verified work. Let apply's dirty guard preserve this run as pending_patch;
 	// never reset work whose ownership this cycle cannot establish.
+	run.ResearchDeliveryPending = true
+	if err := writeSuperpowersRunJSON(run); err != nil {
+		bb.Result = "Could not journal research delivery before apply: " + err.Error()
+		return -1
+	}
 	if err := applySuperpowersRunToMainRepo(c, defaultSuperpowersCommandRunner, run); err != nil {
 		finishPath := filepath.Join(run.ArtifactDir, "finish.md")
 		_ = util.SavePersistenceFile(finishPath, []byte(buildSuperpowersFinishReport(run)))
@@ -1231,8 +1245,12 @@ func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboar
 	// do not re-propose it, and advance the active multi-cycle program only
 	// when this run's changed files or done tasks executed the milestone's
 	// file anchors — a drifted cycle must not check off work it never did.
-	recordImplementedGoals(run)
-	completeGoapProgramMilestone(bb, run)
+	recordSuperpowersResearchDelivery(run)
+	if run.ResearchDeliveryError == "" && run.Mode == SuperpowersModeApply &&
+		(run.ApplyStatus == "committed" || run.ApplyStatus == "committed_unpushed" || run.ApplyStatus == "committed_pr_opened") {
+		completeGoapProgramMilestone(bb, run)
+	}
+	_ = util.SavePersistenceFile(finishPath, []byte(buildSuperpowersFinishReport(run)))
 	// Real progress landed — reset the CIRCUITPOLICY state-hash window so the
 	// next milestone starts fresh instead of inheriting this milestone's
 	// repeated hashes and tripping the preflight breaker before it can run.
@@ -1247,6 +1265,9 @@ func runSuperpowersRuntimeFromExistingPlanAction(ctx *btcore.BTContext[Blackboar
 	// scheduled cycle does not re-resume already completed work.
 	clearSuperpowersPlanState(bb)
 	bb.Result = fmt.Sprintf("## GOAP Superpowers Runtime Complete\n\nRun: `%s`\nFinish: `%s`\nApply status: `%s`\nCommit: `%s`", run.ID, finishPath, run.ApplyStatus, run.AppliedCommit)
+	if run.ResearchDeliveryError != "" {
+		bb.Result += "\n\nResearch attribution needs repair: " + run.ResearchDeliveryError
+	}
 	bb.Result += programContinueNote()
 	if run.PartialFailure != "" {
 		bb.Result += "\n\nPARTIAL LANDING: completed tasks landed; " + run.PartialFailure
@@ -1319,6 +1340,9 @@ func buildSuperpowersFinishReport(run *SuperpowersRun) string {
 	fmt.Fprintf(&b, "- Worktree: `%s`\n", run.WorktreePath)
 	if run.ApplyStatus != "" {
 		fmt.Fprintf(&b, "- Apply status: `%s`\n", run.ApplyStatus)
+	}
+	if run.ResearchDeliveryError != "" {
+		fmt.Fprintf(&b, "- Research attribution incomplete: %s\n", run.ResearchDeliveryError)
 	}
 	if run.PartialFailure != "" {
 		fmt.Fprintf(&b, "- PARTIAL LANDING: %s\n", run.PartialFailure)
