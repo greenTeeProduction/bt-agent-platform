@@ -6,11 +6,9 @@ import (
 	"time"
 )
 
-// A job that was in-flight when bt-agent was killed must run IMMEDIATELY after
-// restart, not wait for its next cron slot. loadState resets a crashed job's
-// NextRun to zero ("run now"); this guarantee must survive the
-// ReconcileWithRegistry pass the constructor runs right after.
-func TestCrashedInFlightJobRunsImmediatelyAfterRestart(t *testing.T) {
+// Interrupted execution requires reconciliation, including after registry
+// schedule changes. Restart alone cannot prove that side effects failed.
+func TestCrashedInFlightJobHeldAfterRestart(t *testing.T) {
 	newSched := func(t *testing.T, persistedSchedule, registrySchedule string) ScheduledJob {
 		t.Helper()
 		dir := t.TempDir()
@@ -38,26 +36,26 @@ func TestCrashedInFlightJobRunsImmediatelyAfterRestart(t *testing.T) {
 		return jobs[0]
 	}
 
-	assertDueNow := func(t *testing.T, j ScheduledJob) {
+	assertHeld := func(t *testing.T, j ScheduledJob) {
 		t.Helper()
 		if j.InFlight {
 			t.Fatal("crash recovery must clear InFlight")
 		}
-		if !j.NextRun.IsZero() && j.NextRun.After(time.Now()) {
-			t.Fatalf("crashed job must be due immediately after restart; NextRun=%v is still in the future", j.NextRun)
+		if !j.RecoveryRequired || j.Active {
+			t.Fatalf("interrupted execution must be held: %+v", j)
 		}
 	}
 
 	// Common case: persisted schedule equals the registry schedule.
 	t.Run("schedule unchanged", func(t *testing.T) {
-		assertDueNow(t, newSched(t, "0,30 * * * *", "0,30 * * * *"))
+		assertHeld(t, newSched(t, "0,30 * * * *", "0,30 * * * *"))
 	})
 
 	// Regression: the registry schedule string differs from the persisted one
 	// (a genuine schedule change, or format normalization). Reconcile must not
-	// push the crashed job to its next slot — it must still run immediately.
+	// release the recovery hold or dispatch the interrupted slot.
 	t.Run("schedule changed by registry", func(t *testing.T) {
-		assertDueNow(t, newSched(t, "0,30 * * * *", "15,45 * * * *"))
+		assertHeld(t, newSched(t, "0,30 * * * *", "15,45 * * * *"))
 	})
 }
 

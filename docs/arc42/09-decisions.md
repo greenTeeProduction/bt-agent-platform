@@ -300,6 +300,7 @@ Navigation and provenance:
 | ADR-274 | [Blackboard Owner Admission and Atomic Run Promotion](#adr-274) | Accepted implementation | 2026-10-01 |
 | ADR-275 | [Sprint Result Commit and Metadata Reconciliation](#adr-275) | Accepted implementation | 2026-10-01 |
 | ADR-276 | [Sprint Capacity Reservation and Owned Batch Budgets](#adr-276) | Accepted implementation | 2026-10-01 |
+| ADR-277 | [Conservative Process Restart Recovery Holds](#adr-277) | Accepted implementation | 2026-10-01 |
 
 <a id="adr-001"></a>
 
@@ -6260,6 +6261,56 @@ status, HTTP detachment, retained capacity after expiration and single execution
 with unstarted cleanup. [Task-store context/group tests](../../internal/dashboard/task_execution_context_test.go)
 cover mutex/sidecar deadlines, unchanged committed state and all-or-nothing
 related results. Only local/fake actions run; no coding/model provider executes.
+
+---
+
+<a id="adr-277"></a>
+## ADR-277: Conservative Process Restart Recovery Holds
+
+**Status:** Accepted implementation, 2026-10-01. Production recovery acceptance
+remains open under R26/R30 and QS7/QS32.
+
+**Context:** An action can succeed while its result save fails. The scheduler
+previously interpreted a durable in-flight claim as a crashed job and scheduled
+it immediately after restart. A process crash cannot distinguish completed,
+partially executed and never-started actions. In-process metadata repair tests
+do not establish safety across that boundary.
+
+**Decision:** Persistent scheduled and manual scheduler dispatch commit admission
+first; failed admission executes nothing. Retain the claim through history and
+final recording. Restart holds interrupted claims inactive with a persisted
+`recovery_required` reason. Failed recording and typed terminal/uncertain results
+also hold the agent. Registry synchronization, scheduling, ordinary removal,
+clean duplicates and manual dispatch cannot release a hold. Unreadable state
+closes admission instead of being overwritten with a fresh schedule.
+
+`Scheduler.ResolveRecovery` records a trusted operator and completed/abandoned
+disposition, commits before releasing the hold and advances to a future slot
+without dispatching interrupted work. It is not currently an authenticated
+transport endpoint. Existing sprint `in_progress` claims similarly remain
+unapproved after failed recording or process exit; no output recovery is inferred
+from that safety marker. Read-only scheduler stores cannot admit manual work.
+
+**Alternatives:** Automatic retry from an in-flight flag risks duplicate side
+effects. Assuming success risks lost work. A new transactional database would
+violate the current storage constraint and still cannot atomically commit an
+external action. Preserve uncertainty and require evidence for reconciliation.
+
+**Consequences:** Availability yields to conservative side-effect ownership;
+operators must diagnose held work. Uncommitted output may be lost. This is
+single-owner process-restart safety with state present, not power-loss durability,
+fleet consensus, multi-store ACID or recovery after a state-volume loss.
+In-memory-only scheduler configuration cannot offer durable admission.
+
+**Evidence:** [Scheduler process restart tests](../../internal/agent/scheduler_restart_safety_test.go)
+execute real local side effects, inject result/history failures or exit directly,
+then start two separate recovery processes and retain exactly one action.
+They also cover failed admission, unreadable state, duplicate holds and
+commit-before-release operator reconciliation.
+[Sprint HTTP process restart tests](../../cmd/bt-dashboard/sprint_restart_safety_test.go)
+lose all transient diagnostics after completed-action/result failure or immediate
+exit, repair storage availability and reject automatic dispatch/reapproval.
+No coding/model provider is invoked by these fixtures.
 
 ---
 

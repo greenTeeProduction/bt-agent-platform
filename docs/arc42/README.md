@@ -55,7 +55,8 @@ and status-specific response validation (ADR-272), exact tree inspection and
 safe presentation (ADR-273), blackboard owner admission and atomic run promotion
 (ADR-274), sprint task-result acknowledgement and metadata-only repair
 (ADR-275), shared sprint capacity and owned batch budgets
-(ADR-276), island acceptance
+(ADR-276), conservative process-restart recovery holds
+(ADR-277), island acceptance
 and the Codex-only policy (ADR-261). The hardcoded health toolchain
 field was corrected on 2026-09-16 (D7).
 Provider/model readiness and clean-repository preconditions also require

@@ -476,10 +476,10 @@ func TestScheduler_NormalJobAfterPanic(t *testing.T) {
 	}
 }
 
-func TestScheduler_CrashRecovery_InFlightReset(t *testing.T) {
+func TestScheduler_CrashRecovery_InFlightHeld(t *testing.T) {
 	// Simulate a crash: schedule a job, mark it in-flight, then
 	// "restart" the scheduler and verify the in-flight flag is cleared
-	// and the job is scheduled to run immediately.
+	// and the job requires explicit reconciliation.
 	dir := t.TempDir()
 	reg, _ := NewRegistry(dir)
 	_, _ = reg.Create(Definition{Name: "crash-agent", Tree: "domain:default", Version: "1.0.0", Description: "crash recovery test"})
@@ -540,14 +540,14 @@ func TestScheduler_CrashRecovery_InFlightReset(t *testing.T) {
 	if restored.InFlight {
 		t.Error("restored job still has InFlight=true — should have been cleared")
 	}
-	if !restored.NextRun.IsZero() {
-		t.Errorf("restored job NextRun should be zero (run immediately), got %v", restored.NextRun)
+	if !restored.RecoveryRequired || restored.RecoveryReason == "" {
+		t.Errorf("restored execution must require reconciliation: %+v", restored)
 	}
 	if restored.RunCount != job.RunCount {
 		t.Errorf("run_count should be preserved: was %d, got %d", job.RunCount, restored.RunCount)
 	}
-	if !restored.Active {
-		t.Error("restored job should still be Active")
+	if restored.Active {
+		t.Error("restored uncertain job must not be active")
 	}
 }
 
@@ -649,8 +649,8 @@ func TestScheduler_CrashRecovery_MultipleCrashedJobs(t *testing.T) {
 			if j.InFlight {
 				t.Errorf("%s: InFlight should be cleared", j.AgentName)
 			}
-			if !j.NextRun.IsZero() {
-				t.Errorf("%s: NextRun should be zero for immediate retry, got %v", j.AgentName, j.NextRun)
+			if !j.RecoveryRequired || j.Active {
+				t.Errorf("%s: interrupted execution must be held: %+v", j.AgentName, j)
 			}
 		case "clean-c":
 			if j.InFlight {

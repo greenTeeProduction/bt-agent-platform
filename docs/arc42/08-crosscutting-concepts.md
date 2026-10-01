@@ -186,6 +186,22 @@ remain review concerns (R24, ADR-246–253).
 
 ## 8.6 Error Resiliency
 
+Durable admission and result recording are separate transitions (ADR-277).
+The scheduler commits an in-flight claim before scheduled or manual dispatch;
+failed admission dispatches nothing. It retains that claim through history
+recording and final state save. Restart converts interrupted claims to inactive
+recovery holds, rather than inferring failure and repeating side effects.
+Registry reconciliation preserves those holds and blocks clean duplicates.
+Failed operator reconciliation leaves the hold intact. Ordinary scheduling
+and removal are not recovery decisions. Persistent manual admissions never
+become recurring jobs. Read-only scheduler stores cannot admit manual work.
+
+This is single-owner process-restart safety with persisted state present.
+Independent stale complete-snapshot writers, state-volume loss, power-loss
+durability and transport-wide execution journals remain separate acceptance.
+JSONL history is not an atomic multi-store result transaction, and transient
+diagnostics may be lost even while the durable claim prevents replay.
+
 [`reliability`](../../internal/reliability) owns panic handling, retry
 policies, queues and DLQ primitives. `agent` owns per-agent breaker state and
 scheduler outcome policy. `SafeGo` recovers/logs a goroutine panic; its

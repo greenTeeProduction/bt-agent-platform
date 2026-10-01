@@ -43,7 +43,7 @@ obligation.
 | Package | Responsibility | Principal interface / consumers |
 |---|---|---|
 | `internal/a2a` | Peer discovery, task transport, bidding/award and card trust | `Server`, `BTAgentClient.SendTask`, `AuctionDelegateWithContext`; agent/dashboard wiring |
-| `internal/agent` | Agent registry, scheduler, history, memory, events, breaker persistence and deploy drift | `RunDeps.RunOnce`, `Scheduler`, `AgentCircuitBreakerStore`; entrypoints |
+| `internal/agent` | Agent registry, scheduler, history, memory, events, breaker persistence and deploy drift | `RunDeps.RunOnce`, `Scheduler` (durable admission/recovery holds), `AgentCircuitBreakerStore`; entrypoints |
 | `internal/agentexec` | Assemble run dependencies and scoped generated-tree resolution | `NewRunDeps`, `ResolveGeneratedTreeForUser`, `AutomationBlocked` |
 | `internal/api` | Dashboard route/schema descriptions and validation support | `DashboardRoutes`; OpenAPI and HTTP middleware |
 | `internal/audit` | Append-only task audit records | JSONL audit writer; agent execution |

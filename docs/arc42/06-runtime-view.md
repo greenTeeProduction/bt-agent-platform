@@ -337,6 +337,24 @@ success metric.
    replay state before scanning so dashboard/MCP requests are visible.
 5. The execution owner retries the queued item and records its new outcome.
 
+Process restart is a separate recovery boundary (ADR-277). A scheduled or
+manual scheduler execution with a persistent JobStore must commit an in-flight
+claim before dispatch. Unreadable job state closes admission. Interrupted
+claims become inactive `recovery_required` jobs; registry synchronization,
+ordinary scheduling, deletion and manual execution do not release them.
+Failed history/result recording and typed uncertain/terminal execution also
+hold the agent. `Scheduler.ResolveRecovery` records a trusted operator's
+completed/abandoned disposition and advances to a future recurring slot without
+dispatching the interrupted work. It is a Go API, not an authenticated HTTP/MCP
+reconciliation endpoint. In-memory-only schedulers have no restart guarantee.
+
+Sprint task claims remain `in_progress` if their result commit fails or the
+process exits after the action. Separate-process HTTP fixtures prove that
+restarting loses transient diagnostics but cannot make these claims approved;
+ordinary approval is rejected. Operators must recover evidence and reconcile
+metadata explicitly. This does not promise recovery of output that never
+reached durable storage, cross-store ACID or safety after losing the state volume.
+
 **Evidence:** [reliability primitives](../../internal/reliability/reliability.go),
 [panic handling](../../internal/reliability/panic_handler.go),
 [scheduler](../../internal/agent/scheduler.go). Recovery from process/host

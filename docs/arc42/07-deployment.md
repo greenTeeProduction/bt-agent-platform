@@ -142,9 +142,10 @@ cycle. See the [runbook](../coding-delegation.md#observed-launch-configuration-2
    the target matching the unit's `ExecStart`. The automatic implementation
    is [`agent/rebuild.go`](../../internal/agent/rebuild.go).
 4. Coordinate with in-flight work, restart the owning units and respawn
-   affected MCP children. All three daemon mains now supply in-flight
-   guards to drift adoption; the earlier missing-guard limitation was
-   closed by ADR-228.
+   affected MCP children. All three daemon mains supply in-flight callbacks
+   to drift adoption (ADR-228), but a review fixture shows the dashboard HTTP
+   request counter misses accepted asynchronous sprint work. Qualify the
+   asynchronous ownership guard before enabling its automatic restart.
 5. Confirm service activity, actual executable revision, a meaningful
    authenticated smoke test and the next relevant workflow outcome.
 
@@ -168,6 +169,17 @@ agent registration, tree resolution, approval state, pending work and
 snapshot recovery before production use. Atomic writes provide single-file
 integrity; they are not backups or cross-store transactions. This review
 does not claim that a production restore drill has passed.
+
+**Process recovery contract, 2026-10-01 (ADR-277):** persisted scheduled/manual
+admissions interrupted before final recording remain inactive and require
+operator reconciliation. Failed result saves after successful/uncertain
+actions, failed history recording and immediate process exit are tested with
+separate execution/restart processes and durable action counts. Sprint HTTP
+restart fixtures preserve `in_progress` claims and reject ordinary reapproval.
+These tests use local actions, not Codex or deployed services. Preserve claim
+files during restore; deleting them is not evidence that work never ran. The
+Go reconciliation API requires trusted completed/abandoned evidence; authenticated
+transport integration and recovery of uncommitted output remain open.
 
 **Isolated review evidence, 2026-10-01:** all thirteen binaries build into a
 separate output directory with revision `db2c116f` and dirty-worktree identity.

@@ -1,0 +1,15 @@
+{
+  "benchcmp": "f6ecb06615be53185174bcafeeab6cf6d09fb9f65588b4c546d25f9c87df3132",
+  "bt-agent": "9b89255fc225c35358dd8dd06f685f9fd285c7c5cd84da6d555f02f33ce39139",
+  "bt-agent-cli": "153797b92989da958958ab248ce51d3b2a82f8ed31111f3eca36d33d21dad513",
+  "bt-assistant": "012e79ce15ff9dae36974d1e5414a6a0cfa742fa58150b2faa705c05f2b5d401",
+  "bt-ci-doctor": "94df25e67fb9cc11aacdd0c5f44179be1f6d328ba5a8768a9da96f07ffc0c274",
+  "bt-dashboard": "1d3fcc62e7b643d5e5dd5612705974962880db6cb1326402244993785b454399",
+  "bt-evaluator": "32e83df25d9f763bd2f2f9916d09c89cb33efd57926ce078b198dd3a2868f158",
+  "bt-gardener": "f4a7cb840ac889cb65928ca37016ea74857da6dff7bcb05e1ed41cb93c2ef286",
+  "bt-langagent": "cf58bd2b4ecda2dc9ffbe72c98838a0a47c94dfc0bc32cf31f2d89b29133ce67",
+  "bt-notebooklm-auth": "26daa937bbe6c264655a77b4471202dd6cac9e38898ff9ad370720f072a95b9b",
+  "bt-scalability-probe": "81a8e7dacc89c7177ca2e2ae58a06cce3dbcba1ef6421004121f27262bf3a75d",
+  "bt-security-probe": "aeb743dd8e2e0928ea4bcb21a5706592afd2fe2a405ddbd5f164105437bbe5d4",
+  "bt-tree-integration": "9a8b7c3dbde803db72fd300610f6a17e26b2fdada341d7dbafaed302ff0638e9"
+}

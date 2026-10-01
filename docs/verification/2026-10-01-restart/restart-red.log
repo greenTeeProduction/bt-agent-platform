@@ -1,0 +1,42 @@
+--- FAIL: TestSchedulerRestartDoesNotReplayUnrecordedExecution (0.27s)
+    --- FAIL: TestSchedulerRestartDoesNotReplayUnrecordedExecution/result-save (0.06s)
+        scheduler_restart_safety_test.go:47: restart process: exit status 1
+            2026/10/01 08:51:10 INFO scheduler: restored persisted jobs count=1
+            2026/10/01 08:51:10 WARN scheduler: recovered crashed job job_id=job_restart-action_1790837470681100556 agent=restart-action run_count=0
+            2026/10/01 08:51:10 WARN scheduler: recovered in-flight jobs from crash count=1
+            --- FAIL: TestSchedulerRestartDoesNotReplayUnrecordedExecution (0.01s)
+                scheduler_restart_safety_test.go:31: ordinary Schedule silently released unresolved execution
+            FAIL
+    --- FAIL: TestSchedulerRestartDoesNotReplayUnrecordedExecution/uncertain-result-save (0.07s)
+        scheduler_restart_safety_test.go:47: restart process: exit status 1
+            2026/10/01 08:51:10 INFO scheduler: restored persisted jobs count=1
+            2026/10/01 08:51:10 WARN scheduler: recovered crashed job job_id=job_restart-action_1790837470758044494 agent=restart-action run_count=0
+            2026/10/01 08:51:10 WARN scheduler: recovered in-flight jobs from crash count=1
+            --- FAIL: TestSchedulerRestartDoesNotReplayUnrecordedExecution (0.01s)
+                scheduler_restart_safety_test.go:31: ordinary Schedule silently released unresolved execution
+            FAIL
+    --- FAIL: TestSchedulerRestartDoesNotReplayUnrecordedExecution/history (0.06s)
+        scheduler_restart_safety_test.go:47: restart process: exit status 1
+            2026/10/01 08:51:10 INFO scheduler: restored persisted jobs count=1
+            --- FAIL: TestSchedulerRestartDoesNotReplayUnrecordedExecution (0.01s)
+                scheduler_restart_safety_test.go:31: ordinary Schedule silently released unresolved execution
+            FAIL
+    --- FAIL: TestSchedulerRestartDoesNotReplayUnrecordedExecution/exit-after-action (0.07s)
+        scheduler_restart_safety_test.go:47: restart process: exit status 1
+            2026/10/01 08:51:10 INFO scheduler: restored persisted jobs count=1
+            2026/10/01 08:51:10 WARN scheduler: recovered crashed job job_id=job_restart-action_1790837470877928207 agent=restart-action run_count=0
+            2026/10/01 08:51:10 WARN scheduler: recovered in-flight jobs from crash count=1
+            --- FAIL: TestSchedulerRestartDoesNotReplayUnrecordedExecution (0.01s)
+                scheduler_restart_safety_test.go:31: ordinary Schedule silently released unresolved execution
+            FAIL
+2026/10/01 08:51:10 WARN scheduler: failed to persist jobs error="fixture admission storage unavailable"
+2026/10/01 08:51:10 WARN scheduler: failed to persist jobs error="fixture admission storage unavailable"
+2026/10/01 08:51:10 INFO scheduler: cycle complete agent=no-admission outcome=success duration=0s quality=0.2 run_count=1
+--- FAIL: TestSchedulerFailedAdmissionDoesNotExecute (0.00s)
+    scheduler_restart_safety_test.go:152: uncommitted admission dispatched: calls=1 job=&{ID:job_no-admission_1790837470937761247 AgentName:no-admission Schedule:every 1h NextRun:2026-10-01 09:51:10.937856319 +0200 CEST m=+3600.291082010 LastRun:2026-10-01 08:51:10.937856095 +0200 CEST m=+0.291081786 RunCount:1 MaxRetries:0 RetryDelay: Timeout:1s Active:true InFlight:false Checkpoint:<nil>}
+2026/10/01 08:51:10 WARN scheduler: failed to load persisted jobs error="invalid character 'b' looking for beginning of object key string"
+--- FAIL: TestSchedulerUnreadableStateFailsClosed (0.00s)
+    scheduler_restart_safety_test.go:171: unreadable state silently replaced by fresh schedule
+FAIL
+FAIL	github.com/nico/go-bt-evolve/internal/agent	0.320s
+FAIL
