@@ -14,7 +14,7 @@ retained in [§9](09-decisions.md).
 | Q2 | Tree improvements must be evaluated before adoption | Competing mutation generators, per-tree evidence, quality/validation gates, snapshots and rollback; record remaining differences between paths | [§5.3](05-building-blocks.md#53-evolution-engine), [§8.5](08-crosscutting-concepts.md#85-evolution-pipeline), ADR-247–253, R23 |
 | Q3 | A failed dependency must not masquerade as successful implementation | Explicit outcome classification, retry/circuit policy, durable quota deferral, phase artifacts and DLQ | [§6.4–6.5](06-runtime-view.md), [§8.6](08-crosscutting-concepts.md#86-error-resiliency) |
 | Q3 | A code change must be reviewable and deployable without corrupting live work | Clean-checkout preflight, isolated worktrees, verification/apply gates, build identity, out-of-place replacement and controlled restart | [§7.3](07-deployment.md#73-release-recovery-and-operational-checks), [§8.10](08-crosscutting-concepts.md#810-autonomous-landing-pipeline) |
-| Q3 | Coding-provider quotas vary independently | One delegation seam, provider-specific cooldown state, opt-in one-alternate rate-limit failover preserving the same permission policy | [Delegation](../coding-delegation.md), [§8.19](08-crosscutting-concepts.md#819-coding-provider-policy) |
+| Q3 | Coding-provider quotas vary independently | One delegation seam and provider-specific cooldown state; the Codex-only policy disables alternate coding providers, including quota failover | [Delegation](../coding-delegation.md), [§8.19](08-crosscutting-concepts.md#819-coding-provider-policy) |
 | Q4 | Intent becomes an approved, executable personal automation | Persona store → goal factory → the canonical GOAP planner → plan compiler → scoped resolver → HITL finalization and feedback | [§5.6](05-building-blocks.md#56-personalization-and-generated-trees), [§6.7](06-runtime-view.md#67-personal-automation-and-feedback), ADR-133, ADR-173, ADR-175 |
 | Q5 | New features and fixes must apply consistently across entrypoints | Shared owner packages, dependency-injection seams, reusable blocks, registry-derived inventories and evidence-linked docs | [§5.1](05-building-blocks.md#51-whitebox-overall-system), [documentation maintenance](README.md), QS33 |
 | Local storage / small team | Preserve state with inspectable operating cost | File stores with explicit scope, atomic replace and lock-protected read-modify-write where required; document unsupported distributed guarantees | [§8.4](08-crosscutting-concepts.md#84-file-based-persistence), ADR-003, ADR-183 |
@@ -32,7 +32,8 @@ retained in [§9](09-decisions.md).
    compilation use `internal/goap`; goals, compiled trees and run evidence
    are separate artifacts (Q1/Q4, ADR-133).
 4. **Separate model roles.** Node inference uses configured LLM adapters;
-   code implementation/review uses Claude Code or Codex subprocesses.
+   code implementation/review uses Codex subprocesses under the default
+   Codex-only policy (ADR-261).
    NotebookLM supplies optional grounded research. These are separate
    availability, cost and permission domains (Q3).
 5. **Evidence before adoption.** Tests, benchmarks, gates and build identity

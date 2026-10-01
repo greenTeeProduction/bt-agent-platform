@@ -42,7 +42,7 @@ obligation.
 
 | Package | Responsibility | Principal interface / consumers |
 |---|---|---|
-| `internal/a2a` | Peer discovery, task transport, bidding/award and card trust | `Server`, `AuctionDelegate`; agent/dashboard wiring |
+| `internal/a2a` | Peer discovery, task transport, bidding/award and card trust | `Server`, `BTAgentClient.SendTask`, `AuctionDelegateWithContext`; agent/dashboard wiring |
 | `internal/agent` | Agent registry, scheduler, history, memory, events, breaker persistence and deploy drift | `RunDeps.RunOnce`, `Scheduler`, `AgentCircuitBreakerStore`; entrypoints |
 | `internal/agentexec` | Assemble run dependencies and scoped generated-tree resolution | `NewRunDeps`, `ResolveGeneratedTreeForUser`, `AutomationBlocked` |
 | `internal/api` | Dashboard route/schema descriptions and validation support | `DashboardRoutes`; OpenAPI and HTTP middleware |
@@ -67,7 +67,7 @@ obligation.
 | `internal/llm` | Configurable model adapters, fallback and health | LLM interface; chains, fusion and evaluation |
 | `internal/notebooklmauth` | NotebookLM authentication diagnosis/recovery and browser integration | Auth helper used by `bt-notebooklm-auth` and research actions |
 | `internal/persona` | User profiles, interactions, habits and tracked automations | `Store`, automation finalization, feedback escalation |
-| `internal/reliability` | Panic/retry primitives, locks, DLQ, queues and routing | Shared reliability APIs; optional adapters are not necessarily deployed |
+| `internal/reliability` | Panic/retry primitives, locks, DLQ, queues, routing and shared execution dispositions | Shared reliability APIs; optional adapters are not necessarily deployed |
 | `internal/research` | Deduplicated knowledge, goals/programs and quota-related state | `KnowledgeStore`, `ProgramStore`, `UpdatePrograms` |
 | `internal/security` | HTTP/session/auth primitives, rate limits, CSRF, input/path checks and probes | Shared middleware and `SessionStore`; entrypoints choose wiring |
 | `internal/startup` | Company/sprint simulation and shared company state | `CompanyOrchestrator`, `CompanyState`; dashboard |
@@ -150,6 +150,8 @@ tree pattern, not a mandatory shape of every valid tree.
 
 The gardener orchestrates evidence collection and adoption; `evaluator`
 scores; `evolution` owns candidate algorithms, IR and durable artifacts.
+`evaluator.MutationCandidate` aliases `evolution.ScoredMutation`; accepted
+experience preserves its proposal attribution and MCTS replay settings.
 
 ```mermaid
 flowchart LR
@@ -170,7 +172,9 @@ in [`cmd/bt-gardener/config.go`](../../cmd/bt-gardener/config.go) and
 
 Per-tree evidence and archive state must not be conflated with global
 runtime success. The ordinary mutation competition, deep search, local
-refinement and island adoption do not all execute identical gates.
+refinement and island adoption retain path-specific evidence. Island adoption
+now includes quick benchmark/meta-validation and a configured predecessor
+snapshot, persisting before updating live state.
 [§8.5](08-crosscutting-concepts.md#85-evolution-pipeline) states the
 contracts; R20–R24 in [§11](11-risks-debt.md) retain the unresolved differences.
 
@@ -197,6 +201,19 @@ local storage by this login flow.
 Sprint execution dispatches approved tasks through the in-process executor;
 MCP is not an obligatory network hop. Workflow and task-store approvals have
 separate records, with explicit synchronization in the handlers.
+The YAML pipeline Runner shares sequential control across top-level, loop and
+subworkflow bodies. Parallel containers retain child results; every container
+preserves typed waiting/approval and completed-prefix stop evidence. The HTTP
+status adapter and browser expose that evidence without claiming resumed work
+(ADR-270). Blackboard Manager owns staged mutation/commit/cache publication
+and context-aware write admission. Runner reports input/output mirror failures
+without replaying admitted work (ADR-271). Pipeline selection/listing reuse the
+shared rooted file reader after basename validation. The API package owns
+standard protected-route error schemas and status-specific response matching
+(ADR-272). The API catalog keeps property documentation separate from required
+field names, with recursive declaration checks. Security audit handlers preserve
+actual event counts/optional attributes and normalize empty event lists to [];
+authenticated audit/live-metric payload regressions cover enforced responses.
 
 ## 5.5 Chain Types
 
@@ -250,6 +267,56 @@ lifecycle. Coding providers, verification commands, Git operations and arc42
 sync are distinct collaborators. `internal/agentexec` wires the scheduled
 domain tree to these engine actions. Runtime phases and evidence locations
 are in [§6.4](06-runtime-view.md#64-self-improvement-cycle-goap-fusion-loop).
+
+### Tree inspection ownership
+
+[`domains.LookupTreeID`](../../internal/domains/tree_resolver.go) shares builtin
+construction branches with execution resolution, but disables execution's
+legacy default/synthesis substitutions. Historical bare catalog aliases retain
+catalog priority; qualified IDs preserve their complete names. The injected
+unscoped generated-tree owner is consulted once on a static miss. Dashboard
+serializes the actual definition instead of duplicating constructors or creating
+metadata-only placeholder trees. The [mind map](../../cmd/bt-dashboard/static/js/tabs/mindmap.js)
+uses structural paths for branch selection, so repeated names cannot redirect
+collapse/detail actions. Source labels/errors are escaped as text (ADR-273).
+
+### Blackboard owner admission and promotion
+
+`blackboard.NewPersistentManager` returns an owner only after persistence
+initialization succeeds. `agentexec.NewRunDeps` initializes it from the loaded
+home (or configured startup paths) before returning dependencies; bt-agent
+checks its owner before starting scheduler/A2A/MCP work. RunDeps.BoardManager
+returns manager/error and synchronizes one default owner or initialization error
+for that runner's lifetime. An explicitly injected manager retains its chosen
+policy; dependencies are configured before use.
+
+Agent and pipeline admission, HTTP reads and MCP tools handle initialization
+errors. HTTP pipeline startup returns 503 before reserving a run; its callback
+captures the same runner/manager rather than a later global value. Successful
+run promotion uses SetEntriesWithContext for one related metadata transaction.
+History retains a failed promotion diagnostic alongside the actual healthy
+output; ExecutionPersistenceError prevents retry of completed work (ADR-274).
+
+### Sprint result acknowledgement
+
+[`TaskStore.CommitExecution`](../../internal/dashboard/tasks.go) owns one
+transaction for the status, output, outcome, run ID and execution diagnostic of
+an in-progress task. It rejects unclaimed/conflicting decisions and unhealthy
+completion. [`sprint_execution.go`](../../cmd/bt-dashboard/sprint_execution.go)
+owns asynchronous batch observation and metadata-only repair, captures the task
+owner, and advances workflow mirrors only after acknowledged task commits.
+Sprint status/browser presentation distinguishes finished processing from failed
+records and observed execution uncertainty (ADR-275).
+
+### Sprint admission owner
+
+[`sprint_admission.go`](../../cmd/bt-dashboard/sprint_admission.go) serializes
+new sprint admission with caller-bounded waiting, captures shared pool/limiter,
+and reserves capacity before task claims. A decision handoff prevents the queued
+callback from executing rejected claims. Accepted batches retain one reservation
+through execution and record cleanup. TaskStore context variants bound mutex and
+sidecar contention; CommitExecutionBatchWithContext returns proven unstarted
+claims atomically after the batch budget expires (ADR-276).
 
 ---
 

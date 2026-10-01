@@ -68,7 +68,8 @@ def check(root):
 
     # Local links/anchors, including source evidence and the operator runbook.
     sources = [(arc / name, body) for name, body in docs.items()]
-    for related in ("README.md", "docs/coding-delegation.md"):
+    for related in ("README.md", "docs/coding-delegation.md", "docs/API_REFERENCE.md",
+                    "docs/GETTING_STARTED.md", "docs/TUTORIAL.md", "docs/TROUBLESHOOTING.md"):
         path = root / related
         if path.exists():
             sources.append((path, path.read_text()))
@@ -103,6 +104,15 @@ def check(root):
             errors.append(f"§5: undocumented {directory}/{name}")
         for name in sorted(documented - actual):
             errors.append(f"§5: nonexistent {directory}/{name}")
+
+    api_reference = root / "docs/API_REFERENCE.md"
+    if api_reference.exists():
+        api_packages = set(re.findall(r"\[`([^`]+)`\]\(#package-[^)]+\)", api_reference.read_text()))
+        actual_packages = {p.name for p in (root / "internal").iterdir() if p.is_dir() and not p.name.startswith(".")}
+        for name in sorted(api_packages - actual_packages):
+            errors.append(f"API_REFERENCE: nonexistent internal/{name}")
+        for name in sorted(actual_packages - api_packages):
+            errors.append(f"API_REFERENCE: undocumented internal/{name}")
 
     goal_rows = rows(docs["01-introduction-goals.md"], "Q")
     scenario_rows = rows(docs["10-quality.md"], "QS")

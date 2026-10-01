@@ -1,0 +1,3 @@
+ok  	github.com/nico/go-bt-evolve/internal/dashboard	3.475s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-dashboard	2.074s
+ok  	github.com/nico/go-bt-evolve/internal/api	0.144s

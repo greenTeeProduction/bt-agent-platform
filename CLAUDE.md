@@ -28,8 +28,9 @@ machine.)
 | Benchmark regression check | `make benchcmp-check` |
 
 The git pre-commit hook runs gofmt → vet → golangci-lint → mod tidy → doc drift →
-ci-doctor → short tests. A PostToolUse hook in `.claude/settings.json` gofmts every
-edited `.go` file, so formatting failures there indicate something else.
+ci-doctor → short tests. Legacy Claude installations have a PostToolUse formatting hook. Codex
+work must run gofmt explicitly; only Codex coding processes are authorized
+for this deployment (see AGENTS.md and ADR-261).
 
 ## Known flake
 
@@ -42,7 +43,7 @@ treating a run as broken — but only if it is the sole failure.
 Architecture and merge conventions (package consolidation mapping, engine
 injection-hook pattern, ADR-003 persistence) live in
 `.claude/skills/project-conventions/SKILL.md` and are enforced by the
-`go-conventions-reviewer` agent — run it after merges from origin or changes
+Codex `go-conventions-reviewer` agent — run it after merges from origin or changes
 touching `internal/engine`.
 
 ## MCP

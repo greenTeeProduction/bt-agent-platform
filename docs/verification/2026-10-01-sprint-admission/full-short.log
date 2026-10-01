@@ -1,0 +1,47 @@
+ok  	github.com/nico/go-bt-evolve/cmd/benchcmp	0.089s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-agent	4.690s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-agent-cli	0.340s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-assistant	0.074s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-ci-doctor	0.018s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-dashboard	3.180s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-docgen	0.117s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-evaluator	0.068s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-gardener	0.762s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-langagent	0.134s
+?   	github.com/nico/go-bt-evolve/cmd/bt-notebooklm-auth	[no test files]
+ok  	github.com/nico/go-bt-evolve/cmd/bt-scalability-probe	0.045s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-security-probe	0.112s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-tree-integration	0.060s
+ok  	github.com/nico/go-bt-evolve/internal/a2a	1.695s
+ok  	github.com/nico/go-bt-evolve/internal/agent	6.092s
+ok  	github.com/nico/go-bt-evolve/internal/agentexec	0.407s
+ok  	github.com/nico/go-bt-evolve/internal/api	0.173s
+?   	github.com/nico/go-bt-evolve/internal/audit	[no test files]
+ok  	github.com/nico/go-bt-evolve/internal/benchmark	0.322s
+ok  	github.com/nico/go-bt-evolve/internal/blackboard	1.277s
+ok  	github.com/nico/go-bt-evolve/internal/blocks	0.138s
+ok  	github.com/nico/go-bt-evolve/internal/cicd	0.240s
+ok  	github.com/nico/go-bt-evolve/internal/config	6.331s
+ok  	github.com/nico/go-bt-evolve/internal/dashboard	3.989s
+ok  	github.com/nico/go-bt-evolve/internal/domains	5.986s
+ok  	github.com/nico/go-bt-evolve/internal/doormate	0.072s
+ok  	github.com/nico/go-bt-evolve/internal/engine	50.796s
+ok  	github.com/nico/go-bt-evolve/internal/evaluator	0.291s
+ok  	github.com/nico/go-bt-evolve/internal/evolution	14.657s
+ok  	github.com/nico/go-bt-evolve/internal/factory	0.061s
+ok  	github.com/nico/go-bt-evolve/internal/fusion	0.730s
+ok  	github.com/nico/go-bt-evolve/internal/gardener	0.580s
+ok  	github.com/nico/go-bt-evolve/internal/goap	0.110s
+ok  	github.com/nico/go-bt-evolve/internal/hitl	0.947s
+ok  	github.com/nico/go-bt-evolve/internal/knowledge	24.530s
+ok  	github.com/nico/go-bt-evolve/internal/llm	20.810s
+ok  	github.com/nico/go-bt-evolve/internal/notebooklmauth	25.330s
+ok  	github.com/nico/go-bt-evolve/internal/persona	0.059s
+ok  	github.com/nico/go-bt-evolve/internal/reliability	13.875s
+ok  	github.com/nico/go-bt-evolve/internal/research	0.151s
+ok  	github.com/nico/go-bt-evolve/internal/security	3.238s
+ok  	github.com/nico/go-bt-evolve/internal/startup	0.780s
+?   	github.com/nico/go-bt-evolve/internal/startup/companies	[no test files]
+ok  	github.com/nico/go-bt-evolve/internal/thinktank	0.027s
+ok  	github.com/nico/go-bt-evolve/internal/tracing	0.029s
+ok  	github.com/nico/go-bt-evolve/internal/util	0.046s

@@ -144,6 +144,7 @@ Tasks, Trees, MindMap, and Evolution.
 ### 4.1 Start the server
 
 ```bash
+export BT_API_KEY="$(openssl rand -hex 32)"
 ./bin/bt-dashboard &
 ```
 
@@ -161,7 +162,7 @@ curl -s http://localhost:9800/api/health | head -c 200
 
 ```bash
 # Platform summary
-curl -s http://localhost:9800/api/summary | python3 -m json.tool | head -20
+curl --fail -sS -H "X-API-Key: $BT_API_KEY" http://localhost:9800/api/summary | python3 -m json.tool | head -20
 
 # OpenAPI spec
 curl -s http://localhost:9800/api/openapi.json | python3 -m json.tool | head -20
@@ -187,7 +188,7 @@ Let's run tasks through different trees.
 
 ```bash
 # List all registered trees
-curl -s http://localhost:9800/api/trees | python3 -m json.tool | grep '"name"' | head -15
+curl --fail -sS -H "X-API-Key: $BT_API_KEY" http://localhost:9800/api/trees | python3 -m json.tool | grep '"name"' | head -15
 ```
 
 **Expected:** 40+ tree names across categories: godev, code_review, devops_ci,
@@ -202,7 +203,7 @@ If you have `mcporter` or `hermes` CLI available:
 # mcporter call bt-agent bt_run_task '{"task":"Review this Go code for nil pointer bugs"}'
 
 # Via curl to the dashboard's agent endpoint:
-curl -s -X POST http://localhost:9800/api/agents/execute \
+curl --fail -sS -H "X-API-Key: $BT_API_KEY" -X POST http://localhost:9800/api/agents/execute \
   -H "Content-Type: application/json" \
   -d '{"agent":"godev","task":"Review this Go code for nil pointer bugs"}' | python3 -m json.tool
 ```
@@ -213,12 +214,12 @@ curl -s -X POST http://localhost:9800/api/agents/execute \
 
 ```bash
 # Research task → deep_research tree
-curl -s -X POST http://localhost:9800/api/agents/execute \
+curl --fail -sS -H "X-API-Key: $BT_API_KEY" -X POST http://localhost:9800/api/agents/execute \
   -H "Content-Type: application/json" \
   -d '{"agent":"research:deep_research","task":"Research the impact of behavior trees on autonomous AI agents"}'
 
 # Finance task → pitch_agent tree  
-curl -s -X POST http://localhost:9800/api/agents/execute \
+curl --fail -sS -H "X-API-Key: $BT_API_KEY" -X POST http://localhost:9800/api/agents/execute \
   -H "Content-Type: application/json" \
   -d '{"agent":"finance:pitch_agent","task":"Build a DCF model for a SaaS company with $10M ARR"}'
 ```
@@ -239,7 +240,7 @@ Let's build a tree from scratch using the knowledge graph and agent factory.
 
 ```bash
 # View knowledge graph stats (via API)
-curl -s http://localhost:9800/api/summary | python3 -m json.tool | grep -A5 knowledge
+curl --fail -sS -H "X-API-Key: $BT_API_KEY" http://localhost:9800/api/summary | python3 -m json.tool | grep -A5 knowledge
 ```
 
 ### 6.2 Create a tree programmatically (Go code)

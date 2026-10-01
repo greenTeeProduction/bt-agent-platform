@@ -18,8 +18,8 @@ Agent definition → Registry / scoped resolver → Runner → Build / validate 
 ```
 
 The separate GOAP fusion workflow researches and implements code changes
-through Claude Code or Codex, with isolated worktrees and verification
-artifacts. Quotas, model availability, repository preconditions and failed
+through Codex under the default and deployed Codex-only policy, with isolated
+worktrees and verification artifacts. Quotas, model availability, repository preconditions and failed
 checks can stop a run from delivering code.
 
 ## Quickstart
@@ -83,8 +83,8 @@ explain their interactions.
   views, workflows, scalability and DoorMate, with browser sessions.
 - **Personalization:** persona profiles, habit-derived goals, GOAP plan
   compilation, tracked automation approval and user feedback.
-- **Coding delegation:** provider selection and opt-in bounded quota failover,
-  preserving separate read-only review and implementation policies.
+- **Coding delegation:** Codex-only implementation and read-only review, with
+  durable quota cooldowns and separate permission policies.
 - **Observability:** structured logs, metrics, tracing, run artifacts and
   build identity.
 

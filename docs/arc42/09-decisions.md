@@ -284,6 +284,22 @@ Navigation and provenance:
 | ADR-258 | [`ResolverReachableDomainTrees()` Ships ADR-255's Work List as a Production Registry, and an AST Sweep of `tree_resolver.go` Makes Resolver-Reachable Coverage Fail Closed Instead of Fail Open](#adr-258) | Accepted | 2026-08-02 |
 | ADR-259 | [Provider-Selectable Coding Delegation and Bounded Quota Failover](#adr-259) | Accepted implementation | 2026-09-16 |
 | ADR-260 | [Fail-Closed Dashboard Access with Explicit Browser Sessions](#adr-260) | Accepted implementation | 2026-09-16 |
+| ADR-261 | [Codex-Only Coding Delegation by Default](#adr-261) | Accepted | 2026-10-01 |
+| ADR-262 | [Publish Evolution State and Learning After Validated Commit](#adr-262) | Accepted implementation | 2026-10-01 |
+| ADR-263 | [Commit and Reconcile Approval Decisions Before Admission](#adr-263) | Accepted implementation | 2026-10-01 |
+| ADR-264 | [Serialize Snapshot Revision Commit and Preserve Orphan Evidence](#adr-264) | Accepted implementation | 2026-10-01 |
+| ADR-265 | [Configure State Owners Before Runtime Initialization](#adr-265) | Accepted implementation | 2026-10-01 |
+| ADR-266 | [Context-Aware Dashboard Admission and Execution Ownership](#adr-266) | Accepted implementation | 2026-10-01 |
+| ADR-267 | [Terminal Distributed Execution Diagnostics](#adr-267) | Accepted implementation | 2026-10-01 |
+| ADR-268 | [A2A Execution Ownership and Tree Replay Stops](#adr-268) | Accepted implementation | 2026-10-01 |
+| ADR-269 | [Known Execution Stops and Parallel Disposition Evidence](#adr-269) | Accepted implementation | 2026-10-01 |
+| ADR-270 | [Shared Workflow Consent and Completed-Prefix Stops](#adr-270) | Accepted implementation | 2026-10-01 |
+| ADR-271 | [Commit Blackboard State Before Workflow Acknowledgement](#adr-271) | Accepted implementation | 2026-10-01 |
+| ADR-272 | [Rooted Pipeline Selection and Status-Specific Validation](#adr-272) | Accepted implementation | 2026-10-01 |
+| ADR-273 | [Exact Tree Inspection and Safe Presentation](#adr-273) | Accepted implementation | 2026-10-01 |
+| ADR-274 | [Blackboard Owner Admission and Atomic Run Promotion](#adr-274) | Accepted implementation | 2026-10-01 |
+| ADR-275 | [Sprint Result Commit and Metadata Reconciliation](#adr-275) | Accepted implementation | 2026-10-01 |
+| ADR-276 | [Sprint Capacity Reservation and Owned Batch Budgets](#adr-276) | Accepted implementation | 2026-10-01 |
 
 <a id="adr-001"></a>
 
@@ -5470,6 +5486,780 @@ listeners require explicit deployment review (R25/R29).
 [browser test](../../tests/e2e/auth.test.js).
 Current protocol details and configured limits live in
 [§8.18](08-crosscutting-concepts.md#818-security-and-trust-boundaries), QS27–QS28.
+
+---
+
+<a id="adr-261"></a>
+
+## ADR-261: Codex-Only Coding Delegation by Default
+
+**Status:** Accepted 2026-10-01; supersedes ADR-259's provider default for the
+current platform/deployment.
+
+**Context:** The operator requires BT coding agents and processes to use only
+Codex. Selecting Codex as primary is insufficient while quota failover can
+launch Claude, and older service EnvironmentFiles can override drop-in values.
+
+**Decision:** Default provider selection to Codex and enable a fail-closed
+Codex-only policy. Unset/malformed policy values keep that policy enabled.
+Reject Claude at selection and execution, including injected provider choices
+and direct legacy adapters. Disable cross-provider failover while the policy
+is enabled. Keep historical interfaces and fake-adapter regression coverage;
+legacy compatibility requires explicit `BT_SUPERPOWERS_CODEX_ONLY=false`.
+Set provider Codex, policy true, failover false and model auto in the final BT
+unit EnvironmentFile and shared Hermes launch environment.
+
+**Alternatives and rationale:** A primary-only environment setting leaves a
+quota escape to Claude. Removing historical interfaces would cause unrelated
+API churn without strengthening the execution guard. A policy guard covers
+all retained paths while preserving explicit compatibility tests.
+
+**Consequences:** Codex quota/model/auth failures remain visible; this
+deployment cannot recover by launching Claude. Service changes require a
+restart to affect running processes. Model availability and successful
+verified code delivery remain operational acceptance, not configuration proof.
+
+**Evidence:** [Provider policy](../../internal/engine/superpowers_provider.go),
+[execution and quota regressions](../../internal/engine/codex_only_test.go),
+[deployment template](../../deploy/systemd/codex-only.conf) and
+[operator runbook](../coding-delegation.md). QS29/QS36 and R27 retain the
+readiness distinction. Dated cleanup evidence is in the
+[plan](../plans/2026-09-30-arc42-cleanup.md).
+
+---
+
+<a id="adr-262"></a>
+
+## ADR-262: Publish Evolution State and Learning After Validated Commit
+
+**Status:** Accepted implementation, documented 2026-10-01.
+
+**Context:** Ordinary and deep-search adoption could leave an unsaved tree live
+and record successful experience before deployment validation or persistence.
+Deep search returned the first proposal of a combination while reporting the
+combination's fitness. Process-global random draws prevented MCTS proposal replay.
+
+**Decision:** Stage ordinary/optional/deep-search changes in detached trees.
+Validate whole-tree construction/expansion and bounded benchmark behavior,
+apply configured quality/meta/SLO gates and require configured predecessor
+snapshots. Publish live state and accepted experience only after tree persistence
+succeeds. Return and replay the complete ordered deep-search proposal, score the
+actual candidate, and key cached search scores by tree and reflection evidence.
+Use one shared scored proposal type across evaluator/evolution. Persist generator,
+score, reason and MCTS seed/budget/exploration/depth/warm-start settings with accepted
+experience. Seeded proposal generation owns its random stream; retrieval returns
+owned payload copies and experience lock waits are bounded to 30 seconds.
+
+**Alternatives and rationale:** In-memory restoration after a failed commit
+still exposes speculative state and cannot repair learning recorded too early.
+A first-proposal shortcut cannot justify multi-proposal fitness. A global RNG
+seam cannot isolate concurrent searches. Detached commit and explicit evidence
+address those boundaries without a new persistence backend.
+
+**Consequences:** Quick benchmarking remains bounded smoke evidence. Tree and
+experience files are separate commits; failed experience persistence is logged
+and does not undo a committed tree. Replay requires matching input tree, fitness
+evidence and evaluator; the complete production cycle also has optional passes
+and dependencies (R20/R24). Snapshots are optional when not configured and do not
+establish a consistent host backup (R26).
+
+**Evidence:** [Commit failure tests](../../internal/gardener/adoption_persistence_regression_test.go),
+[deep-search replay/cache tests](../../internal/evaluator/deep_search_replay_test.go),
+[seeded concurrent search and experience ownership tests](../../internal/evolution/proposal_replay_test.go),
+[whole-tree definition tests](../../internal/benchmark/candidate_validation_test.go).
+QS7/QS24 and the adoption matrix in §8.5 state the practical limits.
+
+---
+
+<a id="adr-263"></a>
+
+## ADR-263: Commit and Reconcile Approval Decisions Before Admission
+
+**Status:** Accepted implementation, documented 2026-10-01.
+
+**Context:** Failed task writes could remain visible in memory or resolve HITL
+before task persistence. Approval waits blocked inside legacy locks, and a
+shared blackboard request ID allowed one nested gate to consume another's
+approval. Cross-store audit failures could be acknowledged without recovery.
+
+**Decision:** Stage task changes and publish them only after bounded locked
+atomic replacement. HITL transactions reload authoritative records, apply
+changes to detached state and publish status/retention only after successful
+private-file replacement. Context-aware APIs bound in-process and sidecar lock
+waits by the caller's budget or a 30-second default. HTTP/MCP distinguish store
+failure from absence; the gate fails closed on unavailable approval storage.
+Structural sandbox runs simulate approval without reading/writing the operational
+store, consistently with simulated action effects. This does not prove real
+approval or side effects. Bind cached gate requests to node type/name/phase, task and agent; retain
+separate gate request/post-child state while nested work is pending.
+
+Task decisions commit a durable `approval_audit_pending` marker before audit
+synchronization. Report a `TaskDecisionPersistenceError` if synchronization or
+marker removal fails. `Approved`/`ClaimApproved` exclude marked tasks; a retry
+finishes reconciliation after restart without dispatching completed work twice.
+By-task audit decisions select the newest request, preserve matching terminal
+retries and reject conflicting or expired decisions. In-memory workflow
+variants report audit failures; HTTP reports failed durable mirrors as 503.
+
+**Alternatives and rationale:** Rolling back only memory loses the durable
+partial-commit evidence. Ignoring audit failure leaves a task dispatchable with
+an unresolved request. A database is outside the accepted file-based deployment;
+a recoverable marker makes this boundary explicit without claiming ACID.
+
+**Consequences:** Task snapshots remain single-owner complete replacements,
+not cross-process stale-snapshot merges. Workflow, task and HITL files remain
+separate commits. Legacy unmarked approved tasks are not automatically repaired.
+Gate identity uses configured node names/types/phases; callers must retain
+stable identities. Arbitrary filesystem I/O and unrelated legacy cancellation
+paths remain outside the lock-wait bound (R30). Provider auto-approval policy
+remains an explicit operator choice, not a universal human-click guarantee.
+
+**Evidence:** [Task persistence/reconciliation tests](../../internal/dashboard/task_persistence_regression_test.go),
+[HITL transaction/cancellation tests](../../internal/hitl/transaction_regression_test.go),
+[gate isolation/failure tests](../../internal/engine/hitl_persistence_regression_test.go),
+[HTTP partial-commit recovery](../../cmd/bt-dashboard/task_decision_outcome_test.go).
+QS7/QS20/QS35 and the cross-store limits in §8.4 remain qualified.
+
+---
+
+<a id="adr-264"></a>
+
+## ADR-264: Serialize Snapshot Revision Commit and Preserve Orphan Evidence
+
+**Status:** Accepted implementation, documented 2026-10-01.
+
+**Context:** Independent snapshot writers could read the same last revision and
+replace each other's rollback evidence. A tree-file commit followed by a failed
+index commit could leave an unindexed revision that the next writer overwrote.
+TreeStore metadata still used direct truncating writes rather than ADR-003's
+atomic replacement owner.
+
+**Decision:** Hold a per-tree index sidecar lock through authoritative index
+reload, unused revision allocation, private tree-file commit and private index
+commit. Bound allocation/lock waiting to 30 seconds or a shorter caller context.
+Require one filename component for tree identities, strictly increasing positive
+index revisions and finite supplied fitness; reject exhausted revision counters.
+Skip existing revision paths so interrupted/unindexed evidence is preserved.
+Read snapshot/tree/metadata files through configured-root helpers. TreeStore
+metadata uses the canonical private atomic JSON writer; snapshot parents retain
+0700 permissions through the shared parent helper.
+
+**Alternatives and rationale:** Atomic replacement alone protects file integrity
+but cannot reserve a shared revision number. Deleting or reusing an unindexed
+file destroys possible recovery evidence. Committing the index before the tree
+can leave a recorded revision without its payload. A sidecar transaction and
+preserved orphans respect the existing file-based deployment without a database.
+
+**Consequences:** Tree and index remain separate filesystem commits; cancellation
+or interruption after tree write may leave an orphan. List/restore-latest follows
+committed index entries; operators can inspect an unindexed revision separately.
+No power-loss durability or automatic orphan repair is claimed. Revisions continue
+to accumulate; retention policy and consistent production recovery remain R12/R26.
+Arbitrary filesystem I/O is outside the lock-wait bound (R30).
+
+**Evidence:** [Process contention, deadline, orphan and root regressions](../../internal/evolution/snapshot_transaction_regression_test.go),
+[metadata atomic/private/root tests](../../internal/evolution/tree_metadata_regression_test.go),
+and existing [snapshot recovery tests](../../internal/evolution/quality_gate_test.go).
+
+---
+
+<a id="adr-265"></a>
+
+## ADR-265: Configure State Owners Before Runtime Initialization
+
+**Status:** Accepted implementation, documented 2026-10-01.
+
+**Context:** Config.ResolvePaths understood loaded definition/history/log settings,
+but process state helpers and logging only saw the environment. Dashboard task
+state opened during package initialization, before JSON/.env configuration was
+loaded. Shared daemon/MCP reflection owners also retained hardcoded paths, and
+the gardener could read SLO evidence from a different root than the scheduler.
+
+**Decision:** Validate loaded configuration before opening runtime owners in
+bt-agent, bt-dashboard, bt-gardener, bt-evaluator and bt-langagent, and before
+bt-agent-cli/bt-assistant open their registries. Publish an
+immutable value copy of configured definition/history/log paths through lower-
+layer util helpers; explicit environment overrides retain precedence. Keep
+configuration resolution pure: loading or resolving another Config does not
+redirect active stores. Initialize dashboard task state after path publication.
+Definition directories are explicit independent paths, not reconstructed by
+assuming their basename is `agents`. Shared reflection/tree/block owners use
+loaded reflection configuration with the legacy independent default. Gardener
+SLO evidence uses the shared platform helper. Pin generated-tree lookup to the
+startup reflection root; configuration-file edits/removal cannot redirect it.
+Skill factories share that same explicit reflection owner. Later runner
+construction uses installed definition/history/reflection owners even if the
+configuration file has changed or disappeared. Validate default-home prerequisites
+before publishing paths; an absent user home cannot create cwd-relative state.
+The standalone runner enforces the same prerequisite before opening stores.
+Required agent
+history initialization fails startup explicitly rather than disabling recording.
+Agent/dashboard/gardener version
+fast paths precede configuration, logging and state initialization.
+
+**Alternatives and rationale:** Reloading configuration inside every path helper
+adds I/O and can redirect individual owners inconsistently. Publishing settings
+into process environment changes ambient configuration for unrelated consumers.
+A lower-layer immutable startup value supplies the existing helpers without
+introducing an engine dependency on higher-level configuration/agent packages.
+
+**Consequences:** Invalid configuration now stops these entrypoints before state
+initialization. Paths are startup configuration; hot reload does not migrate or
+reopen live stores. Separate history/log/definition/reflection overrides remain
+independent of BT_AGENT_HOME. The in-process NewRunDeps builder resolves its own
+loaded definition/history paths; its retained missing-config fallback is a
+separate compatibility behavior when no startup snapshot is installed.
+This does not establish universal path coverage
+for all optional tools, automatically relocate legacy data or qualify production
+recovery. New directories/files retain their owning store's permission contract.
+
+**Evidence:** [Loaded JSON/.env/environment owner tests](../../internal/config/runtime_paths_test.go),
+[value/override isolation tests](../../internal/util/paths_test.go),
+[runner state-owner/root-pinning tests](../../internal/agentexec/deps_test.go),
+[standalone missing-root test](../../internal/agentexec/missing_home_regression_test.go),
+[CLI startup tests](../../cmd/bt-agent-cli/runtime_paths_regression_test.go),
+[assistant owner tests](../../cmd/bt-assistant/runtime_paths_regression_test.go),
+[required-history failure test](../../cmd/bt-agent/history_path_regression_test.go),
+[language-agent reflection tests](../../cmd/bt-langagent/main_test.go),
+and [dashboard version isolation](../../cmd/bt-dashboard/version_state_regression_test.go).
+
+---
+
+<a id="adr-266"></a>
+
+## ADR-266: Context-Aware Dashboard Admission and Execution Ownership
+
+**Status:** Accepted implementation, documented 2026-10-01.
+
+**Context:** Both dashboard agent execution endpoints ignored worker rejection
+and waited unconditionally for a result while holding a limiter slot. Full-queue
+submission held a read lock needed by shutdown. The executor rooted its timeout
+in Background rather than the HTTP caller, and its Hermes fallback discarded
+command exit errors.
+
+**Decision:** Share a context-aware admission/result handoff across both routes.
+Include limiter/queue waiting in the executor budget; propagate the caller's
+context into tree/CLI execution. Report closed-pool rejection as 503 and canceled
+or expired waits as 408. Transfer reservation ownership to accepted work and
+release after cleanup, with a buffered result handoff and terminal panic recovery.
+Skip canceled queued work before execution. Wake blocked submitters before
+shutdown acquires the admission writer lock; drain all accepted callbacks.
+Keep legacy background wrappers for existing callers. Reuse the engine's process-
+group cancellation behavior through a lower-layer reliability helper for the
+Hermes fallback; preserve partial output and actual exit/context errors. Resolve
+Hermes through PATH before the installed fallback path.
+
+**Alternatives and rationale:** Releasing a slot when HTTP disconnects permits
+more executions than the configured bound if a node ignores cancellation.
+Waiting unconditionally traps rejected work forever. Closing the queue before
+excluding submitters risks send-on-close panics; closing the wakeup signal first
+unblocks backpressure while retaining safe admission accounting.
+
+**Consequences:** Cancellation remains cooperative for in-process actions. A
+canceled waiter can return before accepted work finishes; clients must inspect
+history before replaying side effects. A terminal healthy result retains its
+history even if cancellation arrived during synchronous work. Process-group
+cleanup does not cover descendants that detach into new sessions. No remote
+idempotency, universal shutdown deadline or production latency SLO is claimed
+(R30). The shared five-minute default is a budget, not a termination guarantee.
+
+**Evidence:** [Pool/limiter contention regressions](../../internal/reliability/admission_context_test.go),
+[caller deadline and fake CLI exit/child cancellation tests](../../internal/dashboard/executor_context_test.go),
+and [both-route rejection, cancellation, ownership, panic and enforced response tests](../../cmd/bt-dashboard/execution_admission_test.go).
+
+---
+
+<a id="adr-267"></a>
+
+## ADR-267: Terminal Distributed Execution Diagnostics
+
+**Status:** Accepted implementation, documented 2026-10-01.
+
+**Context:** AgentRouter tried another peer/local executor after completed work
+returned a history-write diagnostic. Remote 408/timeouts, lost responses and
+malformed results also caused failover, though the first peer might have already
+performed the side effect. The wire result lost typed persistence errors, and
+local fallback formatting could erase terminal error identity before scheduler
+retry. Workflow deadline handling could overwrite healthy completed outcomes.
+
+**Decision:** Preserve completed-operation persistence diagnostics and introduce
+ExecutionUncertainError for dispatched remote calls whose result cannot be
+established. Both are terminal to router, legacy retry, RetryPolicy and workflow
+retry/skip/parallel control. Return terminal local fallback errors directly.
+Carry `error_kind` with raw outcome/output/quality on HTTP results and reconstruct
+the diagnostic at the remote consumer. Joined uncertainty takes precedence over
+completed-branch persistence for disposition and health classification. Healthy
+canonical terminal results retain their outcome when a step deadline races.
+
+Do not follow execution POST redirects. Treat transport/response read errors,
+unacknowledged non-200 responses, malformed/missing required fields, wrong agent,
+wrong explicit task and invalid error-kind/detail as uncertain. An empty requested
+task keeps the dashboard's configured-default semantics. Only a trusted peer's
+`X-BT-Execution-Admitted: false` rejection permits failover; closed-pool and
+breaker rejection emit this marker before work admission. A 503 alone is not
+proof of rejection. Health-check failures remain pre-execution fallback evidence.
+
+**Alternatives and rationale:** Guessing retry safety from timeout/status/error
+text can duplicate completed side effects. Treating all rejection as uncertain
+would also disable safe fallback after known non-admission. Explicit disposition
+and admission evidence preserve file-based architecture and existing routing
+without inventing a distributed transaction or database.
+
+**Consequences:** Availability may be lower when an older peer/proxy cannot
+establish non-admission, including failures that happened before bytes reached
+that peer. Successful legacy result shapes remain readable; older peers without
+error_kind cannot reconstruct typed record diagnostics. Task-default lookup and
+full request provenance still lack a durable correlation/idempotency ledger.
+Unknown outcomes require operator reconciliation of run evidence before replay;
+this does not implement exactly-once execution, automatic reconciliation or
+bounded termination of uncooperative work. Operator trust of peer/proxy responses
+remains the deployment boundary (R29/R30). Uncertain call failures may be recorded
+for availability diagnostics; they do not prove the underlying side effect failed.
+
+**Evidence:** [Router/remote/retry/redirect and malformed-result regressions](../../internal/reliability/execution_terminal_regression_test.go),
+[workflow retry/parallel/deadline regressions](../../internal/dashboard/execution_terminal_workflow_test.go),
+and [actual HTTP handler history-failure round trip](../../cmd/bt-dashboard/execution_terminal_http_test.go).
+
+<a id="adr-268"></a>
+
+## ADR-268: A2A Execution Ownership and Tree Replay Stops
+
+**Status:** Accepted implementation, documented 2026-10-01.
+
+**Context:** A local SDK endpoint performed a fixture operation then returned
+503. SendTask executed the operation three times. Message IDs do not deduplicate
+new SDK tasks. Server history errors were ignored, active task responses could
+be treated as new execution failures, and the auction wrapper discarded its
+caller context. Integer BT statuses erased typed terminal diagnostics before
+Retry/Selector and scheduler policy could prevent replay.
+
+**Decision:** Bound card lookup, SendMessage and GetTask by one caller-derived
+budget. Retry SendMessage only after explicit same-origin rejection before
+admission. Ambiguous transport or malformed response becomes terminal
+ExecutionUncertainError. Poll submitted/working tasks by their existing ID,
+checking task/context binding. A polling deadline stops the client, not the
+SDK owner. Keep SDK asynchronous ownership independent of HTTP completion;
+explicit CancelTask cancels cooperative actions.
+
+Preserve actual task state and received evidence with optional server-owned
+`bt_execution` status metadata. Completed history failures retain artifact text
+and typed persistence diagnostics. Known failed/canceled history errors remain
+visible without implying healthy completion. Auction keeps award/output/error;
+terminal uncertainty/persistence never permits retry or fallback. A failed task
+aborted by a completed child's persistence failure is still a failed winner.
+Install the context-aware auction hook through agentexec; keep the legacy hook.
+
+Share a synchronized execution stop across branch blackboards. Built node
+wrappers block subsequent node admission, including retries/selector fallback;
+RunTask stops reticks and RunOnce returns the typed diagnostic. A stopped
+surrounding tree is aborted/uncertain, preserving child evidence. History joins
+quality reasons instead of overwriting execution diagnostics.
+
+**Alternatives and rationale:** Retrying transient HTTP status blindly can
+repeat side effects. Making the SDK task context follow each HTTP request would
+break supported asynchronous tasks. Treating a child persistence failure as
+whole-workflow success hides skipped steps. Explicit ownership/disposition
+preserves the current SDK and file-based design without inventing a database.
+
+**Consequences:** Missing admission evidence sacrifices availability for replay
+safety. Already admitted parallel work and uncooperative actions may continue.
+SDK task storage is process-local; restart can lose task/status evidence. Known
+ordinary failure policies remain distinct from completed/unknown stops; this
+change does not establish durable idempotency, exactly-once execution, tenant
+identity or automatic reconciliation. R29/R30 remain open.
+
+**Evidence:** [A2A SDK/transport/history/poll/cancel regressions](../../internal/a2a/execution_terminal_test.go),
+[tree retry/selector/context/branch-stop tests](../../internal/engine/execution_stop_test.go),
+and [RunOnce outer-retry/history/quality tests](../../internal/agent/execution_terminal_delegation_test.go).
+
+<a id="adr-269"></a>
+
+## ADR-269: Known Execution Stops and Parallel Disposition Evidence
+
+**Status:** Accepted implementation, documented 2026-10-01.
+
+**Context:** A real local SDK fixture returned input-required with “network
+timeout” in its status message. The integer tree interface flattened the known
+state into a generic failure; RunOnce and an outer retry dispatched it three
+times. Completed/unknown diagnostics already stopped replay (ADR-268), but
+known failed/paused tasks needed equally explicit ownership evidence. In
+parallel execution, a wait could hide an admitted sibling's ordinary failure
+or panic. Naive correction also misclassified nested success and normal skips.
+
+**Decision:** Add `ExecutionStoppedError` with canonical known non-completed
+outcome in the lower reliability owner. Preserve it through A2A status metadata,
+auction, engine shared stop, RunOnce, router, remote transport, workflow and
+scheduler policy. Validate wire outcome/state consistency, including empty
+error-kind extensions; contradictions become terminal uncertainty. Retain
+older-peer state-enum compatibility and completed-child persistence evidence.
+
+Known waits are deferred and keep availability breakers healthy without
+claiming completed delivery. Preserve their diagnostic in history/completion
+events and stop automatic replay. Failed/aborted admitted siblings outrank
+waits, and uncertainty wins all known dispositions. Parallel trees retain
+branch admission and actual return evidence before shared-stop conversion;
+workflow groups include ordinary failed/panicked siblings when any typed
+terminal branch exists. Blocked nodes, successful nested branches and skipped
+conditions do not become invented failures. Ordinary-only failure policies
+remain unchanged. The agent healthy-outcome facade delegates to the lower
+helper, preserving the engine injection/import boundary.
+
+**Alternatives:** Parsing human-readable status text loses task ownership and
+can retry a settled task. Treating every wait as success claims delivery that
+has not happened. Treating every integer -1/nonhealthy outcome as a fault
+misclassifies blocked nodes and conditional skips. Making every ordinary error
+terminal would silently remove unrelated retry behavior without proof.
+
+**Consequences:** Known stop evidence sacrifices automatic re-execution for
+explicit owner/operator decisions. Completed-child persistence does not make
+an aborted surrounding workflow healthy. No durable task identity, restart-safe
+resumption, exactly-once execution, hard cancellation or new database is added.
+Untyped local approval/workflow paths and fleet reconciliation remain R30 work.
+Actual providers and production services are not exercised by fixture evidence.
+
+**Evidence:** [Real SDK-to-RunOnce stopped-state tests](../../internal/agent/a2a_stopped_runner_test.go),
+[A2A metadata/transport tests](../../internal/a2a/execution_terminal_test.go),
+[admitted/blocked/composite parallel tests](../../internal/engine/execution_stop_test.go),
+[workflow failure/panic/skip tests](../../internal/dashboard/execution_stopped_workflow_test.go),
+[remote/router/retry tests](../../internal/reliability/execution_terminal_regression_test.go),
+[SLO scheduler policy tests](../../cmd/bt-agent/scheduler_retry_test.go), and
+[completion-event diagnostics](../../internal/agent/scheduler_stopped_test.go), and
+[actual dashboard/remote handler round trips](../../cmd/bt-dashboard/execution_terminal_http_test.go).
+
+<a id="adr-270"></a>
+
+## ADR-270: Shared Workflow Consent and Completed-Prefix Stops
+
+**Status:** Accepted implementation, documented 2026-10-01.
+
+**Context:** An intentional fixture showed an unconfigured approval returning
+pending while its following agent ran and the pipeline reported success.
+Rejected decisions could be skipped or requested again. Loops ran only their
+first declared body step, the declared subworkflow kind was unimplemented,
+and container results lost child approval IDs. Ordinary parallel failure could
+be reported as whole-workflow success. Retrying a partially completed container
+or whole workflow can also replay already completed child effects.
+
+**Decision:** Use one sequential control owner for top-level, complete loop and
+subworkflow bodies. Normalize known raw agent waits and every non-approved
+approval result to typed stops. Preserve request/task IDs and stronger terminal
+diagnostics from approval hooks. Approval creation, polling and nested children
+inherit the shorter caller/container/policy deadline. An on_failure skip/retry
+cannot bypass a gate or request a fresh decision.
+
+Retain nested child results in every container. Completed healthy child work
+followed by an ordinary unsuccessful outcome creates a typed partial stop,
+preventing automatic container/outer replay. Eligible fresh single-step retries,
+explicit ordinary skips and normal condition skips retain their meanings.
+Eligible retries use the original input/prior-state snapshot rather than the
+failed attempt output, preserving the logical task. Already admitted parallel work may still finish; its failure/uncertainty keeps
+precedence over waiting (ADR-269).
+
+The HTTP adapter exposes running/waiting/complete/failed and optional diagnostic
+kind. A nil callback error does not make a failed result complete. The browser
+renders nested approval IDs and diagnostics as escaped text, and stops polling
+a settled waiting invocation. OpenAPI documents the status and nested evidence.
+
+**Alternatives:** Returning nil for approval pauses permits downstream work.
+Independent container implementations drift on failure, consent and deadline
+policy. Dropping child evidence makes approval ownership inaccessible. Retrying
+a whole partially completed group sacrifices the completed-work contract.
+Reporting every typed wait as failed loses its required-input meaning.
+
+**Consequences:** Rejection/escalation and completed-prefix stops now require an
+explicit new continuation decision. No rollback, saved execution cursor, durable
+pipeline status, restart-safe resumption or cross-store transaction is added.
+An unconfigured waiter reports intent/task ID without claiming a persisted HITL
+request. Auto-approval remains the configured HITL policy. Unproven side effects
+inside ordinary failing actions, metadata persistence, durable request identity
+and operator reconciliation remain audit/operational work (R30).
+
+**Evidence:** [Workflow consent/container/prefix tests](../../internal/dashboard/workflow_control_regression_test.go),
+[HITL creation contention](../../internal/dashboard/approval_test.go),
+[actual pipeline HTTP schema/status round trips](../../cmd/bt-dashboard/pipeline_control_http_test.go),
+and [browser waiting/nested-ID/escaping tests](../../tests/unit/workflows.test.js).
+
+<a id="adr-271"></a>
+
+## ADR-271: Commit Blackboard State Before Workflow Acknowledgement
+
+**Status:** Accepted implementation, documented 2026-10-01.
+
+**Context:** A filesystem failure fixture proved workflow input and output
+blackboard writes were discarded while the workflow reported success. Manager
+mutations changed live entries and eviction/byte accounting before persistence
+succeeded, and in-process scope contention could outlive caller budgets.
+An actual HTTP fixture also exposed null step evidence violating the schema
+when input persistence failed before admission.
+
+**Decision:** Stage blackboard Set/Append/Delete mutations, including accounting
+and eviction, under one scope transaction. Persist the staged snapshot with
+atomic replacement before publishing its cache. Add SetWithContext and bound
+scope/sidecar lock admission by the shorter caller deadline or ten-second
+default; compatibility methods retain their signatures and use the default.
+Check cancellation before mutation/commit.
+
+Workflow input-write failure returns failure before invoking any agent. Agent
+output mirrors report failures while retaining the original output/outcome.
+Healthy completed work carries ExecutionPersistenceError; failed work retains
+its original error joined into a typed failure stop. Both prevent retry/skip
+and following work. Step-output and previous-output mirrors remain separate
+commits; do not roll back acknowledged first-mirror evidence. Empty step
+evidence serializes as an array, including pre-admission failure.
+
+**Alternatives:** Ignoring optional metadata failure gives a false durable
+acknowledgement. Retrying the agent can repeat completed effects. Publishing
+cache before replacement makes failed writes appear committed and can corrupt
+limit/eviction state. One coarse manager lock stalls unrelated scopes. A database
+or whole-workflow transaction would change the deployment and recovery model.
+
+**Consequences:** Every failed workflow write remains visible, and persistence
+repair is separate from execution replay. Staging copies one bounded scope per
+mutation. Caller budgets bound lock admission, not arbitrary filesystem I/O or
+power-loss durability. No all-mirror/cross-store transaction, durable workflow
+resume or provider execution qualification is added. Remaining fleet paths and
+operational recovery/cancellation remain explicit risks.
+
+**Evidence:** [Blackboard failed-write/cache/limit/contention tests](../../internal/blackboard/transaction_ack_test.go),
+[workflow metadata and deadline tests](../../internal/dashboard/workflow_metadata_regression_test.go),
+and [actual pipeline HTTP schema/failure tests](../../cmd/bt-dashboard/pipeline_control_http_test.go).
+
+<a id="adr-272"></a>
+
+## ADR-272: Rooted Pipeline Selection and Status-Specific Validation
+
+**Status:** Accepted implementation, documented 2026-10-01.
+
+**Context:** A local HTTP probe selected ../outside-evidence.yaml outside the
+configured workflows directory and executed it. Inventory reads followed
+escaping file symlinks. Enforced authentication tests also showed an
+undocumented 401 being validated against a success-array schema and replaced
+with 500; protected route definitions lacked consistent auth-error schemas.
+
+**Decision:** Accept catalog basenames with optional .yaml suffix; reject
+directories, absolute/traversal, backslash and NUL names before selection/run
+admission. Reuse the existing util.ReadPersistenceFile rooted reader in listing
+and execution. Relative file symlinks may resolve within the configured root;
+escaping/absolute file symlinks are unavailable. Operator directory relocation
+via configured-root symlinks remains supported. Omit invalid/unreadable inventory
+entries, distinguish missing-root empty lists from other directory failures
+(503), and return unavailable selected files as 404 without filesystem details.
+
+WithAuth adds standard 401/403 JSON error schemas unless already declared.
+Response validation uses exact status or an explicit default schema, never
+implicitly the first/success response. Preserve explicit auth contracts and
+make repeated WithAuth calls idempotent. Unknown statuses without a default
+remain unvalidated rather than receiving invented success-shape constraints. The
+OpenAPI discovery endpoint itself declares a JSON object with version, info and
+paths, so enforced validation can serve the generated specification. The
+summary category map does not require a second nested categories field; its
+actual map remains valid even with no registered category entries.
+
+**Alternatives:** Cleaning a joined path preserves traversal. Basename checks
+alone cannot stop symlink escapes. Duplicated path readers diverge from existing
+rooted persistence policy. Adding one inventory auth schema leaves the shared
+fallback bug in other routes. Validating every unknown error as a success can
+change the authenticated interface's actual status.
+
+**Consequences:** Rooted selection prevents executing/listing out-of-directory
+YAML through these endpoints. It does not authenticate persona namespaces or
+provide a sandbox against trusted operator mounts. Missing status schemas still
+need audit; no universal schema, retention, hard filesystem cancellation or
+durable pipeline-resume guarantee is added. No coding provider ran in fixtures.
+
+**Evidence:** [Actual authenticated pipeline path/inventory/schema tests](../../cmd/bt-dashboard/pipeline_path_regression_test.go),
+[shared auth/exact/default regressions](../../internal/api/auth_response_regression_test.go),
+[real OpenAPI discovery handler test](../../cmd/bt-dashboard/openapi_schema_regression_test.go),
+and [status matching tests](../../internal/api/response_validator_test.go).
+
+<a id="adr-273"></a>
+
+## ADR-273: Exact Tree Inspection and Safe Presentation
+
+**Status:** Accepted implementation, documented 2026-10-01.
+
+**Context:** Dashboard inspection duplicated constructor catalogs, stripped
+qualified IDs such as domain:arc42:section1, and invented empty sequences from
+metadata-only entries. Its schema expected an id/structure wrapper although the
+browser consumed bare IR. Name-based browser actions confused repeated branches,
+and source IDs/labels were interpolated into HTML/inline handlers.
+
+**Decision:** Add LookupTreeID alongside execution resolution. Reuse the shared
+construction branches with legacy substitutions disabled. Preserve qualified
+names and historical bare catalog alias priority; resolve explicit default from
+its compiled constructor. Reject path-shaped identifiers before the injected
+unscoped generated resolver, which is consulted once on a static miss. Return
+404 for unavailable definitions, including metadata-only entries. Align HTTP
+success with bare SerializableNode and preserve nested children/metadata.
+Root/immediate child shape is enforced; recursive IR verification is not claimed.
+
+Browser actions use structural paths and event listeners. Escape source labels,
+details and failures; use a fixed palette for unknown types. Collisions move the
+actual branch's descendants, and sibling badges reflect parent execution order.
+
+**Alternatives:** Using the execution resolver directly silently substitutes
+unknown trees. A second inspection constructor map drifts. Metadata placeholders
+suggest executable definitions without evidence. Last-segment lookup loses
+namespaces. Escaping a JavaScript quote alone does not protect an HTML attribute.
+
+**Consequences:** Inspection and execution share construction while retaining
+separate miss policies. Bare aliases retain historical wrappers, so callers
+seeking execution-qualified definitions should use qualified IDs. Generated-tree
+inspection remains an operator/unscoped surface, not tenant authorization (R29).
+Live dependency, whole-tree validation and fleet-wide HTTP coverage remain open.
+No provider execution is necessary to inspect definitions.
+
+**Evidence:** [Catalog/lookup regressions](../../internal/domains/tree_lookup_test.go),
+[actual authenticated/enforced HTTP tests](../../cmd/bt-dashboard/tree_structure_regression_test.go),
+and [mind-map text/duplicate-branch/order tests](../../tests/unit/mindmap.test.js).
+
+<a id="adr-274"></a>
+
+## ADR-274: Blackboard Owner Admission and Atomic Run Promotion
+
+**Status:** Accepted implementation, documented 2026-10-01.
+
+**Context:** RunDeps ignored EnablePersistence failure and returned a manager
+that acknowledged persistent-scope writes only in memory. Concurrent lazy
+initialization could publish different managers. Pipeline/HTTP/MCP adapters
+could not observe initialization errors. Healthy-run promotion independently
+ignored each write, allowing lost or mixed output/attribution without diagnosis.
+
+**Decision:** Add NewPersistentManager and make BoardManager return manager/error.
+Synchronize one owner or initialization error per runner; never publish a
+memory substitute after default persistence failure. NewRunDeps initializes
+from loaded/configured paths before returning, and bt-agent checks its owner
+before scheduler/A2A/MCP startup. Update every agent/pipeline/HTTP/MCP caller to
+handle errors. Pipeline admission returns 503 before reservation; capture its
+runner/manager for the run's lifetime. Injected managers remain trusted startup
+dependencies with an explicitly chosen persistence policy.
+
+Promote successful-run output and attribution through one SetEntriesWithContext
+transaction. Reject invalid/self-evicting groups; commit before publishing
+staged cache. Detach metadata maps at storage/read boundaries. Return typed
+ExecutionPersistenceError after healthy completion when promotion fails, retain
+actual output/outcome and record the diagnostic in history. Automatic retry
+must not execute that completed action again.
+
+**Alternatives:** Logging initialization failure still falsely acknowledges
+writes. A nil manager passed through NewHandle silently becomes a memory manager.
+Independent promotion writes permit mixed attribution. Retrying a healthy action
+to repair metadata repeats its side effects. Late environment lookup can move
+unrelated owner state during a runner's lifetime.
+
+**Consequences:** Default owners either initialize or fail admission explicitly.
+Repair of a failed default setup requires a new runner. Group commit is scoped
+metadata atomicity, not whole-run/telemetry atomicity or tenant authentication.
+Startup filesystem I/O remains synchronous; arbitrary I/O/uncooperative actions,
+other ignored artifact writes and deployment qualification remain R30/C09/C12.
+No coding provider is needed for these regressions.
+
+**Evidence:** [Runner ownership/completion/replay tests](../../internal/agent/blackboard_owner_regression_test.go),
+[related transaction/metadata tests](../../internal/blackboard/group_transaction_test.go),
+[loaded-owner/pipeline tests](../../internal/agentexec/blackboard_owner_regression_test.go),
+[actual authenticated/enforced HTTP rejection](../../cmd/bt-dashboard/blackboard_owner_regression_test.go),
+and [MCP adapter errors](../../cmd/bt-agent/blackboard_tools_test.go).
+
+<a id="adr-275"></a>
+
+## ADR-275: Sprint Result Commit and Metadata Reconciliation
+
+**Status:** Accepted implementation, documented 2026-10-01.
+
+**Context:** Sprint dispatch durably claimed tasks, but ignored separate status
+and output commit errors. It reported done even when a healthy task result was
+not recorded or a batch panicked. Independent workflow mirrors could advance
+without durable task completion. Typed healthy-run persistence errors were
+classified as healthy work but lost at the sprint interface.
+
+**Decision:** Introduce TaskStore.CommitExecution to atomically record related
+execution metadata for an in-progress claim. Capture that owner and executor for
+the batch. Retain failed task commits and execution diagnostics in asynchronous
+status with output/outcome/task-agent-tree-run attribution. Mirror workflow state
+only after the task commit. Continue independent already-claimed work once each;
+never execute completed work again to repair its record. Treat unexpected errors
+as failed batch observations and panic/unknown work as uncertainty.
+
+Before new sprint admission, an authenticated request repairs retained metadata
+against the original owner/claim without calling an executor. Failed repair,
+changed operator decisions and uncertainty stop new admission with 503. Matching
+old idempotency keys preserve their existing observation contract. Browser
+polling uses the shared auth/error helper and distinguishes failed observations,
+finished batches and idle state; task-store counts are not sprint percentages.
+
+**Alternatives:** Logging ignored writes hides the failure from polling clients.
+Two separately acknowledged commits can leave status/output contradictory.
+Requeueing a completed task duplicates side effects. Writing a durable resume
+queue would introduce new recovery/retention policy without qualification; this
+increment retains explicit process-local evidence instead.
+
+**Consequences:** Healthy execution and record failure remain independently
+observable. Metadata repair may admit genuinely new approved work afterward,
+but cannot replay a repaired completion. Deferred results can become eligible
+for a later ordinary sprint once their metadata commits. Restart/new-batch
+history, stale multi-process task snapshots, workflow-mirror atomicity, unresolved
+operator conflict/uncertainty recovery and whole-sprint admission budgets remain
+explicit gaps (R30). No new database or coding-provider execution is introduced.
+
+**Evidence:** [Atomic task-result tests](../../internal/dashboard/task_execution_commit_test.go),
+[actual authenticated/enforced sprint commit/repair tests](../../cmd/bt-dashboard/sprint_persistence_regression_test.go)
+and [browser polling tests](../../tests/unit/tasks.test.js). The local fixture
+runs each of two healthy actions once, blocks task persistence, preserves both
+results, rejects repair until storage is restored, and commits original results
+without executing either action again. Separate fixtures retain healthy-run
+promotion errors, reject changed owners/decisions and auth, and report batch
+panic without requeueing claims.
+
+<a id="adr-276"></a>
+
+## ADR-276: Sprint Capacity Reservation and Owned Batch Budgets
+
+**Status:** Accepted implementation, documented 2026-10-01.
+
+**Context:** Sprint dispatch bypassed the shared worker pool and concurrency
+limiter, admitting a real local fixture even after pool closure. Each task had
+an executor timeout, but a batch had no aggregate context budget. Admission
+mutex/file-lock waits could outlive the HTTP caller; eagerly claimed tasks could
+remain stranded if queue admission were added only after those claims.
+
+**Decision:** Serialize admission under a request-bounded gate, cap its default
+at 30 seconds, and reserve shared limiter/queue capacity before durable task
+claim. The callback waits for a claim decision and drains as a no-op after
+rejected/empty claims, releasing capacity once. Status remains readable during
+capacity waiting. Report 503 for unavailable admission and 408 for canceled or
+expired admission, preserving explicit evidence that no task was dispatched.
+
+Accepted work gets a detached five-minute batch context, including queue time;
+each task inherits its remaining budget. Keep capacity until actual execution
+and cleanup return. After expiry, return only proven never-dispatched claims
+as an atomic approved/not_started result group under an independent 30-second
+record-cleanup budget. Failed cleanup retains metadata for ADR-275 repair;
+started results are preserved without deadline-based execution replay. TaskStore
+claim/commit variants propagate caller budgets through mutex and sidecar waits.
+
+**Alternatives:** Claiming before queue admission strands tasks after rejection.
+Using the HTTP context throughout an asynchronous batch cancels healthy accepted
+work when the response ends. Releasing capacity at timeout admits overlapping
+work while an old action still runs. Per-task reservations improve fairness but
+complicate batch claim/cleanup ownership; this increment chooses one reservation
+per sequential batch and documents that tradeoff.
+
+**Consequences:** Shared dashboard capacity now covers sprint batches. Caller
+cancellation limits admission, not already accepted asynchronous ownership.
+Cooperative cleanup can exceed the execution deadline; generic I/O and actions
+ignoring cancellation cannot be forcibly preempted. Failed/unconfirmed started
+work remains non-replayable by ordinary sprint admission. Nil pool/limiter seams
+retain standalone fallback behavior; no durable resume queue, fleet SLO or new
+coding provider is introduced. Operational timeout configurability, restart-safe
+ownership and the remaining fleet cancellation/resource audit stay explicit R30
+follow-up work.
+
+**Evidence:** [Actual admission/budget regressions](../../cmd/bt-dashboard/sprint_admission_regression_test.go)
+cover closed pool, full queue, exhausted limiter, serialization wait, readable
+status, HTTP detachment, retained capacity after expiration and single execution
+with unstarted cleanup. [Task-store context/group tests](../../internal/dashboard/task_execution_context_test.go)
+cover mutex/sidecar deadlines, unchanged committed state and all-or-nothing
+related results. Only local/fake actions run; no coding/model provider executes.
 
 ---
 

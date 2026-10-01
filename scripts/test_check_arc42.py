@@ -67,6 +67,16 @@ class ArchitectureChecks(unittest.TestCase):
         self.assertIn("undocumented internal/new_component", self.errors())
         self.assertIn("nonexistent cmd/bt-agent", self.errors())
 
+    def test_api_inventory_and_operator_links_are_checked(self):
+        reference = self.root / "docs/API_REFERENCE.md"
+        reference.write_text("[`removed`](#package-removed)\n\n## Package: removed\n")
+        self.assertIn("API_REFERENCE: nonexistent internal/removed", self.errors())
+        self.assertIn("API_REFERENCE: undocumented internal/engine", self.errors())
+        reference.write_text("[`engine`](#package-engine)\n\n## Package: engine\n")
+        self.assertEqual(self.errors(), "")
+        (self.root / "docs/TROUBLESHOOTING.md").write_text("[ADR](adr/INDEX.md)\n")
+        self.assertIn("missing link target adr/INDEX.md", self.errors())
+
     def test_goal_needs_strategy_and_scenario(self):
         self.append("01-introduction-goals.md", "| Q2 | **Reliability** | Recover |\n")
         self.assertIn("Q2: no quality scenario", self.errors())

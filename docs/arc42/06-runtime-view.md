@@ -17,7 +17,9 @@ due agent.
    tick budget; `pending_approval` stops that loop so an external decision
    can arrive without busy waiting.
 4. The engine records result/outcome and applies output-quality rules.
-   The runner records history, reflections and feedback as configured.
+   The runner records history, reflections and feedback as configured. History
+   write failure returns the actual execution result plus an error; scheduled
+   execution logs that failure without claiming a persisted history record.
 5. The calling adapter translates the outcome into its API/transport
    response. Scheduled execution additionally applies retry/breaker/DLQ policy.
 
@@ -45,6 +47,53 @@ observe its context. Longer implementation actions have their own budgets
 (§6.4), so “every task returns within 120 seconds” is not a valid platform
 guarantee.
 
+For `POST /api/agents/execute` and `POST /api/agents/run`, one admission owner
+uses the request context and the executor's five-minute default timeout for
+limiter waiting, queue submission and execution. A closed pool returns 503;
+cancellation/expiry while waiting for admission or completion returns 408
+when the HTTP connection still permits a response. An admitted task retains
+its concurrency slot until executor cleanup finishes, even if its HTTP caller
+disconnects. Canceled queued tasks skip execution when drained. Pool shutdown
+wakes blocked submitters and drains accepted work; it cannot force a synchronous
+action that ignores cancellation to terminate.
+
+A 408 or lost connection does not prove the task never started. Inspect run
+history before retrying side effects. The runner preserves a healthy completed
+result/history if cancellation races after the operation. The Hermes fallback
+inherits the caller's budget, preserves partial output and command errors,
+and terminates its owned process group on cancellation (ADR-266). Remote dispatch preserves typed record errors through `error_kind`. A lost,
+expired or malformed remote response is terminal uncertainty: router and retry
+policy stop instead of trying another execution owner. Known rejection can fall
+back only with explicit non-admission evidence. See ADR-267; remote-call
+idempotency and fleet-wide bounded termination remain open.
+
+A2A card resolution, message dispatch and task polling share the caller budget.
+Only explicit same-origin non-admission allows SendMessage retry; lost responses
+are uncertain. Submitted/working tasks use GetTask with the existing ID, never a
+new message. Paused states return to the caller. The SDK owns asynchronous tasks
+independently of an HTTP request; explicit CancelTask cancels cooperative tree
+work. A polling timeout requires reconciliation and does not claim cancellation.
+
+BT status events preserve actual state/output and optional `bt_execution`
+metadata when history writes fail. Auction keeps the award, output and typed
+diagnostic, without replay or local fallback; only a genuinely completed winner
+is healthy. A nested completed-child persistence stop aborts its surrounding
+workflow. The engine shares a typed stop across parallel blackboards, blocks
+subsequent built-node admission/reticks and returns the diagnostic through
+RunOnce. The surrounding outcome is `aborted` or `uncertain`, not whole-task
+success. Already admitted parallel work may still finish. See ADR-268.
+
+Known non-completed A2A states also cross the integer BT interface as typed
+`ExecutionStoppedError`. They stop tree retries, selector fallback and outer
+retry without depending on words such as “timeout” in status text. Canonical
+waits are deferred in SLO accounting and do not open execution breakers; their
+diagnostic remains in history and completion events. Failed/canceled/rejected
+work remains unsuccessful. When a paused group contains an admitted failed or
+panicked sibling, that fault outranks the wait. Blocked admission, nested
+stop-converted success and normal conditional skips are not invented failures.
+These tests cover typed dispositions (ADR-269). Local workflow approval/control
+paths are covered by ADR-270; durable resumption remains separate R30 work.
+
 ## 6.2 Evolution Cycle
 
 **Trigger:** a gardener cycle or a supported evolution tool is invoked.
@@ -60,8 +109,16 @@ guarantee.
 5. Persist accepted trees and associated feedback/archives; reject or
    restore after failed gates, and record cycle metrics.
 
+Ordinary and optional passes stage detached candidates; failed configured
+snapshots, validation or tree writes preserve the live predecessor and do not
+publish mutation experience. Deep search replays the entire ordered winner,
+re-scores it against current reflections and commits before live/learning
+publication (ADR-262). Cached search scoring is scoped to reflection evidence.
+
 The island winner pass runs before the ordinary per-tree mutation loop.
-Its remaining missing benchmark/meta-validation/snapshot checks are R23;
+It validates the whole-tree candidate and snapshots the predecessor before
+committing it to disk, then updates the live tree. Failed snapshot/write
+leaves the live tree unchanged (R23 regression contracts);
 the diagram in §5.3 must not be interpreted as proof of identical gating.
 Per-user trees use per-user evidence and experience banks. See
 [`evolve_v2.go`](../../internal/gardener/evolve_v2.go) and
@@ -72,15 +129,59 @@ Per-user trees use per-user evidence and experience banks. See
 **Trigger:** an authenticated operator approves tasks and submits
 `POST /api/sprint/execute`.
 
-1. Dashboard handlers select approved tasks and expose running status.
-2. The dashboard dispatches tasks through `AgentExecutor`, subject to its
-   worker/concurrency and per-agent breaker checks.
+1. Serialize sprint admission with the HTTP caller's context and a 30-second
+   default. Reserve the shared concurrency limiter and worker queue before
+   durably claiming tasks. Closed admission returns 503; canceled/expired
+   admission returns 408, with explicit non-dispatch evidence and unchanged
+   claims. Matching idempotency keys observe their existing job.
+2. Dispatch claimed tasks sequentially through a captured `AgentExecutor`,
+   task store and breaker owner. Accepted work has its own five-minute batch
+   deadline, including queue time, detached from HTTP disconnect. Per-task
+   contexts inherit the remaining batch budget. The shared reservation stays
+   owned until actual execution/metadata cleanup returns, even after expiry.
 3. Execution uses in-process dependencies; the executor has a Hermes CLI
    fallback. It does not always send a `bt_run_task` MCP request.
-4. Completed tasks, genuine failures and deferred work have distinct
-   dispositions. A provider quota carryover returns a task to approved
-   work rather than treating it as completed.
-5. The browser polls `GET /api/sprint/status`.
+4. Commit each task's disposition, output, outcome, optional run ID and execution
+   diagnostic together. Only then advance its workflow mirror. A healthy run
+   with a record error stays completed work with a diagnostic. Genuine stops
+   stay failed; ordinary quota carryover and pre-execution breaker skips return
+   to approved. Approval/input waits do not establish completion.
+5. Retain task-commit errors and their observed results in sprint diagnostics;
+   continue other claimed tasks once each, without replaying completed work.
+   Expiry stops further dispatch. Proven unstarted claims return to approved
+   work together with outcome `not_started`, within a separate 30-second cleanup
+   record budget; failed cleanup retains their observed metadata for repair.
+   Started work preserves its actual result and is never automatically requeued
+   merely because a deadline elapsed. Terminal errors produce progress `failed`.
+   A batch panic reports uncertainty
+   and leaves interrupted/unattempted claims explicit for operator inspection.
+6. The browser polls `GET /api/sprint/status`, shows terminal diagnostics, and
+   stops on completion or authentication/authorization rejection.
+
+Status exposes tracked progress (idle/dispatching/running/done/failed), latest job
+and task, elapsed seconds, initialized ISO 8601 start time and optional
+deadline_at for the owned batch budget. Before admission,
+progress is idle, elapsed is zero and started_at is absent. tasks_completed and
+tasks_total are task-store-wide observations, not current-sprint percentages.
+Optional error/error_kind and per-task diagnostics retain observed output/outcome,
+agent/tree/run attribution and task_committed/commit_error. `done` means batch
+processing ended without unexpected diagnostics; it does not claim code delivery
+or that every task completed (quota/breaker deferrals can remain).
+
+After repairing the task-store path, a new authenticated sprint request retries
+retained task metadata before claiming any new approved tasks. Matching old
+idempotency keys only return their old job. Repair never invokes the executor;
+changed owners/operator decisions and unresolved execution uncertainty return
+503 rather than overwriting evidence or inventing a replay decision. Diagnostics
+are process-local until a new batch or restart; copy them and inspect history
+before restarting. Restart-safe reconciliation remains R30. See
+[ADR-275](09-decisions.md#adr-275), [commit/repair HTTP regressions](../../cmd/bt-dashboard/sprint_persistence_regression_test.go)
+and [status snapshots](../../cmd/bt-dashboard/sprint_schema_regression_test.go).
+[Capacity/context regressions](../../cmd/bt-dashboard/sprint_admission_regression_test.go)
+cover actual rejected admission, readable status during waits, HTTP detachment,
+retained capacity after cooperative expiry and unstarted-task cleanup (ADR-276).
+These are cooperative budgets, not guaranteed wall-clock termination of arbitrary
+filesystem operations or synchronous actions ignoring cancellation.
 
 `POST /api/workflow/run-full-pipeline` and `POST /api/pipelines/run` are
 separate interfaces; `/api/sprint` and `/api/pipeline/*` are not aliases
@@ -89,6 +190,46 @@ for these routes. [The mux](../../cmd/bt-dashboard/main.go) is authoritative.
 Company-state locks cover snapshot/apply windows around long-running tree
 calls. Holding that shared lock across model calls would block unrelated
 page loads (QS18/QS21, ADR-239).
+
+YAML pipelines use a common sequential runner for top-level, loop and nested
+subworkflow bodies. Loops execute every declared body step. An unconfigured
+approval waiter returns a typed pending state; rejected/escalated/failed or
+expired approval decisions stop rather than being skipped or requested again.
+Raw agent waits are normalized to typed stops. Child contexts inherit container
+budgets; HITL creation and polling use the same shorter caller/policy deadline.
+Completed healthy child work followed by an ordinary failure produces a typed
+partial stop, preventing container or outer retries from repeating the prefix.
+Normal eligible single-step failure retry and explicit ordinary skip remain
+available. Already admitted parallel siblings may finish.
+
+Container results retain nested child evidence, including approval task/request
+IDs. HTTP pipeline status reports `waiting` for a proven wait, `failed` for an
+unsuccessful result even when the callback returned no error, and `complete` for
+healthy completion. Optional `error_kind` retains the terminal diagnostic.
+The browser renders nested IDs as escaped text and stops polling a settled
+waiting invocation. It does not automatically resume a paused run or claim its
+in-memory status survives restart (ADR-270).
+
+A configured blackboard must accept the initial input before an agent starts.
+Step output and previous-output mirrors report every attempted write failure.
+Healthy completed output remains in the result with a persistence diagnostic;
+the workflow aborts before retry/skip/downstream work. A failed agent whose
+output mirror also fails retains its original error and a typed failure stop.
+An acknowledged first mirror is not rolled back when the second fails. Scope
+and sidecar lock waits inherit the shorter caller/default budget. Ordinary
+filesystem I/O remains cooperative (ADR-271).
+
+Pipeline loading accepts a basename with optional .yaml suffix. Directory,
+absolute, traversal, backslash and NUL names are rejected before file selection
+or run admission. Both listing and execution use rooted reads: relative symlinks
+inside the configured directory work; escaping/absolute file symlinks do not.
+Operators may relocate the configured directory through a symlink. Missing
+inventory directories return an empty list; other directory failures return
+503. Invalid/unreadable YAML entries are omitted from the inventory. A selected
+unavailable file returns 404 without internal filesystem error details.
+Protected-route 401/403 responses retain their error schemas even under
+enforced validation; only an explicit default can cover an otherwise
+undocumented response status (ADR-272).
 
 ## 6.4 Self-Improvement Cycle (goap-fusion loop)
 
@@ -122,8 +263,9 @@ An unsupported model is an implementation error, not a rate limit.
 
 The coding runner is selected through `BT_SUPERPOWERS_PROVIDER`.
 Read-only review and write-capable implementation retain different
-permission policies. Opt-in failover may try the alternate provider once
-for a rate limit; it does not switch on authentication/model errors.
+permission policies. The default and deployed Codex-only policy disables alternate-provider failover.
+Only explicit legacy compatibility with that policy disabled may try an alternate
+once for a rate limit; it does not switch on authentication/model errors.
 See [coding delegation](../coding-delegation.md) and
 [§8.19](08-crosscutting-concepts.md#819-coding-provider-policy).
 
@@ -131,8 +273,9 @@ See [coding delegation](../coding-delegation.md) and
 
 1. On an existing-plan run, `internal/engine` calls
    `delegationPreflightBackoff` before creating a worktree or starting the
-   coding-attempt budget. With `BT_SUPERPOWERS_RATE_LIMIT_FAILOVER=true`,
-   preflight checks both the configured provider and its alternate.
+   coding-attempt budget. Only with Codex-only policy explicitly disabled and
+   `BT_SUPERPOWERS_RATE_LIMIT_FAILOVER=true` does preflight check both the
+   configured provider and its alternate; the deployed policy checks Codex.
 2. For each provider whose latest valid deadline is at or before now,
    preflight clears its shared JSON file, legacy agent-scoped blackboard
    key and run-local `ChainState` entry. It checks both providers before
@@ -237,6 +380,14 @@ Approval finalization activates/schedules the tracked automation; rejection
 keeps it unavailable. Negative feedback can flag and pause an approved
 automation until review finalization.
 
+Task approval first persists a reconciliation marker, then resolves the HITL
+audit and clears the marker. Failure is reported and the task remains excluded
+from dispatch until a retry completes synchronization. Nested tree gates bind
+requests to their own node/phase/task/agent identity and retain outer approval
+while inner review remains pending. Post-review begins only after child
+completion; completed child work is not replayed while approval is pending.
+Storage failure stops the gate before a pre-approval child runs (ADR-263).
+
 MCP and dashboard use shared persona finalization functions. User-scoped
 resolution and `AutomationBlocked` prevent falling through to a default
 tree for pending/rejected/flagged tracked automations. Trusted operator
@@ -244,6 +395,42 @@ settings can permit auto-approval; the default HITL policy is not an
 unconditional guarantee that every installation requires a human click.
 See [automation finalization](../../internal/persona/automation_finalize.go),
 [autopilot tests](../../cmd/bt-agent/autopilot_test.go), and QS9–QS13.
+
+## 6.8 Inspect a Tree Definition
+
+An authenticated operator requests an exact tree ID. Lookup rejects path-shaped
+identifiers, checks existing catalog aliases and shared compiled construction,
+then consults the injected unscoped generated-tree resolver on a miss. The
+explicit default ID resolves its compiled definition; unknown IDs never receive
+execution's legacy fallback. Missing parameters return 400; unavailable actual
+definitions return 404. Catalog metadata alone does not establish availability.
+
+HTTP returns the bare SerializableNode, preserving nested children and metadata.
+The browser encodes the requested ID, escapes labels/details/errors and binds
+collapse/detail events to structural paths. Repeated names and IDs remain
+independent branches. This read does not execute a tree or coding provider.
+Enforced schema checks cover the root and immediate child shape; nested schema
+validation and tenant-bound inspection remain separate work (ADR-273).
+
+## 6.9 Admit a Blackboard Owner and Promote Completed Evidence
+
+A platform runner first initializes its persistent blackboard namespace. A
+failed default initialization returns no memory substitute: agent work stops
+before a run handle/tree tick, pipelines stop before step admission, HTTP startup
+returns 503 before publishing/enqueuing a run, and MCP returns an error. A runner
+keeps its initialized owner/error; after a failed setup the operator repairs the
+root and constructs a new runner. Successful initialization fixes the default
+owner despite subsequent environment/configuration removal. Injected managers
+are trusted dependencies configured before use.
+
+After healthy agent execution, promotion stages output, task, run/session IDs
+and timestamp under one scoped gate/file transaction. Invalid entries, a group
+that cannot fit without evicting itself, cancellation or commit failure publish
+none of that group. Entry metadata is detached from writer/read/list callers.
+Failure preserves the actual healthy result and records its diagnostic in
+history; typed persistence evidence stops automatic replay. Promotion write
+admission respects the shorter caller/default scope budget. Startup filesystem
+I/O and arbitrary synchronous I/O remain cooperative (ADR-274, R30).
 
 ---
 

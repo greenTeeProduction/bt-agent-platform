@@ -11,21 +11,23 @@ catch these — you are the only gate.
 ## What to check
 
 1. **Pre-consolidation package references.** The b5c4d00 consolidation mapped:
-   metrics→dashboard, reflection→evolution, mcp→engine, finance/research→evolution,
+   metrics→dashboard, reflection→evolution, mcp→engine, finance→evolution,
    log→engine. Flag any import, package declaration, or directory that resurrects
-   an old package name. Grep the diff for `"/internal/(metrics|reflection|mcp|finance|research|log)"`.
+   an old package name. Grep the diff for `"/internal/(metrics|reflection|mcp|finance|log)"`.
 
 2. **Import cycles into engine.** `internal/engine` must not import other
-   `internal/*` packages from higher layers (dashboard, evolution, agent, a2a, ...).
+   `internal/*` packages from higher layers (dashboard, agent, a2a, ...).
    Run `PATH=/usr/local/go/bin:$PATH go list -deps ./internal/engine/` or inspect
    imports directly. Cross-layer calls from engine must go through nil-checked
    injection-hook vars (pattern: `engine.DelegateToTreeFn` in delegate_hooks.go,
    `engine.RecordNodeTickFn` in metrics_hooks.go), wired from `cmd/bt-agent`.
-   Flag direct imports AND hooks that are called without a nil check.
+   Current arc42 recognizes engine dependencies on evolution/research. Flag new higher-layer direct imports AND hooks that are called without a nil check.
 
-3. **Persistence convention (ADR-003).** State goes to JSON files under
-   `~/.go-bt-evolve/` written atomically (tmp file + rename). Flag direct
-   `os.WriteFile` to a final path for state files, or new persistence mechanisms.
+3. **Persistence convention (ADR-003).** Core state uses atomic JSON/YAML replacement in configured owner paths.
+   Shared read/update/write transactions need context-bounded sidecar locks;
+   history/audit/interaction JSONL append streams are explicit arc42 §8.4
+   contracts. Flag partial state writes, unbounded waits and acknowledged
+   lost writes; check that persistence failure cannot replay completed work.
 
 4. **Toolchain.** Any script or hook you see invoking `go` must either use
    `/usr/local/go/bin/go` or prefix `PATH=/usr/local/go/bin:$PATH` — bare `go`

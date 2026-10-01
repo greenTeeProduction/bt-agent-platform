@@ -386,5 +386,5 @@ export BT_API_KEY="your-secret-key"
 - [Getting Started Guide](GETTING_STARTED.md)
 - [API Reference](API_REFERENCE.md)
 - [Tutorial](TUTORIAL.md)
-- [Architecture Decision Records](adr/INDEX.md)
+- [Architecture Decision Records](arc42/09-decisions.md)
 - [Runner Setup Guide](runner-setup.md)

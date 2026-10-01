@@ -6,6 +6,8 @@ runtime details in §§5–8 and decision history in [§9](09-decisions.md).
 | Term | Definition |
 |---|---|
 | **A2A** | Agent-to-Agent discovery and task exchange over HTTP. Peer trust, transport and availability depend on deployment; see [§3](03-context-scope.md). |
+| **A2A task owner** | The SDK execution identified by task/context ID. Submitted/working tasks are polled by ID; HTTP completion or a polling timeout does not itself cancel that owner. Task state is process-local (ADR-268). |
+| **Aborted delegation tree** | A surrounding workflow stopped after a completed child reported a persistence diagnostic. Child evidence is preserved; skipped remaining steps are not reported as completed. |
 | **Action** | A behavior-tree leaf that performs work and returns an execution status. Its side effects and cancellation behavior belong to the registered implementation. |
 | **ADR** | Architecture Decision Record: a dated decision with context, rationale and consequences. Historical records live in [§9](09-decisions.md); current behavior lives in §§3–8. |
 | **Agent Card Signing** | Origin/integrity checks for A2A capability cards, using the configured signing-key policy. A valid signature is not evidence that a peer is currently healthy. |
@@ -15,12 +17,14 @@ runtime details in §§5–8 and decision history in [§9](09-decisions.md).
 | **Blackboard** | Mutable state shared by nodes within an execution. Distinguish the engine's typed Blackboard from the scoped persistence manager in `internal/blackboard`. |
 | **Build Identity** | The revision/build metadata of a running binary. Repository HEAD, a file on disk and the process executable can represent different revisions. |
 | **BuildTree** | Engine conversion of serializable nodes into executable `go-bt` commands. Building and validating are distinct operations unless the caller uses a combined API. |
+| **Cache publication** | Installing a staged state mutation after its persistent commit succeeds. A failed blackboard mutation/commit preserves the preceding entries, byte accounting and eviction state (ADR-271). |
 | **Chain Type** | The declarative LLM/tool workflow selected by ChainAction metadata; the current kind inventory is in [§5.5](05-building-blocks.md#55-chain-types). |
 | **ChainAction** | A behavior-tree node that invokes a declarative chain, such as a direct tool action, prompt or agent loop. |
 | **Circuit Breaker** | A closed/open/half-open admission policy for repeated failures. A closed breaker describes scheduling health, not proof that a GOAP run landed code. |
 | **Claude Backoff** | Historical name for Claude-specific durable quota state. Codex has separate state; see Provider Cooldown. |
 | **CMA-ES** | Covariance Matrix Adaptation Evolution Strategy, used for numerical parameter tuning. Library/tool availability does not imply every gardener cycle invokes it. |
 | **Codex** | An external coding CLI supported by the implementation/review delegation seam. Its account/model configuration is independent of node-level inference. |
+| **Completed workflow prefix** | Healthy child work already performed before the surrounding workflow/container stopped. A typed partial stop prevents automatic replay of that prefix; no rollback or durable resume is implied (ADR-270). |
 | **Condition** | A behavior-tree leaf that tests state and returns success/failure without selecting a new architecture policy. |
 | **Crisis Detector** | Evolution component identifying stagnation/diversity symptoms that can trigger configured recovery interventions. |
 | **Dead Letter Queue (DLQ)** | Persistent failed-work records retained for inspection and replay. Insertion, retryability and retention are caller/policy-specific. |
@@ -43,6 +47,7 @@ runtime details in §§5–8 and decision history in [§9](09-decisions.md).
 | **Island Model** | Evolution with separate populations and migration. The live champion-adoption path still has documented gate/snapshot differences (R23). |
 | **Knowledge Graph** | Runtime tree/capability/relationship and feedback registry in `internal/knowledge`; used for discovery and learning, not the Graphify source graph. |
 | **Knowledge Store** | Deduplicated research findings and supporting evidence in `internal/research`; separate from tree capabilities and execution feedback. |
+| **Known execution stop** | Typed evidence of non-completed owned work (failed, canceled, rejected or waiting). Automatic retry/fallback stops; a wait is deferred, not delivery. Joined admitted failure/uncertainty outranks a wait (ADR-269). |
 | **MAP-Elites** | A quality-diversity archive retaining strong candidates across behavior niches. |
 | **MCP** | Model Context Protocol. This platform's servers use JSON-RPC over stdio; transport authentication differs from HTTP headers/cookies. |
 | **MCTS Affinity** | A heuristic score determining whether speculative structural search augments ordinary ordering for a tree. Current asymmetry is documented as R21. |
@@ -50,6 +55,7 @@ runtime details in §§5–8 and decision history in [§9](09-decisions.md).
 | **Memetic Evolution** | Population evolution augmented by local search of individual candidates. |
 | **MetaValidator** | Structural/safety validation applied on particular adoption paths after candidate scoring. Its existence does not imply all paths invoke it. |
 | **Mutation** | An operation changing a tree's structure or metadata. Current operators are defined by implementation rather than a copied fixed count. |
+| **Non-admission evidence** | A trusted peer's explicit assertion that a rejected request did not enter execution. An HTTP error status alone is insufficient. |
 | **NSGA-II** | Non-dominated Sorting Genetic Algorithm II: multi-objective population selection using dominance ranking and crowding distance. |
 | **OutcomeSelector** | An engine control node selecting behavior from prior outcome/state according to its configured routing rules. |
 | **Pareto Front** | Candidates not dominated by another candidate across all chosen objectives. |
@@ -64,6 +70,7 @@ runtime details in §§5–8 and decision history in [§9](09-decisions.md).
 | **Quota Economy** | Policies and caches intended to reduce metered calls and respect provider quotas; not a guarantee of free or unlimited execution. |
 | **Recover** | A configured recovery path after failure. Its exact retry/rollback effects depend on the node or caller, unlike the narrower SafeGo primitive. |
 | **RetryWithBackoff** | A retry helper with configured attempts, classification and delay. Not every failure or node automatically uses it. |
+| **Rooted workflow selection** | Reading a selected catalog basename through the configured directory boundary, with escaping symlinks rejected. This is filesystem confinement, not per-user authorization (ADR-272). |
 | **RunTask** | The engine execution loop around a built tree and blackboard, with a cooperative context budget and tick limit. |
 | **SafeGo** | Goroutine wrapper recovering/logging panics and invoking an optional callback. It does not itself guarantee retry, DLQ persistence or goroutine restart. |
 | **Selector** | A control node trying alternatives until one succeeds or remains running, according to its implementation's resume policy. |
@@ -75,10 +82,13 @@ runtime details in §§5–8 and decision history in [§9](09-decisions.md).
 | **StrategyRouter** | A routing point choosing an appropriate execution strategy. Skill-compiled trees use model routing with a configured executable fallback. |
 | **Structural Fitness** | A tree-shape/evaluation signal kept separate from genuine-run success history. |
 | **Superpowers Run** | Durable artifacts for a coding workflow, including plan, tasks, implementation and verification evidence. The historical name is provider-neutral. |
+| **Sprint batch budget** | A five-minute context owned by accepted asynchronous work, including queue time. Expiry stops new dispatch and returns only proven unstarted claims; capacity stays owned until actual cleanup (ADR-276). |
+| **Sprint metadata reconciliation** | Retrying a retained observed task result against its original in-progress owner without running the action again. Failed/conflicting writes and execution uncertainty block new admission; evidence is process-local (ADR-275). |
 | **Task Approval (dashboard)** | The dashboard task workflow's execution decision. It is separate from login authentication and may be distinct from an engine HITL request. |
 | **Tick** | One evaluation step of a behavior tree returning success, failure or running; a synchronous tick can contain slow work. |
 | **Transposition Table (TT)** | Cache of evaluations keyed by state/tree identity, used to reuse previous search results. |
 | **Tree Store** | Persisted serializable trees loaded by the appropriate registry/resolver. Global and per-user scopes must remain explicit. |
+| **Uncertain execution** | A dispatched operation whose completion cannot be established. Automatic replay stops; reconcile evidence before an operator chooses another attempt (ADR-267). |
 | **UtilitySelector** | A selector that ranks alternatives by configured utility/evidence before execution. |
 | **Vault Manager** | Integration for managing research notes and related knowledge-vault content. |
 | **Worktree** | An isolated Git checkout for a change. The main checkout is a normal non-bare repository; worktrees share Git object/history storage. |

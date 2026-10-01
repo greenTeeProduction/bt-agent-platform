@@ -39,9 +39,24 @@ choices with rationale, alternatives, consequences and evidence, not every
 routine bug fix.
 
 The review found several implementation/operations gaps that remain open:
-unequal island-adoption gates, unchecked cursors in two control nodes,
+
 unverified network isolation/TLS and backup recovery, incomplete evolution
-provenance and cooperative cancellation. The hardcoded health toolchain
+provenance and cooperative cancellation. The 2026-10-01 cleanup adds cursor bounds, shared feedback transactions,
+validated commit and proposal replay controls (ADR-262), recoverable approval
+commit/admission and nested gate isolation (ADR-263), serialized snapshot revision
+commit and orphan preservation (ADR-264), configured owner initialization
+(ADR-265), context-aware dashboard admission and execution ownership
+(ADR-266), terminal distributed execution diagnostics (ADR-267), A2A execution ownership
+and tree-level replay stops (ADR-268), typed known-stop dispositions
+and admitted parallel failure evidence (ADR-269), shared workflow consent/control
+and completed-prefix replay protection (ADR-270), commit-before-cache blackboard
+and workflow metadata acknowledgement (ADR-271), rooted pipeline selection
+and status-specific response validation (ADR-272), exact tree inspection and
+safe presentation (ADR-273), blackboard owner admission and atomic run promotion
+(ADR-274), sprint task-result acknowledgement and metadata-only repair
+(ADR-275), shared sprint capacity and owned batch budgets
+(ADR-276), island acceptance
+and the Codex-only policy (ADR-261). The hardcoded health toolchain
 field was corrected on 2026-09-16 (D7).
 Provider/model readiness and clean-repository preconditions also require
 operational verification; a closed GOAP breaker does not prove a successful
@@ -78,7 +93,7 @@ BT_SKIP_LLM_TESTS=1 go test -short -count=1 ./internal/engine -run Arc42
 The drift gate checks required section structure, local Markdown links and
 anchors, package/binary inventory, quality-goal/scenario references, risk IDs,
 and every ADR index/record association. It covers this directory, the repository README and the
-linked coding-delegation runbook, not arbitrary prose claims or the entire
+linked coding-delegation runbook plus the setup/API/tutorial/troubleshooting guides, not arbitrary prose claims or the entire
 repository's historical plan archive. The Python checker requires Python 3
 standard library only. Regression tests deliberately break references,
 inventories and traceability to ensure the gate fails.

@@ -72,7 +72,17 @@ else
     green "  All code packages are documented"
 fi
 
-check "API_REFERENCE.md" "package listing consistent" 0
+REMOVED_PKGS=$(comm -23 <(echo "$DOC_PKGS") <(echo "$ACTUAL_PKGS"))
+if [ -n "$REMOVED_PKGS" ]; then
+    red "  Documented packages no longer in code:"
+    while IFS= read -r pkg; do echo "    - $pkg"; done <<< "$REMOVED_PKGS"
+    ERRORS=$((ERRORS + $(wc -w <<< "$REMOVED_PKGS")))
+fi
+if [ -z "$FILTERED_MISSING" ] && [ -z "$REMOVED_PKGS" ]; then
+    check "API_REFERENCE.md" "package listing consistent" 0
+else
+    check "API_REFERENCE.md" "package listing consistent" 1
+fi
 
 # ----- 2. GETTING_STARTED.md binary list -----
 echo
@@ -86,7 +96,7 @@ ACTUAL_BINS=$(find "$ROOT/cmd" -maxdepth 1 -type d ! -name 'cmd' | sed 's|.*/||'
 MISSING_BINS=""
 CORE_BINS="bt-dashboard bt-agent bt-evaluator bt-langagent bt-gardener"
 for b in $CORE_BINS; do
-    if ! echo "$DOC_BINS" | grep -q "$b"; then
+    if ! grep -Fxq "$b" <<< "$DOC_BINS"; then
         MISSING_BINS="$MISSING_BINS $b"
     fi
 done
@@ -152,7 +162,7 @@ for c in $(echo "$TR_CMDS" | sort -u); do
     case "$c" in
         bt-gardener|bt-dashboard|bt-agent|bt-evaluator|bt-langagent) ;; # core binaries
         bt-*) 
-            if echo "$KNOWN_PATH_REFS" | grep -qw "$c"; then
+            if grep -qw "$c" <<< "$KNOWN_PATH_REFS"; then
                 : # known non-command path reference
             elif [ ! -d "$ROOT/cmd/$c" ]; then
                 UNKNOWN_CMDS="$UNKNOWN_CMDS $c"

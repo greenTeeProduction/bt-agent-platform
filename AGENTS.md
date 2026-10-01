@@ -1,5 +1,26 @@
 # AGENTS.md
 
+## Current architecture and coding-agent policy
+
+Read `graphify-out/GRAPH_REPORT.md` before source exploration; navigate its
+wiki when available and use graph queries for cross-module relationships.
+The canonical architecture is `docs/arc42/README.md`. Review all twelve
+sections when behavior changes; preserve decision history and connect source,
+tests and remaining risks. Run `graphify update .` after code edits.
+
+Use Codex for BT coding agents and processes. Default provider is `codex`,
+`BT_SUPERPOWERS_CODEX_ONLY=true` and rate-limit failover is disabled under that
+policy. Retained Claude interface names and fake-adapter tests are historical
+compatibility; they do not authorize running Claude Code. The deployment
+policy and precedence are in `docs/coding-delegation.md` (ADR-261).
+
+On Nico's host use `PATH=/usr/local/go/bin:$PATH` for Go/make. Current package,
+injection-hook and persistence conventions are in
+`.claude/skills/project-conventions/SKILL.md`; use the Codex conventions
+review described in `.claude/agents/go-conventions-reviewer.md` after engine
+changes. JSONL history/audit streams are permitted; shared JSON transactions
+need bounded sidecar locks and atomic replacement. No new database.
+
 ## Cursor Cloud specific instructions
 
 ### Product
@@ -47,7 +68,7 @@ On VM startup, run `go mod download` from the repo root (see update script). No 
   curl -s -H "X-API-Key: $BT_API_KEY" http://localhost:9800/api/trees | head
   ```
 
-- State files live under `~/.go-bt-evolve/` (e.g. `tasks.json`). Create the directory if task persistence errors appear on first write.
+- State files and engine logs follow `BT_AGENT_HOME` (default `~/.go-bt-evolve/`). Shared runner reflections honor `BT_REFLECTIONS_DIR`; their legacy default is `~/.go-bt-reflections/`.
 
 ### Optional: Ollama
 
