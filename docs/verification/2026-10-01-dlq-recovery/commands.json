@@ -84,5 +84,61 @@
     "PATH": "Go toolchain/local Go tools prepended"
   },
   "implementation_commit": "0017825211f90d6bc8a2d24715b58496474c9fd2",
+  "scanner_correction_checks": [
+    {
+      "command": "go test -short -count=1 -race ./internal/agent ./internal/api ./internal/a2a",
+      "evidence": "scanner-transport-final.log",
+      "exit_code": 0,
+      "qualification": "Final rooted history/rollback/logger and SDK cancellation fault propagation."
+    },
+    {
+      "command": "go test -short -race -count=5 ./internal/dashboard -run ^TestWorkflowMetadataLockUsesCallerDeadline$",
+      "evidence": "workflow-deadline-final.log",
+      "exit_code": 0,
+      "qualification": "Output-phase setup budget corrected; actual caller deadline and <1s bound remain."
+    },
+    {
+      "command": "go test -short -count=1 -race -covermode=atomic -coverprofile=<private>/scanner-corrective-coverage.out ./...",
+      "evidence": "scanner-corrective-full-race.log",
+      "exit_code": 0,
+      "qualification": "Exact corrective Go identity verified unchanged; 77.8% statements."
+    },
+    {
+      "command": "make build BIN_DIR=<private>/scanner-settled-bin",
+      "evidence": "scanner-settled-build.log",
+      "exit_code": 0,
+      "qualification": "Final runtime code; all quality gates and 13 binaries pass. Two subsequent test-only expectation/budget changes have final full-race and separate graph evidence."
+    },
+    {
+      "command": "graphify update .",
+      "evidence": "scanner-graph-final.log",
+      "exit_code": 0,
+      "qualification": "After final test edits: AST-only 1171 files /14637 nodes /29077 edges /729 communities, no provider calls."
+    },
+    {
+      "command": "python3 -B scripts/test_check_arc42.py then bash scripts/check-doc-drift.sh",
+      "evidence": "scanner-docs.log",
+      "exit_code": 0,
+      "qualification": "Eleven fixtures/drift; all twelve sections reviewed, affected history/rollback/logging/scenario views updated."
+    },
+    {
+      "command": "gosec -no-fail -fmt sarif -out <private>/scanner-corrected-medium.sarif -severity medium ./...",
+      "evidence": "scanner-corrected-summary.json",
+      "exit_code": 0,
+      "qualification": "244 baseline findings; all eight actual gosec locations removed locally. Separate hosted results pending."
+    },
+    {
+      "command": "systemctl --user show <each canonical BT unit> --property=ActiveState,SubState,MainPID; SHA256 existing dashboard artifact",
+      "evidence": "host-state-readonly.json",
+      "exit_code": 0,
+      "qualification": "All three units inactive/MainPID 0; on-disk artifact differs from prior f60 qualified dashboard and was not invoked. No current serving revision inferred."
+    },
+    {
+      "command": "python3 -B scripts/test_check_arc42.py then bash scripts/check-doc-drift.sh",
+      "evidence": "scanner-evidence-docs.log",
+      "exit_code": 0,
+      "qualification": "Settled corrective documentation/evidence additions; eleven fixtures and drift."
+    }
+  ],
   "toolchain": "go1.26.5 linux/arm64"
 }

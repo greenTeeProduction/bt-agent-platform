@@ -82,3 +82,55 @@ acceptance. Ordinary purge/eviction cannot be used as reconciliation.
 C01–C05/C07 complete; C06/C08–C12 partial; blocked none. P1 continues with
 daemon-wide self admission/callbacks, safe DLQ rollout/operator recovery,
 provider readiness and real bounded fleet handoff. C09/C12 remain partial.
+
+## Actual hosted scanner correction
+
+At `fb87abef1efaee5355bdc8827787e4fac00a2c7b`, actual separate
+[gosec 110374854223](https://github.com/greenTeeProduction/bt-agent-platform/runs/110374854223)
+failed eight errors; [CodeQL 110374709225](https://github.com/greenTeeProduction/bt-agent-platform/runs/110374709225)
+failed one high/seven medium. [Exact failed-head checks](github-failed.json),
+[gosec annotations](gosec-failed-annotations.json) and
+[CodeQL annotations](CodeQL-failed-annotations.json) preserve the failures.
+That head was not landable despite local gate success.
+
+The annotations identify existing history traversal/permissions, rollback I/O,
+a fixed deploy Git query and request-derived logger fields. History now uses
+local identifiers and configured-root append/read, new 0600/0750 modes and
+commit-before-cache acknowledgement. Outward links fail before append/read.
+Rollback roots backup access and atomically replaces a complete executable
+without truncating the live image or following its outward link. Runner,
+scheduler and validator operator logs use generated/catalog identities and
+status/counts; protected results and encoded client diagnostics retain detail.
+A narrow fixed-argv Git G204 explanation is preserved; no security category or
+severity gate is disabled. The historical invalid-cron +1h fallback is unchanged
+and has a narrow nilerr lint explanation after removing raw parser log text.
+
+[Correction source manifest](scanner-correction-snapshot.json),
+[complete Go identity](scanner-correction-code.json),
+[transport races](scanner-transport-final.log), [full corrective race](scanner-corrective-full-race.log),
+[build gates](scanner-settled-build.log), [graph update](scanner-graph-final.log),
+[documentation](scanner-docs.log), [scanner summary](scanner-corrected-summary.json)
+and [binary fingerprints](scanner-corrected-binaries.json) qualify this correction
+separately. Full corrective coverage is 77.8%. Medium findings drop from 252
+to 244; all eight actual gosec locations are removed locally. Hosted corrected-
+head scanning still requires direct observation.
+
+Earlier fixture/lint/full-suite failures remain private: the old log assertion
+expected raw validation details, the intentional cron fallback needed an explicit
+nilerr explanation, and the SDK fixture expected ENOSPC from an outward
+`/dev/full` link now rejected before append. The SDK test now asserts the actual
+injected history error survives cancellation as a stopped diagnostic; this does
+not claim a real history ENOSPC injection. Under concurrent gates, a 20ms output-
+phase deadline expired before the action and legitimately rejected admission.
+Its fixture now permits 250ms for input setup while still testing a real caller
+deadline and <1s termination, well below the default lock budget; five repeated
+races pass. The final whole suite passes after these updates. No failed or
+superseded run is counted as final acceptance. Conventions re-review found no
+remaining actionable issues.
+
+[Read-only host recheck](host-state-readonly.json) observes all three units
+inactive with MainPID 0. The current disk artifact differs from the earlier
+f60 dashboard used in serving acceptance and was not invoked. Earlier f60
+serving/Codex/restore evidence remains dated qualification, not a current serving
+claim. No host unit/configuration/binary/state was changed here. The corrected
+code still has no deployed execution or real handoff qualification.

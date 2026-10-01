@@ -1,0 +1,71 @@
+{
+  "base_commit": "fb87abef1efaee5355bdc8827787e4fac00a2c7b",
+  "canonical_sha256": "9e4070d9427a0942cc45fbae96c3671c75f9746afd723bf5e8440b3b182fb532",
+  "excludes": [
+    "graphify-out/",
+    "docs/verification/"
+  ],
+  "files": [
+    {
+      "path": "docs/arc42/07-deployment.md",
+      "sha256": "c4ab2de3a1a3d03c5338b8351fc483297a776a3caa1061763e820041614a9239"
+    },
+    {
+      "path": "docs/arc42/08-crosscutting-concepts.md",
+      "sha256": "481027b740ab323abba3103dca8080cd6f8d8cda90f2e1812a436ead9fac7209"
+    },
+    {
+      "path": "docs/arc42/10-quality.md",
+      "sha256": "8f6f71501d36a59b140714d7b00138ec65d16410f5b78c5417c5b9ec20442d8b"
+    },
+    {
+      "path": "docs/plans/2026-09-30-arc42-cleanup.md",
+      "sha256": "ae6b43d80c88b8dd9509295b91559558b94135ce62ef540963189f65732409f1"
+    },
+    {
+      "path": "internal/a2a/execution_terminal_test.go",
+      "sha256": "6d873e794167968dae0948f7892bd6b1dfef89ea08b7fa56e1c2ff83fcffcdad"
+    },
+    {
+      "path": "internal/agent/deploy_drift.go",
+      "sha256": "ea1410d59a5ffae6a86a125e70f18b61d89234c7d9bdad369b34a3605484d2db"
+    },
+    {
+      "path": "internal/agent/history.go",
+      "sha256": "b66741246a1d112a044515f59b98bd41dc08c87c20d0bc40e82f32df1b305d89"
+    },
+    {
+      "path": "internal/agent/history_regression_test.go",
+      "sha256": "067414cd43d90816e898fe86e57339f074913d2fed60945457f169d0ade34f08"
+    },
+    {
+      "path": "internal/agent/rollback_root_regression_test.go",
+      "sha256": "9d71b85602ad07844aa625a495d5988d78b3c1a0867c980c9c5755e42aee1785"
+    },
+    {
+      "path": "internal/agent/runner.go",
+      "sha256": "5cba06e190a2ee60675bc2c7dea155175a03e9dbfb2577be06dd09a1badb9fe8"
+    },
+    {
+      "path": "internal/agent/scheduler.go",
+      "sha256": "b52ce42ebb4145954b6320ed5085336fc3a946c897d0b170c3d9be91c8d0444a"
+    },
+    {
+      "path": "internal/api/response_log_regression_test.go",
+      "sha256": "561afed82d96e6f17d072720add648d5eaee3fdff0f2d9af391c7385d1f83491"
+    },
+    {
+      "path": "internal/api/response_validator.go",
+      "sha256": "452471ea806677fa20d31936e7eee4c751ab76da1f6287ddd9e1f02d47a8816c"
+    },
+    {
+      "path": "internal/api/response_validator_test.go",
+      "sha256": "efd24888ec9f5acd71e4a40cb48711e74226acbe00e60a81c54d669ef9a3eabf"
+    },
+    {
+      "path": "internal/dashboard/workflow_metadata_regression_test.go",
+      "sha256": "1a20f164353ae33063f69f0d6450993397330e82b0728d62478d866bb9f25d40"
+    }
+  ],
+  "scope": "Actual hosted annotation corrections plus path/log/legacy fault/deadline fixture updates"
+}

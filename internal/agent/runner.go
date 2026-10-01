@@ -264,7 +264,7 @@ func (d *RunDeps) RunOnce(ctx context.Context, agentName, task string, opts RunO
 		}
 		runID := blackboard.NewRunID()
 		bb.RunID = runID
-		bb.Logger = engine.L().With("run_id", runID, "agent", agentName, "tree", result.TreeID)
+		bb.Logger = engine.L().With("run_id", runID)
 		bb.BB = blackboard.NewHandle(mgr, runID, opts.SessionID, agentName)
 		defer bb.BB.Mgr.ReleaseRun(runID)
 		result.RunID = runID

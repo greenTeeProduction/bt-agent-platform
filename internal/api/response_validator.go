@@ -405,15 +405,15 @@ func ResponseValidator(routes []Route, config *ResponseValidatorConfig) func(htt
 			if rc.body.Len() > 0 {
 				violations := ValidateResponse(route, rc.Status(), rc.body.Bytes())
 				if len(violations) > 0 {
-					for _, v := range violations {
-						logger.Warn("API response schema drift detected",
-							"path", r.URL.Path,
-							"method", r.Method,
-							"status", rc.Status(),
-							"field", v.Field,
-							"message", v.Message,
-						)
-					}
+					// Log catalog identity and counts. Request paths and validation
+					// details can contain untrusted data; return them as encoded
+					// diagnostics to the caller rather than raw operator log fields.
+					logger.Warn("API response schema drift detected",
+						"path", route.Path,
+						"method", route.Method,
+						"status", rc.Status(),
+						"violations", len(violations),
+					)
 
 					// In enforcement mode, reject the response with HTTP 500
 					// instead of delivering a schema-drifted payload to the client.

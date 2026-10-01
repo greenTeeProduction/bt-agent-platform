@@ -1,0 +1,98 @@
+[
+  {
+    "path": "internal/agent/history.go",
+    "blob_href": "https://github.com/greenTeeProduction/bt-agent-platform/blob/fb87abef1efaee5355bdc8827787e4fac00a2c7b/internal/agent/history.go",
+    "start_line": 63,
+    "start_column": 24,
+    "end_line": 63,
+    "end_column": 28,
+    "annotation_level": "failure",
+    "title": "Uncontrolled data used in path expression",
+    "message": "This path depends on a [user-provided value](1).",
+    "raw_details": null
+  },
+  {
+    "path": "internal/agent/runner.go",
+    "blob_href": "https://github.com/greenTeeProduction/bt-agent-platform/blob/fb87abef1efaee5355bdc8827787e4fac00a2c7b/internal/agent/runner.go",
+    "start_line": 250,
+    "start_column": 57,
+    "end_line": 250,
+    "end_column": 66,
+    "annotation_level": "warning",
+    "title": "Log entries created from user input",
+    "message": "This log entry depends on a [user-provided value](1).",
+    "raw_details": null
+  },
+  {
+    "path": "internal/agent/runner.go",
+    "blob_href": "https://github.com/greenTeeProduction/bt-agent-platform/blob/fb87abef1efaee5355bdc8827787e4fac00a2c7b/internal/agent/runner.go",
+    "start_line": 250,
+    "start_column": 76,
+    "end_line": 250,
+    "end_column": 89,
+    "annotation_level": "warning",
+    "title": "Log entries created from user input",
+    "message": "This log entry depends on a [user-provided value](1).",
+    "raw_details": null
+  },
+  {
+    "path": "internal/agent/scheduler.go",
+    "blob_href": "https://github.com/greenTeeProduction/bt-agent-platform/blob/fb87abef1efaee5355bdc8827787e4fac00a2c7b/internal/agent/scheduler.go",
+    "start_line": 231,
+    "start_column": 29,
+    "end_line": 231,
+    "end_column": 38,
+    "annotation_level": "warning",
+    "title": "Log entries created from user input",
+    "message": "This log entry depends on a [user-provided value](1).\nThis log entry depends on a [user-provided value](2).",
+    "raw_details": null
+  },
+  {
+    "path": "internal/agent/scheduler.go",
+    "blob_href": "https://github.com/greenTeeProduction/bt-agent-platform/blob/fb87abef1efaee5355bdc8827787e4fac00a2c7b/internal/agent/scheduler.go",
+    "start_line": 270,
+    "start_column": 14,
+    "end_line": 270,
+    "end_column": 23,
+    "annotation_level": "warning",
+    "title": "Log entries created from user input",
+    "message": "This log entry depends on a [user-provided value](1).\nThis log entry depends on a [user-provided value](2).",
+    "raw_details": null
+  },
+  {
+    "path": "internal/agent/scheduler.go",
+    "blob_href": "https://github.com/greenTeeProduction/bt-agent-platform/blob/fb87abef1efaee5355bdc8827787e4fac00a2c7b/internal/agent/scheduler.go",
+    "start_line": 1254,
+    "start_column": 78,
+    "end_line": 1254,
+    "end_column": 83,
+    "annotation_level": "warning",
+    "title": "Log entries created from user input",
+    "message": "This log entry depends on a [user-provided value](1).",
+    "raw_details": null
+  },
+  {
+    "path": "internal/agent/scheduler.go",
+    "blob_href": "https://github.com/greenTeeProduction/bt-agent-platform/blob/fb87abef1efaee5355bdc8827787e4fac00a2c7b/internal/agent/scheduler.go",
+    "start_line": 1254,
+    "start_column": 94,
+    "end_line": 1254,
+    "end_column": 97,
+    "annotation_level": "warning",
+    "title": "Log entries created from user input",
+    "message": "This log entry depends on a [user-provided value](1).",
+    "raw_details": null
+  },
+  {
+    "path": "internal/api/response_validator.go",
+    "blob_href": "https://github.com/greenTeeProduction/bt-agent-platform/blob/fb87abef1efaee5355bdc8827787e4fac00a2c7b/internal/api/response_validator.go",
+    "start_line": 410,
+    "start_column": 16,
+    "end_line": 410,
+    "end_column": 26,
+    "annotation_level": "warning",
+    "title": "Log entries created from user input",
+    "message": "This log entry depends on a [user-provided value](1).",
+    "raw_details": null
+  }
+]

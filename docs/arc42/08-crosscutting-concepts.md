@@ -100,7 +100,10 @@ cannot establish disjoint events and retain max-count reconciliation.
 The [shared JSON transaction helper](../../internal/reliability/shared_json.go)
 uses a 30-second default lock budget. Experience add/reuse/persist lock waits
 also use a 30-second bound; the existing 500-entry cap remains in force. JobStore serializes replacement writes;
-it does not merge stale whole-table snapshots. History caches records only
+it does not merge stale whole-table snapshots. History constrains agent identifiers to local basenames and appends/reads through
+the configured `os.Root`; traversal and outward symlinks cannot access another
+owner. New history files/directories use 0600/0750; existing modes are not
+changed. History caches records only
 after successful JSONL append/close, propagates synchronous write errors and
 computes all statistics under one read lock. A healthy completed run's
 history failure is an `ExecutionPersistenceError`: it remains visible to
@@ -792,6 +795,12 @@ cannot assign its entire gain to each individual operation. Legacy search
 ranking still uses heuristic/history estimates and can miss useful candidates.
 Unmanaged manual/genetic publication, complete external-task corpora, legacy
 file concurrency during first adoption and deployed rollout remain open.
+Operator logs retain generated run IDs, registered route/method identity,
+status, timestamps and counts. Runner/scheduler/response-validator diagnostic
+fields do not copy raw request identifiers, schedules, validation fields or
+error text into these log contexts. Protected results/history and encoded
+client responses retain execution/validation detail; this is selective source
+hardening, not universal log redaction or production logging qualification.
 
 ---
 

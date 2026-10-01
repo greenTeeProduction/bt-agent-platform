@@ -246,6 +246,10 @@ func TestA2ACancelHistoryFailureRemainsVisible(t *testing.T) {
 	if err := os.Symlink("/dev/full", filepath.Join(dir, "fixture.jsonl")); err != nil {
 		t.Fatal(err)
 	}
+	expectedHistoryErr := hist.Record(agent.RunRecord{AgentName: "fixture", Outcome: "cancelled"})
+	if expectedHistoryErr == nil {
+		t.Fatal("history fault was not injected")
+	}
 	executor := &BTAgentExecutor{History: hist}
 	execCtx := &a2asrv.ExecutorContext{TaskID: "t", ContextID: "fixture"}
 	for event, err := range executor.Cancel(context.Background(), execCtx) {
@@ -255,7 +259,7 @@ func TestA2ACancelHistoryFailureRemainsVisible(t *testing.T) {
 		status := event.(*protocol.TaskStatusUpdateEvent)
 		task := &protocol.Task{ID: "t", Status: status.Status, Metadata: status.Metadata}
 		_, err := interpretSendResult(task)
-		if err == nil || !strings.Contains(err.Error(), "no space left on device") || reliability.IsExecutionPersistenceError(err) {
+		if !reliability.IsExecutionStoppedError(err) || !strings.Contains(err.Error(), expectedHistoryErr.Error()) || reliability.IsExecutionPersistenceError(err) {
 			t.Fatalf("cancel disposition: %v", err)
 		}
 	}
