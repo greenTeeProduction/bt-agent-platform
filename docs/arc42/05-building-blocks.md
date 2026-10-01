@@ -261,6 +261,7 @@ flowchart LR
 | [`goap/goalfactory.go`](../../internal/goap/goalfactory.go), [`compile.go`](../../internal/goap/compile.go) | Intent/pattern → goal; plan → serializable tree |
 | [`agentexec/wiring.go`](../../internal/agentexec/wiring.go) | Resolve user-scoped generated trees and refuse blocked tracked automations |
 | [`knowledge/factory.go`](../../internal/knowledge/factory.go) | Breed from real parent structures when available; distinct from skill compilation |
+| [`knowledge/task_factory.go`](../../internal/knowledge/task_factory.go) | Build task-specific response workflows with enforced intermediate/final result contracts; MCP publication validates and persists before shared indexing |
 | [`gardener/user_trees.go`](../../internal/gardener/user_trees.go) | Discover personal trees and associate user-specific evidence/experience |
 | [`cmd/bt-agent/feedback_tools.go`](../../cmd/bt-agent/feedback_tools.go) | Explicit feedback, satisfaction evidence and flagged-automation escalation |
 

@@ -104,6 +104,9 @@ func (bb *Blackboard) ChildTicks() []ChildTick {
 
 // Blackboard is the shared state passed through the behavior tree.
 type Blackboard struct {
+	// Only an executed JSON contract can exempt this exact result from the
+	// prose-length heuristic. It is cleared at each run and failed gateway.
+	contractValidatedResult string
 	// TreeID and User are supplied by the resolver/caller, never inferred from task text.
 	TreeID           string
 	User             string
@@ -482,6 +485,9 @@ func validateOutputQuality(b *Blackboard) bool {
 	minLen := 30
 	if isStructured {
 		minLen = 15 // structured zero-LLM output is intentionally compact
+	}
+	if b.contractValidatedResult != "" && b.contractValidatedResult == result {
+		minLen = 0 // the executed JSON contract already verified this output
 	}
 
 	// 1. Minimum length check

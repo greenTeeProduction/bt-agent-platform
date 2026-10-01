@@ -422,6 +422,28 @@ unconditional guarantee that every installation requires a human click.
 See [automation finalization](../../internal/persona/automation_finalize.go),
 [autopilot tests](../../cmd/bt-agent/autopilot_test.go), and QS9–QS13.
 
+### On-demand response-tree creation
+
+`bt_factory_create` and the compatibility name `bt_kg_auto_create` require
+`task` and `result_contract`. Optional steps each declare their own instruction
+and contract. The response factory retains the full task and uses bounded
+primary/recovery calls behind every step's quality gate. Expected values remain
+inside the verifier; only required field names are sent to the worker.
+
+The handler validates the draft, persists a fresh collision-resistant
+`factory:` ID and returns its definition hash. Only a successful shared write
+is indexed. Personal trees require the owner workspace and stay outside shared
+discovery. Creation returns `qualified: false`: it neither executes the task
+nor establishes fitness. Parent references record lineage; this response path
+does not splice unrelated parent actions into the requested work.
+
+Factory IDs resolve only to their saved definition. Missing or inaccessible
+IDs cannot execute DefaultTree. Owner-scoped execution reloads the definition
+and records its actual result, owner, version and gate verdicts. These are
+response workflows; external-tool automation and measured evolution/promotion
+remain separate work. See [factory handler](../../cmd/bt-agent/task_factory.go)
+and [real-model execution test](../../cmd/bt-agent/task_factory_test.go).
+
 ## 6.8 Inspect a Tree Definition
 
 An authenticated operator requests an exact tree ID. Lookup rejects path-shaped

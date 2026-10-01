@@ -185,8 +185,8 @@ func checkLLMHealth(health *llm.HealthMonitor, toolName string) *engine.ToolResu
 // persistGeneratedTree validates a runtime-generated tree and persists it as
 // tree-<id>.json so it becomes resolvable by ID (agentexec dynamic resolver)
 // and visible to the gardener registry (ADR-133 Phase 0). The outcome is
-// recorded in the tool result: an invalid tree stays KG-registered for
-// discovery but is never persisted, so it can never be executed.
+// recorded in the tool result. Callers publish discovery metadata only after
+// successful persistence.
 // recordEvolvedFitness writes a winning QD/island elite's structural fitness
 // back into the knowledge graph via the monotone, clamped "evolved" outcome so
 // fitness-aware discovery can surface archive-improved trees (milestone 4/5). A
@@ -866,32 +866,9 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 
-	server.RegisterTool("bt_kg_auto_create", "Auto-discover or create a behavior tree for a task",
-		map[string]engine.Property{"task": {Type: "string", Description: "Task to discover or create a tree for"}},
-		[]string{"task"},
-		func(args json.RawMessage) *engine.ToolResult {
-			var params struct {
-				Task string `json:"task"`
-			}
-			if err := json.Unmarshal(args, &params); err != nil {
-				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: fmt.Sprintf(`{"error": %q}`, err.Error())}}}
-			}
-			autoTree, treeID, err := knowledge.AutoCreateTreeWith(newTreeFactory(deps), params.Task)
-			if err != nil {
-				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: fmt.Sprintf(`{"error": %q}`, err.Error())}}}
-			}
-			action := "created"
-			if autoTree == nil {
-				action = "discovered"
-			}
-			result := map[string]any{"action": action, "tree_id": treeID}
-			if autoTree != nil {
-				result["node_count"] = evolution.CountNodes(autoTree)
-				persistGeneratedTree(deps, treeID, autoTree, result)
-			}
-			data, _ := json.Marshal(result)
-			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
-		})
+	server.RegisterTool("bt_kg_auto_create", "Create a governed task response tree with declared result checks",
+		factoryTaskProperties(), []string{"task", "result_contract"},
+		func(args json.RawMessage) *engine.ToolResult { return createFactoryTask(deps, args) })
 
 	server.RegisterTool("bt_kg_summary", "Get knowledge graph summary: tree counts by category, total edges",
 		map[string]engine.Property{}, nil,
@@ -2438,41 +2415,9 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 
 	// ─── FACTORY ──────────────────────────────────────────────────────
 
-	server.RegisterTool("bt_factory_create", "Breed a new behavior tree from existing parent trees",
-		map[string]engine.Property{
-			"task":     {Type: "string", Description: "Task description for the new tree"},
-			"parent_a": {Type: "string", Description: "First parent tree ID (e.g., finance:pitch_agent)"},
-			"parent_b": {Type: "string", Description: "Second parent tree ID (e.g., research:deep_research)"},
-		},
-		[]string{"task"},
-		func(args json.RawMessage) *engine.ToolResult {
-			var params struct {
-				Task    string `json:"task"`
-				ParentA string `json:"parent_a"`
-				ParentB string `json:"parent_b"`
-			}
-			_ = json.Unmarshal(args, &params)
-			f := newTreeFactory(deps)
-			var tree *evolution.SerializableNode
-			var treeID string
-			if params.ParentA != "" && params.ParentB != "" {
-				tree, treeID = f.CreateFromParents(params.ParentA, params.ParentB, params.Task)
-			} else {
-				category := params.ParentA
-				if category == "" {
-					category = "core"
-				}
-				tree, treeID = f.CreateTree(params.Task, category, nil)
-			}
-			cat := treeID
-			if before, _, ok := strings.Cut(treeID, ":"); ok {
-				cat = before
-			}
-			result := map[string]any{"tree_id": treeID, "node_count": evolution.CountNodes(tree), "parents": []string{params.ParentA, params.ParentB}, "category": cat}
-			persistGeneratedTree(deps, treeID, tree, result)
-			data, _ := json.Marshal(result)
-			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
-		})
+	server.RegisterTool("bt_factory_create", "Create and persist a governed task response tree; parent references record design lineage",
+		factoryTaskProperties(), []string{"task", "result_contract"},
+		func(args json.RawMessage) *engine.ToolResult { return createFactoryTask(deps, args) })
 
 	// ─── WORKFLOW ─────────────────────────────────────────────────────
 

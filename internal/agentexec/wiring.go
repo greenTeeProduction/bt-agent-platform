@@ -118,6 +118,9 @@ func ResolveGeneratedTree(id string) *evolution.SerializableNode {
 		dir = d
 	}
 	if tree, err := evolution.LoadNamedTree(dir, id); err == nil && tree != nil {
+		if owner, _ := tree.Metadata["user"].(string); owner != "" {
+			return nil
+		}
 		return tree
 	}
 	return resolveUserTree(id)
@@ -151,6 +154,9 @@ func resolveUserTree(id string) *evolution.SerializableNode {
 	for _, user := range names {
 		tree, err := evolution.LoadNamedTree(filepath.Join(root, user, "trees"), id)
 		if err == nil && tree != nil {
+			if owner, _ := tree.Metadata["user"].(string); owner != "" {
+				continue
+			}
 			if !automationApproved(root, user, id) {
 				continue
 			}
@@ -231,13 +237,19 @@ func ResolveGeneratedTreeForUser(user, id string) *evolution.SerializableNode {
 		dir = d
 	}
 	if tree, err := evolution.LoadNamedTree(dir, id); err == nil && tree != nil {
+		if owner, _ := tree.Metadata["user"].(string); owner != "" && owner != user {
+			return nil
+		}
 		if !automationApproved(root, user, id) {
 			return nil
 		}
 		return tree
 	}
-	tree, err := evolution.LoadNamedTree(filepath.Join(root, user, "trees"), id)
+	tree, err := evolution.LoadNamedTree(filepath.Join(root, persona.SanitizeUserID(user), "trees"), id)
 	if err == nil && tree != nil {
+		if owner, _ := tree.Metadata["user"].(string); owner != "" && owner != user {
+			return nil
+		}
 		if !automationApproved(root, user, id) {
 			return nil
 		}

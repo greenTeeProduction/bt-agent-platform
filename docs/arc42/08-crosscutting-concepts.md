@@ -691,7 +691,12 @@ separate risks; this does not create durable sprint resume.
 `QualityGate.metadata.result_contract` declares `json_fields` (required values),
 `required_keys` (required JSON fields), and/or `min_length`. Both primary and
 recovery outputs must pass the declared constraints and ordinary output checks.
-Malformed/unknown contract fields are validation errors. Enforced JSON task
+Malformed/unknown contract fields are validation errors. Contract numeric values
+retain exact JSON precision across save/load; adjacent large integers cannot
+collapse into the same expected value. A successful JSON contract exempts
+only that exact output in that run from the generic prose-length minimum;
+changed or unchecked output cannot reuse the exemption. Other output checks
+still apply. Enforced JSON task
 contracts earn additional governance credit; automatic evolution cannot remove
 or rewrite an existing contract on the protected work to improve its score.
 See [contract implementation](../../internal/evolution/result_contract.go),

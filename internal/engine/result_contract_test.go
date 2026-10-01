@@ -60,3 +60,32 @@ func TestMalformedResultContractCannotExecuteWork(t *testing.T) {
 		t.Fatalf("invalid gate ran: calls=%d outcome=%s", calls, bb.Outcome)
 	}
 }
+
+func TestCompactContractResultDoesNotRequireProsePadding(t *testing.T) {
+	RegisterAction("CompactContractResult", func(ctx *btcore.BTContext[Blackboard]) int {
+		ctx.Blackboard.Result = `{"total":42}`
+		return 1
+	})
+	RegisterAction("OverwriteContractResult", func(ctx *btcore.BTContext[Blackboard]) int {
+		ctx.Blackboard.Result = `oops`
+		return 1
+	})
+	gate := evolution.SerializableNode{Type: "QualityGate", Name: "CompactSum", Metadata: map[string]any{"result_contract": map[string]any{"json_fields": map[string]any{"total": 42}}}, Children: []evolution.SerializableNode{{Type: "Action", Name: "CompactContractResult"}}}
+	bb := &Blackboard{Task: "compute sum"}
+	RunTask(bb, BuildTree(&gate, bb))
+	if bb.Outcome != "success" {
+		t.Fatalf("valid compact result rejected: %+v", bb)
+	}
+	// A later run cannot reuse an earlier contract verdict, even for identical
+	// bytes. Only execution of this run's gate earns the exemption.
+	bare := &evolution.SerializableNode{Type: "Action", Name: "CompactContractResult"}
+	RunTask(bb, BuildTree(bare, bb))
+	if bb.Outcome == "success" {
+		t.Fatal("previous run's verdict authorized unchecked output")
+	}
+	changed := &evolution.SerializableNode{Type: "Sequence", Name: "ChangedAfterGate", Children: []evolution.SerializableNode{gate, {Type: "Action", Name: "OverwriteContractResult"}}}
+	RunTask(bb, BuildTree(changed, bb))
+	if bb.Outcome == "success" {
+		t.Fatal("gate verdict authorized changed output")
+	}
+}

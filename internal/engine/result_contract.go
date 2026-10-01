@@ -13,8 +13,12 @@ func parseResultContract(node *evolution.SerializableNode) (*evolution.ResultCon
 
 func resultContractVerifier(node *evolution.SerializableNode, contract *evolution.ResultContract) func(*Blackboard) bool {
 	return func(bb *Blackboard) bool {
-		qualityOK := validateOutputQuality(bb)
 		err := contract.Verify(resolvedResult(bb))
+		bb.contractValidatedResult = ""
+		if err == nil && (len(contract.JSONFields) > 0 || len(contract.RequiredKeys) > 0) {
+			bb.contractValidatedResult = resolvedResult(bb)
+		}
+		qualityOK := validateOutputQuality(bb)
 		check := evolution.ResultCheck{Gate: node.Name, Passed: err == nil && qualityOK, OutputDigest: fmt.Sprintf("sha256:%x", sha256.Sum256([]byte(resolvedResult(bb))))}
 		if err != nil {
 			check.Reason = err.Error()

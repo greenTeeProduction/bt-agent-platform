@@ -118,7 +118,17 @@ node, distinct repeated runs, outer agent quality rejection, live-mutation
 version history, and persistence failure without replay. Result-contract tests
 reject wrong JSON fields/values in primary and recovery output and reject
 malformed gateway declarations. These strengthen QS2/QS12 evidence integrity;
-they do not complete version-specific promotion, the factory, or fleet impact.
+they do not complete version-specific promotion or fleet impact.
+
+
+The response factory now has a real-model creation→persistence→owner-scoped
+resolution→execution regression in [task factory tests](../../cmd/bt-agent/task_factory_test.go).
+The retained arithmetic sample used Qwen 2.5 0.5B, independently checked the
+answer and matched the saved definition hash to terminal execution evidence.
+It establishes this response-task path, not general assistant capability or
+an adopted evolutionary improvement. External-tool task fixtures, persistent
+promotion/adoption/rollback and broader task coverage remain open. The same
+live test is included in `make test-live-benchmarks`.
 
 ---
 

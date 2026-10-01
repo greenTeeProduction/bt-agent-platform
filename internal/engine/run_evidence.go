@@ -50,6 +50,7 @@ type runEvidence struct {
 }
 
 func beginRunEvidence(bb *Blackboard, command btcore.Command[Blackboard], started time.Time) {
+	bb.contractValidatedResult = ""
 	token := make([]byte, 16)
 	// crypto/rand.Read fills the buffer or terminates on an unrecoverable failure.
 	_, _ = rand.Read(token)

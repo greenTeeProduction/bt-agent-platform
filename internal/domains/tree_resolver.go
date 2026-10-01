@@ -215,6 +215,11 @@ func resolveTreeIDWithResolver(id string, resolve func(id string) *evolution.Ser
 	if id == "" {
 		return nil
 	}
+	// Factory IDs name specific persisted tasks. Missing, unreadable or
+	// inaccessible task definitions must never execute a generic fallback.
+	if strings.HasPrefix(id, "factory:") {
+		return resolve(id)
+	}
 	if id == "hermes_evolve" {
 		return HermesSelfEvolutionTree()
 	}
