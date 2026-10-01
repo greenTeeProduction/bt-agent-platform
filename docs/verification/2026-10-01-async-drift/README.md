@@ -36,9 +36,28 @@ began before that literal-equivalent correction; final API race/build checks
 qualify the corrected file and its identity is explicit above. Check binaries
 are dirty-worktree artifacts, not deployed clean-build evidence. Graphify updated
 14,534 nodes/28,797 edges, AST-only with no model calls. Local high-severity
-security does not establish GitHub's separate gosec result. The new PR head
-must be observed separately; the previous e8be1842 head passed all actual checks.
-Fixture checks invoke no model/coding provider.
+security does not establish GitHub's separate gosec result. Fixture checks
+invoke no model/coding provider.
+
+## GitHub and clean artifact qualification
+
+All actual GitHub checks pass at implementation commit
+`1e2ef7fdef651012b6a8306c67ba92cf7433d496`, including separate gosec
+[110299490609](https://github.com/greenTeeProduction/bt-agent-platform/runs/110299490609)
+and CodeQL
+[110299196539](https://github.com/greenTeeProduction/bt-agent-platform/runs/110299196539).
+The exact final source also passes GitHub's full short race check; Release is
+skipped. [Qualified check identities](github-qualified.json) retain all results.
+[BT CI](https://github.com/greenTeeProduction/bt-agent-platform/actions/runs/36840595079)
+and [CodeQL Analysis](https://github.com/greenTeeProduction/bt-agent-platform/actions/runs/36840595078)
+are separate workflows. The final evidence-only commit preserves every
+Go/dependency byte; its head checks remain separately identified on PR #83.
+
+[Clean artifact](clean-artifact.json) was built from that committed source and
+reports the same revision with `dirty=false`. Build time is unknown.
+Only `--version` was invoked: no serving process, controlled production execution
+or restart is qualified for this artifact. The earlier thirteen local gate
+binaries remain separately fingerprinted as dirty-worktree artifacts.
 
 ## Remaining acceptance
 

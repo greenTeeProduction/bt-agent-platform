@@ -1,7 +1,9 @@
 {
+  "code_commit": "1e2ef7fdef651012b6a8306c67ba92cf7433d496",
   "file_count": 1045,
   "final_go_manifest_sha256": "084114cc35321414292451e4e6d7c5322cd30afdaca8550e2cbb0cfae69a7ced",
   "full_file_manifest_location": "Private retained go-files.json; final source is recoverable from Git and source-snapshot.json.",
+  "github_full_race_qualification": "Actual Test (short) check 110298520182 passed at this exact final source commit; see github-qualified.json.",
   "local_full_race_variant": {
     "change": "Two literal 503 constants replaced by http.StatusServiceUnavailable (503); final API race and all build gates rerun.",
     "only_changed_file": "internal/api/openapi.go",

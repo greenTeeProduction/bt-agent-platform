@@ -42,6 +42,12 @@
       "evidence": "docs.log",
       "exit_code": 0,
       "fixtures": 11
+    },
+    {
+      "command": "go build -ldflags '-X github.com/nico/go-bt-evolve/internal/dashboard.stampedRevision=1e2ef7fdef651012b6a8306c67ba92cf7433d496' -o <private>/clean-bin/bt-dashboard ./cmd/bt-dashboard; <private>/clean-bin/bt-dashboard --version",
+      "evidence": "clean-artifact.json",
+      "exit_code": 0,
+      "stage": "Clean committed implementation artifact; version invocation only, no deployment."
     }
   ],
   "fixture_environment": {
