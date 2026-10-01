@@ -19,5 +19,6 @@
     "State scope excludes research vault and user source worktrees outside these roots.",
     "Provider reauthentication and secret lifetime were not tested.",
     "No numeric RPO/RTO or scheduled retention policy established."
-  ]
+  ],
+  "source_commit_qualification": "Checkout used during backup preparation; not the producing revision of preexisting deployment state."
 }

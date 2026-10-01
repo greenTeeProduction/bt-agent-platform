@@ -1,0 +1,70 @@
+{
+  "head": "f60dcf420baafe5a65bf91f2a9e8661808d977f2",
+  "checks": [
+    {
+      "name": "Release",
+      "id": 110279472320,
+      "status": "completed",
+      "conclusion": "skipped",
+      "url": "https://github.com/greenTeeProduction/bt-agent-platform/actions/runs/36834381244/job/110279472320",
+      "summary": null
+    },
+    {
+      "name": "gosec",
+      "id": 110279081730,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/greenTeeProduction/bt-agent-platform/runs/110279081730",
+      "summary": "[View all branch alerts](/greenTeeProduction/bt-agent-platform/security/code-scanning?query=pr%3A83+tool%3Agosec+is%3Aopen)."
+    },
+    {
+      "name": "CodeQL",
+      "id": 110278817550,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/greenTeeProduction/bt-agent-platform/runs/110278817550",
+      "summary": "[View all branch alerts](/greenTeeProduction/bt-agent-platform/security/code-scanning?query=pr%3A83+tool%3ACodeQL+is%3Aopen)."
+    },
+    {
+      "name": "Analyze (go)",
+      "id": 110278143299,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/greenTeeProduction/bt-agent-platform/actions/runs/36834381236/job/110278143299",
+      "summary": null
+    },
+    {
+      "name": "Build",
+      "id": 110278142986,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/greenTeeProduction/bt-agent-platform/actions/runs/36834381244/job/110278142986",
+      "summary": null
+    },
+    {
+      "name": "Security Scan",
+      "id": 110278142965,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/greenTeeProduction/bt-agent-platform/actions/runs/36834381244/job/110278142965",
+      "summary": null
+    },
+    {
+      "name": "Lint",
+      "id": 110278142818,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/greenTeeProduction/bt-agent-platform/actions/runs/36834381244/job/110278142818",
+      "summary": null
+    },
+    {
+      "name": "Test (short)",
+      "id": 110278142662,
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/greenTeeProduction/bt-agent-platform/actions/runs/36834381244/job/110278142662",
+      "summary": null
+    }
+  ],
+  "qualification": "Actual GitHub check outcomes at the identified head; separate code-scanning checks are included."
+}

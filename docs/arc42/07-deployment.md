@@ -168,7 +168,7 @@ source/state/vault/secret sets, restore into a separate location, and prove
 agent registration, tree resolution, approval state, pending work and
 snapshot recovery before production use. Atomic writes provide single-file
 integrity; they are not backups or cross-store transactions. This review
-does not claim that a production restore drill has passed.
+does not claim full host-loss or complete production restore qualification; the bounded 2026-10-01 evidence below covers actual-state hashes and dashboard reads.
 
 **Process recovery contract, 2026-10-01 (ADR-277):** persisted scheduled/manual
 admissions interrupted before final recording remain inactive and require
@@ -215,6 +215,26 @@ outlive that deadline. Inspect not_started task diagnostics separately from
 completed or failed started work before another sprint. These local source/tests
 establish ownership behavior, not production termination or capacity targets
 (ADR-276, R30).
+
+### Bounded operational qualification — 2026-10-01
+
+The [durable checkpoint](../verification/2026-10-01-checkpoint/README.md)
+qualifies a clean f60dcf42 dashboard artifact briefly served by the canonical
+user unit, plus service reads from an isolated restore of actual offline state.
+Executable hash, version and build_info agree; tasks and definition names
+match their persisted contents; unauthenticated task reads return 401. The
+unit needed a temporary supported generic-provider EnvironmentFile because
+host BT_LLM_PROVIDER=codex is unsupported by this committed snapshot. Global
+settings were preserved and the three BT units returned to their initial
+inactive state. This is read/identity acceptance, not as-is deployment readiness.
+
+A controlled actual host Codex adapter execution with private gpt-5.5 produced
+the expected artifact; that account rejected gpt-6.1-sol. Backup/restoration
+matched every file/link in evolve/reflections/gardener roots, with no escaping
+restored links. Existing work was not dispatched. Full deployed coding or
+evolution, provider authentication restore, external vault/worktrees, power-loss,
+retention and numeric RPO/RTO remain open. Implemented restart holds and their
+separate-process fault fixtures do not establish those operational guarantees.
 
 ---
 

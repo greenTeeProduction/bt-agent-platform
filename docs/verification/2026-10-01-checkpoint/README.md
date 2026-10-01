@@ -51,7 +51,7 @@ Rooted lock I/O, private atomic artifacts/config, rooted owner reads, fixed
 `ps` arguments and status-only logs address their actual annotations. Narrow
 G204/G404 exceptions document intentional authorized shell execution and
 non-security search/retry randomness; no category/severity gate is disabled.
-Updated GitHub outcomes require their own recorded head identity.
+All actual checks, including separate gosec and CodeQL, pass at f60dcf42; [qualified check identities](github-qualified.json). The final operational-doc commit changes no Go implementation; later head outcomes remain separately identified on the PR.
 
 ## Operational evidence and its limits
 
@@ -71,8 +71,7 @@ bytes, stable manifests during backup, every restored hash/link matching, and
 zero restored links escaping the isolated root. The archive and detailed
 manifests/configuration copies are private. Actual provider reauthentication,
 external vault/worktrees, scheduled retention and numeric RPO/RTO remain open.
-Deployed clean-build identity and restored-service read acceptance are recorded
-separately after qualification; archive equality does not imply them.
+[Operational service results](operational-result.json), [clean binary hashes](clean-binaries.json), [commands/private script fingerprints](operational-commands.json) and [complete Go snapshot identity](qualified-code.json) qualify the clean f60dcf42 artifact. Both restored and canonical production dashboard probes matched executable/version/build_info, task contents and agent definition names; protected task reads without credentials returned 401. The production probe needed a temporary final EnvironmentFile setting the supported generic provider to ollama; it dispatched no existing tasks or provider execution and retained Codex-only coding. As-is host BT_LLM_PROVIDER=codex startup failed, and full deployed coding/evolution remains unverified. Overrides were removed, globals preserved, and all three BT units returned to their initial inactive state. Build commit time is unknown in the version output; revision, clean flag, hashes and serving identity are observed directly. Archive equality alone does not establish these read/identity checks.
 
 Implemented, fixture-tested and operationally verified scopes stay separate.
 Single-owner process recovery does not establish power-loss synchronization,

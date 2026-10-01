@@ -40,7 +40,7 @@ routine bug fix.
 
 The review found several implementation/operations gaps that remain open:
 
-unverified network isolation/TLS and backup recovery, incomplete evolution
+unverified network isolation/TLS and full recovery scope, incomplete evolution
 provenance and cooperative cancellation. The 2026-10-01 cleanup adds cursor bounds, shared feedback transactions,
 validated commit and proposal replay controls (ADR-262), recoverable approval
 commit/admission and nested gate isolation (ADR-263), serialized snapshot revision
