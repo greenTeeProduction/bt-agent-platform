@@ -109,3 +109,29 @@ func TestSchedulerDeadLetter_RecordsActualAttempts(t *testing.T) {
 		t.Fatalf("ID/FailedAt unset: %+v", e)
 	}
 }
+
+func TestRecordSchedulerAttemptRetainsTypedPauseAndCountsDeferred(t *testing.T) {
+	for _, outcome := range []string{"input-required", "auth-required", "pending_approval", "goap_fusion_rate_limited"} {
+		t.Run(outcome, func(t *testing.T) {
+			slo := &engine.SLOMetrics{}
+			diagnostic := &reliability.ExecutionStoppedError{Outcome: outcome, Err: errors.New("network timeout awaits owner")}
+			calls := 0
+			policy := reliability.DefaultRetryPolicy()
+			policy.RetryUnknown = true
+			err := policy.ExecuteContext(t.Context(), func() error {
+				calls++
+				return recordSchedulerAttempt(slo, outcome, diagnostic, "pause evidence", 1, time.Second)
+			})
+			snapshot := slo.Snapshot()
+			if calls != 1 || !errors.Is(err, diagnostic) || snapshot.DeferredCalls != 1 || snapshot.TotalCalls != 0 {
+				t.Fatalf("calls=%d snapshot=%+v err=%v", calls, snapshot, err)
+			}
+			joined := errors.Join(diagnostic, &reliability.ExecutionStoppedError{Outcome: "failure", Err: errors.New("sibling failed")})
+			_ = recordSchedulerAttempt(slo, outcome, joined, "fault evidence", 1, time.Second)
+			snapshot = slo.Snapshot()
+			if snapshot.DeferredCalls != 1 || snapshot.FailedCalls != 1 {
+				t.Fatalf("stale pause hid fault: %+v", snapshot)
+			}
+		})
+	}
+}

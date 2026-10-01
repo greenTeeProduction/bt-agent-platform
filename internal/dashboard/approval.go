@@ -31,10 +31,6 @@ func WorkflowApprovalWait(ctx context.Context, step Step, state *wfState) (Appro
 		result.Approved = true
 		return result, nil
 	}
-	if err := store.Create(req); err != nil {
-		return result, err
-	}
-
 	waitCtx, cancel := stepContext(ctx, step.Timeout)
 	defer cancel()
 	if _, hasDeadline := waitCtx.Deadline(); !hasDeadline {
@@ -44,6 +40,10 @@ func WorkflowApprovalWait(ctx context.Context, step Step, state *wfState) (Appro
 			waitCtx, c = context.WithTimeout(waitCtx, pol.Timeout)
 			defer c()
 		}
+	}
+
+	if err := store.CreateWithContext(waitCtx, req); err != nil {
+		return result, err
 	}
 
 	resolved, err := store.WaitForRequest(waitCtx, req.ID, 500*time.Millisecond)

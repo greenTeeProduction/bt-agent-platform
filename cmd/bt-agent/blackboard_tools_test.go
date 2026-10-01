@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/agent"
@@ -289,5 +290,16 @@ func TestBTBBWriteThenReadNormalizesKeyIdentically(t *testing.T) {
 				t.Errorf("bt_bb_read value = %v, want \"hello\"", readOut["value"])
 			}
 		})
+	}
+}
+
+func TestBBManagerReportsUnavailablePersistentOwner(t *testing.T) {
+	t.Setenv("BT_AGENT_HOME", t.TempDir())
+	if err := os.WriteFile(agent.BlackboardDir(), []byte("blocked fixture directory"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	manager, err := bbManager(&mcpDeps{agentRunner: &agent.RunDeps{}})
+	if manager != nil || err == nil {
+		t.Fatalf("MCP received an in-memory substitute: manager=%p err=%v", manager, err)
 	}
 }

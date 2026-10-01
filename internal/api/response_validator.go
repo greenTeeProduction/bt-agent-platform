@@ -39,7 +39,47 @@ func (ri *RouteIndex) Lookup(method, path string) *Route {
 	if ri == nil {
 		return nil
 	}
-	return ri.byMethodPath[routeKey(HTTPMethod(strings.ToLower(method)), path)]
+	normalized := HTTPMethod(strings.ToLower(method))
+	if exact := ri.byMethodPath[routeKey(normalized, path)]; exact != nil {
+		return exact
+	}
+	var best *Route
+	bestSpecificity := -1
+	for i := range ri.routes {
+		route := &ri.routes[i]
+		if route.Method != normalized || !strings.Contains(route.Path, "{") {
+			continue
+		}
+		specificity, ok := matchRouteTemplate(route.Path, path)
+		if ok && specificity >= bestSpecificity {
+			best = route
+			bestSpecificity = specificity
+		}
+	}
+	return best
+}
+
+// matchRouteTemplate matches one nonempty path segment per {parameter}.
+// Literal segments determine precedence; exact paths win before templates.
+func matchRouteTemplate(template, path string) (int, bool) {
+	wanted, actual := strings.Split(template, "/"), strings.Split(path, "/")
+	if len(wanted) != len(actual) {
+		return 0, false
+	}
+	literal := 0
+	for i, part := range wanted {
+		if strings.HasPrefix(part, "{") && strings.HasSuffix(part, "}") && len(part) > 2 {
+			if actual[i] == "" {
+				return 0, false
+			}
+		} else {
+			if part != actual[i] {
+				return 0, false
+			}
+			literal++
+		}
+	}
+	return literal, true
 }
 
 // Len returns the number of indexed routes.
@@ -108,18 +148,19 @@ func ValidateResponse(route *Route, statusCode int, body []byte) []SchemaViolati
 }
 
 // findResponse finds the RouteResponse for the given status code.
-// Falls back to the 200 response if the exact status code is not found.
+// An explicit default schema is the only fallback. A success schema must not
+// reinterpret an undocumented auth/error response as a success-shape violation.
 func findResponse(route *Route, statusCode int) *RouteResponse {
+	var fallback *RouteResponse
 	for i := range route.Responses {
 		if route.Responses[i].StatusCode == statusCode {
 			return &route.Responses[i]
 		}
+		if route.Responses[i].StatusCode < 100 || route.Responses[i].StatusCode >= 600 {
+			fallback = &route.Responses[i]
+		}
 	}
-	// Fallback: return the first response (typically 200)
-	if len(route.Responses) > 0 {
-		return &route.Responses[0]
-	}
-	return nil
+	return fallback
 }
 
 // collectViolations builds a list of SchemaViolation by comparing a JSON value
@@ -313,12 +354,12 @@ type ResponseValidatorConfig struct {
 // status code.
 //
 // Validation failures are logged as WARN-level messages via the configured
-// logger. The middleware never blocks or alters the response — it is purely
-// an advisory drift detector.
+// logger. Advisory mode passes responses through; enforcement mode replaces
+// a schema violation with HTTP 500.
 //
 // Usage:
 //
-//	validator := api.ResponseValidator(api.DashboardRoutes())
+//	validator := api.ResponseValidator(api.DashboardRoutes(), nil)
 //	mux := http.NewServeMux()
 //	mux.Handle("/api/health", validator(healthHandler))
 func ResponseValidator(routes []Route, config *ResponseValidatorConfig) func(http.Handler) http.Handler {
@@ -349,8 +390,8 @@ func ResponseValidator(routes []Route, config *ResponseValidatorConfig) func(htt
 			// Look up the route definition
 			route := index.Lookup(r.Method, r.URL.Path)
 			if route == nil {
-				// Unknown route — pass through (could be a dynamic route not in the index)
-				// TODO: support path parameter matching (e.g., /api/tasks/approve?id=...)
+				// Undocumented route — pass through. Registered path templates
+				// have already been considered by the index.
 				next.ServeHTTP(w, r)
 				return
 			}

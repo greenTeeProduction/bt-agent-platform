@@ -2,12 +2,14 @@ package dashboard
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/hitl"
+	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
 func TestWorkflow_ApprovalWaiter(t *testing.T) {
@@ -133,5 +135,27 @@ func TestWorkflow_ParallelStateIsolation(t *testing.T) {
 	}
 	if writes["agent-a"] != 1 || writes["agent-b"] != 1 {
 		t.Fatalf("expected each agent once, got %v", writes)
+	}
+}
+
+func TestWorkflowApprovalCreationObeysCallerBudgetDuringContention(t *testing.T) {
+	root := t.TempDir()
+	oldStore, oldPolicy := hitl.DefaultStore, hitl.GetPolicy()
+	t.Cleanup(func() { hitl.DefaultStore = oldStore; hitl.SetPolicy(oldPolicy) })
+	if _, err := hitl.InitStore(root); err != nil {
+		t.Fatal(err)
+	}
+	hitl.SetPolicy(hitl.Policy{Enabled: true, AutoApprove: false, Timeout: time.Minute})
+	release, err := reliability.AcquireFileLockWithContext(t.Context(), filepath.Join(root, "hitl", "requests.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	result, err := WorkflowApprovalWait(ctx, Step{ID: "approve", Kind: StepApproval}, &wfState{workflow: "budget", runID: "run", prev: map[string]StepResult{}})
+	if !errors.Is(err, context.DeadlineExceeded) || result.TaskID == "" || result.RequestID == "" || result.Approved || time.Since(start) > time.Second {
+		t.Fatalf("elapsed=%v result=%+v err=%v", time.Since(start), result, err)
 	}
 }

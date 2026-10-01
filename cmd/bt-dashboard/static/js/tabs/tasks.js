@@ -267,16 +267,31 @@ async function executeSprint() {
   }
 }
 
-function pollSprintStatus(attempt) {
-  fetch(API + '/sprint/status').then(r => r.json()).then(d => {
+async function pollSprintStatus(attempt) {
+  try {
+    const d = await apiFetch('/sprint/status');
     const elapsed = Math.round(d.elapsed || 0);
-    const done = Math.round((d.tasks_completed / d.tasks_total) * 100) || 0;
     if (d.running) {
-      toast('Sprint running: ' + done + '% (' + elapsed + 's elapsed)...');
+      toast('Sprint running (' + elapsed + 's elapsed)...');
       setTimeout(() => pollSprintStatus(attempt + 1), 10000);
-    } else {
-      toast('Sprint complete! ' + d.tasks_completed + '/' + d.tasks_total + ' tasks done in ' + elapsed + 's');
-      refreshTasks();
+      return;
     }
-  }).catch(() => setTimeout(() => pollSprintStatus(attempt + 1), 10000));
+    if (d.error || d.progress === 'failed') {
+      const pending = (d.diagnostics || []).filter(item => !item.task_committed);
+      const detail = pending.length ? ' ' + pending.length + ' task results await persistence repair.' : '';
+      toast('Sprint stopped with errors: ' + (d.error || 'Inspect sprint status.') + detail);
+    } else if (d.progress === 'done') {
+      toast('Sprint finished in ' + elapsed + 's. ' + d.tasks_completed + '/' + d.tasks_total + ' stored tasks completed.');
+    } else {
+      toast('No active sprint.');
+    }
+    refreshTasks();
+  } catch (error) {
+    toast('Sprint status unavailable: ' + error.message);
+    // Authentication/authorization errors require a new session or operator
+    // decision. A failed read never starts another sprint.
+    if (error.status !== 401 && error.status !== 403) {
+      setTimeout(() => pollSprintStatus(attempt + 1), 10000);
+    }
+  }
 }

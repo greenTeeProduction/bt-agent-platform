@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
 func TestWorkflow_Sequential(t *testing.T) {
@@ -149,8 +151,8 @@ func TestWorkflow_ParallelSubStepPanicRecovered(t *testing.T) {
 	}
 
 	result, err := runner.Run(context.Background(), wf, "")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if !reliability.IsExecutionStoppedError(err) || result.Outcome != "partial" {
+		t.Fatalf("completed sibling evidence must stop group replay: %+v %v", result, err)
 	}
 	if len(result.Steps) != 1 {
 		t.Fatalf("expected 1 top-level step (the parallel step), got %d", len(result.Steps))
@@ -190,11 +192,11 @@ func TestWorkflow_OnFailureAbort(t *testing.T) {
 	}
 
 	result, err := runner.Run(context.Background(), wf, "")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if !reliability.IsExecutionStoppedError(err) {
+		t.Fatalf("completed prefix must stop whole-workflow replay: %v", err)
 	}
-	if result.Outcome != "failure" {
-		t.Errorf("expected failure, got %s", result.Outcome)
+	if result.Outcome != "partial" {
+		t.Errorf("expected partial stopped outcome, got %s", result.Outcome)
 	}
 	if len(result.Steps) != 2 {
 		t.Errorf("expected 2 steps (aborted before 3rd), got %d", len(result.Steps))
@@ -338,8 +340,8 @@ func TestWorkflow_ApprovalEscalatedIsDistinctAndHalts(t *testing.T) {
 	}
 
 	result, err := runner.Run(context.Background(), wf, "")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if !reliability.IsExecutionStoppedError(err) {
+		t.Fatalf("missing typed escalation stop: %v", err)
 	}
 	if result.Steps[0].Outcome != "escalated" {
 		t.Errorf("expected approval step outcome %q, got %q", "escalated", result.Steps[0].Outcome)
@@ -350,8 +352,8 @@ func TestWorkflow_ApprovalEscalatedIsDistinctAndHalts(t *testing.T) {
 	if result.Steps[0].Error == "" {
 		t.Errorf("expected a non-empty error on an escalated approval step")
 	}
-	if result.Outcome != "failure" {
-		t.Errorf("expected pipeline outcome %q on escalation, got %q", "failure", result.Outcome)
+	if result.Outcome != "escalated" {
+		t.Errorf("expected pipeline outcome %q on escalation, got %q", "escalated", result.Outcome)
 	}
 	if len(result.Steps) != 1 {
 		t.Errorf("expected pipeline to halt after the escalated approval step, got %d steps", len(result.Steps))

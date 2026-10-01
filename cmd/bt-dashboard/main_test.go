@@ -767,22 +767,8 @@ func TestHandleAnalyze_SurfacesOrchestratorError(t *testing.T) {
 	}
 }
 
-// TestHandleWorkflowApprovalEndpoints pins milestone 4/4 of the Q1 Correctness
-// dashboard Workflow/Approval wiring program. internal/dashboard/workflow_engine.go's
-// Workflow.PendingApprovals/ApproveTask/RejectTask are fully tested in
-// workflow_engine_test.go but have zero callers outside that file (confirmed via
-// git grep for ".ApproveTask(" / ".RejectTask(" / ".PendingApprovals("): handleAnalyze
-// builds a *dashboard.Workflow locally, copies its derived WorkflowTasks into
-// taskStore as plain dashboard.Task values, and lets the Workflow itself fall out of
-// scope, so nothing in cmd/bt-dashboard/main.go can ever call these three methods.
-//
-// This pins the dashboard-level contract the fix must satisfy: handleAnalyze retains
-// the *dashboard.Workflow it builds in the package-level `currentWorkflow` var (mirroring
-// how taskStore/companyState are already held as package vars), and three new handlers —
-// handleWorkflowPending/handleWorkflowApprove/handleWorkflowReject, registered alongside
-// the existing /api/tasks/approve and /api/tasks/reject routes per main.go's mux setup —
-// operate on it directly, proving the Workflow-level approval gate is reachable over HTTP
-// instead of existing only in unit tests.
+// TestHandleWorkflowApprovalEndpoints exercises the in-memory workflow and
+// its persisted task mirror together, as handleAnalyze creates them at runtime.
 func TestHandleWorkflowApprovalEndpoints(t *testing.T) {
 	origWorkflow := currentWorkflow
 	t.Cleanup(func() { currentWorkflow = origWorkflow })
@@ -793,6 +779,14 @@ func TestHandleWorkflowApprovalEndpoints(t *testing.T) {
 		{ID: "task-b", Status: dashboard.StatusPending, Priority: dashboard.PriorityMedium},
 	}
 	currentWorkflow = wf
+	previousTasks := taskStore
+	t.Cleanup(func() { taskStore = previousTasks })
+	taskStore = dashboard.NewTaskStore(filepath.Join(t.TempDir(), "tasks.json"))
+	for _, task := range wf.Tasks {
+		if err := taskStore.Create(dashboard.Task{ID: wf.ID + "-" + task.ID}); err != nil {
+			t.Fatal(err)
+		}
+	}
 
 	// /api/workflow/pending must surface every WorkflowTask still awaiting a
 	// decision, via Workflow.PendingApprovals — not an empty/hardcoded list.
@@ -1344,8 +1338,7 @@ func TestHandleAgentExecute_SetsQualityScoreFromRunResult(t *testing.T) {
 		dashWorkerPool = prevPool
 		dashConcurrencyLimiter = prevLimiter
 	})
-	// Force the synchronous fallback path in handleAgentExecute so the test
-	// doesn't race a worker-pool goroutine.
+	// Use the no-pool handoff; the handler waits for the executor's result.
 	dashWorkerPool = nil
 	dashConcurrencyLimiter = nil
 
@@ -1405,6 +1398,7 @@ func TestDashboardAPIRoutesHaveOpenAPICoverage(t *testing.T) {
 			"dashboardMuxAPIPathRE may be stale")
 	}
 
+	index := api.NewRouteIndex(api.DashboardRoutes())
 	registered := make(map[string]bool)
 	for _, route := range api.DashboardRoutes() {
 		registered[route.Path] = true
@@ -1418,7 +1412,13 @@ func TestDashboardAPIRoutesHaveOpenAPICoverage(t *testing.T) {
 			continue
 		}
 		seenMuxPath[muxPath] = true
-		if !registered[muxPath] {
+		covered := registered[muxPath]
+		if !covered && strings.HasSuffix(muxPath, "/") {
+			// A mux subtree is documented by its concrete path templates.
+			route := index.Lookup(http.MethodGet, muxPath+"coverage-id")
+			covered = route != nil && strings.HasPrefix(route.Path, muxPath)
+		}
+		if !covered {
 			missing = append(missing, muxPath)
 		}
 	}

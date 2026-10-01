@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/agent"
+	"github.com/nico/go-bt-evolve/internal/config"
 	"github.com/nico/go-bt-evolve/internal/dashboard"
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evaluator"
@@ -186,6 +187,11 @@ func main() {
 		return
 	}
 
+	platformConfig, configErr := config.LoadRuntime()
+	if configErr != nil {
+		fmt.Fprintf(os.Stderr, "fatal: configuration: %v\n", configErr)
+		os.Exit(1)
+	}
 	engine.Init()
 	engine.SetAsDefault()
 	engine.Info("bt-gardener starting", "version", "1.0.0", "binary", "go-bt-gardener")
@@ -252,12 +258,16 @@ func main() {
 		fmt.Fprintf(os.Stderr, "fatal: cannot determine home directory: %v\n", err)
 		os.Exit(1)
 	}
-	refDir := filepath.Join(home, ".go-bt-reflections")
+	refDir, refErr := platformConfig.SharedReflectionsDir()
+	if refErr != nil {
+		fmt.Fprintf(os.Stderr, "fatal: reflection root: %v\n", refErr)
+		os.Exit(1)
+	}
 	metricsDir := filepath.Join(home, ".go-bt-gardener")
 	snapDir := filepath.Join(metricsDir, "snapshots")
 	// SLO evidence written by the bt-agent process (B1) — must match the path
 	// bt-agent saves to.
-	sloEvidencePath := filepath.Join(home, ".go-bt-evolve", "slo", "slo-metrics.json")
+	sloEvidencePath := agent.SLOMetricsFile()
 
 	_ = os.MkdirAll(metricsDir, 0755)
 

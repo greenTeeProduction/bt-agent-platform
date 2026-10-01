@@ -739,9 +739,16 @@ func TestValidateResponse_FindResponseFallback(t *testing.T) {
 		},
 	}
 
-	// Status 201 is not in the list — should fall back to first (200)
-	if got := findResponse(route, 201); got == nil || got.Description != "ok" {
-		t.Errorf("findResponse(201) should fall back to 200, got %v", got)
+	// An undocumented status has no schema, not an invented success schema.
+	if got := findResponse(route, 201); got != nil {
+		t.Errorf("findResponse(201) without an explicit default should be nil, got %v", got)
+	}
+	route.Responses = append(route.Responses, RouteResponse{StatusCode: 0, Description: "default"})
+	if got := findResponse(route, 201); got == nil || got.Description != "default" {
+		t.Errorf("findResponse(201) should use explicit default, got %v", got)
+	}
+	if got := findResponse(route, 200); got == nil || got.Description != "ok" {
+		t.Errorf("explicit default shadowed exact status, got %v", got)
 	}
 }
 

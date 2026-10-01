@@ -91,6 +91,41 @@ func ResolveTreeID(id string) *evolution.SerializableNode {
 	return tree
 }
 
+// LookupTreeID returns an actual definition, never a default on a miss. It
+// shares builtin construction with execution resolution and supports historical
+// bare catalog names without stripping qualified names. Inspection is unscoped;
+// callers with a user identity must use the corresponding scoped owner.
+func LookupTreeID(id string) *evolution.SerializableNode {
+	if id == "" || id == "." || id == ".." || strings.ContainsAny(id, "/\\\x00") {
+		return nil
+	}
+	noDynamic := func(string) *evolution.SerializableNode { return nil }
+	var tree *evolution.SerializableNode
+	if id == "default" {
+		tree = evolution.DefaultTree()
+	}
+	if tree == nil {
+		// Preserve the old inspection aliases by consulting the same category
+		// branches, rather than maintaining another map of constructors.
+		for _, prefix := range []string{"domain:", "finance:", "startup:", "research:", "thinktank:"} {
+			tree = resolveTreeIDWithResolver(prefix+id, noDynamic, false)
+			if tree != nil {
+				break
+			}
+		}
+	}
+	if tree == nil {
+		tree = resolveTreeIDWithResolver(id, noDynamic, false)
+	}
+	if tree == nil {
+		tree = dynamicResolve(id)
+	}
+	if tree != nil {
+		applyLearnedSelectorOrdering(id, tree)
+	}
+	return tree
+}
+
 // ResolveTreeIDForUser is the user-scoped counterpart to ResolveTreeID
 // (ADR-133 personalization hardening, Q1 Correctness): when user is
 // non-empty, runtime-generated tree lookups are scoped to that user's own
@@ -104,7 +139,7 @@ func ResolveTreeIDForUser(user, id string) *evolution.SerializableNode {
 	}
 	tree := resolveTreeIDWithResolver(id, func(id string) *evolution.SerializableNode {
 		return dynamicResolveForUser(user, id)
-	})
+	}, true)
 	if tree != nil {
 		applyLearnedSelectorOrdering(id, tree)
 	}
@@ -169,14 +204,14 @@ func applyDTOptimizerOrdering(id string, tree *evolution.SerializableNode) {
 // shares the exact same branching logic via resolveTreeIDWithResolver, only
 // swapping in a user-scoped resolver.
 func resolveTreeID(id string) *evolution.SerializableNode {
-	return resolveTreeIDWithResolver(id, dynamicResolve)
+	return resolveTreeIDWithResolver(id, dynamicResolve, true)
 }
 
 // resolveTreeIDWithResolver is resolveTreeID parameterized over the
 // runtime-generated-tree resolver, so the unscoped and per-user resolution
 // paths (ResolveTreeID vs ResolveTreeIDForUser) share one branching
 // implementation instead of drifting out of sync.
-func resolveTreeIDWithResolver(id string, resolve func(id string) *evolution.SerializableNode) *evolution.SerializableNode {
+func resolveTreeIDWithResolver(id string, resolve func(id string) *evolution.SerializableNode, allowFallback bool) *evolution.SerializableNode {
 	if id == "" {
 		return nil
 	}
@@ -280,7 +315,10 @@ func resolveTreeIDWithResolver(id string, resolve func(id string) *evolution.Ser
 			if t := resolve(id); t != nil {
 				return t
 			}
-			return thinktank.SynthesisTree()
+			if allowFallback {
+				return thinktank.SynthesisTree()
+			}
+			return nil
 		}
 	}
 	if len(id) > 9 && id[:9] == "composed:" {
@@ -314,7 +352,10 @@ func resolveTreeIDWithResolver(id string, resolve func(id string) *evolution.Ser
 	if t := resolve(id); t != nil {
 		return t
 	}
-	return evolution.DefaultTree()
+	if allowFallback {
+		return evolution.DefaultTree()
+	}
+	return nil
 }
 
 // dynamicResolve consults the injected DynamicResolveFn, tolerating the

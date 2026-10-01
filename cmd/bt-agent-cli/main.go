@@ -12,11 +12,17 @@ import (
 
 	"github.com/nico/go-bt-evolve/internal/agent"
 	"github.com/nico/go-bt-evolve/internal/agentexec"
+	"github.com/nico/go-bt-evolve/internal/config"
 )
 
 func main() {
 	if len(os.Args) < 2 {
 		printUsage()
+		os.Exit(1)
+	}
+	_, err := config.LoadRuntime()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: configuration: %v\n", err)
 		os.Exit(1)
 	}
 

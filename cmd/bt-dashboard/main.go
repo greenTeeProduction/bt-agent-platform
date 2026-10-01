@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -135,13 +136,16 @@ var loginThrottle *security.LoginThrottle
 // Sprint tracking
 var sprintState = struct {
 	sync.Mutex
-	Running        bool
-	JobID          string
-	StartedAt      time.Time
-	Progress       string
-	TasksTotal     int
-	TasksCompleted int
-	CurrentTask    string
+	Running     bool
+	JobID       string
+	StartedAt   time.Time
+	Deadline    time.Time
+	Progress    string
+	CurrentTask string
+	Error       string
+	ErrorKind   string
+	Diagnostics []sprintTaskDiagnostic
+	Uncertain   bool
 }{}
 
 // taskStore is the persistent task pipeline.
@@ -162,20 +166,7 @@ var companyState *startup.CompanyState
 var currentWorkflow *dashboard.Workflow
 var currentWorkflowMu sync.RWMutex
 
-func getHomeDir() string {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		home = os.Getenv("HOME")
-	}
-	if home == "" {
-		home = "."
-	}
-	return home
-}
-
 func init() {
-	home := getHomeDir()
-	taskStore = dashboard.NewTaskStore(home + "/.go-bt-evolve/tasks.json")
 	companyState = startup.NewDefaultCompany()
 }
 
@@ -218,6 +209,14 @@ func main() {
 		return
 	}
 
+	cfg, cfgErr := config.LoadRuntime()
+	if cfgErr != nil {
+		fmt.Fprintf(os.Stderr, "fatal: configuration: %v\n", cfgErr)
+		os.Exit(1)
+	}
+	dashConfig = cfg
+	taskStore = dashboard.NewTaskStore(agent.TasksFile())
+
 	engine.Init()
 	engine.SetAsDefault()
 
@@ -243,7 +242,7 @@ func main() {
 	}
 
 	// Dead letter queue — persisted alongside other agent state
-	dlqPath := getHomeDir() + "/.go-bt-evolve/dead_letter_queue.json"
+	dlqPath := agent.DLQFile()
 	dlq = reliability.NewDeadLetterQueue(dlqPath)
 	slog.Info("DLQ initialized", "path", dlqPath, "entries", dlq.Len())
 	dashboard.DLQCategoriesFn = dlq.CategoryCounts
@@ -272,7 +271,7 @@ func main() {
 	// with a single in-process local executor (RemoteExecutor peers join it when
 	// configured); the queue tracks pending pipeline work. Both are surfaced by
 	// /api/scalability instead of the former nil/0 placeholders.
-	dashTaskQueue = reliability.NewTaskQueue(getHomeDir() + "/.go-bt-evolve/task_queue.json")
+	dashTaskQueue = reliability.NewTaskQueue(agent.TaskQueueFile())
 	dashAgentRouter = reliability.NewAgentRouter(reliability.NewLocalExecutor(
 		"dashboard-local",
 		func(_ context.Context, agentName, task string) (*reliability.AgentResult, error) {
@@ -308,15 +307,7 @@ func main() {
 		sharedLLM = nil
 	}
 
-	// Load runtime configuration
-	cfg, cfgErr := config.Load()
-	if cfgErr != nil {
-		slog.Warn("Failed to load config, using defaults", "error", cfgErr)
-		dashConfig = &config.Config{}
-	} else {
-		dashConfig = cfg
-		slog.Info("Configuration loaded", "llm_provider", cfg.LLMProvider, "ollama_model", cfg.OllamaModel)
-	}
+	slog.Info("Configuration loaded", "llm_provider", cfg.LLMProvider, "ollama_model", cfg.OllamaModel)
 
 	if runner, err := agentexec.NewRunDeps(); err != nil {
 		slog.Warn("In-process agent runner unavailable (pipelines will fail)", "error", err)
@@ -394,7 +385,7 @@ func main() {
 
 	// HITL — human-in-the-loop approval policy and store
 	config.ApplyHITLPolicy(dashConfig)
-	hitlBase := filepath.Join(getHomeDir(), ".go-bt-evolve")
+	hitlBase := agent.HomeDir()
 	if _, err := hitl.InitStore(hitlBase); err != nil {
 		slog.Warn("HITL store init failed", "error", err)
 	} else {
@@ -424,11 +415,11 @@ func main() {
 	sessionAuth := dashboardSessionAuth(apiKey)
 
 	// DoorMate components initialization & registration
-	dmStore, err := doormate.NewStore(filepath.Join(getHomeDir(), ".go-bt-evolve", "doormate"))
+	dmStore, err := doormate.NewStore(filepath.Join(agent.HomeDir(), "doormate"))
 	if err != nil {
 		slog.Error("DoorMate store initialization failed", "error", err)
 	} else {
-		slog.Info("DoorMate store initialized", "path", filepath.Join(getHomeDir(), ".go-bt-evolve", "doormate"))
+		slog.Info("DoorMate store initialized", "path", filepath.Join(agent.HomeDir(), "doormate"))
 		dmAgent := doormate.NewPageAgent(sharedLLM)
 		dmHandler := doormate.NewHandler(dmStore, dmAgent)
 
@@ -771,11 +762,11 @@ func handleChat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	agents := map[string]string{
-		"overview":  "BT Studio admin agent. 38 trees, 26 MCP tools, 7 categories. Help the user navigate and manage.",
+		"overview":  "BT Studio admin agent. Help the user navigate and manage the platform; use current inventory when discussing available trees and tools.",
 		"thinktank": "ThinkTank moderator. 5 fellows: Bull, Bear, Technical, Macro, Contrarian. Help with analyses.",
 		"company":   "Startup strategy agent. BT Studio Inc, pre-seed. Help with company decisions.",
-		"tasks":     "PM agent. 6 tasks across 3 sprints. Help prioritize, approve, and execute.",
-		"trees":     "Tree architect. 38 trees. Help create, evolve, and manage behavior trees.",
+		"tasks":     "PM agent. Help prioritize, approve, and execute the current tasks and sprints.",
+		"trees":     "Tree architect. Help create, evolve, and manage the current behavior trees.",
 		"mindmap":   "Tree visualization agent. SVG mind maps. Help navigate tree structures.",
 		"evolution": "Evolution optimizer. Stockfish+genetic+Q-learning. Help tune evolution parameters.",
 	}
@@ -844,7 +835,14 @@ func handleTaskApprove(w http.ResponseWriter, r *http.Request) {
 	taskID := params.Get("id")
 	pendingID, resolvedFrom := pendingHITLBeforeResolve(taskID)
 	if err := taskStore.Approve(taskID, "dashboard"); err != nil {
-		w.WriteHeader(http.StatusNotFound)
+		status := http.StatusServiceUnavailable
+		if errors.Is(err, dashboard.ErrTaskNotFound) {
+			status = http.StatusNotFound
+		}
+		if errors.Is(err, dashboard.ErrTaskInvalidStatus) {
+			status = http.StatusBadRequest
+		}
+		w.WriteHeader(status)
 		_ = encodeJSON(w, map[string]string{"error": err.Error()})
 		return
 	}
@@ -876,7 +874,14 @@ func handleTaskReject(w http.ResponseWriter, r *http.Request) {
 	}
 	pendingID, resolvedFrom := pendingHITLBeforeResolve(taskID)
 	if err := taskStore.Reject(taskID, "dashboard", reason); err != nil {
-		w.WriteHeader(http.StatusNotFound)
+		status := http.StatusServiceUnavailable
+		if errors.Is(err, dashboard.ErrTaskNotFound) {
+			status = http.StatusNotFound
+		}
+		if errors.Is(err, dashboard.ErrTaskInvalidStatus) {
+			status = http.StatusBadRequest
+		}
+		w.WriteHeader(status)
 		_ = encodeJSON(w, map[string]string{"error": err.Error()})
 		return
 	}
@@ -923,7 +928,13 @@ func handleWorkflowApprove(w http.ResponseWriter, r *http.Request) {
 		_ = encodeJSON(w, map[string]string{"error": "no active workflow"})
 		return
 	}
-	if task := wf.ApproveTask(taskID, "dashboard"); task == nil {
+	task, err := wf.ApproveTaskWithError(taskID, "dashboard")
+	if err != nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = encodeJSON(w, map[string]string{"error": err.Error()})
+		return
+	}
+	if task == nil {
 		w.WriteHeader(http.StatusNotFound)
 		_ = encodeJSON(w, map[string]string{"error": "workflow task not found: " + taskID})
 		return
@@ -932,7 +943,11 @@ func handleWorkflowApprove(w http.ResponseWriter, r *http.Request) {
 	// composed ID wf.ID+"-"+wt.ID, and handleSprintExecute dispatches
 	// exclusively from taskStore.Approved() — so the workflow-level approval
 	// must also land on that record, or the sprint runner never sees it.
-	_ = taskStore.Approve(wf.ID+"-"+taskID, "dashboard")
+	if err := taskStore.Approve(wf.ID+"-"+taskID, "dashboard"); err != nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = encodeJSON(w, map[string]string{"error": err.Error()})
+		return
+	}
 	_ = encodeJSON(w, map[string]string{"status": "approved", "id": taskID})
 }
 
@@ -955,13 +970,23 @@ func handleWorkflowReject(w http.ResponseWriter, r *http.Request) {
 		_ = encodeJSON(w, map[string]string{"error": "no active workflow"})
 		return
 	}
-	if task := wf.RejectTask(taskID, "dashboard", reason); task == nil {
+	task, err := wf.RejectTaskWithError(taskID, "dashboard", reason)
+	if err != nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = encodeJSON(w, map[string]string{"error": err.Error()})
+		return
+	}
+	if task == nil {
 		w.WriteHeader(http.StatusNotFound)
 		_ = encodeJSON(w, map[string]string{"error": "workflow task not found: " + taskID})
 		return
 	}
 	// Mirror the taskStore record too — see handleWorkflowApprove.
-	_ = taskStore.Reject(wf.ID+"-"+taskID, "dashboard", reason)
+	if err := taskStore.Reject(wf.ID+"-"+taskID, "dashboard", reason); err != nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = encodeJSON(w, map[string]string{"error": err.Error()})
+		return
+	}
 	_ = encodeJSON(w, map[string]string{"status": "rejected", "id": taskID})
 }
 
@@ -990,6 +1015,13 @@ func handleSprintExecute(w http.ResponseWriter, r *http.Request) {
 	if _, ok := decodeMutation(w, r); !ok {
 		return
 	}
+	ctx, cancel := context.WithTimeout(r.Context(), sprintAdmissionTimeout)
+	defer cancel()
+	if err := sprintAdmission.AcquireWithContext(ctx); err != nil {
+		writeSprintAdmissionError(w, err)
+		return
+	}
+	defer sprintAdmission.Release()
 	sprintState.Lock()
 	key := r.Header.Get("Idempotency-Key")
 	if job, ok := sprintIdempotency[key]; key != "" && ok {
@@ -1003,13 +1035,35 @@ func handleSprintExecute(w http.ResponseWriter, r *http.Request) {
 		_ = encodeJSON(w, map[string]any{"status": "sprint_started", "job_id": job})
 		return
 	}
-	// Approved() returns tasks ordered by priority then sprint, so the
-	// sequential dispatch loop below already runs critical/high-priority
-	// tasks before lower-priority ones regardless of creation order.
-	approved, claimErr := taskStore.ClaimApproved()
+	// Repair retained task metadata before admitting new work. No executor is
+	// involved, and failed repair keeps the original diagnostic available.
+	if err := reconcileSprintCommitsLockedWithContext(ctx, taskStore); err != nil {
+		sprintState.Unlock()
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			writeSprintAdmissionError(w, err)
+			return
+		}
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = encodeJSON(w, map[string]string{"error": "Sprint requires task-result reconciliation; inspect sprint status"})
+		return
+	}
+	// Reserve shared capacity before durable task admission. A rejected queue
+	// or canceled waiter cannot turn approved tasks into stranded claims.
+	store := taskStore
+	executor := newAgentExecutor()
+	sprintState.Unlock()
+	reservation, reserveErr := reserveSprint(ctx, store, executor)
+	if reserveErr != nil {
+		writeSprintAdmissionError(w, reserveErr)
+		return
+	}
+	defer reservation.abort()
+	sprintState.Lock()
+	approved, claimErr := store.ClaimApprovedWithContext(ctx)
 	if claimErr != nil {
 		sprintState.Unlock()
-		http.Error(w, claimErr.Error(), http.StatusInternalServerError)
+		slog.Error("sprint admission commit failed", "error", claimErr)
+		writeSprintAdmissionError(w, claimErr)
 		return
 	}
 	if len(approved) == 0 {
@@ -1030,9 +1084,11 @@ func handleSprintExecute(w http.ResponseWriter, r *http.Request) {
 	sprintState.Running = true
 	sprintState.JobID = jobID
 	sprintState.StartedAt = time.Now()
-	sprintState.TasksTotal = len(approved)
-	sprintState.TasksCompleted = 0
 	sprintState.Progress = "dispatching"
+	sprintState.CurrentTask = ""
+	sprintState.Error, sprintState.ErrorKind = "", ""
+	sprintState.Diagnostics = nil
+	sprintState.Deadline = reservation.start(ctx, approved)
 	sprintState.Unlock()
 
 	_ = encodeJSON(w, map[string]any{
@@ -1040,87 +1096,6 @@ func handleSprintExecute(w http.ResponseWriter, r *http.Request) {
 		"message": fmt.Sprintf("Dispatching %d tasks to BT agents", len(approved)),
 		"count":   len(approved),
 	})
-
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				slog.Error("sprint panic", "error", r)
-			}
-			sprintState.Lock()
-			sprintState.Running = false
-			sprintState.Progress = "done"
-			sprintState.Unlock()
-		}()
-
-		executor := newAgentExecutor()
-
-		for i, task := range approved {
-			sprintState.Lock()
-			sprintState.TasksCompleted = i
-			sprintState.CurrentTask = task.Title
-			sprintState.Progress = "running"
-			sprintState.Unlock()
-
-			// Mark as in_progress
-			// Already durably claimed under sprint admission before launch.
-			syncWorkflowTaskStatus(task.ID, dashboard.StatusInProgress)
-
-			// Pick tree if not set
-			treeID := task.TreeID
-			if treeID == "" {
-				treeID = dashboard.PickTreeForTask(task)
-			}
-
-			// Resolve agent name
-			agentName := dashboard.ResolveAgentName(task.Assignee)
-			taskDesc := task.Title
-			if task.Description != "" {
-				taskDesc = task.Description
-			}
-
-			// Skip agents whose breaker is open, mirroring handleAgentExecute's
-			// gate and the scheduler's tick-time skip — no point burning a
-			// worker slot and an LLM call on a known-broken agent. The task
-			// goes back to approved so a later sprint retries it once the
-			// breaker recovers.
-			if !getDashCBStore().Allowed(agentName) {
-				slog.Warn("sprint: skipping task — circuit breaker open", "task", task.ID, "agent", agentName)
-				_ = taskStore.UpdateStatus(task.ID, "approved")
-				_ = taskStore.SetOutput(task.ID, "skipped: circuit breaker open for agent "+agentName, "deferred")
-				syncWorkflowTaskStatus(task.ID, dashboard.StatusPending)
-				continue
-			}
-
-			slog.Info("sprint: running task", "task", task.ID, "agent", agentName, "tree", treeID)
-
-			output, outcome, err := executor.RunTask(agentName, taskDesc, treeID)
-
-			switch sprintTaskDisposition(outcome, err) {
-			case sprintDeferred:
-				// Healthy rate-limit pause: requeue for a later sprint.
-				_ = taskStore.UpdateStatus(task.ID, "approved")
-				_ = taskStore.SetOutput(task.ID, output, "deferred")
-				syncWorkflowTaskStatus(task.ID, dashboard.StatusPending)
-			case sprintFailed:
-				failLabel := "failed"
-				if err != nil && outcome == "timeout" {
-					output = "timeout: " + err.Error()
-					failLabel = "timeout"
-				}
-				_ = taskStore.UpdateStatus(task.ID, "failed")
-				_ = taskStore.SetOutput(task.ID, output, failLabel)
-				syncWorkflowTaskStatus(task.ID, dashboard.StatusBlocked)
-			default: // sprintCompleted
-				_ = taskStore.UpdateStatus(task.ID, "completed")
-				_ = taskStore.SetOutput(task.ID, output, outcome)
-				syncWorkflowTaskStatus(task.ID, dashboard.StatusCompleted)
-			}
-		}
-
-		sprintState.Lock()
-		sprintState.TasksCompleted = len(approved)
-		sprintState.Unlock()
-	}()
 }
 
 func handleSprintStatus(w http.ResponseWriter, _ *http.Request) {
@@ -1133,116 +1108,64 @@ func handleSprintStatus(w http.ResponseWriter, _ *http.Request) {
 			completed++
 		}
 	}
-	_ = encodeJSON(w, map[string]any{
+	progress := sprintState.Progress
+	if progress == "" {
+		progress = "idle"
+	}
+	elapsed := 0.0
+	if !sprintState.StartedAt.IsZero() {
+		elapsed = time.Since(sprintState.StartedAt).Seconds()
+	}
+	status := map[string]any{
 		"running": sprintState.Running, "job_id": sprintState.JobID,
-		"elapsed":         time.Since(sprintState.StartedAt).Seconds(),
+		"progress":        progress,
+		"elapsed":         elapsed,
 		"tasks_completed": completed, "tasks_total": len(tasks),
 		"current_task": sprintState.CurrentTask,
-	})
+	}
+	if sprintState.Error != "" {
+		status["error"], status["error_kind"] = sprintState.Error, sprintState.ErrorKind
+	}
+	if len(sprintState.Diagnostics) > 0 {
+		status["diagnostics"] = sprintState.Diagnostics
+	}
+	if !sprintState.Deadline.IsZero() {
+		status["deadline_at"] = sprintState.Deadline.UTC().Format(time.RFC3339Nano)
+	}
+	if !sprintState.StartedAt.IsZero() {
+		status["started_at"] = sprintState.StartedAt.UTC().Format(time.RFC3339Nano)
+	}
+	_ = encodeJSON(w, status)
 }
 
+// handleTreeStructure returns the actual IR consumed by the mind-map UI. An
+// inventory metadata entry is not a substitute for an unavailable definition.
 func handleTreeStructure(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", http.MethodGet)
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		_ = encodeJSON(w, map[string]string{"error": "method not allowed — use GET"})
+		return
+	}
 	treeID := r.URL.Query().Get("id")
-
-	// Strip category prefix (e.g., "domain:code_review" -> "code_review")
-	if idx := strings.LastIndex(treeID, ":"); idx >= 0 {
-		treeID = treeID[idx+1:]
-	}
-
-	// ── Domain trees (14) ──
-	domainTrees := domains.AllDomainTrees()
-	if tree, ok := domainTrees[treeID]; ok {
-		_ = encodeJSON(w, tree)
+	if strings.TrimSpace(treeID) == "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_ = encodeJSON(w, map[string]string{"error": "missing required parameter: id"})
 		return
 	}
-
-	// ── Finance trees (10) ──
-	financeTrees := map[string]*evolution.SerializableNode{
-		"pitch_agent":        evolution.PitchAgentTree(),
-		"earnings_reviewer":  evolution.EarningsReviewerTree(),
-		"market_researcher":  evolution.MarketResearcherTree(),
-		"model_builder":      evolution.ModelBuilderTree(),
-		"meeting_prep":       evolution.MeetingPrepTree(),
-		"valuation_reviewer": evolution.ValuationReviewerTree(),
-		"gl_reconciler":      evolution.GLReconcilerTree(),
-		"month_end_closer":   evolution.MonthEndCloserTree(),
-		"statement_auditor":  evolution.StatementAuditorTree(),
-		"kyc_screener":       evolution.KYCScreenerTree(),
-	}
-	if tree, ok := financeTrees[treeID]; ok {
-		_ = encodeJSON(w, tree)
+	tree := domains.LookupTreeID(treeID)
+	if tree == nil {
+		w.WriteHeader(http.StatusNotFound)
+		_ = encodeJSON(w, map[string]string{"error": "tree definition not found"})
 		return
 	}
-
-	// ── Startup trees (6) ──
-	startupTrees := map[string]*evolution.SerializableNode{
-		"ceo":       startup.CEOTree(),
-		"cto":       startup.CTOTree(),
-		"pm":        startup.PMTree(),
-		"engineer":  startup.EngineerTree(),
-		"marketing": startup.MarketingTree(),
-		"sales":     startup.SalesTree(),
-	}
-	if tree, ok := startupTrees[treeID]; ok {
-		_ = encodeJSON(w, tree)
-		return
-	}
-
-	// ── Research trees (2) ──
-	researchTrees := map[string]*evolution.SerializableNode{
-		"deep_research":  evolution.DeepResearchTree(),
-		"quick_research": evolution.QuickResearchTree(),
-	}
-	if tree, ok := researchTrees[treeID]; ok {
-		_ = encodeJSON(w, tree)
-		return
-	}
-
-	// ── ThinkTank trees (3 static + FellowResearch/Debate parameterized) ──
-	thinktankTrees := map[string]*evolution.SerializableNode{
-		"synthesis":   thinktank.SynthesisTree(),
-		"peer_review": thinktank.PeerReviewTree(),
-		"report":      thinktank.ReportGenerationTree(),
-	}
-	if tree, ok := thinktankTrees[treeID]; ok {
-		_ = encodeJSON(w, tree)
-		return
-	}
-
-	// ── Evolution / core trees (2) ──
-	evolutionTrees := map[string]*evolution.SerializableNode{
-		"godev":   evolution.GoDeveloperTree(),
-		"default": evolution.DefaultTree(),
-	}
-	if tree, ok := evolutionTrees[treeID]; ok {
-		_ = encodeJSON(w, tree)
-		return
-	}
-
-	// ── Fallback: simplified node for trees without SerializableNode ──
-	for _, t := range kg.Trees {
-		name := t.ID
-		if idx := strings.LastIndex(name, ":"); idx >= 0 {
-			name = name[idx+1:]
-		}
-		if name == treeID {
-			_ = encodeJSON(w, map[string]any{
-				"id": t.ID, "name": t.Name, "type": "Sequence", "node_type": "Sequence",
-				"node_count": t.NodeCount,
-				"children":   []map[string]any{},
-			})
-			return
-		}
-	}
-
-	http.Error(w, `{"error":"tree not found"}`, http.StatusNotFound)
+	_ = encodeJSON(w, tree)
 }
 
 // --- Security & Health ---
 
-// authMiddleware wraps a handler with optional API key authentication.
-// If apiKey is empty, all requests pass through (no auth required).
-// If apiKey is set, requests must include X-API-Key header matching the key.// handleHealth returns platform health status.
+// handleHealth returns platform health status on the public liveness route.
 func handleHealth(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	_, _ = w.Write(dashboard.HealthJSON("1.0.0"))
@@ -1658,6 +1581,9 @@ func handleSecurityAudit(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 	events := buf.Recent(200)
+	if events == nil {
+		events = []security.AuditEvent{}
+	}
 	_ = encodeJSON(w, security.AuditBufferJSON{
 		Capacity:       buf.Capacity(),
 		TotalEvents:    buf.Count(),
@@ -1804,45 +1730,19 @@ func handleAgentExecute(w http.ResponseWriter, r *http.Request) {
 	// internal/agent/scheduler.go's tick — no point wasting a worker slot
 	// and an LLM call on a known-broken agent.
 	if !getDashCBStore().Allowed(req.Agent) {
+		w.Header().Set(reliability.ExecutionAdmissionHeader, "false")
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusServiceUnavailable)
 		_ = encodeJSON(w, map[string]string{"error": "circuit breaker open for agent: " + req.Agent})
 		return
 	}
 
-	// Acquire concurrency slot before submitting to worker pool.
-	// The limiter prevents more than 2 simultaneous LLM-bound agent
-	// executions, avoiding Ollama queue overflows on this Jetson.
-	if dashConcurrencyLimiter != nil {
-		dashConcurrencyLimiter.Acquire()
+	execution, admissionErr := executeDashboardAgent(r.Context(), req.Agent, req.Task, treeID)
+	if admissionErr != nil {
+		writeExecutionAdmissionError(w, admissionErr)
+		return
 	}
-	releaseLimiter := func() {
-		if dashConcurrencyLimiter != nil {
-			dashConcurrencyLimiter.Release()
-		}
-	}
-
-	result := make(chan reliability.AgentResult, 1)
-	if dashWorkerPool != nil {
-		dashWorkerPool.Submit(func() {
-			defer releaseLimiter()
-			start := time.Now()
-			executor := newAgentExecutor()
-			runRes, err := executor.RunTaskResult(req.Agent, req.Task, treeID)
-			elapsed := time.Since(start)
-			result <- agentExecuteResult(req.Agent, req.Task, runRes, elapsed, err)
-		})
-	} else {
-		// Fallback: execute synchronously (no worker pool configured)
-		start := time.Now()
-		executor := newAgentExecutor()
-		runRes, err := executor.RunTaskResult(req.Agent, req.Task, treeID)
-		elapsed := time.Since(start)
-		releaseLimiter()
-		result <- agentExecuteResult(req.Agent, req.Task, runRes, elapsed, err)
-	}
-
-	res := <-result
+	res := agentExecuteResult(req.Agent, req.Task, execution.Result, execution.Duration, execution.Err)
 	w.Header().Set("Content-Type", "application/json")
 	_ = encodeJSON(w, res)
 }
@@ -1869,6 +1769,7 @@ func agentExecuteResult(agentName, task string, runRes *agent.RunResult, elapsed
 	}
 	if err != nil {
 		res.Error = err.Error()
+		res.ErrorKind = reliability.ExecutionErrorKind(err)
 	}
 	return res
 }
@@ -1892,6 +1793,7 @@ func dashboardLocalAgentResult(agentName, task string, res *agent.RunResult, err
 	}
 	if err != nil {
 		ar.Error = err.Error()
+		ar.ErrorKind = reliability.ExecutionErrorKind(err)
 	}
 	return ar, err
 }
@@ -1911,15 +1813,14 @@ const (
 	sprintDeferred
 )
 
-// sprintTaskDisposition routes the sprint loop's task-status decision through
-// agent.IsBreakerSuccess — the same classifier that just recorded the run's
-// breaker and metric outcome — so one run can no longer be a breaker success
-// and a workflow-Blocked task failure at the same time.
+// sprintTaskDisposition distinguishes completed work from expected quota
+// carryover. Breaker health also includes input/approval waits; those waits do
+// not establish task completion or authorize automatic execution replay.
 func sprintTaskDisposition(outcome string, err error) sprintDisposition {
-	if agent.IsRateLimitCarryover(outcome) {
+	if agent.IsRateLimitCarryover(outcome) && reliability.IsExecutionPause(outcome, err) {
 		return sprintDeferred
 	}
-	if agent.IsBreakerSuccess(outcome, err) {
+	if reliability.IsHealthyOutcome(outcome) && (err == nil || reliability.IsExecutionPersistenceError(err)) {
 		return sprintCompleted
 	}
 	return sprintFailed
@@ -1958,71 +1859,36 @@ func handleAgentRun(w http.ResponseWriter, r *http.Request) {
 	// breaker is open, mirroring the job-skip gate in
 	// internal/agent/scheduler.go's tick.
 	if !getDashCBStore().Allowed(agentName) {
+		w.Header().Set(reliability.ExecutionAdmissionHeader, "false")
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusServiceUnavailable)
 		_ = encodeJSON(w, map[string]string{"error": "circuit breaker open for agent: " + agentName})
 		return
 	}
 
-	// Acquire concurrency slot to prevent LLM resource exhaustion.
-	if dashConcurrencyLimiter != nil {
-		dashConcurrencyLimiter.Acquire()
+	execution, admissionErr := executeDashboardAgent(r.Context(), agentName, task, treeID)
+	if admissionErr != nil {
+		writeExecutionAdmissionError(w, admissionErr)
+		return
 	}
-
-	result := make(chan map[string]any, 1)
-	if dashWorkerPool != nil {
-		dashWorkerPool.Submit(func() {
-			defer func() {
-				if dashConcurrencyLimiter != nil {
-					dashConcurrencyLimiter.Release()
-				}
-			}()
-			executor := newAgentExecutor()
-			res, err := executor.RunTaskResult(agentName, task, treeID)
-			resp := map[string]any{
-				"agent": agentName, "outcome": "failure", "output": "",
-			}
-			if res != nil {
-				resp["outcome"] = res.Outcome
-				resp["output"] = res.Output
-				if res.RunID != "" {
-					resp["run_id"] = res.RunID
-				}
-				if res.SessionID != "" {
-					resp["session_id"] = res.SessionID
-				}
-			}
-			if err != nil {
-				resp["error"] = err.Error()
-			}
-			result <- resp
-		})
-	} else {
-		executor := newAgentExecutor()
-		res, err := executor.RunTaskResult(agentName, task, treeID)
-		if dashConcurrencyLimiter != nil {
-			dashConcurrencyLimiter.Release()
+	res := map[string]any{"agent": agentName, "outcome": "failure", "output": ""}
+	if execution.Result != nil {
+		res["outcome"] = execution.Result.Outcome
+		res["output"] = execution.Result.Output
+		if execution.Result.RunID != "" {
+			res["run_id"] = execution.Result.RunID
 		}
-		resp := map[string]any{
-			"agent": agentName, "outcome": "failure", "output": "",
+		if execution.Result.SessionID != "" {
+			res["session_id"] = execution.Result.SessionID
 		}
-		if res != nil {
-			resp["outcome"] = res.Outcome
-			resp["output"] = res.Output
-			if res.RunID != "" {
-				resp["run_id"] = res.RunID
-			}
-			if res.SessionID != "" {
-				resp["session_id"] = res.SessionID
-			}
-		}
-		if err != nil {
-			resp["error"] = err.Error()
-		}
-		result <- resp
 	}
-
-	res := <-result
+	if execution.Err != nil {
+		res["error"] = execution.Err.Error()
+		if kind := reliability.ExecutionErrorKind(execution.Err); kind != "" {
+			res["error_kind"] = kind
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
 	_ = encodeJSON(w, res)
 }
 

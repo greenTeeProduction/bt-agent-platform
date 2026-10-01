@@ -43,11 +43,23 @@ func (e *AgentExecutor) RunTask(agentName, task, treeID string) (output string, 
 
 // RunTaskResult executes a task and returns the full RunResult (includes blackboard run_id).
 func (e *AgentExecutor) RunTaskResult(agentName, task, treeID string) (*agent.RunResult, error) {
+	return e.RunTaskResultWithContext(context.Background(), agentName, task, treeID)
+}
+
+// RunTaskResultWithContext keeps execution and subprocess budgets within the
+// caller's deadline. Pre-execution cancellation does not record a failed run.
+func (e *AgentExecutor) RunTaskResultWithContext(parent context.Context, agentName, task, treeID string) (*agent.RunResult, error) {
+	if parent == nil {
+		parent = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(parent, e.Timeout)
+	defer cancel()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	var res *agent.RunResult
 	var err error
 	if e.Runner != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), e.Timeout)
-		defer cancel()
 		opts := agent.RunOptions{
 			InjectMemory:   true,
 			EnforceQuality: true,
@@ -58,7 +70,7 @@ func (e *AgentExecutor) RunTaskResult(agentName, task, treeID string) (*agent.Ru
 	} else {
 		start := time.Now()
 		var output, outcome string
-		output, outcome, err = e.runViaHermes(task, treeID)
+		output, outcome, err = e.runViaHermesWithContext(ctx, task, treeID)
 		if err != nil && outcome == "" {
 			outcome = "failure"
 		}
@@ -161,9 +173,7 @@ func hermesOutcome(output string, execErr error) string {
 	}
 }
 
-func (e *AgentExecutor) runViaHermes(task, treeID string) (output string, outcome string, err error) {
-	ctx, cancel := context.WithTimeout(context.Background(), e.Timeout)
-	defer cancel()
+func (e *AgentExecutor) runViaHermesWithContext(ctx context.Context, task, treeID string) (output string, outcome string, err error) {
 
 	// Build the Hermes command: hermes chat -q "delegate task to tree"
 	// We use the bt-agent platform's tree delegation pattern
@@ -172,9 +182,9 @@ func (e *AgentExecutor) runViaHermes(task, treeID string) (output string, outcom
 		treeID, task,
 	)
 
-	hermesPath := "hermes"
-	// Find hermes in common locations
-	if _, err := os.Stat(hermesPath); os.IsNotExist(err) {
+	hermesPath, lookupErr := exec.LookPath("hermes")
+	if lookupErr != nil {
+		hermesPath = "hermes"
 		if _, err := os.Stat("/usr/local/bin/hermes"); err == nil {
 			hermesPath = "/usr/local/bin/hermes"
 		}
@@ -186,23 +196,23 @@ func (e *AgentExecutor) runViaHermes(task, treeID string) (output string, outcom
 		"--yolo",
 		"-m", "deepseek-v4-flash",
 	)
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		home = os.Getenv("HOME")
-	}
-	cmd.Env = append(os.Environ(), "HOME="+home)
-
+	reliability.BindCommandCancellation(cmd)
 	outBytes, err := cmd.CombinedOutput()
 	output = strings.TrimSpace(string(outBytes))
 
-	if ctx.Err() == context.DeadlineExceeded {
-		return output, "timeout", fmt.Errorf("task timed out after %v", e.Timeout)
-	}
 	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return output, "timeout", fmt.Errorf("task execution deadline: %w", ctx.Err())
+		}
+		if ctx.Err() != nil {
+			return output, "canceled", fmt.Errorf("task execution canceled: %w", ctx.Err())
+		}
 		// Still return output — it may contain useful error info
-		return output, hermesOutcome(output, err), nil
+		return output, hermesOutcome(output, err), err
 	}
 
+	// A completed command with no wait/capture error is terminal evidence;
+	// a later racing cancellation must not rewrite it as failed work.
 	outcome = hermesOutcome(output, nil)
 
 	return output, outcome, nil
