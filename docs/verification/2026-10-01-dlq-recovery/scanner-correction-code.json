@@ -1,0 +1,7 @@
+{
+  "complete_go_dependencies_sha256": "69ede790feaf961dd29e391e6d6fa0859efbe91f4dfd3b08b03263ffc5ad87f5",
+  "files": 1063,
+  "full_race_exit_code": 0,
+  "scope": "Final settled corrective Go/dependency identity, full short race/atomic coverage pass. Earlier failed fixture/lint/full-suite runs are retained privately, not counted as passing gates.",
+  "total_statement_coverage": "77.8%"
+}

@@ -104,3 +104,51 @@ func TestRunHistoryFailureIsReportedWithExecutionResult(t *testing.T) {
 		})
 	}
 }
+
+func TestHistoryConfinesIdentifiersAndSymlinksToOwner(t *testing.T) {
+	base := t.TempDir()
+	dir := filepath.Join(base, "history")
+	outside := filepath.Join(base, "outside.jsonl")
+	original := []byte("{\"task\":\"private outside evidence\"}\n")
+	if err := os.WriteFile(outside, original, 0600); err != nil {
+		t.Fatal(err)
+	}
+	h, err := NewHistory(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"", ".", "..", "../outside", outside, "nested/agent", `nested\agent`, "bad\x00name"} {
+		if err := h.Record(RunRecord{AgentName: name, Outcome: "success"}); err == nil {
+			t.Errorf("unsafe identifier acknowledged: %q", name)
+		}
+		if len(h.List(name, 0)) != 0 {
+			t.Errorf("unsafe record cached: %q", name)
+		}
+	}
+	if err := os.Symlink(outside, filepath.Join(dir, "linked.jsonl")); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.Record(RunRecord{AgentName: "linked"}); err == nil {
+		t.Fatal("outward append acknowledged")
+	}
+	loaded, err := NewHistory(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded.List("linked", 0)) != 0 {
+		t.Fatal("outward history read disclosed records")
+	}
+	if actual, err := os.ReadFile(outside); err != nil || string(actual) != string(original) {
+		t.Fatal("outside history changed")
+	}
+	if err := h.Record(RunRecord{AgentName: "domain:arc42", Task: "valid local identifier"}); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(filepath.Join(dir, "domain:arc42.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm()&0077 != 0 {
+		t.Fatalf("new history exposes private records: %o", info.Mode().Perm())
+	}
+}

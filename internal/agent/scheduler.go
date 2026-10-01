@@ -228,7 +228,7 @@ func (s *Scheduler) Schedule(agentName, schedule string, timeout string, maxRetr
 		for id, existing := range s.jobs {
 			if existing.AgentName == agentName {
 				slog.Warn("scheduler: deleting job (agent set to on_demand via Schedule)",
-					"job_id", id, "agent", agentName, "run_count", existing.RunCount)
+					"run_count", existing.RunCount)
 				delete(s.jobs, id)
 			}
 		}
@@ -267,7 +267,7 @@ func (s *Scheduler) Schedule(agentName, schedule string, timeout string, maxRetr
 			// preserve immediate-run marker
 		case sameSchedule && missedSlot:
 			slog.Info("scheduler: preserving missed slot for catch-up",
-				"agent", agentName, "missed_next_run", keep.NextRun)
+				"missed_next_run", keep.NextRun)
 		default:
 			keep.NextRun = nextRun
 		}
@@ -1251,8 +1251,8 @@ func parseSchedule(sched string) (time.Time, error) {
 		next, err := nextCronTime(sched, now)
 		if err != nil {
 			// Fall back to 1h if we can't parse — better than crashing
-			slog.Warn("scheduler: cron parse error, falling back to +1h", "schedule", sched, "error", err)
-			return now.Add(1 * time.Hour), nil
+			slog.Warn("scheduler: cron parse error, falling back to +1h", "field_count", len(strings.Fields(sched)))
+			return now.Add(1 * time.Hour), nil //nolint:nilerr // Deliberate historical fallback; raw parser text is not logged.
 		}
 		return next, nil
 	}

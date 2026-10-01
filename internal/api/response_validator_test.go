@@ -710,8 +710,8 @@ func TestResponseValidator_DriftLogging(t *testing.T) {
 	if logOutput == "" {
 		t.Error("expected drift warning in logs, got nothing")
 	}
-	if !strings.Contains(logOutput, "message") || !strings.Contains(logOutput, "missing required field") {
-		t.Errorf("log should contain drift warning about 'message', got: %s", logOutput)
+	if !strings.Contains(logOutput, "path=/api/test") || !strings.Contains(logOutput, "violations=1") {
+		t.Errorf("log should contain catalog identity and violation count, got: %s", logOutput)
 	}
 }
 

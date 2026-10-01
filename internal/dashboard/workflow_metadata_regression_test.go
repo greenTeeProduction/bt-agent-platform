@@ -127,7 +127,14 @@ func testWorkflowMetadataLockDeadline(t *testing.T, phase string) {
 		acquire()
 		return "success", "completed evidence", nil
 	}}
-	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
+	budget := 20 * time.Millisecond
+	if phase == "completed-output" {
+		// Leave setup time for the real input commit before the action. A
+		// premature deadline would legitimately reject admission and test a
+		// different boundary. Still much shorter than the default lock budget.
+		budget = 250 * time.Millisecond
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), budget)
 	defer cancel()
 	start := time.Now()
 	result, err := runner.Run(ctx, Pipeline{Name: "bounded", Steps: []Step{{ID: "work", Kind: StepAgent, OnFailure: "retry"}, {ID: "later", Kind: StepAgent}}}, "input")

@@ -103,12 +103,18 @@ func defaultDriftSmokeTest(binPath string) error {
 // rollback for a rebuilt binary that failed its smoke test, so a later restart
 // cannot adopt the broken build.
 func restorePreviousBinary(binPath string) error {
-	prev := binPath + ".previous"
-	data, err := os.ReadFile(prev)
+	root, name, err := util.OpenPersistenceRoot(binPath)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(binPath, data, 0o755)
+	defer root.Close()
+	data, err := root.ReadFile(name + ".previous")
+	if err != nil {
+		return err
+	}
+	// Replace a complete executable sibling; never truncate the live image or
+	// follow an outward backup symlink. New mode retains owner/group execution.
+	return util.SavePersistenceFileMode(binPath, data, 0o750, 0o750)
 }
 
 // AutoRestartEnabled reports whether BT_AUTO_RESTART_ON_DRIFT opts into adopting
@@ -126,6 +132,8 @@ func AutoRestartEnabled() bool {
 // context cannot redirect rev-parse at the wrong repository — the same class of
 // leak that mis-authored a shared bare repo on 2026-07-10.
 func defaultDriftHead(repoDir string) (string, error) {
+	// #nosec G204 -- repoDir is operator-selected deploy configuration. Git,
+	// -C and rev-parse HEAD are fixed argv; no shell or request options run.
 	cmd := exec.Command("git", "-C", repoDir, "rev-parse", "HEAD")
 	cmd.Env = scrubGitEnv()
 	out, err := cmd.Output()
