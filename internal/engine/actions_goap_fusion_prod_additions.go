@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/blackboard"
+	"github.com/nico/go-bt-evolve/internal/util"
 	btcore "github.com/rvitorper/go-bt/core"
 )
 
@@ -136,11 +137,11 @@ func registerGoapFusionProductionAdditions() {
 		if len(path) > 220 {
 			path = filepath.Join(dir, fmt.Sprintf("goap-fusion-%s.md", time.Now().Format("20060102T150405")))
 		}
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+		if err := os.MkdirAll(dir, 0o750); err != nil {
 			bb.Result = err.Error()
 			return -1
 		}
-		if err := os.WriteFile(path, []byte(plan), 0o644); err != nil {
+		if err := util.SavePersistenceFile(path, []byte(plan)); err != nil {
 			bb.Result = err.Error()
 			return -1
 		}
@@ -169,12 +170,12 @@ func registerGoapFusionProductionAdditions() {
 			// cycle showed neither).
 			report += goapFusionImplDegradedSection(bb)
 			report += goapFusionSeedSection(bb)
-			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 				bb.Result = err.Error()
 				return -1
 			}
-			_ = os.WriteFile(path, []byte(report), 0o644)
-			_ = os.WriteFile(latest, []byte(report), 0o644)
+			_ = util.SavePersistenceFile(path, []byte(report))
+			_ = util.SavePersistenceFile(latest, []byte(report))
 			setGoapState(bb, "fusion_analysis_path", path)
 			bb.Result = fmt.Sprintf("## No New Gaps\n\nGoals unchanged. Skipping analysis boilerplate.\nAnalysis: `%s`", path)
 			return 1
@@ -183,15 +184,15 @@ func registerGoapFusionProductionAdditions() {
 		report := fmt.Sprintf("# GOAP Fusion Analysis — %s\n\n## Task\n%s\n\n## Goals\n%s\n\n## Gaps\n%s\n", ts, bb.Task, goals, gaps)
 		report += goapFusionImplDegradedSection(bb)
 		report += goapFusionSeedSection(bb)
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 			bb.Result = err.Error()
 			return -1
 		}
-		if err := os.WriteFile(path, []byte(report), 0o644); err != nil {
+		if err := util.SavePersistenceFile(path, []byte(report)); err != nil {
 			bb.Result = err.Error()
 			return -1
 		}
-		_ = os.WriteFile(latest, []byte(report), 0o644)
+		_ = util.SavePersistenceFile(latest, []byte(report))
 		setGoapState(bb, "fusion_analysis_path", path)
 		bb.Result = fmt.Sprintf("## Analysis Written\n\nSaved to: `%s`", path)
 		return 1
@@ -438,7 +439,7 @@ func goapFusionMaterializerSnapshotsSection(bb *Blackboard) string {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".patch") || reported[e.Name()] {
 			continue
 		}
-		data, rerr := os.ReadFile(filepath.Join(dir, e.Name()))
+		data, rerr := util.ReadPersistenceFile(filepath.Join(dir, e.Name()))
 		if rerr != nil {
 			continue
 		}

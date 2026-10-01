@@ -522,7 +522,17 @@ func AcquireFileLock(path string) (func(), error) {
 // AcquireFileLockWithContext acquires `<path>.lock` with context cancellation
 // and deadline support.
 func AcquireFileLockWithContext(ctx context.Context, path string) (func(), error) {
-	lockPath := path + ".lock"
+	root, name, err := util.OpenPersistenceRoot(path)
+	if err != nil {
+		return nil, fmt.Errorf("open lock parent: %w", err)
+	}
+	transferred := false
+	defer func() {
+		if !transferred {
+			_ = root.Close()
+		}
+	}()
+	lockPath := name + ".lock"
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
 
@@ -533,7 +543,7 @@ func AcquireFileLockWithContext(ctx context.Context, path string) (func(), error
 		default:
 		}
 
-		f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0644)
+		f, err := root.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0600)
 		if err != nil {
 			return nil, fmt.Errorf("open lock %s: %w", lockPath, err)
 		}
@@ -554,16 +564,18 @@ func AcquireFileLockWithContext(ctx context.Context, path string) (func(), error
 			_ = f.Close()
 			return nil, fmt.Errorf("stat lock %s: %w", lockPath, err)
 		}
-		if current, err := os.Stat(lockPath); err != nil || !os.SameFile(held, current) {
+		if current, err := root.Stat(lockPath); err != nil || !os.SameFile(held, current) {
 			_ = f.Close() // locked an orphaned inode; retry on the live path
 			continue
 		}
 		release := sync.OnceFunc(func() {
 			// Unlink before close so no waiter still blocked on this
 			// inode can mistake it for the lock guarding the path.
-			_ = os.Remove(lockPath)
+			_ = root.Remove(lockPath)
 			_ = f.Close() // closing the descriptor releases the flock
+			_ = root.Close()
 		})
+		transferred = true
 		return release, nil
 	}
 }

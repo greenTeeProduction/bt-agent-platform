@@ -1,0 +1,21 @@
+{
+  "command": "gosec -no-fail -fmt sarif -out <private>/settled-results.sarif -severity medium ./...",
+  "gosec_version": "v2.27.1",
+  "remaining_findings": 256,
+  "by_rule": {
+    "G115": 16,
+    "G124": 4,
+    "G204": 24,
+    "G301": 54,
+    "G302": 11,
+    "G304": 65,
+    "G306": 55,
+    "G401": 1,
+    "G404": 12,
+    "G505": 1,
+    "G703": 12,
+    "G704": 1
+  },
+  "sarif_sha256": "53591dc6f5098d1a12470eaef0d1259e9478f6091c3dc36ac1ebfe7e89d43390",
+  "qualification": "Reported GitHub annotations remediated locally; existing baseline findings retained. Separate GitHub comparison determines PR scan acceptance."
+}

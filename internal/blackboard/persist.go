@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 type scopeFile struct {
@@ -35,10 +37,10 @@ func (m *Manager) EnablePersistence(baseDir string) error {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if err := os.MkdirAll(filepath.Join(baseDir, "session"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(baseDir, "session"), 0o750); err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Join(baseDir, "agent"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(baseDir, "agent"), 0o750); err != nil {
 		return err
 	}
 	m.persistDir = baseDir
@@ -77,7 +79,7 @@ func (m *Manager) persistFile(scope Scope) string {
 }
 
 func loadScopeFile(path string, s *scopedStore) error {
-	data, err := os.ReadFile(path)
+	data, err := util.ReadPersistenceFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil

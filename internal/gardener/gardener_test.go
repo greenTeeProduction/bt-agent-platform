@@ -402,18 +402,9 @@ func TestMetricsTracker_SaveAggregatesRollbacks(t *testing.T) {
 	}
 }
 
-// TestMetricsTracker_SaveWriteFailureLeavesOriginalUntouched verifies
-// milestone 2/4 of the "Q3 Reliability — Stop silent write-failure and
-// breaker-bypass gaps in gardener persistence, dashboard circuit-breaker
-// gating, and A2A history recording" program: like SaveTree, Save must not
-// discard the os.WriteFile error via `_ =`. This test forces the WriteFile
-// call to fail while a stale tmp file is already on disk (e.g. left over
-// from a prior crashed write). A naive implementation that ignores the
-// WriteFile error still calls os.Rename, which succeeds unconditionally
-// (rename permission is governed by the *directory*, not the file's own
-// mode) and silently clobbers gardener-metrics.json with the stale tmp
-// content. Save must check the WriteFile error first and refuse to rename,
-// leaving the prior metrics file untouched and reporting a non-nil error.
+// TestMetricsTracker_SaveWriteFailureLeavesOriginalUntouched denies random
+// temporary-file creation. Failure must preserve the preceding metrics and
+// cannot promote an unrelated stale legacy temporary file.
 func TestMetricsTracker_SaveWriteFailureLeavesOriginalUntouched(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("running as root: file write permission cannot be revoked to force this failure")
@@ -432,18 +423,16 @@ func TestMetricsTracker_SaveWriteFailureLeavesOriginalUntouched(t *testing.T) {
 		t.Fatalf("seed WriteFile: %v", err)
 	}
 
-	// Pre-create the tmp file Save will target, then revoke its write
-	// permission so os.WriteFile(tmp, ...) inside Save fails while the
-	// stale tmp file remains on disk.
+	// Seed an unrelated old temporary file, then deny directory writes.
 	tmpPath := filePath + ".tmp"
 	stale := []byte("stale-leftover-data")
 	if err := os.WriteFile(tmpPath, stale, 0644); err != nil {
 		t.Fatalf("seed tmp WriteFile: %v", err)
 	}
-	if err := os.Chmod(tmpPath, 0444); err != nil {
-		t.Fatalf("Chmod tmp: %v", err)
+	if err := os.Chmod(dir, 0500); err != nil {
+		t.Fatalf("Chmod parent: %v", err)
 	}
-	t.Cleanup(func() { _ = os.Chmod(tmpPath, 0644) })
+	t.Cleanup(func() { _ = os.Chmod(dir, 0700) })
 
 	err = mt.Save()
 	if err == nil {
@@ -456,6 +445,10 @@ func TestMetricsTracker_SaveWriteFailureLeavesOriginalUntouched(t *testing.T) {
 	}
 	if string(data) != string(original) {
 		t.Errorf("original metrics file content changed after failed Save: got %q, want %q", data, original)
+	}
+	legacy, err := os.ReadFile(tmpPath)
+	if err != nil || string(legacy) != string(stale) {
+		t.Fatalf("unrelated temporary file changed: %q %v", legacy, err)
 	}
 }
 

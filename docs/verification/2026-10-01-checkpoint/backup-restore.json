@@ -1,0 +1,23 @@
+{
+  "source_commit": "78d973da85d3e85fa7063735be858a62be903461",
+  "source_scope": [
+    "evolve",
+    "reflections",
+    "gardener"
+  ],
+  "services_inactive_before_backup": true,
+  "no_BT_writer_process_before_backup": true,
+  "source_manifest_stable_during_backup": true,
+  "all_restored_content_hashes_match": true,
+  "files_and_links": 238472,
+  "file_bytes": 2117685081,
+  "archive_sha256": "b56dc0837526c4689ccf073a14fec6cec3bd97909677bd09dca4d449ef801690",
+  "manifest_sha256": "3ebc4766a23cc295ba690c7cfc80c1ce78eee6a7fed61b907b95b6c3cedd91b4",
+  "duration_seconds": 709.919,
+  "restored_links_outside_root": 0,
+  "remaining_limits": [
+    "State scope excludes research vault and user source worktrees outside these roots.",
+    "Provider reauthentication and secret lifetime were not tested.",
+    "No numeric RPO/RTO or scheduled retention policy established."
+  ]
+}

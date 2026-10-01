@@ -487,7 +487,7 @@ type MutationSearchEvidence struct {
 // "the search found no evidence", never "try these unscored guesses". parent is
 // never mutated.
 func (m *MCTSMutator) Candidates(parent *SerializableNode, parentFitness float64) []ScoredMutation {
-	return m.CandidatesWithSeed(parent, parentFitness, rand.Int63()) // non-crypto search seed
+	return m.CandidatesWithSeed(parent, parentFitness, rand.Int63()) // #nosec G404 -- non-crypto search seed; not a security token.
 }
 
 // CandidatesWithSeed isolates the complete search random stream. Concurrent
@@ -498,7 +498,7 @@ func (m *MCTSMutator) CandidatesWithSeed(parent *SerializableNode, parentFitness
 	run := &MCTSMutator{
 		Iterations: m.Iterations, ExplorationConst: m.ExplorationConst, MaxDepth: m.MaxDepth,
 		FitnessEvaluator: m.FitnessEvaluator, WarmStartHints: slices.Clone(m.WarmStartHints),
-		random: rand.New(rand.NewSource(seed)),
+		random: rand.New(rand.NewSource(seed)), // #nosec G404 -- search/retry timing; not a security token.
 	}
 	m.mu.Unlock()
 	return run.candidates(parent, parentFitness, seed)

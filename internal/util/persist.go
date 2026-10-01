@@ -90,6 +90,23 @@ func SaveJSONAtomicMode(path string, v any, filePerm, dirPerm os.FileMode) error
 	if err != nil {
 		return fmt.Errorf("marshal %s: %w", path, err)
 	}
+	return SavePersistenceFileMode(path, data, filePerm, dirPerm)
+}
+
+// SavePersistenceFile atomically replaces private text or binary state.
+// Shared read/update/write transactions still require their sidecar lock.
+func SavePersistenceFile(path string, data []byte) error {
+	return SavePersistenceFileMode(path, data, 0o600, 0o750)
+}
+
+// OpenPersistenceRoot opens the configured parent and validates the filename.
+// Callers own the handle and must constrain request-derived names beforehand.
+func OpenPersistenceRoot(path string) (*os.Root, string, error) {
+	return persistenceParent(path, false, 0)
+}
+
+// SavePersistenceFileMode preserves a store's stricter permission policy.
+func SavePersistenceFileMode(path string, data []byte, filePerm, dirPerm os.FileMode) error {
 	root, name, err := persistenceParent(path, true, dirPerm)
 	if err != nil {
 		return fmt.Errorf("create dir for %s: %w", path, err)

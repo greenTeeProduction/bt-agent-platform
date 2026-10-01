@@ -5,12 +5,37 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
 	"testing"
 	"time"
 )
+
+func TestFileLock_RejectsEscapingSidecar(t *testing.T) {
+	outside := filepath.Join(t.TempDir(), "outside")
+	if err := os.WriteFile(outside, []byte("untouched"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "state.json")
+	if err := os.Symlink(outside, path+".lock"); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if release, err := AcquireFileLockWithContext(ctx, path); err == nil {
+		release()
+		t.Fatal("escaping sidecar admitted")
+	}
+	data, err := os.ReadFile(outside)
+	if err != nil || string(data) != "untouched" {
+		t.Fatalf("outside state changed: %q, %v", data, err)
+	}
+	if _, err := os.Lstat(path + ".lock"); err != nil {
+		t.Fatalf("rejected sidecar removed: %v", err)
+	}
+}
 
 // ─── Circuit Breaker Tests ──────────────────────────────────────────────────
 

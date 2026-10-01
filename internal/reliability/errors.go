@@ -494,7 +494,7 @@ func FullJitter(baseDelay time.Duration) time.Duration {
 	if baseDelay <= 0 {
 		return 0
 	}
-	return time.Duration(rand.Int63n(int64(baseDelay)))
+	return time.Duration(rand.Int63n(int64(baseDelay))) // #nosec G404 -- search/retry timing; not a security token.
 }
 
 // EqualJitter returns a random duration in [baseDelay/2, baseDelay].
@@ -507,7 +507,7 @@ func EqualJitter(baseDelay time.Duration) time.Duration {
 	}
 	half := baseDelay / 2
 	// +1 to include exact half in the random range.
-	return half + time.Duration(rand.Int63n(int64(half+1)))
+	return half + time.Duration(rand.Int63n(int64(half+1))) // #nosec G404 -- search/retry timing; not a security token.
 }
 
 // DecorrelatedJitter returns a duration based on the previous sleep value.
@@ -528,7 +528,7 @@ func DecorrelatedJitter(previousSleep time.Duration, base time.Duration, maxDela
 	if next <= minVal {
 		return minVal
 	}
-	return minVal + time.Duration(rand.Int63n(int64(next-minVal)))
+	return minVal + time.Duration(rand.Int63n(int64(next-minVal))) // #nosec G404 -- search/retry timing; not a security token.
 }
 
 // ApplyJitter applies the selected jitter strategy to a backoff delay.
@@ -741,7 +741,7 @@ func (p *RetryPolicy) delayForCategory(attempt int, cat ErrorCategory, err error
 		}
 		// Additive jitter (up to +10%) — never below the server-requested
 		// wait, but desynchronized across clients hitting the same limit.
-		return ra + time.Duration(rand.Int63n(int64(ra/10)+1))
+		return ra + time.Duration(rand.Int63n(int64(ra/10)+1)) // #nosec G404 -- search/retry timing; not a security token.
 	}
 
 	base := p.Base

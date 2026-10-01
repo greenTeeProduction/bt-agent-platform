@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/nico/go-bt-evolve/internal/reliability"
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 func applySuperpowersRunToMainRepo(ctx context.Context, runner CommandRunner, run *SuperpowersRun) error {
@@ -41,10 +42,10 @@ func applySuperpowersRunToMainRepo(ctx context.Context, runner CommandRunner, ru
 	}
 
 	patchPath := filepath.Join(run.ArtifactDir, "verification", "worktree.patch")
-	if err := os.MkdirAll(filepath.Dir(patchPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(patchPath), 0o750); err != nil {
 		return err
 	}
-	if err := os.WriteFile(patchPath, []byte(patchText), 0o644); err != nil {
+	if err := util.SavePersistenceFile(patchPath, []byte(patchText)); err != nil {
 		return err
 	}
 	run.PatchPath = patchPath
@@ -395,7 +396,7 @@ func verifySuperpowersRuntimeInDir(ctx context.Context, runner CommandRunner, ru
 		res := runShellCommand(ctx, runner, dir, check.cmd)
 		vc := VerificationCheck{Name: check.name, Command: check.cmd, Passed: res.Err == nil, Output: res.Output, Duration: res.Duration.String()}
 		run.Verification = append(run.Verification, vc)
-		_ = os.WriteFile(filepath.Join(run.ArtifactDir, "verification", check.name+".txt"), []byte(formatCommandResult(res)), 0o644)
+		_ = util.SavePersistenceFile(filepath.Join(run.ArtifactDir, "verification", check.name+".txt"), []byte(formatCommandResult(res)))
 		if res.Err != nil {
 			run.ApplyStatus = "pending_patch"
 			return fmt.Errorf("main repo verification %s failed after applying patch: %v\n%s", check.name, res.Err, res.Output)
@@ -540,8 +541,8 @@ func writeApplyCommitEvidence(run *SuperpowersRun, label string, res CommandResu
 		return
 	}
 	path := filepath.Join(run.ArtifactDir, "verification", "apply-commit.txt")
-	_ = os.MkdirAll(filepath.Dir(path), 0o755)
-	_ = os.WriteFile(path, []byte(label+"\n\n"+formatCommandResult(res)), 0o644)
+	_ = os.MkdirAll(filepath.Dir(path), 0o750)
+	_ = util.SavePersistenceFile(path, []byte(label+"\n\n"+formatCommandResult(res)))
 }
 
 // writeApplyRebaseEvidence persists a failed apply-time re-apply (the rebase of
@@ -552,9 +553,9 @@ func writeApplyRebaseEvidence(run *SuperpowersRun, rebase, abort CommandResult) 
 		return
 	}
 	path := filepath.Join(run.ArtifactDir, "verification", "apply-rebase.txt")
-	_ = os.MkdirAll(filepath.Dir(path), 0o755)
+	_ = os.MkdirAll(filepath.Dir(path), 0o750)
 	body := "rebase onto master failed:\n\n" + formatCommandResult(rebase) + "\n\nrebase --abort:\n\n" + formatCommandResult(abort)
-	_ = os.WriteFile(path, []byte(body), 0o644)
+	_ = util.SavePersistenceFile(path, []byte(body))
 }
 
 // runVerificationPassed reports whether a named verification check ran and

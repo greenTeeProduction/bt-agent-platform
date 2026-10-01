@@ -228,7 +228,7 @@ func handlePipelineRun(w http.ResponseWriter, r *http.Request) {
 			if runErr != nil {
 				rec.Error = runErr.Error()
 			}
-			slog.Info("pipeline: waiting", "run_id", runID, "outcome", result.Outcome)
+			slog.Info("pipeline: waiting", "run_id", runID, "status", rec.Status)
 		} else if runErr != nil || result == nil || !agent.IsHealthyOutcome(result.Outcome) {
 			rec.Status = "failed"
 			if runErr != nil {
@@ -238,10 +238,10 @@ func handlePipelineRun(w http.ResponseWriter, r *http.Request) {
 			} else {
 				rec.Error = "pipeline returned no result"
 			}
-			slog.Warn("pipeline: execution stopped", "run_id", runID, "error", rec.Error)
+			slog.Warn("pipeline: execution stopped", "run_id", runID, "status", rec.Status)
 		} else {
 			rec.Status = "complete"
-			slog.Info("pipeline: execution complete", "run_id", runID, "outcome", result.Outcome)
+			slog.Info("pipeline: execution complete", "run_id", runID, "status", rec.Status)
 		}
 		rec.Result = result
 	}, func(panicVal any, panicCtx string) {

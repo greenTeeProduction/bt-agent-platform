@@ -152,6 +152,24 @@ Optional queue adapters do not turn the default file-based deployment into
 a distributed database. Backup/restore and retention remain explicit
 operational requirements (R12/R26).
 
+The PR #83 corrections extend the configured-parent rooted I/O contract to
+lock sidecars, artifact text, configuration, skills and feedback readers.
+Sidecars use `0600`; reported new artifact directories use `0750`. Atomic
+replacement also replaces a preexisting leaf symlink or permissive file rather
+than following it or retaining its mode. Rooted reads reject escaping leaf
+symlinks; operator-configured parent symlinks remain supported. Existing
+unmodified directories are not retroactively hardened. Shared transactions
+still need a lock; these changes do not add power-loss synchronization.
+
+Private configuration saves intentionally preserve credentials for reload.
+Use `Config.Sanitized` for presentation/sharing. Boolean merge behavior is
+preserved; tracking presence in original JSON remains a separate compatibility
+fix. Process lookup uses fixed `ps` arguments and literal Go matching. Explicit
+shell tools and authorized command actions retain their execution contracts;
+narrow G204 exceptions record that intent. G404 exceptions apply only to search
+seeds and retry timing, never authentication tokens. Pipeline status logs omit
+untrusted outcome/error text; private execution records retain those details.
+
 ## 8.5 Evolution Pipeline
 
 The canonical runtime is [`gardener/evolve_v2.go`](../../internal/gardener/evolve_v2.go).

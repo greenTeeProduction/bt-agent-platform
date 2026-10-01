@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/reliability"
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 // feedbackSnapshot is the serializable subset of the knowledge graph that
@@ -380,7 +381,7 @@ func mergeTreeFeedback(disk, mem treeFeedback) treeFeedback {
 // re-registered them, even though their tree file and feedback metadata both
 // still exist on disk. A missing file is a no-op (returns nil).
 func (kg *KnowledgeGraph) LoadFeedback(path string) error {
-	data, err := os.ReadFile(path)
+	data, err := util.ReadPersistenceFile(path)
 	if os.IsNotExist(err) {
 		return nil
 	}

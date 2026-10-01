@@ -63,7 +63,7 @@ func buildBaseHandler() slog.Handler {
 	}
 
 	logDir := util.PlatformLogDir()
-	if err := os.MkdirAll(logDir, 0755); err != nil {
+	if err := os.MkdirAll(logDir, 0750); err != nil {
 		return slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})
 	}
 
