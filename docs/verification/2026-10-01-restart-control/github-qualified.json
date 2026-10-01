@@ -1,0 +1,93 @@
+{
+  "code_commit": "2693548055f9f710701305e0b0a75d11a2690198",
+  "checks": [
+    {
+      "name": "Release",
+      "id": 110340024458,
+      "head_sha": "2693548055f9f710701305e0b0a75d11a2690198",
+      "status": "completed",
+      "conclusion": "skipped",
+      "details_url": "https://github.com/greenTeeProduction/bt-agent-platform/actions/runs/36852996372/job/110340024458",
+      "completed_at": "2026-10-01T11:07:25Z"
+    },
+    {
+      "name": "gosec",
+      "id": 110339650368,
+      "head_sha": "2693548055f9f710701305e0b0a75d11a2690198",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/greenTeeProduction/bt-agent-platform/runs/110339650368",
+      "completed_at": "2026-10-01T11:06:24Z"
+    },
+    {
+      "name": "CodeQL",
+      "id": 110339555530,
+      "head_sha": "2693548055f9f710701305e0b0a75d11a2690198",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/greenTeeProduction/bt-agent-platform/runs/110339555530",
+      "completed_at": "2026-10-01T11:06:05Z"
+    },
+    {
+      "name": "Test (short)",
+      "id": 110338804579,
+      "head_sha": "2693548055f9f710701305e0b0a75d11a2690198",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/greenTeeProduction/bt-agent-platform/actions/runs/36852996372/job/110338804579",
+      "completed_at": "2026-10-01T11:07:25Z"
+    },
+    {
+      "name": "Build",
+      "id": 110338804431,
+      "head_sha": "2693548055f9f710701305e0b0a75d11a2690198",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/greenTeeProduction/bt-agent-platform/actions/runs/36852996372/job/110338804431",
+      "completed_at": "2026-10-01T11:04:37Z"
+    },
+    {
+      "name": "Security Scan",
+      "id": 110338804418,
+      "head_sha": "2693548055f9f710701305e0b0a75d11a2690198",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/greenTeeProduction/bt-agent-platform/actions/runs/36852996372/job/110338804418",
+      "completed_at": "2026-10-01T11:07:14Z"
+    },
+    {
+      "name": "Lint",
+      "id": 110338804213,
+      "head_sha": "2693548055f9f710701305e0b0a75d11a2690198",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/greenTeeProduction/bt-agent-platform/actions/runs/36852996372/job/110338804213",
+      "completed_at": "2026-10-01T11:05:20Z"
+    },
+    {
+      "name": "Analyze (go)",
+      "id": 110338803738,
+      "head_sha": "2693548055f9f710701305e0b0a75d11a2690198",
+      "status": "completed",
+      "conclusion": "success",
+      "details_url": "https://github.com/greenTeeProduction/bt-agent-platform/actions/runs/36852996264/job/110338803738",
+      "completed_at": "2026-10-01T11:06:17Z"
+    }
+  ],
+  "workflows": [
+    {
+      "id": 36852996264,
+      "name": "CodeQL Analysis",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/greenTeeProduction/bt-agent-platform/actions/runs/36852996264"
+    },
+    {
+      "id": 36852996372,
+      "name": "BT Platform CI",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/greenTeeProduction/bt-agent-platform/actions/runs/36852996372"
+    }
+  ]
+}

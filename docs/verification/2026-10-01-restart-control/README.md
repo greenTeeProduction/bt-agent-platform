@@ -81,7 +81,22 @@ footer failures were corrected; the failed log remains private. Graph rebuild:
 1,162 files, 14,588 nodes, 28,904 edges, without model calls. The corrective
 manifest canonical SHA-256 is
 `c6d72b251b69eda4899e71a17ba0fa1caa50ab9985ba3e632cd87ac0036dcaaa`.
-Actual corrected-head scanning results remain pending until retained below.
+All actual GitHub checks pass at corrected implementation
+`2693548055f9f710701305e0b0a75d11a2690198`, including separate
+[gosec 110339650368](https://github.com/greenTeeProduction/bt-agent-platform/runs/110339650368)
+and [CodeQL 110339555530](https://github.com/greenTeeProduction/bt-agent-platform/runs/110339555530).
+[Qualified identities](github-qualified.json) retain exact heads and outcomes.
+[BT CI](https://github.com/greenTeeProduction/bt-agent-platform/actions/runs/36852996372)
+and [CodeQL Analysis](https://github.com/greenTeeProduction/bt-agent-platform/actions/runs/36852996264)
+pass; Release is skipped. The actual full short race check qualifies the final
+corrected Go source. The subsequent evidence-only commit preserves every Go/
+dependency byte; final head outcomes are separately retained on PR #83.
+[Evidence documentation checks](evidence-docs.log) pass eleven fixtures and drift;
+complete Go-manifest equality confirms the documentation-only qualification.
+
+[Corrected clean artifact](clean-corrected-artifact.json) reports this exact
+revision and `dirty=false`. Only `--version` ran; build commit time is unknown.
+It is not deployed serving identity or real handoff evidence.
 
 [Initial clean artifact](clean-artifact.json) reports f7fa8dc6 and `dirty=false`;
 only its fixed `--version` was invoked. It predates the scanner correction.

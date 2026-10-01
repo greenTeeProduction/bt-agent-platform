@@ -45,6 +45,19 @@
       "stage": "Clean committed source; version only, not deployed."
     }
   ],
+  "evidence_only_checks": [
+    {
+      "command": "python3 scripts/test_check_arc42.py then bash scripts/check-doc-drift.sh (only on success)",
+      "evidence": "evidence-docs.log",
+      "exit_code": 0,
+      "fixtures": 11
+    },
+    {
+      "command": "git diff 2693548055f9f710701305e0b0a75d11a2690198 -- '*.go' go.mod go.sum and complete Go manifest SHA-256 comparison",
+      "exit_code": 0,
+      "qualification": "No Go/dependency differences; exact corrected code identity preserved."
+    }
+  ],
   "fixture_environment": {
     "BT_AGENT_HOME": "<private-fixture>",
     "BT_SKIP_LLM_TESTS": "1",
@@ -77,6 +90,12 @@
       "evidence": "scanner-fix-summary.json",
       "exit_code": 0,
       "qualification": "253 remaining findings; not a clean scan."
+    },
+    {
+      "command": "GOFLAGS=-p=2 go build -ldflags '-X github.com/nico/go-bt-evolve/internal/dashboard.stampedRevision=2693548055f9f710701305e0b0a75d11a2690198' -o <private>/clean-bin/bt-dashboard-corrected ./cmd/bt-dashboard then <private>/clean-bin/bt-dashboard-corrected --version (only on successful build)",
+      "evidence": "clean-corrected-artifact.json",
+      "exit_code": 0,
+      "stage": "Clean corrected committed source; version only, not deployed."
     }
   ],
   "toolchain": "go1.26.5 linux/arm64"
