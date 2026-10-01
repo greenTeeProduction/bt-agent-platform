@@ -60,6 +60,7 @@ runtime details in §§5–8 and decision history in [§9](09-decisions.md).
 | **Mutation** | An operation changing a tree's structure or metadata. Current operators are defined by implementation rather than a copied fixed count. |
 | **Non-admission evidence** | A trusted peer's explicit assertion that a rejected request did not enter execution. An HTTP error status alone is insufficient. |
 | **NSGA-II** | Non-dominated Sorting Genetic Algorithm II: multi-objective population selection using dominance ranking and crowding distance. |
+| **Offline tree recovery** | Restoring an authored task definition or quarantining a retired one after preserving original bytes. Requires stopped writers; it provides no measured evolution fitness or task-success credit (ADR-283). |
 | **OutcomeSelector** | An engine control node selecting behavior from prior outcome/state according to its configured routing rules. |
 | **Pareto Front** | Candidates not dominated by another candidate across all chosen objectives. |
 | **Partial Landing** | A workflow result where only eligible completed work is landed and remaining work stays explicit in artifacts; it is not completion of the full goal. |

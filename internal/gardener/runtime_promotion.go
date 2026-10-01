@@ -47,6 +47,10 @@ func (r *Registry) loadRuntimeVersionsLocked() {
 		}
 		if tree != nil {
 			entry.Tree = tree
+			if entry.RecoveryRequired {
+				entry.RecoveryRequired = false
+				entry.Active = true
+			}
 		}
 	}
 }

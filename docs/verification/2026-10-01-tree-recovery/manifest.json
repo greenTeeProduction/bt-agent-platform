@@ -1,0 +1,48 @@
+{
+  "created_utc": "2026-10-01T15:27:52.206413+00:00",
+  "source_parent": "a036e01ba23659adb407f3202451b6ad9509d4ab",
+  "recovery_binary_sha256": "564dacbee4dedb2b1442c576c6526aeb3238fa9ad1edb29ccbc8bcd4e10b13c5",
+  "scope": "Offline actual persisted-tree recovery and fresh registry readback. No tree tasks executed on host, no deployed restart and no broad task-improvement claim.",
+  "result": {
+    "authored_trees_restored": 51,
+    "retired_tree_quarantined": 1,
+    "originals_verified_against_prior_backup": 52,
+    "unchanged_other_files": 2,
+    "remaining_known_collapsed_trees": 0,
+    "fresh_registry_exact_versions": 51
+  },
+  "offline_precondition": "systemctl inactive for all three BT services and no bt-agent/bt-gardener/bt-dashboard processes immediately before apply; noncooperating writers must remain stopped.",
+  "backup_manifest": "/home/nico/.local/state/go-bt-evolve/persisted-tree-recovery-20261001T144353Z/manifest.json",
+  "recovery_manifest": "/home/nico/.go-bt-reflections/recovery/20261001T152317Z-Z6TSWKSAR4HWY2U6CIKP4JQ4YI/manifest.json",
+  "retirement_evidence": "docs/superpowers/specs/2026-07-16-arc42-docs-consolidation-design.md; arc42:assemble intentionally retired, its removed actions are not reintroduced.",
+  "corrections": [
+    "Validator recognizes the seven node types already implemented by the runtime; benchmark admission still excludes stateful external workflows.",
+    "TreeVersion normalizes typed metadata without float64 conversion, fixing GOAP struct/map persistence identity.",
+    "Registry disables collapsed builtin overrides until recovery; qualified managed authority retains precedence."
+  ],
+  "checks": {
+    "short_affected": "passed",
+    "race_affected": "passed",
+    "lint_affected": "passed",
+    "live": "passed: real Ollama Qwen 2.5 1.5B and real Sol unavailable/deadline fallback; factory/manual/genetic promotion and rollback",
+    "commit_hook": "pending",
+    "graph": "updated"
+  },
+  "artifacts": {
+    "applied.json": "22c4f1fc67964d0affd0ca7c6b9116d66a8e75d0726d4b99be10cb44d4c7a0d2",
+    "graph-update.log": "7f478ec316fc25a22096dab03edb054bcd30ca0655997cebb65a5b88ef10469f",
+    "lint.log": "e92606b0bf483111dff0a120c315ea165821348f31365020e2468a0059095c47",
+    "live-genetic.json": "e816eaec2ce7522fbc1afac7ea950fb9aeb94f086f40daeb5f87b9e9d1edd7da",
+    "live-manual.json": "2020fcf3bfa666628a3c72e37a1e6f0f6a0306fd7abb24b0da271cf337fbd93e",
+    "live-promotion.json": "6aab4b870e756cf878831afd310eeecb06bed43c3d81ea03e8f084349615c0a6",
+    "live-suite.log": "73e56bec54c616f11e54bbdccb5ddc9a336b8631b0f853458b3e2577c8d60225",
+    "plan.json": "ed9c06c2e5cb8f3889eeff2951107bc1a143631f487de7c2dc5ba723766a10d0",
+    "postcheck.json": "4f477d8b46a8b5b762f495fb6e80499348fa4d5b467c7397cdae6388053c9349",
+    "race.log": "106b6d5de3466a71dee8e1c3b5c13f086486bdf6e7c595372edb7895fc023275",
+    "red-roundtrip.log": "437ac776b8866a84f8c7ca45491d5bd44d9fabedb0069ed1ad6a77ec33166ad1",
+    "red-validator.log": "38ccf1bf47ca060b9def5e368e8525a3e0021c4466335b702f0b8bb6b81b6238",
+    "registry-verification.json": "ebefeeb3630a18726cafab55f9204b6deabd83e8d2ef98630defe21474fa708b",
+    "registry-verifier.go.txt": "c17b9acb5c3c583adef792b75fe5e9a03edee049675a800d7d0dd09fd87432bc",
+    "regression.log": "472e7fec8dae5dcef9b3afb657757fcf0dbfb6097b899b2d57292e794c0a9d8c"
+  }
+}

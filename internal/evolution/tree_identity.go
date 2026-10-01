@@ -1,6 +1,7 @@
 package evolution
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -16,6 +17,20 @@ func TreeVersion(tree *SerializableNode) (string, error) {
 	data, err := json.Marshal(tree)
 	if err != nil {
 		return "", fmt.Errorf("encode tree version: %w", err)
+	}
+	// Metadata can contain typed GOAP structs before persistence and maps
+	// after reload. Normalize only through the same tree schema so nested
+	// object key order cannot change identity. UseNumber preserves exact
+	// numeric values instead of routing metadata through float64.
+	var canonical SerializableNode
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	if err := decoder.Decode(&canonical); err != nil {
+		return "", fmt.Errorf("canonicalize tree version: %w", err)
+	}
+	data, err = json.Marshal(&canonical)
+	if err != nil {
+		return "", fmt.Errorf("encode canonical tree version: %w", err)
 	}
 	return fmt.Sprintf("sha256:%x", sha256.Sum256(data)), nil
 }

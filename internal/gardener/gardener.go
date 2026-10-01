@@ -26,6 +26,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -42,12 +43,13 @@ import (
 
 // TreeEntry is a named tree in the registry with its evolution state.
 type TreeEntry struct {
-	TreeID      string                      `json:"tree_id,omitempty"`
-	Name        string                      `json:"name"`
-	Description string                      `json:"description"`
-	Tree        *evolution.SerializableNode `json:"-"`
-	FilePath    string                      `json:"file_path"`
-	Active      bool                        `json:"active"`
+	TreeID           string                      `json:"tree_id,omitempty"`
+	Name             string                      `json:"name"`
+	Description      string                      `json:"description"`
+	Tree             *evolution.SerializableNode `json:"-"`
+	FilePath         string                      `json:"file_path"`
+	Active           bool                        `json:"active"`
+	RecoveryRequired bool                        `json:"recovery_required,omitempty"`
 	// User marks a personal tree loaded from a user workspace (ADR-133
 	// Phase 5). It is the workspace directory name (already sanitized by
 	// persona.SanitizeUserID); empty for shared/builtin trees. Personal
@@ -91,28 +93,7 @@ func (r *Registry) loadAll() {
 
 	r.entries = nil
 
-	// Default trees (built-in)
-	r.addBuiltin("default", "General-purpose BT agent", evolution.DefaultTree())
-	r.addBuiltin("godev", "Go software developer BT", evolution.GoDeveloperTree())
-
-	// Finance trees
-	for name, tree := range evolution.AllFinanceTrees() {
-		r.addBuiltin("finance_"+name, evolution.AgentDescriptions[name], tree)
-	}
-
-	// Research trees
-	for name, tree := range evolution.ResearchTrees() {
-		r.addBuiltin("research_"+name, evolution.Descriptions[name], tree)
-	}
-
-	// Domain trees. Resolve descriptions through domains.DescriptionFor rather
-	// than indexing domains.Descriptions: descriptions are split across three
-	// maps, and a direct index registers a blank Description the moment a
-	// registry tree is described outside the curated map.
-	for name, tree := range domains.AllDomainTrees() {
-		desc, _ := domains.DescriptionFor(name)
-		r.addBuiltin("domain_"+name, desc, tree)
-	}
+	r.addCatalogBuiltins()
 
 	// Load persisted trees from disk (tree-<name>.json files only)
 	entries, _ := os.ReadDir(r.dir)
@@ -140,7 +121,13 @@ func (r *Registry) loadAll() {
 		already := false
 		for i := range r.entries {
 			if r.entries[i].FilePath == path {
-				r.entries[i].Tree = &tree
+				if outcomeRecoveryOnly(&tree) {
+					r.entries[i].Active = false
+					r.entries[i].RecoveryRequired = true
+					engine.Warn("persisted builtin has lost task logic; offline recovery required", "tree", r.entries[i].Name)
+				} else {
+					r.entries[i].Tree = &tree
+				}
 				already = true
 				break
 			}
@@ -160,12 +147,43 @@ func (r *Registry) loadAll() {
 				Active:      true,
 			}
 			entry.TreeID = runtimeTreeID(entry)
+			if name == "tree-domain_arc42:assemble.json" && outcomeRecoveryOnly(&tree) {
+				entry.Active, entry.RecoveryRequired = false, true
+			}
 			r.entries = append(r.entries, entry)
 		}
 	}
 
 	r.loadUserTreesLocked()
 	r.loadRuntimeVersionsLocked()
+}
+
+// addCatalogBuiltins constructs authored definitions without persisted overrides.
+func (r *Registry) addCatalogBuiltins() {
+	// Default trees (built-in)
+	r.addBuiltin("default", "General-purpose BT agent", evolution.DefaultTree())
+	r.addBuiltin("godev", "Go software developer BT", evolution.GoDeveloperTree())
+
+	// Finance trees
+	for name, tree := range evolution.AllFinanceTrees() {
+		r.addBuiltin("finance_"+name, evolution.AgentDescriptions[name], tree)
+	}
+
+	// Research trees
+	for name, tree := range evolution.ResearchTrees() {
+		r.addBuiltin("research_"+name, evolution.Descriptions[name], tree)
+	}
+
+	// Domain trees. Resolve descriptions through domains.DescriptionFor rather
+	// than indexing domains.Descriptions: descriptions are split across three
+	// maps, and a direct index registers a blank Description the moment a
+	// registry tree is described outside the curated map.
+	for name, tree := range domains.AllDomainTrees() {
+		desc, _ := domains.DescriptionFor(name)
+		r.addBuiltin("domain_"+name, desc, tree)
+	}
+
+	slices.SortFunc(r.entries, func(a, b TreeEntry) int { return strings.Compare(a.Name, b.Name) })
 }
 
 // Rescan re-scans usersRoot for personal trees written since construction (or

@@ -178,6 +178,13 @@ func versionRequested() bool {
 }
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "recover-persisted-trees" {
+		if err := runTreeRecovery(context.Background(), os.Args[2:], os.Stdout, os.Stderr); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 	// Version fast path: print the stamped build identity and exit before any
 	// engine/store initialization, so the drift smoke test has no side effects.
 	if versionRequested() {

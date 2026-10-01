@@ -41,7 +41,7 @@ personalization renumbering. Every open risk has a closure criterion.
 | R11 | Low / open | **Dormant scaffolding may fail when first wired.** Unit-tested components are not proof of production reachability or integration. | Maintainer: add a representative runtime scenario and evidence at the entrypoint before marking a feature implemented. |
 | R12 | Low / open | **Worktree, artifact and DLQ growth.** Durable DLQ recovery claims cannot be expired, purged or evicted without an explicit outcome decision (ADR-280). Retained failure evidence competes with finite disk capacity; premature cleanup can destroy diagnosis data. | Operator: measure usage, set retention per artifact type and test recovery before pruning; preserve referenced run evidence. |
 | R5 | Low / partial | **HTTP/browser coverage remains selective.** Login/session/logout and browser expiry now have behavioral tests; pipeline rooted selection/inventory and enforced authentication now have real handler coverage (ADR-272); other management routes and real network deployment still need risk-based coverage. | Dashboard maintainer: map remaining state-changing routes to behavior tests and negative authorization cases ([current tests](../../cmd/bt-dashboard/security_test.go), QS27/QS34). |
-| R1 | High / reopened (2026-10-01) | **Persisted tree collapse and proxy fitness.** The host audit found 52 of 53 saved trees reduced to recovery-only skeletons. Governance scoring, capability preservation and real-model evaluation now address incentives; this does not repair or qualify deployed trees by itself. | Evolution maintainer: preserve backups, recover executable task trees, qualify versioned adoption/rollback and retain task outcomes; see [§8.5](08-crosscutting-concepts.md#85-evolution-pipeline), R20/R23. |
+| R1 | High / reopened (2026-10-01) | **Persisted tree collapse and proxy fitness.** The host audit found 52 of 53 saved trees reduced to recovery-only skeletons. Offline repair now restored 51 authored definitions and quarantined one retired tree, with exact backups and fresh registry hash verification (ADR-283). Governance scoring and qualified publication address incentives; representative task coverage, historical learning cleanup and deployed impact remain open. | Evolution maintainer: preserve backups, recover executable task trees, qualify versioned adoption/rollback and retain task outcomes; see [§8.5](08-crosscutting-concepts.md#85-evolution-pipeline), R20/R23. |
 | R14 | Mitigated | **Generated trees were not executable.** Scoped persisted-tree resolution now connects creation to execution. | [Resolver tests](../../internal/agentexec/wiring_test.go); identity residual is R29, not missing resolution. |
 | R15 | Mitigated | **Breeding ignored parent structure.** Structural crossover now consumes parent trees. | [Structural factory tests](../../internal/knowledge/factory_structural_test.go); end-to-end quality remains workload-dependent. |
 | R16 | Mitigated | **Duplicate GOAP planning/transient plans.** Canonical planner, durable goal queue and plan compiler are integrated. | [GOAP](../../internal/goap), ADR-133; keep engine adapters thin. |
@@ -95,8 +95,9 @@ later trials; the stronger default passed a bounded probe, not a broad assistant
 evaluation. Managed `bt_reset` semantics and personal genetic evolution still
 need explicit workflows. Search ranking
 still uses historical/proxy estimates before the final measured publication
-gate. The 52/53 collapsed persisted trees and personal GOAP effect compilation
-still require recovery and actual task validation.
+gate. The persisted-tree repair is complete for the observed 52 collapsed files
+(51 restored, one retired). Representative task validation, historical learning
+cleanup and personal GOAP effect compilation still require work.
 
 ---
 

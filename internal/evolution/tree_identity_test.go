@@ -48,3 +48,23 @@ func TestExecutionEvidenceSeparatesCompilationFeedbackAndVersions(t *testing.T) 
 		t.Fatalf("wrong version evidence: %+v", got)
 	}
 }
+
+func TestTreeVersionTypedMetadataSurvivesPersistence(t *testing.T) {
+	tree := GOAPDevOpsTree()
+	before, err := TreeVersion(tree)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(tree)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var reloaded SerializableNode
+	if err := json.Unmarshal(data, &reloaded); err != nil {
+		t.Fatal(err)
+	}
+	after, err := TreeVersion(&reloaded)
+	if err != nil || before != after {
+		t.Fatalf("typed metadata changed version: %s != %s (%v)", before, after, err)
+	}
+}

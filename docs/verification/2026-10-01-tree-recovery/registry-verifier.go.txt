@@ -1,0 +1,39 @@
+package main
+import (
+ "bytes"
+ "crypto/sha256"
+ "encoding/json"
+ "fmt"
+ "os"
+ "path/filepath"
+ "github.com/nico/go-bt-evolve/internal/evolution"
+ "github.com/nico/go-bt-evolve/internal/gardener"
+)
+func main() {
+ var report gardener.TreeRecoveryReport
+ data,err:=os.ReadFile(os.Getenv("BT_RECOVERY_MANIFEST")); must(err)
+ must(json.Unmarshal(data,&report))
+ entries:=gardener.NewRegistry(report.Directory).List()
+ verified:=0
+ for _,item:=range report.Items {
+  original,err:=os.ReadFile(item.Backup);must(err)
+  if fmt.Sprintf("%x",sha256.Sum256(original))!=item.BeforeHash {panic("backup hash mismatch")}
+  if item.Operation=="quarantine_retired" {
+   archived,err:=os.ReadFile(item.Archived);must(err)
+   if !bytes.Equal(original,archived) {panic("retired original mismatch")}
+   if _,err:=os.Stat(filepath.Join(report.Directory,item.File));!os.IsNotExist(err) {panic("retired file still discoverable")}
+   for _,e:=range entries {if e.FilePath==filepath.Join(report.Directory,item.File) {panic("retired tree still registered")}}
+   continue
+  }
+  found:=false
+  for _,e:=range entries {
+   if e.FilePath!=filepath.Join(report.Directory,item.File) {continue}
+   version,err:=evolution.TreeVersion(e.Tree);must(err)
+   if version!=item.AfterVersion || !e.Active || e.RecoveryRequired || e.TreeID!=item.TreeID {panic("registry did not adopt exact restored definition: "+item.TreeID)}
+   found=true;verified++
+  }
+  if !found {panic("restored tree missing from registry: "+item.TreeID)}
+ }
+ must(json.NewEncoder(os.Stdout).Encode(map[string]any{"restored_registry_versions_verified":verified,"quarantined":report.Quarantined,"registry_total":len(entries),"manifest":report.Manifest,"scope":"Fresh production Registry reload and exact definition hash checks; no task executions or LLM calls."}))
+}
+func must(err error) {if err!=nil {panic(err)}}

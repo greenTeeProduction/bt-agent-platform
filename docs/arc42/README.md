@@ -61,7 +61,7 @@ safe presentation (ADR-273), blackboard owner admission and atomic run promotion
 (ADR-277), durable DLQ replay claims and current-disk deltas
 (ADR-280), measured runtime publication and rollback
 (ADR-281), manual/genetic publication through the same evidence boundary
-(ADR-282), island acceptance and the Codex-only policy (ADR-261). The hardcoded health toolchain
+(ADR-282), offline collapsed-tree repair with retained evidence (ADR-283), island acceptance and the Codex-only policy (ADR-261). The hardcoded health toolchain
 field was corrected on 2026-09-16 (D7).
 Provider/model readiness and clean-repository preconditions also require
 operational verification; a closed GOAP breaker does not prove a successful

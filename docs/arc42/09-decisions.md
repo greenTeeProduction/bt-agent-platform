@@ -308,6 +308,7 @@ Navigation and provenance:
 | ADR-280 | [Durable DLQ Replay Claims and Current-Disk Transactions](#adr-280) | Accepted — fixture-tested; production/rollout partial | 2026-10-01 |
 | ADR-281 | [Measured Runtime Tree Publication and Exact Rollback](#adr-281) | Accepted — gardener implemented; broader rollout partial | 2026-10-01 |
 | ADR-282 | [Manual and Genetic Publication Requires Measured Task Improvement](#adr-282) | Accepted — covered MCP entrypoints; fleet rollout partial | 2026-10-01 |
+| ADR-283 | [Evidence-Preserving Offline Recovery of Collapsed Trees](#adr-283) | Accepted — observed data repair; service rollout open | 2026-10-01 |
 
 <a id="adr-001"></a>
 
@@ -6576,6 +6577,52 @@ open. One controlled arithmetic task is not general assistant impact.
 [exact execution filter](../../internal/evolution/tree_identity_test.go),
 [shared publication helper](../../internal/benchmark/runtime_publication.go), and
 [retained observations](../verification/2026-10-01-manual-publication/manifest.json).
+
+---
+
+<a id="adr-283"></a>
+## ADR-283: Evidence-Preserving Offline Recovery of Collapsed Trees
+
+**Date:** 2026-10-01
+**Status:** Accepted; observed host data repair, service rollout still open.
+
+**Context:** Fifty-two persisted named trees had lost every task branch and
+retained only outcome recovery. Wrong root names also made name-based recovery
+unsafe. One affected ID, `domain:arc42:assemble`, was intentionally retired.
+
+**Decision:** Match exact registered filenames to fresh compiled definitions.
+Recognize the observed lost-task signature rather than a node-count threshold.
+Disable collapsed builtin overrides in the gardener until repaired; preserve
+qualified managed authority. An explicit offline command validates replacements,
+seals the in-process plan, checks original bytes, makes private exact backups and
+writes a prepared manifest before per-file changes. Restore authored trees;
+quarantine the retired assembly skeleton. Record each completed operation and
+report partial failure without replay or speculative rollback. Preserve unrelated
+and unknown trees. Require all legacy writers stopped because they do not share
+the bounded recovery lock.
+
+Recovery validation exposed seven implemented engine node types absent from the
+schema allowlist; align the allowlist while retaining benchmark capability
+admission. GOAP typed metadata also changed serialized key order after reload;
+normalize metadata through the tree schema with exact JSON numbers for stable
+versions. Existing persisted map representations retain their identity.
+
+**Alternatives:** Replacing every small tree would destroy valid compact tasks.
+Using damaged root names would perpetuate cross-tree substitutions. Treating
+restoration as qualified evolution would invent task-success evidence. Restoring
+a removed assembly workflow would revive intentionally retired behavior.
+
+**Consequences:** The observed 52-file collapse is repaired with 51 restores and
+one quarantine, verified against exact backups and a fresh registry. This is
+neither measured general task improvement nor deployed service adoption. The
+batch is not globally atomic or power-loss durable; prepared manifests and
+per-item states aid reconciliation. Noncooperating writers, representative task
+coverage, historical learning and remaining personal-effect gaps remain open.
+
+**Evidence:** [Recovery tests](../../internal/gardener/recovery_test.go),
+[CLI tests](../../cmd/bt-gardener/recovery_test.go),
+[metadata identity regression](../../internal/evolution/tree_identity_test.go),
+and [actual host repair/readback](../verification/2026-10-01-tree-recovery/manifest.json).
 
 ---
 

@@ -110,6 +110,14 @@ var KnownNodeTypes = map[string]bool{
 	// (errorHandlerAllowedNodeTypes in error_handler_claude.go), which already
 	// excludes MemSequence explicitly and independently of this map.
 	"MemSequence": true,
+	// Implemented stateful/controlled nodes in engine.buildNodeInner.
+	"MemSelector":           true,
+	"PersistentMemSequence": true,
+	"CachedCondition":       true,
+	"SemaphoreGuard":        true,
+	"ForEachTask":           true,
+	"ReviewCycle":           true,
+	"BanditSelector":        true,
 }
 
 // ValidateEdge validates a single TypedEdge against the tree structure.
