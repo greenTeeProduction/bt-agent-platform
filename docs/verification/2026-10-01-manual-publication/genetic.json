@@ -1,0 +1,140 @@
+{
+  "after": {
+    "agent_name": "publication_sum",
+    "tree_id": "factory:core_ca45cf50de35024b88a4c1c68cea4460",
+    "tree_version": "sha256:576600c452126b703e349140ccd5974956aa2f85949ae86e899372945d102559",
+    "task": "Execute the saved task.",
+    "outcome": "success",
+    "output": "```json\n{\n  \"total\": 42\n}\n```",
+    "quality": 0.6,
+    "quality_passed": true,
+    "output_passed": true,
+    "Duration": 2383991083,
+    "StartedAt": "2026-10-01T16:39:16.391726571+02:00",
+    "EndedAt": "2026-10-01T16:39:18.77571759+02:00"
+  },
+  "fitness": {
+    "failures": 0,
+    "node_count": 5,
+    "success_rate": "1.00",
+    "successes": 1,
+    "total_tasks": 1,
+    "tree_id": "factory:core_ca45cf50de35024b88a4c1c68cea4460",
+    "tree_version": "sha256:576600c452126b703e349140ccd5974956aa2f85949ae86e899372945d102559",
+    "user": ""
+  },
+  "persisted_feedback": {
+    "id": "factory:core_ca45cf50de35024b88a4c1c68cea4460",
+    "name": "factory:core_ca45cf50de35024b88a4c1c68cea4460",
+    "category": "core",
+    "description": "",
+    "node_count": 5,
+    "fitness": 0,
+    "structural_fitness": 100,
+    "capabilities": null,
+    "keywords": null,
+    "run_count": 0,
+    "evolved_count": 1,
+    "last_outcome": "evolved",
+    "last_duration": 0
+  },
+  "result": {
+    "baseline_pass_rate": 0,
+    "baseline_version": "sha256:5e44ed53bdcf1a5eb371ad7b818b77241b4dd3f7a47197ec7756fadc9e2aa7c1",
+    "best_fitness": 100,
+    "best_nodes": 5,
+    "candidate_pass_rate": 1,
+    "candidate_version": "sha256:576600c452126b703e349140ccd5974956aa2f85949ae86e899372945d102559",
+    "convergence_rate": 100,
+    "diversity": 0.75,
+    "evolved_tree_id": "factory:core_ca45cf50de35024b88a4c1c68cea4460",
+    "experience_bank_entries": 0,
+    "experience_retrieval_hits": 0,
+    "generations": 1,
+    "health": {
+      "crisis_reasons": [],
+      "generation": 1,
+      "last_mutation_rate": 0.16649999999999998,
+      "resurrections": 0
+    },
+    "niche_diversity": "0.94",
+    "persisted": true,
+    "proposal_file": "/tmp/TestLiveManualAndGeneticPublicationbt_evolve_genetic3312194052/002/evolution-proposals/5b166a08bc4707522f84f0544e0080406e037255ac77557b127afe9bd23706c8.json",
+    "proposal_saved": true,
+    "qualification_attempt": {
+      "backend": "ollama",
+      "baseline_calls": 3,
+      "baseline_version": "sha256:5e44ed53bdcf1a5eb371ad7b818b77241b4dd3f7a47197ec7756fadc9e2aa7c1",
+      "candidate_calls": 6,
+      "candidate_version": "sha256:576600c452126b703e349140ccd5974956aa2f85949ae86e899372945d102559",
+      "measured_at": "2026-10-01T14:39:05.780048393Z",
+      "model": "qwen2.5:1.5b",
+      "tree_id": "factory:core_ca45cf50de35024b88a4c1c68cea4460",
+      "trials": [
+        {
+          "after_duration_ms": 2330,
+          "after_outcome": "success",
+          "after_output": "```json\n{\n  \"total\": 42\n}\n```",
+          "before_duration_ms": 1187,
+          "before_outcome": "failure",
+          "before_output": "```json\n{\n  \"wrong_total\": 42\n}\n```",
+          "contract": {
+            "json_fields": {
+              "total": 42
+            }
+          },
+          "task": "Compute seventeen plus twenty-five. Return compact JSON with only the field total containing the calculated sum. Do not add prose or padding."
+        },
+        {
+          "after_duration_ms": 2328,
+          "after_outcome": "success",
+          "after_output": "```json\n{\n  \"total\": 42\n}\n```",
+          "before_duration_ms": 1205,
+          "before_outcome": "failure",
+          "before_output": "```json\n{\n  \"wrong_total\": 42\n}\n```",
+          "contract": {
+            "json_fields": {
+              "total": 42
+            }
+          },
+          "task": "Compute seventeen plus twenty-five. Return compact JSON with only the field total containing the calculated sum. Do not add prose or padding."
+        },
+        {
+          "after_duration_ms": 2346,
+          "after_outcome": "success",
+          "after_output": "```json\n{\n  \"total\": 42\n}\n```",
+          "before_duration_ms": 1201,
+          "before_outcome": "failure",
+          "before_output": "```json\n{\n  \"wrong_total\": 42\n}\n```",
+          "contract": {
+            "json_fields": {
+              "total": 42
+            }
+          },
+          "task": "Compute seventeen plus twenty-five. Return compact JSON with only the field total containing the calculated sum. Do not add prose or padding."
+        }
+      ],
+      "user": ""
+    },
+    "qualified": true,
+    "regression_rate": "0.0%",
+    "regressions": 0,
+    "release": {
+      "action": "promote",
+      "ancestors": [
+        "sha256:5e44ed53bdcf1a5eb371ad7b818b77241b4dd3f7a47197ec7756fadc9e2aa7c1"
+      ],
+      "generation": 1,
+      "qualification": "ef1af7c18eb398d403de6734c4dbd5c4fa862d30a0f912f0d9a7a8268a9d1d04",
+      "tree_id": "factory:core_ca45cf50de35024b88a4c1c68cea4460",
+      "updated_at": "2026-10-01T14:39:16.383137327Z",
+      "user": "",
+      "version": "sha256:576600c452126b703e349140ccd5974956aa2f85949ae86e899372945d102559"
+    },
+    "total_mutations": 0,
+    "tree": "factory:core_ca45cf50de35024b88a4c1c68cea4460",
+    "tree_id": "factory:core_ca45cf50de35024b88a4c1c68cea4460"
+  },
+  "test_passed": true,
+  "tool": "bt_evolve_genetic"
+}

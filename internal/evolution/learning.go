@@ -29,14 +29,18 @@ type Individual struct {
 
 // Population is a generation of individuals.
 type Population struct {
-	Individuals         []Individual      `json:"individuals"`
-	Generation          int               `json:"generation"`
-	BestFitness         float64           `json:"best_fitness"`
-	PrevBestFitness     float64           `json:"prev_best_fitness"`
-	BestTree            *SerializableNode `json:"-"`
-	TotalMutations      int               `json:"total_mutations"`
-	Regressions         int               `json:"regressions"`
-	NicheDiversityScore float64           `json:"niche_diversity"`
+	// DeferExperienceCommit keeps heuristic search from recording measured
+	// improvement claims. Qualified single-operation learning is handled by
+	// the publication owner; batch gains cannot be assigned to individual ops.
+	DeferExperienceCommit bool              `json:"-"`
+	Individuals           []Individual      `json:"individuals"`
+	Generation            int               `json:"generation"`
+	BestFitness           float64           `json:"best_fitness"`
+	PrevBestFitness       float64           `json:"prev_best_fitness"`
+	BestTree              *SerializableNode `json:"-"`
+	TotalMutations        int               `json:"total_mutations"`
+	Regressions           int               `json:"regressions"`
+	NicheDiversityScore   float64           `json:"niche_diversity"`
 
 	// Crisis wires proactive population-level crisis detection into the GA
 	// loop. It is lazily initialized on first Evolve so death spirals
@@ -111,10 +115,17 @@ func NewPopulation(size int, baseTree *SerializableNode) *Population {
 		Generation:  0,
 	}
 	pop.Individuals[0] = Individual{Tree: cloneTree(baseTree), Genome: hashTree(baseTree)}
+	recoveryTargets := ContractRecoveryTargets(baseTree)
 	for i := 1; i < size; i++ {
 		mutated := cloneTree(baseTree)
-		// Apply random mutation
-		ops := randomMutation(mutated)
+		// Give an explicit missing recovery control a bounded proposal before
+		// random exploration. Qualification still measures actual task impact.
+		var ops []MutationOp
+		if i <= len(recoveryTargets) {
+			ops = []MutationOp{{Operation: "add_contract_recovery", Target: recoveryTargets[i-1]}}
+		} else {
+			ops = randomMutation(mutated)
+		}
 		ApplyMutations(mutated, ops)
 		pop.Individuals[i] = Individual{Tree: mutated, Genome: hashTree(mutated)}
 	}
@@ -457,7 +468,9 @@ func RetrieveExperienceHints(bank *ExperienceBank, tree *SerializableNode, topK 
 // EvoRepair-style learn→retrieve→mutate loop against an ExperienceBank:
 // operator selection is warm-started from RetrieveByTreeType hints for the
 // population's tree type, and every fitness-improving mutation is recorded
-// back into the bank via AddFromMutation. A nil bank degrades to plain Evolve.
+// back into the bank via AddFromMutation unless DeferExperienceCommit is set.
+// Production heuristic search defers this credit until measured qualification.
+// A nil bank degrades to plain Evolve.
 func (p *Population) EvolveWithExperience(generations int, fitnessFn func(*SerializableNode) float64, bank *ExperienceBank) *SerializableNode {
 	return p.EvolveWithExperienceContext(generations, fitnessFn, bank, "")
 }
@@ -569,7 +582,9 @@ func (p *Population) mutateAndRecord(
 		p.Regressions++
 		return child
 	}
-	_ = bank.AddFromMutation(mutated, op, before, after, nil, query)
+	if !p.DeferExperienceCommit {
+		_ = bank.AddFromMutation(mutated, op, before, after, nil, query)
+	}
 	return mutated
 }
 

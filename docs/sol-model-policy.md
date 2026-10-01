@@ -38,10 +38,17 @@ The owner also authorizes real Ollama inference for benchmark evaluation
 (2026-10-01), with Sol 6.1 through Codex login as the fallback for slow or
 unavailable local inference. This exception does not disable `BT_LLM_SOL_ONLY`
 or change ordinary agents. The dedicated [benchmark client](../internal/benchmark/live_model.go)
-defaults to `qwen2.5:0.5b`, local endpoint `http://127.0.0.1:11434`, and a
+defaults to `qwen2.5:1.5b`, local endpoint `http://127.0.0.1:11434`, and a
 15-second local call deadline. Configure only `BT_BENCHMARK_BACKEND`,
 `BT_BENCHMARK_MODEL`, `BT_BENCHMARK_OLLAMA_URL`, or `BT_BENCHMARK_TIMEOUT` for
-this role. Benchmark results must identify the actual backend and calls;
+this role. The initial 0.5B choice failed later recovery trials. A fixed six-task,
+three-repetition probe found 1.5B passed 18/18 existing result contracts at a
+1.18-second median; 0.5B passed 7/18 and Qwen 3 0.6B passed 9/18. This selects
+the fastest passing model among these tested candidates, not all Ollama models.
+All three wrapped most JSON responses in code fences; the existing contract
+accepts complete JSON fences. Strict bare-JSON compliance is reported separately.
+[Retained outputs and timings](verification/2026-10-01-manual-publication/small-model-comparison.json)
+include failures. Benchmark results must identify the actual backend and calls;
 synthetic inference cannot qualify a tree. The [live gate test](../internal/benchmark/live_governance_test.go)
 can be run with `PATH=/usr/local/go/bin:$PATH go test ./internal/benchmark -run TestLiveGovernance -v`.
 

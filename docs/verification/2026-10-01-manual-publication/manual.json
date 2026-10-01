@@ -1,0 +1,109 @@
+{
+  "after": {
+    "agent_name": "publication_sum",
+    "tree_id": "factory:core_f2ac25978d446321e7769e5f913d40a7",
+    "tree_version": "sha256:f9af3ec2587ad50c4c23b74ddbd2b9ac2c0f3d7a1151a4eb36a549e3abbdb3f0",
+    "task": "Execute the saved task.",
+    "outcome": "success",
+    "output": "```json\n{\n  \"total\": 42\n}\n```",
+    "quality": 0.6,
+    "quality_passed": true,
+    "output_passed": true,
+    "Duration": 2348106184,
+    "StartedAt": "2026-10-01T16:38:59.837860551+02:00",
+    "EndedAt": "2026-10-01T16:39:02.185966767+02:00"
+  },
+  "fitness": {
+    "failures": 0,
+    "node_count": 5,
+    "success_rate": "1.00",
+    "successes": 1,
+    "total_tasks": 1,
+    "tree_id": "factory:core_f2ac25978d446321e7769e5f913d40a7",
+    "tree_version": "sha256:f9af3ec2587ad50c4c23b74ddbd2b9ac2c0f3d7a1151a4eb36a549e3abbdb3f0",
+    "user": "manual-benchmark"
+  },
+  "result": {
+    "baseline_pass_rate": 0,
+    "baseline_version": "sha256:36ef32dda541f98b06a605e3a1c536706782aa4e8cafa5aae3ed1e906822d29f",
+    "candidate_pass_rate": 1,
+    "candidate_version": "sha256:f9af3ec2587ad50c4c23b74ddbd2b9ac2c0f3d7a1151a4eb36a549e3abbdb3f0",
+    "evolved": true,
+    "matching_failures": 3,
+    "persisted": true,
+    "proposal_file": "/tmp/TestLiveManualAndGeneticPublicationbt_evolve2161051577/002/evolution-proposals/98e563c20d8efefbf10c7987912d18795c7c8e902843b945cef82ce50da28b95.json",
+    "proposal_saved": true,
+    "proposed_mutations": 1,
+    "qualification_attempt": {
+      "backend": "ollama",
+      "baseline_calls": 3,
+      "baseline_version": "sha256:36ef32dda541f98b06a605e3a1c536706782aa4e8cafa5aae3ed1e906822d29f",
+      "candidate_calls": 6,
+      "candidate_version": "sha256:f9af3ec2587ad50c4c23b74ddbd2b9ac2c0f3d7a1151a4eb36a549e3abbdb3f0",
+      "measured_at": "2026-10-01T14:38:49.055561159Z",
+      "model": "qwen2.5:1.5b",
+      "tree_id": "factory:core_f2ac25978d446321e7769e5f913d40a7",
+      "trials": [
+        {
+          "after_duration_ms": 2393,
+          "after_outcome": "success",
+          "after_output": "```json\n{\n  \"total\": 42\n}\n```",
+          "before_duration_ms": 1197,
+          "before_outcome": "failure",
+          "before_output": "```json\n{\n  \"wrong_total\": 42\n}\n```",
+          "contract": {
+            "json_fields": {
+              "total": 42
+            }
+          },
+          "task": "Compute seventeen plus twenty-five. Return compact JSON with only the field total containing the calculated sum. Do not add prose or padding."
+        },
+        {
+          "after_duration_ms": 2389,
+          "after_outcome": "success",
+          "after_output": "```json\n{\n  \"total\": 42\n}\n```",
+          "before_duration_ms": 1217,
+          "before_outcome": "failure",
+          "before_output": "```json\n{\n  \"wrong_total\": 42\n}\n```",
+          "contract": {
+            "json_fields": {
+              "total": 42
+            }
+          },
+          "task": "Compute seventeen plus twenty-five. Return compact JSON with only the field total containing the calculated sum. Do not add prose or padding."
+        },
+        {
+          "after_duration_ms": 2369,
+          "after_outcome": "success",
+          "after_output": "```json\n{\n  \"total\": 42\n}\n```",
+          "before_duration_ms": 1207,
+          "before_outcome": "failure",
+          "before_output": "```json\n{\n  \"wrong_total\": 42\n}\n```",
+          "contract": {
+            "json_fields": {
+              "total": 42
+            }
+          },
+          "task": "Compute seventeen plus twenty-five. Return compact JSON with only the field total containing the calculated sum. Do not add prose or padding."
+        }
+      ],
+      "user": "manual-benchmark"
+    },
+    "qualified": true,
+    "release": {
+      "action": "promote",
+      "ancestors": [
+        "sha256:36ef32dda541f98b06a605e3a1c536706782aa4e8cafa5aae3ed1e906822d29f"
+      ],
+      "generation": 1,
+      "qualification": "390c6fbe62b776874681694547029269ee7575ddbf043a7a8cf17fc05b91cfdd",
+      "tree_id": "factory:core_f2ac25978d446321e7769e5f913d40a7",
+      "updated_at": "2026-10-01T14:38:59.833551016Z",
+      "user": "manual-benchmark",
+      "version": "sha256:f9af3ec2587ad50c4c23b74ddbd2b9ac2c0f3d7a1151a4eb36a549e3abbdb3f0"
+    },
+    "tree_id": "factory:core_f2ac25978d446321e7769e5f913d40a7"
+  },
+  "test_passed": true,
+  "tool": "bt_evolve"
+}

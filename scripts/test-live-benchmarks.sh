@@ -17,4 +17,4 @@ go test ./internal/benchmark -count=1 -timeout 300s -v \
 go test ./cmd/bt-gardener -count=1 -timeout 120s -v \
   -run '^TestGardenerRunCycleTool_RejectsUnqualifiedSelectorOrdering'
 go test ./cmd/bt-agent -count=1 -timeout 180s -v \
-  -run '^TestLiveFactory(CreatesResolvesAndExecutesTask|EvolutionPromotesAndRollsBackMeasuredVersion)$'
+  -run '^(TestLiveFactory(CreatesResolvesAndExecutesTask|EvolutionPromotesAndRollsBackMeasuredVersion)|TestLiveManualAndGeneticPublication)$'

@@ -86,9 +86,14 @@ power/volume-loss qualification remain prioritized acceptance.
 
 
 Versioned gardener promotion and rollback now have a real-model controlled
-response-task cycle (ADR-281). This narrows R23 but does not close it: unmanaged
-manual/genetic writes, first-adoption races with legacy file writers, domain
-capability fixtures and deployed adoption remain unqualified. Search ranking
+response-task cycle (ADR-281). MCP manual/genetic-family and selector publication
+now share that qualification boundary (ADR-282). This narrows R23 but does not
+close it: first-adoption races with legacy file writers, unmanaged resolve-time
+ordering, stale lineage-skip/archive estimates, domain capability fixtures and
+deployed adoption remain unqualified. The initial tiny benchmark model failed
+later trials; the stronger default passed a bounded probe, not a broad assistant
+evaluation. Managed `bt_reset` semantics and personal genetic evolution still
+need explicit workflows. Search ranking
 still uses historical/proxy estimates before the final measured publication
 gate. The 52/53 collapsed persisted trees and personal GOAP effect compilation
 still require recovery and actual task validation.

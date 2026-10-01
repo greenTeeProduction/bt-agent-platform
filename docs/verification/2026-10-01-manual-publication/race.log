@@ -1,0 +1,4 @@
+ok  	github.com/nico/go-bt-evolve/cmd/bt-agent	21.367s
+ok  	github.com/nico/go-bt-evolve/internal/evolution	51.641s
+ok  	github.com/nico/go-bt-evolve/internal/gardener	2.135s
+ok  	github.com/nico/go-bt-evolve/internal/benchmark	1.480s

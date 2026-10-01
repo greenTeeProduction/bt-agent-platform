@@ -307,6 +307,7 @@ Navigation and provenance:
 | ADR-279 | [Target-Owned Sibling Restart and Uncertain Handoff Seals](#adr-279) | Accepted implementation | 2026-10-01 |
 | ADR-280 | [Durable DLQ Replay Claims and Current-Disk Transactions](#adr-280) | Accepted — fixture-tested; production/rollout partial | 2026-10-01 |
 | ADR-281 | [Measured Runtime Tree Publication and Exact Rollback](#adr-281) | Accepted — gardener implemented; broader rollout partial | 2026-10-01 |
+| ADR-282 | [Manual and Genetic Publication Requires Measured Task Improvement](#adr-282) | Accepted — covered MCP entrypoints; fleet rollout partial | 2026-10-01 |
 
 <a id="adr-001"></a>
 
@@ -6527,6 +6528,54 @@ boundary, not external model attestation or a power-loss durability guarantee.
 [transaction and integrity regressions](../../internal/evolution/runtime_release_test.go),
 [scoped runtime authority](../../internal/agentexec/runtime_version_test.go),
 and [qualification implementation](../../internal/benchmark/runtime_qualification.go).
+
+---
+
+<a id="adr-282"></a>
+## ADR-282: Manual and Genetic Publication Requires Measured Task Improvement
+
+**Date:** 2026-10-01
+**Status:** Accepted for the covered MCP entrypoints; fleet rollout remains open.
+
+**Context:** Manual failure counts pooled unrelated history. Genetic, selector
+and archive tools could publish runnable winners or discovery fitness from
+structural estimates. This bypassed ADR-281's measured gardener boundary.
+
+**Decision:** Share the real-model qualification and immutable publication helper
+with manual/genetic-family tools. Retain proposals outside every runtime tree
+discovery directory. Report proposal persistence separately from qualified
+publication under the existing tree ID; an unqualified `-evolved` file is no
+longer created. Require three failed executions of the exact owner/tree/source
+and executed version before manual recovery. Inspection and fitness use the
+active definition and exact execution evidence. Only committed shared
+publication credits discovery; personal manual results stay private. QD/island
+archive estimates no longer credit runtime discovery. Production GA learning
+retains prior hints but defers new heuristic-gain experience. Batch gains are
+not assigned to individual operations without attribution evidence.
+
+Seed missing bounded contract recovery among initial genetic candidates so it
+is reachable without random luck. Preserve actual task contracts and the
+three-trial acceptance threshold. The initial Qwen 0.5B manual attempt failed
+one trial and was rejected. The stronger Qwen 2.5 1.5B passed 18/18 checks in a
+six-task repeated probe and both real entrypoint cycles, with acceptable local
+latency; make it the benchmark-only default. Sol 6.1 timeout fallback remains.
+
+**Alternatives:** Keeping old writes behind a higher structural-score threshold
+would still not demonstrate task improvement. Automatically retrying failed
+qualification until green would hide model unreliability. Publishing only a new
+`-evolved` ID would not ensure runtime adoption of the intended tree.
+
+**Consequences:** Missing task corpora now prevent publication. Existing clients
+must distinguish `proposal_saved` from `qualified`/`persisted`. Rejected outputs
+remain reviewable. Shared genetic entrypoints do not gain personal authority.
+Legacy first-adoption races, resolve-time ordering, lineage-skip/archive scoring,
+managed reset behavior, effectful personal tasks and deployed rollout remain
+open. One controlled arithmetic task is not general assistant impact.
+
+**Evidence:** [Real entrypoint and failure-scope tests](../../cmd/bt-agent/runtime_publication_test.go),
+[exact execution filter](../../internal/evolution/tree_identity_test.go),
+[shared publication helper](../../internal/benchmark/runtime_publication.go), and
+[retained observations](../verification/2026-10-01-manual-publication/manifest.json).
 
 ---
 

@@ -37,9 +37,10 @@ func TestExecutionEvidenceSeparatesCompilationFeedbackAndVersions(t *testing.T) 
 		{TaskID: "run", TreeName: "tree", User: "alice", TreeVersion: "v1", EvidenceKind: EvidenceExecution, ExecutionVersions: []string{"v1"}},
 		{TaskID: "old", TreeName: "tree", User: "alice", TreeVersion: "v0", EvidenceKind: EvidenceExecution, ExecutionVersions: []string{"v0"}},
 		{TaskID: "other-owner", TreeName: "tree", User: "bob", TreeVersion: "v1", EvidenceKind: EvidenceExecution, ExecutionVersions: []string{"v1"}},
+		{TaskID: "expanded-other", TreeName: "tree", User: "alice", TreeVersion: "v1", EvidenceKind: EvidenceExecution, ExecutionVersions: []string{"v2"}},
 		{TaskID: "mixed", TreeName: "tree", User: "alice", TreeVersion: "v1", EvidenceKind: EvidenceExecution, ExecutionVersions: []string{"v1", "v2"}},
 	}
-	if got := ExecutionRecords(records); len(got) != 4 {
+	if got := ExecutionRecords(records); len(got) != 5 {
 		t.Fatalf("synthetic evidence counted: %+v", got)
 	}
 	got := FilterByTreeVersion(records, "tree", "alice", "v1")

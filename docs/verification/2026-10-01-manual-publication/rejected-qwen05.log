@@ -1,0 +1,34 @@
+=== RUN   TestLiveManualAndGeneticPublication
+=== RUN   TestLiveManualAndGeneticPublication/bt_evolve
+    runtime_publication_test.go:137: measured candidate not published: map[baseline_version:sha256:891ce14f337e72954a34b7dad9f28d20a71e7cfa01b59d4201dd9b0a42e01a7e candidate_version:sha256:15ddcfbc782a637686c19ea6a5cd001b3789335ef7936b286e27535d526ed7e4 evolved:false matching_failures:3 persisted:false proposal_file:/tmp/TestLiveManualAndGeneticPublicationbt_evolve1179156382/002/evolution-proposals/8c25ef3ac6bf5634622bfd2870841de69b86a5b519905bc179b729c3c463e2c7.json proposal_saved:true proposed_mutations:1 qualification_attempt:map[backend:ollama baseline_calls:3 baseline_version:sha256:891ce14f337e72954a34b7dad9f28d20a71e7cfa01b59d4201dd9b0a42e01a7e candidate_calls:6 candidate_version:sha256:15ddcfbc782a637686c19ea6a5cd001b3789335ef7936b286e27535d526ed7e4 measured_at:2026-10-01T14:10:15.337809076Z model:qwen2.5:0.5b tree_id:factory:core_4abe2d40cd147f832adda95a0e267d86 trials:[map[after_duration_ms:1059 after_outcome:failure after_output:```json
+        {
+          "total": 32
+        }
+        ``` before_duration_ms:471 before_outcome:failure before_output:```json
+        {
+          "wrong_total": 37
+        }
+        ``` contract:map[json_fields:map[total:42]] task:Compute seventeen plus twenty-five. Return compact JSON with only the field total containing the calculated sum. Do not add prose or padding.] map[after_duration_ms:985 after_outcome:success after_output:```json
+        {
+          "total": 42
+        }
+        ``` before_duration_ms:576 before_outcome:failure before_output:```json
+        {
+          "wrong_total": 37
+        }
+        ``` contract:map[json_fields:map[total:42]] task:Compute seventeen plus twenty-five. Return compact JSON with only the field total containing the calculated sum. Do not add prose or padding.] map[after_duration_ms:1069 after_outcome:success after_output:```json
+        {
+          "total": 42
+        }
+        ``` before_duration_ms:481 before_outcome:failure before_output:```json
+        {
+          "wrong_total": 37
+        }
+        ``` contract:map[json_fields:map[total:42]] task:Compute seventeen plus twenty-five. Return compact JSON with only the field total containing the calculated sum. Do not add prose or padding.]] user:manual-benchmark] qualification_error:candidate has not demonstrated task improvement: candidate must improve task passes and satisfy every declared trial qualified:false]
+=== RUN   TestLiveManualAndGeneticPublication/bt_evolve_genetic
+--- FAIL: TestLiveManualAndGeneticPublication (18.82s)
+    --- FAIL: TestLiveManualAndGeneticPublication/bt_evolve (11.46s)
+    --- PASS: TestLiveManualAndGeneticPublication/bt_evolve_genetic (7.36s)
+FAIL
+FAIL	github.com/nico/go-bt-evolve/cmd/bt-agent	18.846s
+FAIL

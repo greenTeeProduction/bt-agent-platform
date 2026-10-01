@@ -53,7 +53,7 @@ func newLiveModel() (*LiveModel, error) {
 	}
 	model := strings.TrimSpace(os.Getenv("BT_BENCHMARK_MODEL"))
 	if model == "" {
-		model = "qwen2.5:0.5b"
+		model = "qwen2.5:1.5b"
 	}
 	timeout := 15 * time.Second
 	if raw := os.Getenv("BT_BENCHMARK_TIMEOUT"); raw != "" {

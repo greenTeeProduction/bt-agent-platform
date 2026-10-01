@@ -13,7 +13,7 @@ import (
 // services or writes need a dedicated isolated task fixture; lacking one is an
 // explicit unsupported result, never an action stub that pretends success.
 func benchmarkAdmission(kind, name string) error {
-	if kind == "HumanApprovalGate" || kind == "PersistentMemSequence" || kind == "ClaudeErrorHandler" {
+	if kind == "HumanApprovalGate" || kind == "PersistentMemSequence" || kind == "ClaudeErrorHandler" || kind == "PlannerNode" {
 		return unsupportedNode(kind, name)
 	}
 	if kind == "Action" {

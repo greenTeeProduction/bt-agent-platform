@@ -1,0 +1,897 @@
+{
+  "scope": "Exploratory real-model qualification on six fixed tasks, three repetitions each; not general capability proof.",
+  "models": [
+    {
+      "model": "qwen2.5:0.5b",
+      "think": false,
+      "trials": [
+        {
+          "case": "addition",
+          "repeat": 1,
+          "prompt": "Compute seventeen plus twenty-five. Return compact JSON with only the field total containing the calculated sum. Do not add prose or padding.",
+          "expected": {
+            "total": 42
+          },
+          "output": "```json\n{\n  \"total\": 42\n}\n```",
+          "done": true,
+          "load_ms": 2.284752,
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "latency_ms": 479.8,
+          "contract_passed": true
+        },
+        {
+          "case": "recovery",
+          "repeat": 1,
+          "prompt": "Independently recompute and verify the requested task result. Return JSON only.\n\nSolve this task independently and check your calculation: Compute seventeen plus twenty-five. Return compact JSON with only the field total containing the calculated sum. Do not add prose or padding.\nReturn only a JSON object with these required field names: [\"total\"]. Compute every value from the task. A previous attempt failed validation.\nValidation failure: missing required JSON field \"total\"\nReturn complete JSON.",
+          "expected": {
+            "total": 42
+          },
+          "output": "```json\n{\n  \"total\": 37\n}\n```",
+          "done": true,
+          "load_ms": 2.053903,
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "latency_ms": 515.7,
+          "contract_passed": false
+        },
+        {
+          "case": "subtract",
+          "repeat": 1,
+          "prompt": "There are 31 tasks and 12 are completed. Calculate how many remain. Return JSON only with field remaining, no prose.",
+          "expected": {
+            "remaining": 19
+          },
+          "output": "```json\n{\n  \"remaining\": 19\n}\n```",
+          "done": true,
+          "load_ms": 2.142511,
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "latency_ms": 474.4,
+          "contract_passed": true
+        },
+        {
+          "case": "multiply",
+          "repeat": 1,
+          "prompt": "Calculate six times seven. Return JSON only with field product, no prose.",
+          "expected": {
+            "product": 42
+          },
+          "output": "```json\n{\n  \"product\": \"six times seven\",\n  \"result\": \"42\"\n}\n```",
+          "done": true,
+          "load_ms": 2.148592,
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "latency_ms": 716.0,
+          "contract_passed": false
+        },
+        {
+          "case": "extract",
+          "repeat": 1,
+          "prompt": "Facts: owner is Alex, priority is high. Extract the owner and priority. Return only JSON with keys owner and priority.",
+          "expected": {
+            "owner": "Alex",
+            "priority": "high"
+          },
+          "output": "```json\n{\n  \"owner\": \"Alex\",\n  \"priority\": \"high\"\n}\n```",
+          "done": true,
+          "load_ms": 6.106283,
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "latency_ms": 647.3,
+          "contract_passed": true
+        },
+        {
+          "case": "sort",
+          "repeat": 1,
+          "prompt": "Sort these integers in ascending order: 9, 2, 5. Return only JSON with the field sorted containing the array.",
+          "expected": {
+            "sorted": [
+              2,
+              5,
+              9
+            ]
+          },
+          "output": "```json\n[\n  5,\n  9,\n  2\n]\n```",
+          "done": true,
+          "load_ms": 1.995182,
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "latency_ms": 595.0,
+          "contract_passed": false
+        },
+        {
+          "case": "addition",
+          "repeat": 2,
+          "prompt": "Compute seventeen plus twenty-five. Return compact JSON with only the field total containing the calculated sum. Do not add prose or padding.",
+          "expected": {
+            "total": 42
+          },
+          "output": "```json\n{\n  \"total\": 42\n}\n```",
+          "done": true,
+          "load_ms": 1.975182,
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "latency_ms": 433.2,
+          "contract_passed": true
+        },
+        {
+          "case": "recovery",
+          "repeat": 2,
+          "prompt": "Independently recompute and verify the requested task result. Return JSON only.\n\nSolve this task independently and check your calculation: Compute seventeen plus twenty-five. Return compact JSON with only the field total containing the calculated sum. Do not add prose or padding.\nReturn only a JSON object with these required field names: [\"total\"]. Compute every value from the task. A previous attempt failed validation.\nValidation failure: missing required JSON field \"total\"\nReturn complete JSON.",
+          "expected": {
+            "total": 42
+          },
+          "output": "```json\n{\n  \"total\": 37\n}\n```",
+          "done": true,
+          "load_ms": 2.009518,
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "latency_ms": 433.0,
+          "contract_passed": false
+        },
+        {
+          "case": "subtract",
+          "repeat": 2,
+          "prompt": "There are 31 tasks and 12 are completed. Calculate how many remain. Return JSON only with field remaining, no prose.",
+          "expected": {
+            "remaining": 19
+          },
+          "output": "```json\n{\n  \"remaining\": 11\n}\n```",
+          "done": true,
+          "load_ms": 2.065039,
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "latency_ms": 434.3,
+          "contract_passed": false
+        },
+        {
+          "case": "multiply",
+          "repeat": 2,
+          "prompt": "Calculate six times seven. Return JSON only with field product, no prose.",
+          "expected": {
+            "product": 42
+          },
+          "output": "```json\n{\n  \"product\": \"six_times_seven\"\n}\n```",
+          "done": true,
+          "load_ms": 2.021551,
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "latency_ms": 487.3,
+          "contract_passed": false
+        },
+        {
+          "case": "extract",
+          "repeat": 2,
+          "prompt": "Facts: owner is Alex, priority is high. Extract the owner and priority. Return only JSON with keys owner and priority.",
+          "expected": {
+            "owner": "Alex",
+            "priority": "high"
+          },
+          "output": "```json\n{\n  \"owner\": \"Alex\",\n  \"priority\": \"high\"\n}\n```",
+          "done": true,
+          "load_ms": 2.052079,
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "latency_ms": 602.0,
+          "contract_passed": true
+        },
+        {
+          "case": "sort",
+          "repeat": 2,
+          "prompt": "Sort these integers in ascending order: 9, 2, 5. Return only JSON with the field sorted containing the array.",
+          "expected": {
+            "sorted": [
+              2,
+              5,
+              9
+            ]
+          },
+          "output": "```json\n[\n  5,\n  2,\n  9\n]\n```",
+          "done": true,
+          "load_ms": 2.027983,
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "latency_ms": 544.2,
+          "contract_passed": false
+        },
+        {
+          "case": "addition",
+          "repeat": 3,
+          "prompt": "Compute seventeen plus twenty-five. Return compact JSON with only the field total containing the calculated sum. Do not add prose or padding.",
+          "expected": {
+            "total": 42
+          },
+          "output": "```json\n{\n  \"total\": 42\n}\n```",
+          "done": true,
+          "load_ms": 3.866908,
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "latency_ms": 434.5,
+          "contract_passed": true
+        },
+        {
+          "case": "recovery",
+          "repeat": 3,
+          "prompt": "Independently recompute and verify the requested task result. Return JSON only.\n\nSolve this task independently and check your calculation: Compute seventeen plus twenty-five. Return compact JSON with only the field total containing the calculated sum. Do not add prose or padding.\nReturn only a JSON object with these required field names: [\"total\"]. Compute every value from the task. A previous attempt failed validation.\nValidation failure: missing required JSON field \"total\"\nReturn complete JSON.",
+          "expected": {
+            "total": 42
+          },
+          "output": "```json\n{\n  \"total\": 37\n}\n```",
+          "done": true,
+          "load_ms": 1.978414,
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "latency_ms": 436.2,
+          "contract_passed": false
+        },
+        {
+          "case": "subtract",
+          "repeat": 3,
+          "prompt": "There are 31 tasks and 12 are completed. Calculate how many remain. Return JSON only with field remaining, no prose.",
+          "expected": {
+            "remaining": 19
+          },
+          "output": "```json\n{\n  \"remaining\": 11\n}\n```",
+          "done": true,
+          "load_ms": 1.97259,
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "latency_ms": 447.9,
+          "contract_passed": false
+        },
+        {
+          "case": "multiply",
+          "repeat": 3,
+          "prompt": "Calculate six times seven. Return JSON only with field product, no prose.",
+          "expected": {
+            "product": 42
+          },
+          "output": "```json\n{\n  \"product\": \"six_times_seven\"\n}\n```",
+          "done": true,
+          "load_ms": 2.031758,
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "latency_ms": 486.5,
+          "contract_passed": false
+        },
+        {
+          "case": "extract",
+          "repeat": 3,
+          "prompt": "Facts: owner is Alex, priority is high. Extract the owner and priority. Return only JSON with keys owner and priority.",
+          "expected": {
+            "owner": "Alex",
+            "priority": "high"
+          },
+          "output": "```json\n{\n  \"owner\": \"Alex\",\n  \"priority\": \"high\"\n}\n```",
+          "done": true,
+          "load_ms": 2.066991,
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "latency_ms": 600.3,
+          "contract_passed": true
+        },
+        {
+          "case": "sort",
+          "repeat": 3,
+          "prompt": "Sort these integers in ascending order: 9, 2, 5. Return only JSON with the field sorted containing the array.",
+          "expected": {
+            "sorted": [
+              2,
+              5,
+              9
+            ]
+          },
+          "output": "```json\n[\n  5,\n  2,\n  9\n]\n```",
+          "done": true,
+          "load_ms": 2.101327,
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "latency_ms": 542.8,
+          "contract_passed": false
+        }
+      ],
+      "passed": 0,
+      "total": 18,
+      "median_ms": 486.9,
+      "max_ms": 716.0,
+      "contract_passed": 7
+    },
+    {
+      "model": "qwen3:0.6b",
+      "think": false,
+      "trials": [
+        {
+          "case": "addition",
+          "repeat": 1,
+          "prompt": "Compute seventeen plus twenty-five. Return compact JSON with only the field total containing the calculated sum. Do not add prose or padding.",
+          "expected": {
+            "total": 42
+          },
+          "output": "{\"total\": 37}",
+          "done": true,
+          "load_ms": 3312.827236,
+          "passed": false,
+          "latency_ms": 6699.1,
+          "contract_passed": false
+        },
+        {
+          "case": "recovery",
+          "repeat": 1,
+          "prompt": "Independently recompute and verify the requested task result. Return JSON only.\n\nSolve this task independently and check your calculation: Compute seventeen plus twenty-five. Return compact JSON with only the field total containing the calculated sum. Do not add prose or padding.\nReturn only a JSON object with these required field names: [\"total\"]. Compute every value from the task. A previous attempt failed validation.\nValidation failure: missing required JSON field \"total\"\nReturn complete JSON.",
+          "expected": {
+            "total": 42
+          },
+          "output": "```json\n{\"total\": 37}\n```",
+          "done": true,
+          "load_ms": 2.235696,
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "latency_ms": 668.6,
+          "contract_passed": false
+        },
+        {
+          "case": "subtract",
+          "repeat": 1,
+          "prompt": "There are 31 tasks and 12 are completed. Calculate how many remain. Return JSON only with field remaining, no prose.",
+          "expected": {
+            "remaining": 19
+          },
+          "output": "{\n  \"remaining\": 19\n}",
+          "done": true,
+          "load_ms": 2.118959,
+          "passed": true,
+          "latency_ms": 563.8,
+          "contract_passed": true
+        },
+        {
+          "case": "multiply",
+          "repeat": 1,
+          "prompt": "Calculate six times seven. Return JSON only with field product, no prose.",
+          "expected": {
+            "product": 42
+          },
+          "output": "{\"product\": \"42\"}",
+          "done": true,
+          "load_ms": 2.01115,
+          "passed": false,
+          "latency_ms": 417.4,
+          "contract_passed": false
+        },
+        {
+          "case": "extract",
+          "repeat": 1,
+          "prompt": "Facts: owner is Alex, priority is high. Extract the owner and priority. Return only JSON with keys owner and priority.",
+          "expected": {
+            "owner": "Alex",
+            "priority": "high"
+          },
+          "output": "```json\n{\n  \"owner\": \"Alex\",\n  \"priority\": \"high\"\n}\n```",
+          "done": true,
+          "load_ms": 1.961934,
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "latency_ms": 1008.8,
+          "contract_passed": true
+        },
+        {
+          "case": "sort",
+          "repeat": 1,
+          "prompt": "Sort these integers in ascending order: 9, 2, 5. Return only JSON with the field sorted containing the array.",
+          "expected": {
+            "sorted": [
+              2,
+              5,
+              9
+            ]
+          },
+          "output": "```json\n{\n  \"sorted\": [2, 5, 9]\n}\n```",
+          "done": true,
+          "load_ms": 1.96731,
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "latency_ms": 961.5,
+          "contract_passed": true
+        },
+        {
+          "case": "addition",
+          "repeat": 2,
+          "prompt": "Compute seventeen plus twenty-five. Return compact JSON with only the field total containing the calculated sum. Do not add prose or padding.",
+          "expected": {
+            "total": 42
+          },
+          "output": "{\"total\": 37}",
+          "done": true,
+          "load_ms": 2.196464,
+          "passed": false,
+          "latency_ms": 396.6,
+          "contract_passed": false
+        },
+        {
+          "case": "recovery",
+          "repeat": 2,
+          "prompt": "Independently recompute and verify the requested task result. Return JSON only.\n\nSolve this task independently and check your calculation: Compute seventeen plus twenty-five. Return compact JSON with only the field total containing the calculated sum. Do not add prose or padding.\nReturn only a JSON object with these required field names: [\"total\"]. Compute every value from the task. A previous attempt failed validation.\nValidation failure: missing required JSON field \"total\"\nReturn complete JSON.",
+          "expected": {
+            "total": 42
+          },
+          "output": "```json\n{\"total\": 37}\n```",
+          "done": true,
+          "load_ms": 2.101999,
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "latency_ms": 562.0,
+          "contract_passed": false
+        },
+        {
+          "case": "subtract",
+          "repeat": 2,
+          "prompt": "There are 31 tasks and 12 are completed. Calculate how many remain. Return JSON only with field remaining, no prose.",
+          "expected": {
+            "remaining": 19
+          },
+          "output": "{\n  \"remaining\": 19\n}",
+          "done": true,
+          "load_ms": 2.100431,
+          "passed": true,
+          "latency_ms": 515.3,
+          "contract_passed": true
+        },
+        {
+          "case": "multiply",
+          "repeat": 2,
+          "prompt": "Calculate six times seven. Return JSON only with field product, no prose.",
+          "expected": {
+            "product": 42
+          },
+          "output": "{\"product\": \"42\"}",
+          "done": true,
+          "load_ms": 2.022062,
+          "passed": false,
+          "latency_ms": 376.5,
+          "contract_passed": false
+        },
+        {
+          "case": "extract",
+          "repeat": 2,
+          "prompt": "Facts: owner is Alex, priority is high. Extract the owner and priority. Return only JSON with keys owner and priority.",
+          "expected": {
+            "owner": "Alex",
+            "priority": "high"
+          },
+          "output": "```json\n{\n  \"owner\": \"Alex\",\n  \"priority\": \"high\"\n}\n```",
+          "done": true,
+          "load_ms": 2.029326,
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "latency_ms": 958.6,
+          "contract_passed": true
+        },
+        {
+          "case": "sort",
+          "repeat": 2,
+          "prompt": "Sort these integers in ascending order: 9, 2, 5. Return only JSON with the field sorted containing the array.",
+          "expected": {
+            "sorted": [
+              2,
+              5,
+              9
+            ]
+          },
+          "output": "```json\n{\n  \"sorted\": [2, 5, 9]\n}\n```",
+          "done": true,
+          "load_ms": 2.006511,
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "latency_ms": 940.9,
+          "contract_passed": true
+        },
+        {
+          "case": "addition",
+          "repeat": 3,
+          "prompt": "Compute seventeen plus twenty-five. Return compact JSON with only the field total containing the calculated sum. Do not add prose or padding.",
+          "expected": {
+            "total": 42
+          },
+          "output": "{\"total\": 37}",
+          "done": true,
+          "load_ms": 1.970414,
+          "passed": false,
+          "latency_ms": 382.9,
+          "contract_passed": false
+        },
+        {
+          "case": "recovery",
+          "repeat": 3,
+          "prompt": "Independently recompute and verify the requested task result. Return JSON only.\n\nSolve this task independently and check your calculation: Compute seventeen plus twenty-five. Return compact JSON with only the field total containing the calculated sum. Do not add prose or padding.\nReturn only a JSON object with these required field names: [\"total\"]. Compute every value from the task. A previous attempt failed validation.\nValidation failure: missing required JSON field \"total\"\nReturn complete JSON.",
+          "expected": {
+            "total": 42
+          },
+          "output": "```json\n{\"total\": 37}\n```",
+          "done": true,
+          "load_ms": 2.075919,
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "latency_ms": 570.9,
+          "contract_passed": false
+        },
+        {
+          "case": "subtract",
+          "repeat": 3,
+          "prompt": "There are 31 tasks and 12 are completed. Calculate how many remain. Return JSON only with field remaining, no prose.",
+          "expected": {
+            "remaining": 19
+          },
+          "output": "{\n  \"remaining\": 19\n}",
+          "done": true,
+          "load_ms": 2.072942,
+          "passed": true,
+          "latency_ms": 522.7,
+          "contract_passed": true
+        },
+        {
+          "case": "multiply",
+          "repeat": 3,
+          "prompt": "Calculate six times seven. Return JSON only with field product, no prose.",
+          "expected": {
+            "product": 42
+          },
+          "output": "{\"product\": \"42\"}",
+          "done": true,
+          "load_ms": 2.058959,
+          "passed": false,
+          "latency_ms": 379.6,
+          "contract_passed": false
+        },
+        {
+          "case": "extract",
+          "repeat": 3,
+          "prompt": "Facts: owner is Alex, priority is high. Extract the owner and priority. Return only JSON with keys owner and priority.",
+          "expected": {
+            "owner": "Alex",
+            "priority": "high"
+          },
+          "output": "```json\n{\n  \"owner\": \"Alex\",\n  \"priority\": \"high\"\n}\n```",
+          "done": true,
+          "load_ms": 2.066671,
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "latency_ms": 962.5,
+          "contract_passed": true
+        },
+        {
+          "case": "sort",
+          "repeat": 3,
+          "prompt": "Sort these integers in ascending order: 9, 2, 5. Return only JSON with the field sorted containing the array.",
+          "expected": {
+            "sorted": [
+              2,
+              5,
+              9
+            ]
+          },
+          "output": "```json\n{\n  \"sorted\": [2, 5, 9]\n}\n```",
+          "done": true,
+          "load_ms": 2.106607,
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "latency_ms": 950.9,
+          "contract_passed": true
+        }
+      ],
+      "passed": 3,
+      "total": 18,
+      "median_ms": 567.3499999999999,
+      "max_ms": 6699.1,
+      "contract_passed": 9
+    },
+    {
+      "model": "qwen2.5:1.5b",
+      "think": false,
+      "trials": [
+        {
+          "case": "addition",
+          "repeat": 1,
+          "prompt": "Compute seventeen plus twenty-five. Return compact JSON with only the field total containing the calculated sum. Do not add prose or padding.",
+          "expected": {
+            "total": 42
+          },
+          "output": "```json\n{\n  \"total\": 42\n}\n```",
+          "done": true,
+          "load_ms": 4071.149615,
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "latency_ms": 5306.0,
+          "contract_passed": true
+        },
+        {
+          "case": "recovery",
+          "repeat": 1,
+          "prompt": "Independently recompute and verify the requested task result. Return JSON only.\n\nSolve this task independently and check your calculation: Compute seventeen plus twenty-five. Return compact JSON with only the field total containing the calculated sum. Do not add prose or padding.\nReturn only a JSON object with these required field names: [\"total\"]. Compute every value from the task. A previous attempt failed validation.\nValidation failure: missing required JSON field \"total\"\nReturn complete JSON.",
+          "expected": {
+            "total": 42
+          },
+          "output": "```json\n{\n  \"total\": 42\n}\n```",
+          "done": true,
+          "load_ms": 2.071183,
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "latency_ms": 1296.2,
+          "contract_passed": true
+        },
+        {
+          "case": "subtract",
+          "repeat": 1,
+          "prompt": "There are 31 tasks and 12 are completed. Calculate how many remain. Return JSON only with field remaining, no prose.",
+          "expected": {
+            "remaining": 19
+          },
+          "output": "```json\n{\n  \"remaining\": 19\n}\n```",
+          "done": true,
+          "load_ms": 1.985998,
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "latency_ms": 1190.5,
+          "contract_passed": true
+        },
+        {
+          "case": "multiply",
+          "repeat": 1,
+          "prompt": "Calculate six times seven. Return JSON only with field product, no prose.",
+          "expected": {
+            "product": 42
+          },
+          "output": "```json\n{\n  \"product\": 42\n}\n```",
+          "done": true,
+          "load_ms": 2.013358,
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "latency_ms": 1167.8,
+          "contract_passed": true
+        },
+        {
+          "case": "extract",
+          "repeat": 1,
+          "prompt": "Facts: owner is Alex, priority is high. Extract the owner and priority. Return only JSON with keys owner and priority.",
+          "expected": {
+            "owner": "Alex",
+            "priority": "high"
+          },
+          "output": "```json\n{\n  \"owner\": \"Alex\",\n  \"priority\": \"high\"\n}\n```",
+          "done": true,
+          "load_ms": 2.118223,
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "latency_ms": 1630.1,
+          "contract_passed": true
+        },
+        {
+          "case": "sort",
+          "repeat": 1,
+          "prompt": "Sort these integers in ascending order: 9, 2, 5. Return only JSON with the field sorted containing the array.",
+          "expected": {
+            "sorted": [
+              2,
+              5,
+              9
+            ]
+          },
+          "output": "```json\n{\n  \"sorted\": [2, 5, 9]\n}\n```",
+          "done": true,
+          "load_ms": 2.109647,
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "latency_ms": 1550.7,
+          "contract_passed": true
+        },
+        {
+          "case": "addition",
+          "repeat": 2,
+          "prompt": "Compute seventeen plus twenty-five. Return compact JSON with only the field total containing the calculated sum. Do not add prose or padding.",
+          "expected": {
+            "total": 42
+          },
+          "output": "```json\n{\n  \"total\": 42\n}\n```",
+          "done": true,
+          "load_ms": 2.04715,
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "latency_ms": 1122.8,
+          "contract_passed": true
+        },
+        {
+          "case": "recovery",
+          "repeat": 2,
+          "prompt": "Independently recompute and verify the requested task result. Return JSON only.\n\nSolve this task independently and check your calculation: Compute seventeen plus twenty-five. Return compact JSON with only the field total containing the calculated sum. Do not add prose or padding.\nReturn only a JSON object with these required field names: [\"total\"]. Compute every value from the task. A previous attempt failed validation.\nValidation failure: missing required JSON field \"total\"\nReturn complete JSON.",
+          "expected": {
+            "total": 42
+          },
+          "output": "```json\n{\n  \"total\": 42\n}\n```",
+          "done": true,
+          "load_ms": 1.974286,
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "latency_ms": 1123.9,
+          "contract_passed": true
+        },
+        {
+          "case": "subtract",
+          "repeat": 2,
+          "prompt": "There are 31 tasks and 12 are completed. Calculate how many remain. Return JSON only with field remaining, no prose.",
+          "expected": {
+            "remaining": 19
+          },
+          "output": "```json\n{\n  \"remaining\": 19\n}\n```",
+          "done": true,
+          "load_ms": 1.935278,
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "latency_ms": 1117.7,
+          "contract_passed": true
+        },
+        {
+          "case": "multiply",
+          "repeat": 2,
+          "prompt": "Calculate six times seven. Return JSON only with field product, no prose.",
+          "expected": {
+            "product": 42
+          },
+          "output": "```json\n{\n  \"product\": 42\n}\n```",
+          "done": true,
+          "load_ms": 2.059791,
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "latency_ms": 1121.8,
+          "contract_passed": true
+        },
+        {
+          "case": "extract",
+          "repeat": 2,
+          "prompt": "Facts: owner is Alex, priority is high. Extract the owner and priority. Return only JSON with keys owner and priority.",
+          "expected": {
+            "owner": "Alex",
+            "priority": "high"
+          },
+          "output": "```json\n{\n  \"owner\": \"Alex\",\n  \"priority\": \"high\"\n}\n```",
+          "done": true,
+          "load_ms": 2.189807,
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "latency_ms": 1564.5,
+          "contract_passed": true
+        },
+        {
+          "case": "sort",
+          "repeat": 2,
+          "prompt": "Sort these integers in ascending order: 9, 2, 5. Return only JSON with the field sorted containing the array.",
+          "expected": {
+            "sorted": [
+              2,
+              5,
+              9
+            ]
+          },
+          "output": "```json\n{\n  \"sorted\": [2, 5, 9]\n}\n```",
+          "done": true,
+          "load_ms": 2.068623,
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "latency_ms": 1490.2,
+          "contract_passed": true
+        },
+        {
+          "case": "addition",
+          "repeat": 3,
+          "prompt": "Compute seventeen plus twenty-five. Return compact JSON with only the field total containing the calculated sum. Do not add prose or padding.",
+          "expected": {
+            "total": 42
+          },
+          "output": "```json\n{\n  \"total\": 42\n}\n```",
+          "done": true,
+          "load_ms": 1.981902,
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "latency_ms": 1121.0,
+          "contract_passed": true
+        },
+        {
+          "case": "recovery",
+          "repeat": 3,
+          "prompt": "Independently recompute and verify the requested task result. Return JSON only.\n\nSolve this task independently and check your calculation: Compute seventeen plus twenty-five. Return compact JSON with only the field total containing the calculated sum. Do not add prose or padding.\nReturn only a JSON object with these required field names: [\"total\"]. Compute every value from the task. A previous attempt failed validation.\nValidation failure: missing required JSON field \"total\"\nReturn complete JSON.",
+          "expected": {
+            "total": 42
+          },
+          "output": "```json\n{\n  \"total\": 42\n}\n```",
+          "done": true,
+          "load_ms": 2.108367,
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "latency_ms": 1154.0,
+          "contract_passed": true
+        },
+        {
+          "case": "subtract",
+          "repeat": 3,
+          "prompt": "There are 31 tasks and 12 are completed. Calculate how many remain. Return JSON only with field remaining, no prose.",
+          "expected": {
+            "remaining": 19
+          },
+          "output": "```json\n{\n  \"remaining\": 19\n}\n```",
+          "done": true,
+          "load_ms": 2.085039,
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "latency_ms": 1126.3,
+          "contract_passed": true
+        },
+        {
+          "case": "multiply",
+          "repeat": 3,
+          "prompt": "Calculate six times seven. Return JSON only with field product, no prose.",
+          "expected": {
+            "product": 42
+          },
+          "output": "```json\n{\n  \"product\": 42\n}\n```",
+          "done": true,
+          "load_ms": 2.052366,
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "latency_ms": 1118.6,
+          "contract_passed": true
+        },
+        {
+          "case": "extract",
+          "repeat": 3,
+          "prompt": "Facts: owner is Alex, priority is high. Extract the owner and priority. Return only JSON with keys owner and priority.",
+          "expected": {
+            "owner": "Alex",
+            "priority": "high"
+          },
+          "output": "```json\n{\n  \"owner\": \"Alex\",\n  \"priority\": \"high\"\n}\n```",
+          "done": true,
+          "load_ms": 2.012014,
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "latency_ms": 1558.9,
+          "contract_passed": true
+        },
+        {
+          "case": "sort",
+          "repeat": 3,
+          "prompt": "Sort these integers in ascending order: 9, 2, 5. Return only JSON with the field sorted containing the array.",
+          "expected": {
+            "sorted": [
+              2,
+              5,
+              9
+            ]
+          },
+          "output": "```json\n{\n  \"sorted\": [2, 5, 9]\n}\n```",
+          "done": true,
+          "load_ms": 2.046415,
+          "passed": false,
+          "error": "Expecting value: line 1 column 1 (char 0)",
+          "latency_ms": 1494.2,
+          "contract_passed": true
+        }
+      ],
+      "passed": 0,
+      "total": 18,
+      "median_ms": 1179.15,
+      "max_ms": 5306.0,
+      "contract_passed": 18
+    }
+  ],
+  "evaluation": "Strict JSON compliance is reported separately from the existing ResultContract, which also accepts a complete json code fence. The raw outputs are retained.",
+  "request_options": {
+    "temperature": 0,
+    "seed": 42,
+    "num_ctx": 4096,
+    "num_predict": 512
+  },
+  "endpoint": "http://127.0.0.1:11434/api/generate",
+  "request_timeout_seconds": 15,
+  "keep_alive": "15m",
+  "stream": false,
+  "selected": "qwen2.5:1.5b",
+  "selection_reason": "Fastest candidate passing all existing result contracts in this fixed corpus; a bounded comparison, not a claim about all available Ollama models."
+}

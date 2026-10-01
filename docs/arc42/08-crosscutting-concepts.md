@@ -210,7 +210,7 @@ positive score change, followed by validation. None of these static scores
 prove task impact or version-specific runtime success.
 
 [Live benchmarks](../../internal/benchmark/live_model.go) use
-`BT_BENCHMARK_BACKEND=ollama` and `BT_BENCHMARK_MODEL=qwen2.5:0.5b` by default.
+`BT_BENCHMARK_BACKEND=ollama` and `BT_BENCHMARK_MODEL=qwen2.5:1.5b` by default.
 `BT_BENCHMARK_OLLAMA_URL` scopes the endpoint; `BT_BENCHMARK_TIMEOUT` defaults
 to 15 seconds per local call. Timeout/unavailability selects Sol 6.1 through
 Codex login without changing the ordinary Sol-only policy. Paired comparisons
@@ -773,8 +773,9 @@ these contracts. These source changes do not establish deployed adoption.
 
 ### Runtime qualification and immutable versions
 
-Gardener persistence now uses [paired qualification](../../internal/benchmark/runtime_qualification.go)
-and a [version store](../../internal/evolution/runtime_release.go) (ADR-281).
+Gardener and MCP manual/genetic-family publication share
+[paired qualification](../../internal/benchmark/runtime_publication.go) and a
+[version store](../../internal/evolution/runtime_release.go) (ADR-281/282).
 Factory response trees use their original fixed task and declared expected
 JSON values. Other suites must provide independent result-value contracts and
 isolated capability fixtures. Missing contracts, missing inference, changed
@@ -793,8 +794,12 @@ Returned gardener improvement metrics use measured pass counts and definition
 versions. Single-mutation experience can inherit that measured gain; a batch
 cannot assign its entire gain to each individual operation. Legacy search
 ranking still uses heuristic/history estimates and can miss useful candidates.
-Unmanaged manual/genetic publication, complete external-task corpora, legacy
-file concurrency during first adoption and deployed rollout remain open.
+MCP proposals are retained separately from runnable definitions. Only committed
+qualified publication credits shared discovery; personal manual evolution stays
+out of the shared graph. GA heuristic mutations no longer record their estimated
+gains as new experience. Legacy lineage-skip/archive estimates, unmanaged
+resolve-time ordering, complete external-task corpora, legacy file concurrency
+during first adoption and deployed rollout remain open.
 Operator logs retain generated run IDs, registered route/method identity,
 status, timestamps and counts. Runner/scheduler/response-validator diagnostic
 fields do not copy raw request identifiers, schedules, validation fields or

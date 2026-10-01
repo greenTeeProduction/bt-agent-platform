@@ -48,7 +48,7 @@ func FilterByTreeVersion(records []Record, treeID, owner, version string) []Reco
 	}
 	out := make([]Record, 0, len(records))
 	for _, record := range records {
-		if record.TreeName == treeID && record.User == owner && record.TreeVersion == version && record.EvidenceKind == EvidenceExecution && len(record.ExecutionVersions) == 1 && record.ResultChecksDropped == 0 {
+		if record.TreeName == treeID && record.User == owner && record.TreeVersion == version && record.EvidenceKind == EvidenceExecution && len(record.ExecutionVersions) == 1 && record.ExecutionVersions[0] == version && record.ResultChecksDropped == 0 {
 			out = append(out, record)
 		}
 	}

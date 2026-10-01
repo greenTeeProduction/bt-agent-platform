@@ -92,6 +92,7 @@ runtime details in §§5–8 and decision history in [§9](09-decisions.md).
 | **Task Approval (dashboard)** | The dashboard task workflow's execution decision. It is separate from login authentication and may be distinct from an engine HITL request. |
 | **Tick** | One evaluation step of a behavior tree returning success, failure or running; a synchronous tick can contain slow work. |
 | **Transposition Table (TT)** | Cache of evaluations keyed by state/tree identity, used to reuse previous search results. |
+| **Qualified runtime version** | An immutable tree definition admitted by paired real-model task evidence and selected by the owner/tree active pointer. A retained search proposal or structural score alone is not qualified publication (ADR-281/282). |
 | **Tree Store** | Persisted serializable trees loaded by the appropriate registry/resolver. Global and per-user scopes must remain explicit. |
 | **Uncertain execution** | A dispatched operation whose completion cannot be established. Automatic replay stops; reconcile evidence before an operator chooses another attempt (ADR-267). |
 | **UtilitySelector** | A selector that ranks alternatives by configured utility/evidence before execution. |

@@ -2,7 +2,6 @@ package gardener
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -12,7 +11,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/evolution"
 )
 
-var ErrCandidateUnqualified = errors.New("candidate has not demonstrated task improvement")
+var ErrCandidateUnqualified = benchmark.ErrCandidateUnqualified
 
 func runtimeTreeID(entry TreeEntry) string {
 	if entry.TreeID != "" {
@@ -82,25 +81,8 @@ func (g *Gardener) PromoteCandidate(ctx context.Context, proposed TreeEntry) (*e
 	if active != nil {
 		prior.Tree = active
 	}
-	if info := engine.ValidateTreeFull(proposed.Tree); !info.Valid() {
-		return nil, fmt.Errorf("candidate validation: %v", info.Errors)
-	}
-	model, err := benchmark.DefaultLLM()
+	qualification, _, err := benchmark.PublishRuntimeCandidate(ctx, store, id, prior.User, prior.Tree, proposed.Tree, benchmark.SuiteForTree(prior.Name))
 	if err != nil {
-		return nil, err
-	}
-	live, ok := model.(*benchmark.LiveModel)
-	if !ok {
-		return nil, fmt.Errorf("promotion requires the real benchmark provider")
-	}
-	qualification, err := benchmark.QualifyRuntimeCandidate(ctx, id, prior.User, prior.Tree, proposed.Tree, benchmark.SuiteForTree(prior.Name), live)
-	if err != nil {
-		if recordErr := store.RecordAttempt(qualification, err); recordErr != nil {
-			return qualification, errors.Join(err, fmt.Errorf("retain rejected qualification: %w", recordErr))
-		}
-		return qualification, fmt.Errorf("%w: %v", ErrCandidateUnqualified, err)
-	}
-	if _, err := store.Promote(ctx, prior.Tree, proposed.Tree, qualification); err != nil {
 		return qualification, err
 	}
 	registry.mu.Lock()

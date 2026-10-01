@@ -237,7 +237,7 @@ establish ownership behavior, not production termination or capacity targets
 (ADR-276, R30).
 
 
-Benchmark qualification on 2026-10-01 installed `gemma3:270m` and `qwen2.5:0.5b` in the host Ollama store. The latter is the default benchmark model after the smaller model failed an arithmetic correctness probe. This is a benchmark-only exception to ordinary Sol inference. Source changes and live qualification are isolated in `codex/runtime-impact-20261001`; they do not establish adoption by the deployed BT services. See [benchmark policy](../sol-model-policy.md).
+Benchmark qualification on 2026-10-01 installed `gemma3:270m`, `qwen2.5:0.5b`, `qwen3:0.6b` and `qwen2.5:1.5b` in the host Ollama store. Later repeated trials invalidated the initial 0.5B selection; 1.5B is now the benchmark default, the fastest candidate to pass the six-task/three-repetition corpus among the three Qwen models tested (18/18 at median 1.18 seconds). This is a benchmark-only exception to ordinary Sol inference. Source changes and live qualification are isolated in `codex/runtime-impact-20261001`; they do not establish adoption by the deployed BT services. See [benchmark policy](../sol-model-policy.md).
 ### Bounded operational qualification — 2026-10-01
 
 The [durable checkpoint](../verification/2026-10-01-checkpoint/README.md)
