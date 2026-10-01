@@ -1,0 +1,116 @@
+ok  	github.com/nico/go-bt-evolve/internal/persona	0.084s
+2026/10/01 17:57:11 WARN deploy drift: running binary is behind repo HEAD binary=bt-agent running_revision=abc head_revision=def auto_rebuild=true
+2026/10/01 17:57:11 WARN deploy drift: restarting to adopt rebuilt binary binary=bt-agent head_revision=def
+2026/10/01 17:57:11 WARN deploy drift: idle adoption check failed binary=bt-agent err="git broke"
+2026/10/01 17:57:11 WARN deploy drift: running binary is behind repo HEAD binary=bt-agent running_revision=abc head_revision=def auto_rebuild=true
+2026/10/01 17:57:11 WARN deploy drift: restarting to adopt rebuilt binary binary=bt-agent head_revision=def
+2026/10/01 17:57:11 WARN deploy drift: running binary is behind repo HEAD binary=bt-agent running_revision=abc head_revision=def auto_rebuild=true
+2026/10/01 17:57:11 WARN deploy drift: restarting swapped sibling unit binary=bt-agent unit=bt-dashboard head_revision=def
+2026/10/01 17:57:11 WARN deploy drift: restarting to adopt rebuilt binary binary=bt-agent head_revision=def
+2026/10/01 17:57:11 WARN deploy drift: running binary is behind repo HEAD binary=bt-agent running_revision=abc head_revision=def auto_rebuild=true
+2026/10/01 17:57:11 WARN deploy drift: restart deferred — a job started during the rebuild binary=bt-agent head_revision=def
+2026/10/01 17:57:11 INFO scheduler: cycle complete agent=idle-agent outcome=success duration=0s quality=0.2 run_count=1
+2026/10/01 17:57:11 INFO scheduler: cycle complete agent=busy-agent outcome=success duration=0s quality=0.2 run_count=1
+2026/10/01 17:57:12 WARN deploy drift: running binary is behind repo HEAD binary=bt-agent running_revision=oldrev head_revision=newhead auto_rebuild=true
+2026/10/01 17:57:12 WARN deploy drift: rebuilt binaries from repo HEAD — restart to adopt binary=bt-agent head_revision=newhead
+2026/10/01 17:57:12 WARN deploy drift: running binary is behind repo HEAD binary=bt-agent running_revision=oldrev head_revision=newhead auto_rebuild=true
+2026/10/01 17:57:12 WARN deploy drift: restarting to adopt rebuilt binary binary=bt-agent head_revision=newhead
+2026/10/01 17:57:12 WARN deploy drift: running binary is behind repo HEAD binary=bt-agent running_revision=oldrev head_revision=newhead auto_rebuild=true
+2026/10/01 17:57:12 ERROR deploy drift: rebuilt binary failed smoke test — rolled back, NOT restarting binary=bt-agent head_revision=newhead err="binary crashes on --version" rollback_err=<nil>
+2026/10/01 17:57:12 WARN deploy drift: running binary is behind repo HEAD binary=bt-agent running_revision=oldrev head_revision=newhead auto_rebuild=true
+2026/10/01 17:57:12 WARN deploy drift: restarting swapped sibling unit binary=bt-agent unit=bt-gardener head_revision=newhead
+2026/10/01 17:57:12 WARN deploy drift: restarting to adopt rebuilt binary binary=bt-agent head_revision=newhead
+2026/10/01 17:57:12 WARN deploy drift: running binary is behind repo HEAD binary=bt-dashboard running_revision=oldrev head_revision=newhead auto_rebuild=true
+2026/10/01 17:57:12 WARN deploy drift: restarting to adopt rebuilt binary binary=bt-dashboard head_revision=newhead
+2026/10/01 17:57:12 WARN deploy drift: running binary is behind repo HEAD binary=bt-agent running_revision=oldrev head_revision=newhead auto_rebuild=true
+2026/10/01 17:57:12 ERROR deploy drift: sibling binary failed smoke test — rolled back, NOT restarting binary=bt-agent unit=bt-gardener path=/repo/bin/bt-gardener err="binary crashes on --version" rollback_err=<nil>
+2026/10/01 17:57:12 WARN deploy drift: restarting swapped sibling unit binary=bt-agent unit=bt-dashboard head_revision=newhead
+2026/10/01 17:57:12 WARN deploy drift: restarting to adopt rebuilt binary binary=bt-agent head_revision=newhead
+2026/10/01 17:57:12 WARN deploy drift: running binary is behind repo HEAD binary=bt-dashboard running_revision=oldhead head_revision=newhead auto_rebuild=true
+2026/10/01 17:57:12 WARN deploy drift: running binary is behind repo HEAD binary=bt-dashboard running_revision=oldhead head_revision=newhead auto_rebuild=true
+2026/10/01 17:57:12 WARN deploy drift: restarting to adopt rebuilt binary binary=bt-dashboard head_revision=newhead
+2026/10/01 17:57:12 WARN deploy drift: running binary is behind repo HEAD binary=bt-dashboard running_revision=oldhead head_revision=newhead auto_rebuild=true
+2026/10/01 17:57:12 WARN deploy drift: restarting to adopt rebuilt binary binary=bt-dashboard head_revision=newhead
+2026/10/01 17:57:12 WARN deploy drift: running binary is behind repo HEAD binary=bt-dashboard running_revision=oldhead head_revision=newhead auto_rebuild=true
+2026/10/01 17:57:12 WARN deploy drift: restarting to adopt rebuilt binary binary=bt-dashboard head_revision=newhead
+2026/10/01 17:57:12 WARN deploy drift: running binary is behind repo HEAD binary="" running_revision=abc head_revision=def auto_rebuild=false
+2026/10/01 17:57:12 WARN deploy drift: running binary is behind repo HEAD binary="" running_revision=abc head_revision=def auto_rebuild=true
+2026/10/01 17:57:12 WARN deploy drift: rebuilt binaries from repo HEAD — restart to adopt binary="" head_revision=def
+2026/10/01 17:57:12 WARN deploy drift: running binary is behind repo HEAD binary="" running_revision=abc head_revision=def auto_rebuild=true
+2026/10/01 17:57:12 WARN deploy drift: running binary is behind repo HEAD binary="" running_revision=abc head_revision=def auto_rebuild=true
+2026/10/01 17:57:12 WARN deploy drift: running binary is behind repo HEAD binary="" running_revision=abc head_revision=def auto_rebuild=true
+2026/10/01 17:57:12 WARN deploy drift: rebuild attempt blocked by backoff guard binary="" head_revision=def
+2026/10/01 17:57:12 WARN deploy drift: running binary is behind repo HEAD binary="" running_revision=abc head_revision=def auto_rebuild=true
+2026/10/01 17:57:12 WARN deploy drift: rebuild attempt skipped — a scheduled job is in-flight binary="" head_revision=def
+2026/10/01 17:57:12 WARN deploy drift: running binary is behind repo HEAD binary="" running_revision=abc head_revision=def auto_rebuild=true
+2026/10/01 17:57:12 WARN deploy drift: rebuilt binaries from repo HEAD — restart to adopt binary="" head_revision=def
+2026/10/01 17:57:12 WARN jobstore: refusing to overwrite a non-empty job table with an empty one this process never loaded path=/tmp/TestFileJobStore_RefusesEmptyOverwriteFromBlindProcess1787832078/001/scheduler-jobs.json existing_size=291
+2026/10/01 17:57:12 WARN jobstore: TRUNCATING a populated job table to empty — run history (last_run/run_count) is lost; if this was not an operator removing the last agent it is the job-table wipe path=/tmp/TestFileJobStore_AllowsLegitimateEmptyAfterOwnership3099379742/001/scheduler-jobs.json existing_size=291 pid=2339010
+2026/10/01 17:57:12 WARN scheduler: no persisted job state found — starting with fresh jobs path=/tmp/agent-test-home-966140364/jobs/scheduler-jobs.json
+2026/10/01 17:57:12 WARN scheduler: deleting job (RemoveJob call) job_id=job_persist-agent_1790870232452882297 agent=persist-agent run_count=0
+2026/10/01 17:57:12 WARN jobstore: TRUNCATING a populated job table to empty — run history (last_run/run_count) is lost; if this was not an operator removing the last agent it is the job-table wipe path=/tmp/TestScheduler_PersistenceOnSchedule1506797375/001/scheduler-jobs.json existing_size=350 pid=2339010
+2026/10/01 17:57:12 INFO scheduler: restored persisted jobs count=1
+2026/10/01 17:57:12 WARN scheduler: deleting job (RemoveJob call) job_id=job_nil-agent_1790870232461187752 agent=nil-agent run_count=0
+2026/10/01 17:57:12 WARN mutated tree override unreadable; ignoring tree=goal:corrupt path=/tmp/TestLoadMutatedTreeOverride_CorruptFileReturnsNil2032945540/001/goal_corrupt.json err="invalid character 'n' looking for beginning of object key string"
+2026/10/01 17:57:12 INFO webhook: routine notification suppressed agent=throttle-fusion-a
+2026/10/01 17:57:12 INFO webhook: routine notification suppressed agent=throttle-fusion-a
+2026/10/01 17:57:12 INFO webhook: routine notification suppressed agent=throttle-fusion-hb
+2026/10/01 17:57:12 INFO webhook: routine notification suppressed agent=throttle-fusion-f
+2026/10/01 17:57:12 INFO webhook: routine notification suppressed agent=throttle-fusion-p
+2026/10/01 17:57:12 ERROR panic recovered context=restart-control-request panic="fixture verification panic"
+2026/10/01 17:57:12 WARN deploy drift: running binary is behind repo HEAD binary=bt-agent running_revision=oldhead head_revision=newhead auto_rebuild=true
+2026/10/01 17:57:12 WARN deploy drift: sibling restart deferred — target ownership is unavailable unit=bt-dashboard
+2026/10/01 17:57:12 WARN deploy drift: restarting to adopt rebuilt binary binary=bt-agent head_revision=newhead
+2026/10/01 17:57:13 WARN scheduler: no persisted job state found — starting with fresh jobs path=/tmp/agent-test-home-966140364/jobs/scheduler-jobs.json
+2026/10/01 17:57:13 WARN scheduler: no persisted job state found — starting with fresh jobs path=/tmp/TestApplySchedule_PersistsRegistryAndJobs3405439759/001/jobs/scheduler-jobs.json
+2026/10/01 17:57:13 WARN scheduler: no persisted job state found — starting with fresh jobs path=/tmp/TestDeleteRegisteredAgent794059531/001/jobs/scheduler-jobs.json
+2026/10/01 17:57:13 INFO scheduler: restored persisted jobs count=1
+2026/10/01 17:57:13 WARN scheduler: deleting job (agent set to on_demand via Schedule) run_count=0
+2026/10/01 17:57:13 WARN jobstore: TRUNCATING a populated job table to empty — run history (last_run/run_count) is lost; if this was not an operator removing the last agent it is the job-table wipe path=/tmp/TestDeleteRegisteredAgent794059531/001/jobs/scheduler-jobs.json existing_size=331 pid=2339010
+2026/10/01 17:57:13 INFO scheduler: preserving missed slot for catch-up missed_next_run=2026-10-01T17:12:13.000+02:00
+2026/10/01 17:57:13 INFO scheduler: restored persisted jobs count=1
+2026/10/01 17:57:13 WARN scheduler: reconcile sees EMPTY registry — keeping persisted jobs untouched
+2026/10/01 17:57:13 WARN scheduler: agent missing from registry at run time agent=vanished-agent err="agent \"vanished-agent\" not found"
+2026/10/01 17:57:13 WARN circuit breaker: agent is now OPEN agent=vanished-agent consecutive_failures=4
+2026/10/01 17:57:13 INFO circuit breaker: agent recovered to CLOSED agent=agent
+2026/10/01 17:57:13 WARN circuit breaker: agent is now OPEN agent=agent consecutive_failures=2
+2026/10/01 17:57:13 INFO scheduler: cycle complete agent=flaky-agent outcome=failure duration=0s quality=0 run_count=1 error="invalid argument"
+2026/10/01 17:57:13 WARN circuit breaker: agent is now OPEN agent=flaky-agent consecutive_failures=1
+2026/10/01 17:57:13 INFO scheduler: cycle complete agent=a outcome=success duration=0s quality=0.2 run_count=1
+2026/10/01 17:57:13 INFO scheduler: cycle complete agent=b outcome=success duration=0s quality=0.2 run_count=1
+2026/10/01 17:57:13 INFO scheduler: cycle complete agent=a outcome=success duration=0s quality=0.2 run_count=1
+2026/10/01 17:57:13 INFO scheduler: cycle complete agent=b outcome=success duration=0s quality=0.2 run_count=1
+2026/10/01 17:57:13 INFO scheduler: cycle complete agent=d outcome=success duration=0s quality=0.2 run_count=1
+2026/10/01 17:57:13 INFO scheduler: cycle complete agent=c outcome=success duration=0s quality=0.2 run_count=1
+2026/10/01 17:57:13 INFO scheduler: cycle complete agent=a outcome=success duration=0s quality=0.2 run_count=1
+2026/10/01 17:57:13 INFO scheduler: cycle complete agent=b outcome=success duration=0s quality=0.2 run_count=1
+2026/10/01 17:57:13 INFO scheduler: cycle complete agent=c outcome=success duration=0s quality=0.2 run_count=1
+2026/10/01 17:57:13 INFO scheduler: cycle complete agent=d outcome=success duration=0s quality=0.2 run_count=1
+2026/10/01 17:57:13 WARN scheduler: deleting job (RemoveJob call) job_id=job_a_1790870233936869123 agent=a run_count=0
+2026/10/01 17:57:13 INFO scheduler: cycle complete agent=a outcome=success duration=0s quality=0.2 run_count=1
+2026/10/01 17:57:13 INFO scheduler: cycle complete agent=a outcome=success duration=0s quality=0.2 run_count=1
+2026/10/01 17:57:13 WARN scheduler: agent missing from registry at run time agent=a err="agent \"a\" not found"
+2026/10/01 17:57:13 WARN scheduler: dropping job for agent not in registry job_id=job_a_1790870233949030119 agent=a run_count=0
+2026/10/01 17:57:13 ERROR scheduler: agent panicked in runJob (recovered) agent=b panic="runner panic"
+2026/10/01 17:57:13 INFO scheduler: cycle complete agent=b outcome=panic duration=0s quality=0 run_count=1 error="execution outcome unknown; reconcile before retrying: agent panicked: runner panic"
+2026/10/01 17:57:13 INFO scheduler: cycle complete agent=a outcome=success duration=0s quality=0.2 run_count=1
+2026/10/01 17:57:13 INFO scheduler: cycle complete agent=b outcome=success duration=0s quality=0.2 run_count=1
+2026/10/01 17:57:13 INFO scheduler: cycle complete agent=short outcome=success duration=0s quality=0.2 run_count=1
+2026/10/01 17:57:13 INFO scheduler: cycle complete agent=long outcome=success duration=0s quality=0.2 run_count=1
+2026/10/01 17:57:13 INFO scheduler: cycle complete agent=long outcome=failure duration=0s quality=0 run_count=1 error="context canceled"
+2026/10/01 17:57:13 INFO scheduler: restored persisted jobs count=1
+2026/10/01 17:57:13 WARN scheduler: holding interrupted execution for reconciliation job_id=j1 agent=goap-runner run_count=3
+2026/10/01 17:57:13 WARN scheduler: recovered in-flight jobs from crash count=1
+2026/10/01 17:57:13 INFO scheduler: restored persisted jobs count=1
+2026/10/01 17:57:13 WARN scheduler: holding interrupted execution for reconciliation job_id=j1 agent=goap-runner run_count=3
+2026/10/01 17:57:13 WARN scheduler: recovered in-flight jobs from crash count=1
+2026/10/01 17:57:13 INFO scheduler: cycle complete agent=build-rev-agent outcome=success duration=0s quality=0 run_count=1
+--- FAIL: TestSecurityRegistryWritePreservesHardlinkTarget (0.00s)
+    storage_security_test.go:123: existing agent definition: yaml: unmarshal errors:
+          line 1: cannot unmarshal !!str `unchanged` into agent.Definition
+FAIL
+FAIL	github.com/nico/go-bt-evolve/internal/agent	5.544s
+ok  	github.com/nico/go-bt-evolve/internal/agentexec	0.104s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-agent	2.718s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-dashboard	2.029s
+FAIL

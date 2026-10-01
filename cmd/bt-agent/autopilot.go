@@ -9,7 +9,6 @@ import (
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/goap"
 	"github.com/nico/go-bt-evolve/internal/hitl"
-	"github.com/nico/go-bt-evolve/internal/knowledge"
 	"github.com/nico/go-bt-evolve/internal/persona"
 )
 
@@ -116,29 +115,10 @@ func proposeAutomation(deps *mcpDeps, user string, profile *persona.Profile, led
 		"count":     pattern.Count,
 		"signature": signature,
 	}
-	persistGeneratedTreeForUser(deps, user, treeID, tree, result)
-	if result["persisted"] != true {
-		result["proposed"] = false
-		return result
-	}
+
 	planSummary := make([]string, 0, len(plan.Steps))
 	for _, s := range plan.Steps {
 		planSummary = append(planSummary, s.Name)
-	}
-	// Seed compile-time evidence so the gardener can evolve the tree (Phase 5).
-	seedCompileReflection(deps, user, treeID, goal.Name, planSummary)
-	if deps.kg != nil {
-		deps.kg.Register(&knowledge.TreeMeta{
-			ID:          treeID,
-			Name:        treeID,
-			Category:    "goal",
-			Description: "Autopilot automation for recurring task: " + pattern.Representative,
-			NodeCount:   evolution.CountNodes(tree),
-			Keywords:    strings.Fields(strings.ToLower(pattern.Representative)),
-			Capabilities: []knowledge.Capability{
-				{Action: "goal_automation", Domain: "goal", Strength: 0.7},
-			},
-		})
 	}
 
 	schedule := suggestSchedule(pattern)
@@ -147,33 +127,12 @@ func proposeAutomation(deps *mcpDeps, user string, profile *persona.Profile, led
 		"I noticed you asked for similar tasks %d times (last: %q). I compiled tree %s and prepared agent %q (schedule: %s). Approve to schedule it.",
 		pattern.Count, pattern.Representative, treeID, agentName, schedule)
 
-	// Profile-level auto-approval bypasses HITL entirely.
-	if profile.Approval.AutoApproveAutomations {
-		if err := activateAutomation(deps, user, agentName, treeID, signature, schedule, pattern.Representative); err != nil {
-			result["proposed"] = false
-			result["error"] = err.Error()
-			return result
-		}
-		_ = ledger.Upsert(persona.AutomationRecord{
-			Signature:      signature,
-			Status:         persona.AutomationApproved,
-			TreeID:         treeID,
-			AgentName:      agentName,
-			Representative: pattern.Representative,
-		})
-		result["proposed"] = true
-		result["auto_approved"] = true
-		result["agent"] = agentName
-		result["schedule"] = schedule
-		return result
-	}
-
-	// HITL proposal (default path).
-	if hitl.DefaultStore == nil {
+	if !profile.Approval.AutoApproveAutomations && hitl.DefaultStore == nil {
 		result["proposed"] = false
 		result["error"] = "HITL store not initialized"
 		return result
 	}
+
 	req := hitl.NewRequest("AutomationProposal", "automation",
 		pattern.Representative, strings.Join(planSummary, " → "), proposed,
 		"Approve to schedule this automation as an agent.",
@@ -186,52 +145,43 @@ func proposeAutomation(deps *mcpDeps, user string, profile *persona.Profile, led
 			"schedule":          schedule,
 		})
 	req = hitl.ApplyAutoApproveIfPolicy(req)
-	if err := hitl.DefaultStore.Create(req); err != nil {
-		result["proposed"] = false
-		result["error"] = err.Error()
+	limit := profile.Approval.MaxAutoCreatedAgents
+	if limit <= 0 {
+		limit = 3
+	}
+	if err := ledger.Reserve(persona.AutomationRecord{
+		Signature: signature, Status: persona.AutomationPending, HITLID: req.ID,
+		TreeID: treeID, AgentName: agentName, Schedule: schedule, Representative: pattern.Representative,
+	}, limit); err != nil {
+		result["proposed"], result["error"] = false, err.Error()
 		return result
 	}
-
-	status := persona.AutomationPending
-	// Global HITL policy may have skipped the gate (dev/test auto-approve).
-	if req.Status == hitl.StatusSkipped {
-		if err := activateAutomation(deps, user, agentName, treeID, signature, schedule, pattern.Representative); err != nil {
-			result["proposed"] = false
-			result["error"] = err.Error()
+	// A pending record is durable before the tree becomes resolvable. Any
+	// subsequent failure leaves admission closed and is reported for repair.
+	persistGeneratedTreeForUser(deps, user, treeID, tree, result)
+	if result["persisted"] != true {
+		result["proposed"] = false
+		return result
+	}
+	if !profile.Approval.AutoApproveAutomations {
+		if err := hitl.DefaultStore.Create(req); err != nil {
+			result["proposed"], result["error"] = false, err.Error()
 			return result
 		}
-		status = persona.AutomationApproved
-		result["auto_approved"] = true
-		result["agent"] = agentName
 	}
-	_ = ledger.Upsert(persona.AutomationRecord{
-		Signature:      signature,
-		Status:         status,
-		HITLID:         req.ID,
-		TreeID:         treeID,
-		AgentName:      agentName,
-		Representative: pattern.Representative,
-	})
-	result["proposed"] = true
-	result["hitl_id"] = req.ID
-	result["status"] = status
-	result["schedule"] = schedule
-	return result
-}
-
-// activateAutomation writes the approved automation into the agent registry
-// as a scheduled agent definition, delegating the binary-agnostic part to
-// persona.ActivateAutomation and refreshing A2A cards on success.
-func activateAutomation(deps *mcpDeps, user, agentName, treeID, signature, schedule, representative string) error {
-	if err := persona.ActivateAutomation(deps.agentReg, user, agentName, treeID, signature, schedule, representative); err != nil {
-		return err
-	}
-	if deps.refreshA2ACards != nil {
-		if rerr := deps.refreshA2ACards(); rerr != nil {
-			engine.Warn("a2a: card refresh after activateAutomation failed", "agent", agentName, "error", rerr)
+	// Personal task text stays in the owner's workspace, outside the shared KG.
+	seedCompileReflection(deps, user, treeID, goal.Name, planSummary)
+	result["status"] = persona.AutomationPending
+	if profile.Approval.AutoApproveAutomations || req.Status == hitl.StatusSkipped {
+		activation := finalizeAutomationApproval(deps, req, true)
+		if activation["activated"] != true {
+			result["proposed"], result["error"] = false, activation["activation_error"]
+			return result
 		}
+		result["status"], result["auto_approved"], result["agent"] = persona.AutomationApproved, true, agentName
 	}
-	return nil
+	result["proposed"], result["hitl_id"], result["schedule"] = true, req.ID, schedule
+	return result
 }
 
 // finalizeAutomationApproval activates an approved automation proposal and

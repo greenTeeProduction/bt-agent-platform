@@ -1,0 +1,39 @@
+{
+  "observed_utc": "2026-10-01T16:18:58.366257+00:00",
+  "baseline_commit": "7000d8a7e96fe2671dedeb4357db3b2f28f1be2c",
+  "status": "affected-package regression/race/lint and full implementation commit hook passed; evidence packaging hook pending",
+  "scope": "Approval storage, reservation, exact task/configuration identity and failure handling only. No LLM/task-performance qualification claimed.",
+  "pr83_head_verified": "af780cdbf4745432b4b3a2d890a9c9e88443237e",
+  "tests": [
+    "24 independent ledger writers retain all records",
+    "16 concurrent reservations admit only three slots",
+    "owner collision rejects ledger read",
+    "ledger commit failure is surfaced and prior pending record retained",
+    "contended lock returns within bounded wait",
+    "escaping ledger symlink rejected",
+    "existing agent configuration matched against disk across stale registry instances",
+    "mismatched request/task/tree/agent/schedule/owner and rejected/flagged proposals cannot activate",
+    "exact activation retry retains one agent and exact task description",
+    "corrupt/conflicting ledger admission denied",
+    "MCP and dashboard approval regressions"
+  ],
+  "first_failure": "Registry hardlink test expected Create to overwrite an unrecognized existing file. Create now refuses; the explicit-write hardlink preservation assertion is retained.",
+  "open": [
+    "Autopilot still compiles administrative operators instead of actual task capabilities",
+    "Independent postcondition and external-effect proof",
+    "Immutable tree-version consent and missing-ledger provenance",
+    "Incomplete reservation repair and legacy approval migration",
+    "Stale feedback request IDs and legacy noncooperating definition writers",
+    "Deployed rollout"
+  ],
+  "files_sha256": {
+    "first-check.log": "36d3a17eedd60bd77ab6c67da71ec94edb0cfde3d318eb2849844d696bb10eea",
+    "regression.log": "4d61694576be63b94849e135a76d9c52d0105b635975ad5e7b035cb0b1965cff",
+    "race.log": "9593813879b348f1be72ff677cb3b9e457b7106018ff832f2395412e3d4f5186",
+    "lint.log": "e92606b0bf483111dff0a120c315ea165821348f31365020e2468a0059095c47",
+    "docs.log": "9dcb4058a343f9159305dfad95166a69070e6d26542935587151b3b7e41d7142",
+    "graph.log": "9ac1e0d5f128e42024268edba0ebdc0fc7f3d796601a27682da92c60e9f148f0",
+    "implementation-hook.log": "cf3f5b3e7e4780ae42c3f35524f951a9174b1b1f3803f39d2a34a8cf5c2019b6"
+  },
+  "implementation_checked_commit": "c895ed97ff1da27d376aadf25edf049950ff834f"
+}

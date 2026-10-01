@@ -442,6 +442,23 @@ Approval finalization activates/schedules the tracked automation; rejection
 keeps it unavailable. Negative feedback can flag and pause an approved
 automation until review finalization.
 
+The proposal path reserves a pending record before publishing its tree. Reservation
+serializes duplicate checks and the per-user cap across instances; pending and
+flagged proposals consume slots. Approval compares the request, tree, agent,
+schedule and exact task with the reservation, creates or verifies the same agent
+definition, then commits approval. A failed commit is reported and leaves the
+previous admission state; retrying matches the existing definition. Scheduled
+agents receive the original task text as their description. Unreadable ledgers
+and contradictory records deny admission. Personal task descriptions are not
+registered in the shared knowledge graph (ADR-284).
+
+This repairs approval integrity, not task execution: the current autopilot still
+compiles administrative automation operators, and GOAP can assert effects after
+text generation. Independent task/effect qualification and version-bound consent
+remain open. Incomplete legacy proposals cannot be newly activated; they can be
+rejected or reconciled explicitly. Failed proposal preparation can leave a pending
+reservation requiring repair; it must not silently release execution admission.
+
 Explicit-feedback totals and review thresholds are scoped to the exact
 tree/user pair. Another user's same-ID tree and unowned legacy feedback do
 not contribute. Compile-seed identifiers include both owner and tree, so

@@ -211,22 +211,23 @@ func automationApproved(root, user, treeID string) bool {
 	}
 	store, err := persona.NewStore(root)
 	if err != nil {
-		return true
+		return false
 	}
 	ledger, err := persona.NewAutomationStore(store.Workspace(user))
 	if err != nil {
-		return true
+		return false
 	}
 	records, err := ledger.All()
 	if err != nil {
-		return true
+		return false
 	}
+	approved := true
 	for _, rec := range records {
 		if rec.TreeID == treeID {
-			return rec.Status == persona.AutomationApproved
+			approved = approved && rec.Status == persona.AutomationApproved
 		}
 	}
-	return true
+	return approved
 }
 
 // AutomationBlocked reports whether treeID has an automation record for user

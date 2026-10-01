@@ -119,7 +119,11 @@ func TestSecurityRegistryWritePreservesHardlinkTarget(t *testing.T) {
 	if err := os.Link(outside, filepath.Join(reg.dir, "linked.yaml")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := reg.Create(Definition{Name: "linked"}); err != nil {
+	if _, err := reg.Create(Definition{Name: "linked"}); err == nil {
+		t.Fatal("creation must reject a preexisting unrecognized definition")
+	}
+	// Explicit writes still replace the link atomically without changing its target.
+	if err := reg.saveDef(Definition{Name: "linked"}); err != nil {
 		t.Fatal(err)
 	}
 	if got, err := os.ReadFile(outside); err != nil || string(got) != "unchanged" {

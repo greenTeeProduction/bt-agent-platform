@@ -2011,6 +2011,7 @@ func TestHandleHITL_ApproveActivatesAutomation(t *testing.T) {
 		Status:    persona.AutomationPending,
 		HITLID:    req.ID,
 		TreeID:    treeID,
+		AgentName: agentName, Schedule: req.Context["schedule"], Representative: req.Task,
 	}); err != nil {
 		t.Fatalf("seed ledger: %v", err)
 	}
@@ -2072,6 +2073,7 @@ func TestHandleHITL_RejectQuarantinesAutomationTree(t *testing.T) {
 		Status:    persona.AutomationPending,
 		HITLID:    req.ID,
 		TreeID:    treeID,
+		AgentName: agentName, Schedule: req.Context["schedule"], Representative: req.Task,
 	}); err != nil {
 		t.Fatalf("seed ledger: %v", err)
 	}

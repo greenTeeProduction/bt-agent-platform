@@ -18,9 +18,12 @@ func ActivateAutomation(reg *agent.Registry, user, agentName, treeID, signature,
 	if reg == nil {
 		return fmt.Errorf("agent registry not configured")
 	}
-	_, err := reg.Create(agent.Definition{
+	if strings.TrimSpace(user) == "" || strings.TrimSpace(treeID) == "" || strings.TrimSpace(signature) == "" || strings.TrimSpace(schedule) == "" || strings.TrimSpace(representative) == "" {
+		return fmt.Errorf("automation requires owner, tree, signature, schedule and exact task")
+	}
+	_, err := reg.EnsureDefinition(agent.Definition{
 		Name:        agentName,
-		Description: "Auto-created automation for recurring task: " + representative,
+		Description: representative,
 		Tree:        treeID,
 		Schedule:    schedule,
 		Metadata: map[string]string{
@@ -29,13 +32,7 @@ func ActivateAutomation(reg *agent.Registry, user, agentName, treeID, signature,
 			"pattern_signature": signature,
 		},
 	})
-	if err != nil {
-		if strings.Contains(err.Error(), "already exists") {
-			return nil // idempotent: re-approval of an existing agent is fine
-		}
-		return err
-	}
-	return nil
+	return err
 }
 
 // FinalizeAutomationApproval activates an approved automation proposal (or
@@ -50,34 +47,48 @@ func FinalizeAutomationApproval(reg *agent.Registry, store *Store, req *hitl.Req
 	}
 	user := req.Context["user"]
 	out := map[string]any{"automation": true, "user": user}
-	var ledger *AutomationStore
-	if store != nil && user != "" {
-		ledger, _ = NewAutomationStore(store.Workspace(user))
+	out["activated"] = false
+	fail := func(err error) map[string]any { out["activation_error"] = err.Error(); return out }
+	if store == nil || strings.TrimSpace(user) == "" {
+		return fail(fmt.Errorf("automation approval requires an owner store"))
 	}
-
-	if !approved {
-		if ledger != nil {
-			_, _, _ = ledger.SetStatus(req.ID, AutomationRejected, "")
-		}
-		if store != nil && user != "" {
-			ws := store.Workspace(user)
-			if qerr := evolution.QuarantineNamedTree(ws.TreesDir(), req.Context["tree_id"]); qerr != nil {
-				engine.Warn("FinalizeAutomationApproval: tree quarantine failed", "tree", req.Context["tree_id"], "error", qerr)
-			}
-		}
-		out["activated"] = false
-		return out
+	ledger, err := NewAutomationStore(store.Workspace(user))
+	if err != nil {
+		return fail(err)
 	}
-
 	agentName := req.Context["agent_name"]
-	if err := ActivateAutomation(reg, user, agentName, req.Context["tree_id"],
-		req.Context["pattern_signature"], req.Context["schedule"], req.Task); err != nil {
-		out["activated"] = false
-		out["activation_error"] = err.Error()
-		return out
+	err = ledger.transition(req.Context["pattern_signature"], func(rec *AutomationRecord) error {
+		if req.ID == "" || rec.HITLID != req.ID || rec.TreeID != req.Context["tree_id"] {
+			return fmt.Errorf("automation request does not match the reserved owner, request and tree")
+		}
+		// Legacy incomplete proposals may still be rejected. Activating one
+		// requires a complete reservation; missing fields are not consent.
+		if (approved || rec.Representative != "") && rec.Representative != req.Task ||
+			(approved || rec.AgentName != "") && rec.AgentName != agentName ||
+			(approved || rec.Schedule != "") && rec.Schedule != req.Context["schedule"] {
+			return fmt.Errorf("automation approval does not match the reserved agent, schedule and task")
+		}
+		if !approved {
+			rec.Status = AutomationRejected
+			return nil
+		}
+		if rec.Status != AutomationPending && rec.Status != AutomationApproved {
+			return fmt.Errorf("automation is %s; original approval cannot reactivate it", rec.Status)
+		}
+		if err := ActivateAutomation(reg, user, rec.AgentName, rec.TreeID, rec.Signature, rec.Schedule, rec.Representative); err != nil {
+			return err
+		}
+		rec.Status = AutomationApproved
+		return nil
+	})
+	if err != nil {
+		return fail(err)
 	}
-	if ledger != nil {
-		_, _, _ = ledger.SetStatus(req.ID, AutomationApproved, agentName)
+	if !approved {
+		if err := evolution.QuarantineNamedTree(store.Workspace(user).TreesDir(), req.Context["tree_id"]); err != nil {
+			out["quarantine_error"] = err.Error()
+		}
+		return out
 	}
 	out["activated"] = true
 	out["agent"] = agentName
@@ -109,17 +120,16 @@ func FinalizeFeedbackEscalation(store *Store, req *hitl.Request, approved bool) 
 	if err != nil {
 		return
 	}
-	rec, exists, err := ledger.Get(signature)
-	if err != nil || !exists || rec.Status != AutomationFlagged {
-		return
-	}
 	if !approved {
-		// Rejected — the automation stays paused; nothing further to do.
 		return
 	}
-	rec.Status = AutomationApproved
-	if err := ledger.Upsert(*rec); err != nil {
-		engine.Warn("failed to resume automation after feedback-review approval",
-			"tree", rec.TreeID, "user", user, "error", err)
+	if err := ledger.transition(signature, func(rec *AutomationRecord) error {
+		if rec.Status != AutomationFlagged {
+			return fmt.Errorf("automation is not flagged")
+		}
+		rec.Status = AutomationApproved
+		return nil
+	}); err != nil {
+		engine.Warn("failed to resume automation after feedback-review approval", "user", user, "error", err)
 	}
 }

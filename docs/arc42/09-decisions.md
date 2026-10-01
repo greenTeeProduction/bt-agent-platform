@@ -309,6 +309,7 @@ Navigation and provenance:
 | ADR-281 | [Measured Runtime Tree Publication and Exact Rollback](#adr-281) | Accepted — gardener implemented; broader rollout partial | 2026-10-01 |
 | ADR-282 | [Manual and Genetic Publication Requires Measured Task Improvement](#adr-282) | Accepted — covered MCP entrypoints; fleet rollout partial | 2026-10-01 |
 | ADR-283 | [Evidence-Preserving Offline Recovery of Collapsed Trees](#adr-283) | Accepted — observed data repair; service rollout open | 2026-10-01 |
+| ADR-284 | [Transactional Automation Reservations and Exact Activation](#adr-284) | Accepted — approval boundary; task effects remain open | 2026-10-01 |
 
 <a id="adr-001"></a>
 
@@ -6623,6 +6624,49 @@ coverage, historical learning and remaining personal-effect gaps remain open.
 [CLI tests](../../cmd/bt-gardener/recovery_test.go),
 [metadata identity regression](../../internal/evolution/tree_identity_test.go),
 and [actual host repair/readback](../verification/2026-10-01-tree-recovery/manifest.json).
+
+---
+
+<a id="adr-284"></a>
+## ADR-284: Transactional Automation Reservations and Exact Activation
+
+**Date:** 2026-10-01
+**Status:** Accepted implementation; task execution and service rollout remain open.
+
+**Context:** Autopilot published trees before durable approval tracking, ignored
+ledger failures, and accepted any existing agent with the proposed name. Separate
+ledger instances could lose updates. Scheduled task descriptions added automation
+administration prose, and personal descriptions entered shared discovery.
+
+**Decision:** Reserve the exact task, agent, schedule and request before tree
+publication. Enforce dedup/cap checks in a bounded, rooted ledger transaction;
+include pending and flagged reservations in capacity. Retain the raw owner.
+Resolve approvals against that reservation and reject conflicts. Accept an existing
+agent only when its complete current-disk configuration matches; serialize creation
+with a bounded per-definition sidecar lock. Preserve the original task description.
+Commit approval after preparing the definition and surface failures, preserving the
+prior admission state. Deny unreadable ledgers and conflicting statuses. Keep personal
+tasks out of the shared KG. Both MCP and dashboard use shared finalization.
+
+**Alternatives:** Accepting a name collision treats unrelated configuration as
+consent. Approving before definition persistence acknowledges incomplete activation.
+Publishing before reservation leaves an untracked runnable tree after a write failure.
+Silently retrying a completed task is not a remedy for an approval storage error.
+
+**Consequences:** This is an approval-boundary repair, not an external-task benchmark.
+Agent YAML and ledger are separate atomic files, without a global transaction or
+power-loss guarantee. Failed preparation can leave a pending reservation for repair.
+Incomplete legacy records cannot be newly activated but can be rejected. Unowned
+legacy ledgers, absent-ledger provenance, immutable tree-version consent, stale
+feedback-review IDs and noncooperating definition writers remain open. The current
+compiled automation still describes administrative creation steps; actual task
+capabilities and independent effect verification must follow before assistant impact
+is claimed. Ordinary Sol policy and real-model benchmark configuration are unchanged.
+
+**Evidence:** [Ledger concurrency/failure tests](../../internal/persona/automation_transaction_test.go),
+[approval identity/retry tests](../../internal/persona/automation_finalize_test.go),
+[current-disk creation tests](../../internal/agent/registry_identity_test.go), and
+[admission tests](../../internal/agentexec/wiring_test.go).
 
 ---
 

@@ -45,7 +45,7 @@ obligation.
 | Package | Responsibility | Principal interface / consumers |
 |---|---|---|
 | `internal/a2a` | Peer discovery, task transport, bidding/award and card trust | `Server`, `BTAgentClient.SendTask`, `AuctionDelegateWithContext`; agent/dashboard wiring |
-| `internal/agent` | Agent registry, scheduler, history, memory, events, breaker persistence and deploy drift | `RunDeps.RunOnce`, `Scheduler` (durable admission/recovery holds), `AgentCircuitBreakerStore`; entrypoints |
+| `internal/agent` | Agent registry, scheduler, history, memory, events, breaker persistence and deploy drift | `RunDeps.RunOnce`, `Registry.EnsureDefinition` (exact creation retry), `Scheduler` (durable admission/recovery holds), `AgentCircuitBreakerStore`; entrypoints |
 | `internal/agentexec` | Assemble run dependencies and scoped generated-tree resolution | `NewRunDeps`, `ResolveGeneratedTreeForUser`, `AutomationBlocked` |
 | `internal/api` | Dashboard route/schema descriptions and validation support | `DashboardRoutes`; OpenAPI and HTTP middleware |
 | `internal/audit` | Append-only task audit records | JSONL audit writer; agent execution |
@@ -68,7 +68,7 @@ obligation.
 | `internal/knowledge` | Tree capabilities, discovery, feedback, breeding and impact graph | `KnowledgeGraph`, `Factory`; runners and gardener |
 | `internal/llm` | Configurable model adapters, fallback and health | LLM interface; chains, fusion and evaluation |
 | `internal/notebooklmauth` | NotebookLM authentication diagnosis/recovery and browser integration | Auth helper used by `bt-notebooklm-auth` and research actions |
-| `internal/persona` | User profiles, interactions, habits and tracked automations | `Store`, automation finalization, feedback escalation |
+| `internal/persona` | User profiles, interactions, habits and tracked automations | `Store`, transactional `AutomationStore.Reserve`, exact approval finalization, feedback escalation (ADR-284) |
 | `internal/reliability` | Panic/retry primitives, locks, DLQ, queues, routing and shared execution dispositions | Shared reliability APIs; optional adapters are not necessarily deployed |
 | `internal/research` | Deduplicated knowledge, goals/programs and quota-related state | `KnowledgeStore`, `ProgramStore`, `UpdatePrograms` |
 | `internal/security` | HTTP/session/auth primitives, rate limits, CSRF, input/path checks and probes | Shared middleware and `SessionStore`; entrypoints choose wiring |

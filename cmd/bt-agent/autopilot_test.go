@@ -75,7 +75,7 @@ func seedRecurringTask(t *testing.T, deps *mcpDeps, user, task string) {
 
 // TestConsiderAutomation_ProposesViaHITLOnce pins the observe→propose loop
 // (ADR-133 Phase 4): a task repeated 3× yields exactly one HITL automation
-// proposal backed by a compiled, persisted, KG-registered tree — and the
+// proposal backed by a compiled, persisted personal tree — and the
 // dedup ledger prevents the same habit from being proposed twice.
 func TestConsiderAutomation_ProposesViaHITLOnce(t *testing.T) {
 	deps := newAutopilotDeps(t)
@@ -103,8 +103,8 @@ func TestConsiderAutomation_ProposesViaHITLOnce(t *testing.T) {
 	} else if _, err := os.Stat(file); err != nil {
 		t.Errorf("persisted tree file missing: %v", err)
 	}
-	if _, registered := deps.kg.Trees[treeID]; !registered {
-		t.Errorf("compiled tree %q must be KG-registered", treeID)
+	if _, registered := deps.kg.Trees[treeID]; registered {
+		t.Errorf("personal tree %q must not expose the task in the shared KG", treeID)
 	}
 
 	// The HITL request carries the activation context for the approve hook.
