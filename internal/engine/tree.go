@@ -153,7 +153,12 @@ type Blackboard struct {
 	// via ChildTicks()). The agent runner filters these to Selector parents
 	// and merges them into the durable per-tree selector telemetry at run end.
 	// A pointer so shallow Blackboard copies share the same log (copylocks).
-	childTicks *childTickLog
+	childTicks    *childTickLog
+	executionStop *executionStop
+	// Branch-local admission evidence; never shared across parallel forks.
+	executionLocalError error
+	executionBlocked    bool
+	executionForced     bool
 
 	// liveRun and buildCapture support runtime tree mutation
 	// (tree_mutation.go / live_run.go). Pointer + map so forkBlackboard's
@@ -211,6 +216,9 @@ func BuildAndValidate(serTree *evolution.SerializableNode, bb *Blackboard) (btco
 	// lazily creating divergent ones.
 	if bb != nil && bb.childTicks == nil {
 		bb.childTicks = &childTickLog{}
+	}
+	if bb != nil && bb.executionStop == nil {
+		bb.executionStop = &executionStop{}
 	}
 	expanded, err := prepareTreeForBuild(serTree)
 	if err != nil {
@@ -559,6 +567,9 @@ func stripFencedBlocks(s string) string {
 
 func RunTask(bb *Blackboard, tree btcore.Command[Blackboard]) string {
 	start := time.Now()
+	if bb.executionStop == nil {
+		bb.executionStop = &executionStop{}
+	}
 
 	// Production Blackboard-construction sites (a2a Execute, bt_run_task MCP
 	// tool) leave ChainState nil; dozens of engine nodes write
@@ -600,6 +611,9 @@ func RunTask(bb *Blackboard, tree btcore.Command[Blackboard]) string {
 		return bb.Result
 	}
 	btCtx := btcore.NewBTContext(ctx, bb)
+	if bb.applyExecutionStop() {
+		return bb.Result
+	}
 
 	if bb.liveRun != nil {
 		tree = bb.liveRun.applyPending(btCtx, bb, tree)
@@ -615,7 +629,7 @@ func RunTask(bb *Blackboard, tree btcore.Command[Blackboard]) string {
 	// Mutable runs (bb.liveRun set) apply queued tree mutations at each tick
 	// boundary — a quiescent point — and keep ticking the rebuilt tree.
 	const maxTicks = 1000
-	for tick := 1; code == 0 && bb.Outcome != "pending_approval" && tick < maxTicks; tick++ {
+	for tick := 1; code == 0 && bb.ExecutionError() == nil && bb.Outcome != "pending_approval" && tick < maxTicks; tick++ {
 		// Running means waiting for future progress. Pace ticks so async producers
 		// (mutations, timers, cancellation) can run before the bounded tick budget.
 		select {
@@ -635,6 +649,7 @@ func RunTask(bb *Blackboard, tree btcore.Command[Blackboard]) string {
 	bb.DurationMs = time.Since(start).Milliseconds()
 
 	switch {
+	case bb.applyExecutionStop():
 	case bb.Outcome == "goap_fusion_rate_limited":
 		// Deliberate graceful-degrade carryover set by a leaf (e.g. an active
 		// Claude rate-limit backoff) — preserve it instead of collapsing the

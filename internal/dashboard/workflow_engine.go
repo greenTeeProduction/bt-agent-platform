@@ -204,47 +204,47 @@ func newTaskNonce() string {
 
 // ─── WorkflowTask Management ───
 
-// ApproveTask marks a task as approved and ready for execution.
+// ApproveTask is the compatibility wrapper; external boundaries use the
+// error-returning variant to distinguish audit failure from a missing task.
 func (w *Workflow) ApproveTask(taskID, approver string) *WorkflowTask {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	for i := range w.Tasks {
-		if w.Tasks[i].ID == taskID {
-			now := time.Now()
-			w.Tasks[i].Approval = Approval{
-				ApprovedBy: approver,
-				ApprovedAt: &now,
-				IsApproved: true,
-			}
-			w.Tasks[i].Status = StatusApproved
-			w.UpdatedAt = now
-			resolveHITLAudit(taskID, approver, "", true)
-			return &w.Tasks[i]
-		}
-	}
-	return nil
+	task, _ := w.ApproveTaskWithError(taskID, approver)
+	return task
 }
-
-// RejectTask marks a task as rejected with a reason.
+func (w *Workflow) ApproveTaskWithError(taskID, approver string) (*WorkflowTask, error) {
+	return w.decideTask(taskID, approver, "", true)
+}
 func (w *Workflow) RejectTask(taskID, rejector, reason string) *WorkflowTask {
+	task, _ := w.RejectTaskWithError(taskID, rejector, reason)
+	return task
+}
+func (w *Workflow) RejectTaskWithError(taskID, rejector, reason string) (*WorkflowTask, error) {
+	return w.decideTask(taskID, rejector, reason, false)
+}
+func (w *Workflow) decideTask(taskID, reviewer, reason string, approved bool) (*WorkflowTask, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	for i := range w.Tasks {
-		if w.Tasks[i].ID == taskID {
-			now := time.Now()
-			w.Tasks[i].Approval = Approval{
-				ApprovedBy: rejector,
-				RejectedAt: &now,
-				Reason:     reason,
-				IsApproved: false,
-			}
-			w.Tasks[i].Status = StatusRejected
-			w.UpdatedAt = now
-			resolveHITLAudit(taskID, rejector, reason, false)
-			return &w.Tasks[i]
+		if w.Tasks[i].ID != taskID {
+			continue
 		}
+		if err := resolveHITLAudit(taskID, reviewer, reason, approved); err != nil {
+			return nil, err
+		}
+		now := time.Now()
+		approval := Approval{ApprovedBy: reviewer, Reason: reason, IsApproved: approved}
+		if approved {
+			approval.ApprovedAt = &now
+			w.Tasks[i].Status = StatusApproved
+		} else {
+			approval.RejectedAt = &now
+			w.Tasks[i].Status = StatusRejected
+		}
+		w.Tasks[i].Approval = approval
+		w.UpdatedAt = now
+		snapshot := w.Tasks[i]
+		return &snapshot, nil
 	}
-	return nil
+	return nil, nil
 }
 
 // SetTaskStatus updates the status of the WorkflowTask matching taskID and,

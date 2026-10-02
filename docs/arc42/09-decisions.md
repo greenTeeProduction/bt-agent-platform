@@ -1,286 +1,311 @@
 # 9. Architecture Decisions
 
-This is the platform's append-only architecture decision log, ADR-001 through
-ADR-258. Early entries (001–007) record the founding decisions; the rest is
-the running log the autonomous goap-fusion loop appends to as changes land.
-Detailed rationale referenced from other sections (`→ ADR-NNN`) resolves here.
+This append-only log preserves the rationale and limitations recorded when
+changes landed. **A historical Accepted status is not a claim that every
+consequence remains true today.** Current structure and behavior are in
+[§§3–8](README.md); current acceptance evidence and unresolved work are in
+[§10](10-quality.md) and [§11](11-risks-debt.md).
 
-Consolidation notes (2026-07-16):
-
-- **ADR-131–133** were folded in from the retired `docs/adr/` directory and
-  carry "(formerly docs/adr ADR-00x)" aliases — historical references to
-  "docs/adr ADR-008/009/010" (Composable Blocks, Blackboard Context
-  Offloading, Personalized Self-Evolving Agents) resolve to them. The log's
-  own ADR-008/009/010 below are different, unrelated decisions.
-- The log contains **two entries numbered ADR-024** (a historical duplicate;
-  both kept verbatim — code comments cite both decisions).
-- **ADR-105** was never logged as its own entry; its content (the
-  `RecentRuns` feedback-snapshot fix) lives inline in
-  [§8](08-crosscutting-concepts.md) File-Based Persistence. **ADR-104** below
-  is a reconstruction — see its provenance note.
+Navigation and provenance:
+- ADR-131–133 retain aliases from the retired `docs/adr/` directory; the
+  log's ADR-008/009/010 are different decisions.
+- Two historical records use ADR-024. Their bodies/IDs are preserved; cite
+  [composition/input boundaries](#adr-024-composition) or
+  [ExperienceBank locking](#adr-024-experience-bank) explicitly.
+- ADR-104 and ADR-105 are reconstructed records with provenance, not newly
+  invented historical approvals.
+- ADR-259/260 document already-implemented provider and HTTP-security
+  decisions missing from the old log. New records use the next unused ID.
+- The index links to stable explicit anchors; never renumber existing
+  records or copy their chronological narratives into the current views.
 
 ## ADR Index
 
 | ID | Title | Status | Date |
 |---|---|---|---|
-| ADR-001 | Behavior Trees as Core Execution Model | Accepted | 2026-05-26 |
-| ADR-002 | MCP as External Interface | Accepted | 2026-05-26 |
-| ADR-003 | File-Based Persistence over SQL | Accepted | 2026-05-27 |
-| ADR-004 | YAML-Defined Agent Platform | Accepted | 2026-05-27 |
-| ADR-005 | Stockfish-Adapted Evolution Engine | Accepted | 2026-05-27 |
-| ADR-006 | ChainAction — LLM Integration via BT Nodes | Accepted | 2026-05-28 |
-| ADR-007 | Reliability Architecture — Circuit Breakers, Retry, DLQ | Accepted | 2026-05-29 |
-| ADR-008 | Auction-Based A2A Task Allocation | Accepted | 2026-07-04 |
-| ADR-009 | Deterministic, LLM-Free Evolution MCP Tools | Accepted | 2026-07-05 |
-| ADR-010 | Non-Wedging Self-Halting Circuit Gates for the GOAP Fusion Loop | Accepted | 2026-07-05 |
-| ADR-011 | Adopting the Horizontal-Scaling Substrate (RemoteExecutor + AgentRouter) | Accepted | 2026-07-05 |
-| ADR-012 | Wiring the Scalability Substrate into the Dashboard Endpoint and Probe (Milestones 3–4) | Accepted | 2026-07-05 |
-| ADR-013 | Making the Production Superpowers Pipeline Tree Operator-Selectable and Guarded | Accepted | 2026-07-05 |
-| ADR-014 | Mandatory Descriptions for Every Node Class in Curated Domain Trees | Accepted | 2026-07-05 |
-| ADR-015 | Domain-Mapped Island-Model Evolution as a Deterministic MCP Tool | Accepted | 2026-07-05 |
-| ADR-016 | Durable Claude Rate-Limit Backoff for the GOAP Fusion Loop | Accepted | 2026-07-08 |
-| ADR-017 | Experience-Grounded Evolution Closes the Learn→Discover→Evolve Loop | Accepted | 2026-07-08 |
-| ADR-018 | Bounded ExperienceBank with Quality-Aware Eviction | Accepted | 2026-07-08 |
-| ADR-019 | Production Entry Points for Memetic and Q-Learning Evolution | Accepted | 2026-07-08 |
-| ADR-020 | CMA-ES Parameter Tuning Routed Through the Bottleneck Tool | Accepted | 2026-07-08 |
-| ADR-021 | Gardener Cycles Record Into and Retrieve From the Shared ExperienceBank | Accepted | 2026-07-08 |
-| ADR-022 | Two-Writer-Safe ExperienceBank Persistence and Uniform Evolve-Population Validation | Accepted | 2026-07-08 |
-| ADR-023 | Full Prometheus Histogram Exposition and a Build-Identity Gauge | Accepted | 2026-07-08 |
-| ADR-024 | Fail-Loud Compose, Feedback, and CLI Input Boundaries | Accepted | 2026-07-08 |
-| ADR-024 | Sidecar flock Serializes All ExperienceBank Write Paths | Accepted | 2026-07-08 |
-| ADR-025 | Drop-Safe, Bounded Dead-Letter Replay and an Honest Deferred SLO Outcome | Accepted | 2026-07-09 |
-| ADR-026 | QD/Island Elite Fitness Write-Back into the Knowledge Graph | Accepted | 2026-07-09 |
-| ADR-027 | Fitness-Driven Selection Pressure in Deterministic Breeding and Discovery | Accepted | 2026-07-09 |
-| ADR-028 | Separate Structural Fitness from the Runtime-Success EMA | Accepted | 2026-07-09 |
-| ADR-029 | Durable, Merge-Safe Telemetry for the Selector-Ordering Optimizers | Accepted | 2026-07-09 |
-| ADR-030 | Analytics Signals Drive Registration, Breeding, and Failure-Targeted Evolution | Accepted | 2026-07-09 |
-| ADR-031 | Proactive Crisis Intervention Wired into the GA Evolution Loop | Accepted | 2026-07-09 |
-| ADR-032 | Aggregated Gardener Metrics Document and a GA Population-Health Snapshot | Accepted | 2026-07-09 |
-| ADR-033 | Durable, Merge-Safe Archives for Island-Model and MAP-Elites Evolution | Accepted | 2026-07-10 |
-| ADR-034 | Per-Base-Tree Scoping of the Durable Island Archive | Accepted | 2026-07-10 |
-| ADR-035 | Seeding-Faithful Evolved-Fitness Attribution in Domains-Mode Island Evolution | Accepted | 2026-07-10 |
-| ADR-036 | Crash-Safe, Merge-on-Save DLQ Persistence and Reload-Before-Consume Replay | Accepted | 2026-07-10 |
-| ADR-037 | GA Population-Health Snapshot Wired into the Evolve Tool Responses | Accepted | 2026-07-11 |
-| ADR-038 | Self-Healing Envelope Shared Between Evolve and EvolveWithExperience | Accepted | 2026-07-12 |
-| ADR-039 | CheckCodebaseFit Probe Failures No Longer Hard-Fail the bt_fusion Cycle | Accepted | 2026-07-12 |
-| ADR-040 | Bounding the Durable Island-Model Archive Against Runaway Growth | Accepted | 2026-07-12 |
-| ADR-041 | Durable, Bounded Cross-Run Memory for Q-Learning Evolution | Accepted | 2026-07-12 |
-| ADR-042 | Persisting Evolved Winner Trees from the Production Genetic-Evolution Tools | Accepted | 2026-07-12 |
-| ADR-043 | Wiring the Durable MAP-Elites Archive into bt_evolve_qd | Accepted | 2026-07-12 |
-| ADR-044 | Zero-Risk Deploy-Drift Diagnosis via Build-Revision Stamping | Accepted | 2026-07-12 |
-| ADR-045 | Closing the Deploy-Drift Loop — Dashboard Self-Rebuild and Retry-Storm Guardrails | Accepted | 2026-07-12 |
-| ADR-046 | SafeGo Panic Recovery Adopted Across A2A, Dashboard, and Knowledge-Graph Fan-Out | Accepted | 2026-07-12 |
-| ADR-047 | SafeGo Extended to reactive_parallel Fan-Out; DLQ ID Defaulting and bt_dlq_list Reload Close Two Residual Gaps | Accepted | 2026-07-12 |
-| ADR-048 | SafeGo Extended to LLM Health Monitor, Request-Timeout Middleware, and Scalability Probe Fan-Out (milestones 1–3/5) | Accepted | 2026-07-12 |
-| ADR-049 | SafeGo Extended to the Dashboard Pipeline-Run Goroutine and bt-agent's KG-Index/DLQ-Scan Goroutines (closes milestones 4–5/5) | Accepted | 2026-07-12 |
-| ADR-050 | Wiring RebuildBackoff and Scheduler.AnyInFlight into the Production Deploy-Drift Watchers | Accepted | 2026-07-12 |
-| ADR-051 | Extending the Self-Healing Envelope to NSGA-II, the Last Zero-Observability Evolve Variant | Accepted | 2026-07-13 |
-| ADR-052 | Change-Impact Graph Exposed via a CLI Subcommand and an MCP Tool | Accepted | 2026-07-13 |
-| ADR-053 | SafeGo/Recover Extended to the LLM Subprocess Scanner, the Fallback-Chain Call Loop, and the Scheduler/A2A Start Goroutines | Accepted | 2026-07-13 |
-| ADR-054 | Circuit Breaker on ACPClient Stops Failure-Storm Respawns of a Crash-Looping ACP Subprocess | Accepted | 2026-07-13 |
-| ADR-055 | RunTask Backstops bb.Result on Every Non-Success Terminal Outcome | Accepted | 2026-07-13 |
-| ADR-056 | HITL Escalated Requests Terminate Waits and Become Resolvable | Accepted | 2026-07-13 |
-| ADR-057 | Deterministic `bt_evolve_pareto` MCP Entry Point for `ParetoPopulation.EvolvePareto` | Accepted | 2026-07-13 |
-| ADR-058 | `DecisionTrace.Steps` Populated from `bb.ChildTicks()` for `ExplainLastFailure` | Accepted | 2026-07-13 |
-| ADR-059 | SafeGo Extended to the Webhook-Publisher Loop and the RateLimiter/SessionStore Cleanup Goroutines (milestones 1–3/5) | Accepted | 2026-07-13 |
-| ADR-060 | SafeGo Extended to the Key-Rotation, Config-Watcher, and Node-Heartbeat Cleanup Goroutines (closes milestones 4–5/5) | Accepted | 2026-07-13 |
-| ADR-061 | `WorkflowApprovalWait` and `FindPendingByTaskID` Stop Treating an Escalated HITL Request as Approved (milestones 1–3/4) | Accepted | 2026-07-13 |
-| ADR-062 | Cross-Domain Experience Transfer Closes the Island Model's Own Feedback Loop (Q2 Evolvability, milestone 4/4) | Accepted | 2026-07-13 |
-| ADR-063 | Durable Per-Agent Circuit Breaker State Feeds the Dashboard's cb_status Column | Accepted | 2026-07-13 |
-| ADR-064 | Honest A2A SendTask Errors and Per-Winner Retry/Circuit-Breaking in Auction Dispatch (A2A Reliability Program, milestones 1 & 3 of 5) | Accepted | 2026-07-13 |
-| ADR-065 | A2A Auction Winner Circuit Breakers Persist Across Engine Ticks and Restarts (A2A Reliability Program, milestone 5 of 5) | Accepted | 2026-07-13 |
-| ADR-066 | Personal-Tree Reflection Evidence Keyed on the Real Tree ID and Owning User; `bankFor` Stops Permanently Caching a Transient Open Failure | Accepted | 2026-07-13 |
-| ADR-067 | User-Scoped Runtime-Generated Tree Resolution (ADR-010 Personalization Hardening Program, milestone 3/5) | Accepted | 2026-07-13 |
-| ADR-068 | Distinguishing an Escalated-Origin HITL Resolution from a Routine Pending One (Closes the HITL-Escalation Program, Milestone 4/4) | Accepted | 2026-07-13 |
-| ADR-069 | `agent.RunDeps`/`RunOnce` Consult a User-Scoped Tree Resolver, Closing the ADR-010 Personalization Hardening Program (Milestone 5/5) | Accepted | 2026-07-13 |
-| ADR-070 | `NormalizeImpactSource` Exported from `internal/knowledge`, Closing Half of the CLI/MCP Normalization Split (Q1 Correctness Program, Milestone 1/3) | Accepted | 2026-07-13 |
-| ADR-071 | `bt_impact_tests` Normalizes and Honestly Rejects Out-of-Root Source Paths, Closing the Q1 Correctness Program (Milestone 3/3) | Accepted | 2026-07-13 |
-| ADR-072 | Task-ID Collision Fix and a Priority-Ordered Approval Audit Trail for Dashboard Tasks (Q1 Correctness / Q3 Reliability Program, Milestones 1–3/3) | Accepted | 2026-07-13 |
-| ADR-073 | `dashboard.PickTreeForTask` Routes Auction-Shaped Tasks to `auction_demo`, Exercising the A2A Auction on the Sprint-Execution Path | Accepted | 2026-07-13 |
-| ADR-074 | Bounded HTTP Timeout, Circuit Breaker, Retry, and Lock Scoping Harden the Knowledge-Graph Embedding Client Against an Unresponsive Ollama Backend | Accepted | 2026-07-13 |
-| ADR-075 | The Scheduler and DLQ Replay Dispatch Through the AgentRouter Instead of Calling RunOnce Directly, Closing Milestone 5/5 of the Horizontal-Scaling Substrate | Accepted | 2026-07-13 |
-| ADR-076 | `bt_evolve_island` Wires Its `IslandModel.Bank` Field, Making Cross-Domain Experience Transfer Live in Production | Accepted | 2026-07-13 |
-| ADR-077 | `pending_approval` Survives `engine.RunTask` as a Non-Terminal Outcome and Routes Through `TaskStateBridge` in the A2A Responder | Accepted | 2026-07-13 |
-| ADR-078 | `persistEvolvedWinner`/`RegisterEvolved` Only Overwrite a Stored Evolved Winner When the New Fitness Actually Beats It | Accepted | 2026-07-13 |
-| ADR-079 | `cmd/bt-gardener` Wires the Learned Selector-Ordering Pass into Its Production Daemon and MCP Tool | Accepted | 2026-07-13 |
-| ADR-080 | `handleAnalyze` Adopts the `Workflow` Task-Derivation Engine and Stops Swallowing ThinkTank Orchestrator Errors (Q1 Correctness Program, Milestones 1–3/4) | Accepted | 2026-07-13 |
-| ADR-081 | Workflow-Level Approval Endpoints Wired Over HTTP and `RunFullPipeline`'s Auto-Approval Removed (Q1 Correctness Program, Milestone 4/4 — Closes the Program) | Accepted | 2026-07-13 |
-| ADR-082 | `Workflow`-Derived Task IDs Made Collision-Resistant and `currentWorkflow`/`Workflow.Tasks` Made Concurrency-Safe | Accepted | 2026-07-13 |
-| ADR-083 | `persistEvolvedWinner`'s Knowledge-Graph Bookkeeping and Tree-Store Write Made Atomic | Accepted | 2026-07-13 |
-| ADR-084 | `MarkSuccessful` and `EscalateToDeepSeek` Make the `OutcomeSelector`'s Self-Correction and Escalation Paths Real (Q1 Correctness / Q3 Reliability Program, Milestones 1–2/4) | Accepted | 2026-07-13 |
-| ADR-085 | `RunTask`'s Terminal Backstop Flips `bb.Outcome` on Failed Quality Validation, Closing the OutcomeSelector Program (Milestone 4/4) | Accepted | 2026-07-14 |
-| ADR-086 | `handleWorkflowApprove`/`handleWorkflowReject` Mirror Their Decision into `taskStore`, Closing the Approval-Surface Split ADR-081 Left Open | Accepted | 2026-07-14 |
-| ADR-087 | `handleAgentExecute` Carries `RunResult.Quality` into `AgentResult.QualityScore` for Remote-Routed Runs | Accepted | 2026-07-14 |
-| ADR-088 | `evolution.MetaValidator` Wired into the Gardener's Live Mutation-Acceptance Loop | Accepted | 2026-07-14 |
-| ADR-089 | `handleSprintExecute` Reconciles `currentWorkflow`'s Task State with `taskStore` as Tasks Actually Execute | Accepted | 2026-07-14 |
-| ADR-090 | A2A Agent-Card Signing Wired into the Card-Serving and Card-Consuming Paths | Accepted | 2026-07-14 |
-| ADR-091 | Durable Cross-Run Archives for the Pareto Front and NSGA-II's Final Front (Q2 Evolvability, Milestones 1–3/5) | Accepted | 2026-07-14 |
-| ADR-092 | Characterization Tests for the Goal and Blackboard MCP Tools Surface Two Real Bugs | Accepted | 2026-07-15 |
-| ADR-093 | Durable Pre-Mutation Snapshots and Operator-Triggered Tree Rollback for the Gardener | Accepted | 2026-07-15 |
-| ADR-094 | Gardener-Embedded Transposition Table and Deterministic Eviction (Q2 Evolvability, Milestones 1–3/3) | Accepted | 2026-07-15 |
-| ADR-095 | A Durable, Learning Archive for Expert Knowledge (Q2 Evolvability, Milestones 1–2/2) | Accepted | 2026-07-15 |
-| ADR-096 | Benchmark-Suite Gate on the Standalone Evolution Tools' Durable-Archive Winners (Q2 Evolvability, Milestones 1–2/4) | Accepted | 2026-07-15 |
-| ADR-097 | Domain-Aware Fitness Override for Genuine Knowledge-Graph Runs (NotebookLM Research) | Accepted | 2026-07-15 |
-| ADR-098 | An Operator-Triggered Evolution Kill Switch for the Gardener | Accepted | 2026-07-15 |
-| ADR-099 | `DashboardRoutes()` Gains 15 Missing `/api/*` Route Definitions, Closing the Response-Validator's Route-Coverage Blind Spot (Q1 Correctness / Q3 Reliability Program, Milestone 1/4) | Accepted | 2026-07-15 |
-| ADR-100 | `dashboard.PickTreeForTask` Consults `knowledge.KnowledgeGraph.Discover` Instead of Relying Solely on Its Static Keyword Switch | Accepted | 2026-07-15 |
-| ADR-101 | `dashboard.TaskStore` Load/Save Made Atomic and Fail-Loud on Corruption | Accepted | 2026-07-15 |
-| ADR-102 | `Gardener.evolveTreeV2`'s Crisis Mutation Budget Now Scales from the Detector's Calibrated `EmergencyRate` Instead of a Hardcoded Doubling | Accepted | 2026-07-15 |
-| ADR-103 | `ExpertKnowledge.LearnedPatterns` Capped at 500, Evicting the Lowest-Gain Entry (Q2 Evolvability, Milestone 1/3) | Accepted | 2026-07-15 |
-| ADR-104 | `ExpertKnowledge` Observation Across MAP-Elites/Pareto/NSGA-II/Island and Island Real Breeding (reconstructed) | Accepted | 2026-07-15 |
-| ADR-106 | `ExpertKnowledge` Warm-Start/Save Wired into `bt_evolve_island`, `bt_evolve_multiobjective`, and `bt_evolve_pareto` (Q2 Evolvability, NotebookLM Research) | Accepted | 2026-07-15 |
-| ADR-107 | The Gardener's Deep-Search `BestMutation` Now Feeds Back into the Live Tree (Q2 Evolvability, NotebookLM Research) | Accepted | 2026-07-15 |
-| ADR-108 | The A2A Auction Responder Reuses `RespondToAnnouncement` and a Cached, Already-Signed Card (NotebookLM Research) | Accepted | 2026-07-15 |
-| ADR-109 | `bt_evolve_bottlenecks`' Genetic Path Conditions Its Warm-Start on the Failing Task, Not Just Tree Type (Q2 Evolvability, Milestones 1–3/3) | Accepted | 2026-07-15 |
-| ADR-110 | `bt_evolve_qd` Adopts `MAPElitesPopulation.EvolveMAPElites` Directly and Wires `ExpertKnowledge`, Closing the Q2 Evolvability Learned-Pattern Program (Milestones 1–2/2) | Accepted | 2026-07-15 |
-| ADR-111 | Benchmark-Suite Gate Extended to `bt_evolve_qd` and `bt_evolve_qlearning` (Q2 Evolvability, Milestones 2–3/4) | Accepted | 2026-07-15 |
-| ADR-112 | Deep-Search-Applied Gardener Mutations Are Re-Validated Before Persisting (Q2 Evolvability, Milestone 4/4) | Accepted | 2026-07-15 |
-| ADR-113 | Benchmark-Suite Gate Extended to `bt_evolve_pareto`, Closing Out Q2 Evolvability's Benchmark-Gate Coverage | Accepted | 2026-07-15 |
-| ADR-114 | The Gardener's Deep-Search Apply Path Is Gated Through `MetaValidator` and Wired Live in Production (Q2 Evolvability, Milestones 1–3/3) | Accepted | 2026-07-15 |
-| ADR-115 | Multi-Revision Snapshot History and Automatic Fail-Closed Rollback for the Gardener (Q2 Evolvability, Milestones 1–3/3) | Accepted | 2026-07-15 |
-| ADR-116 | `RunFullPipeline` Executes Every Present Sprint, Halts on a Thinktank-Phase Error, and Gets Its First Production Caller (Q1 Correctness Program, Milestones 1–3/3) | Accepted | 2026-07-15 |
-| ADR-117 | The A2A Card Registry Becomes Refreshable at Runtime Instead of a One-Shot `NewServer` Snapshot (NotebookLM Research) | Accepted | 2026-07-15 |
-| ADR-118 | `bt_evolve_memetic` and the CMA-ES Branch of `bt_evolve_bottlenecks` Stop Discarding Their Evolved Winner (NotebookLM Research) | Accepted | 2026-07-15 |
-| ADR-119 | Adaptive, Track-Record-Driven Generation Budgets for the Five Benchmark-Gated Evolution Tools (Q2 Evolvability, Milestones 1–3/3) | Accepted | 2026-07-15 |
-| ADR-120 | `RunTask`'s Terminal Switch Preserves `goap_fusion_rate_limited` Instead of Collapsing It to a Raw Success/Failure Code (NotebookLM Research) | Accepted | 2026-07-15 |
-| ADR-121 | The Self-Healing Envelope Reaches the Last Three GA Variants — Q-Learning, Memetic, and MAP-Elites (Q2 Evolvability, Milestones 1–3/3) | Accepted | 2026-07-15 |
-| ADR-122 | `BTFusionTree`'s HITL Gate Reclassified `local_reversible`/`auto_approve`, Ending Every Unattended Cycle's Deadlock (Q3 Reliability, Milestone 1/2) | Accepted | 2026-07-16 |
-| ADR-123 | `mcpDeps` Gains a `bbMu` Mutex, and `engine.Server` Gains a `RegisterBlackboardTool` Primitive, for the Shared-Blackboard Data Race Across `bt_run_task` and the Cross-File Tool Handlers That Touch `deps.bb` (Q1 Correctness / Q3 Reliability, Milestones 1, 4 & 5/5) | Accepted | 2026-07-16 |
-| ADR-124 | `cmd/bt-agent` Migrates All Six Shared-Blackboard Tools onto `Server.RegisterBlackboardTool`, Closing ADR-123's Residual Production Gap | Accepted | 2026-07-16 |
-| ADR-125 | The ExperienceBank Write Side Now Threads Failing-Task Context, Closing ADR-109's Warm-Start Loop (Q2 Evolvability, Milestones 1–3/3) | Accepted | 2026-07-16 |
-| ADR-126 | `/api/trees` Surfaces Fitness and Evolution Lineage, Closing Milestones 1–2/4 of the Dashboard's Dead Blind Spot (Q1 Correctness / Q2 Evolvability) | Accepted | 2026-07-16 |
-| ADR-127 | `bt_evolve_bottlenecks` Consults `EvolutionLineage` Before Re-Evolving a Tree With a Fitter, Non-Regressing Evolved Descendant, Closing Milestone 4/4 of ADR-126's Program (Q1 Correctness / Q2 Evolvability) | Accepted | 2026-07-16 |
-| ADR-128 | `ACPClient.GenerateCtx` Guards Its `cmd.Stderr` Buffer With a Mutex, Closing a Data Race Between the Subprocess's Copy Goroutine and the Timeout/Scan-Error Read Path (NotebookLM Research) | Accepted | 2026-07-16 |
-| ADR-129 | `setGoapStateDurable` Makes GOAP Fusion Charge Stamps Durable, and `clearSuperpowersPlanState` Retires Them on Cycle Completion (Q3 Reliability, Milestones 1–2/2) | Accepted | 2026-07-16 |
-| ADR-130 | `IsKnownChainKind` Closes the ChainAction chain_type / Leaf-Children Validation Gap at Authoring Time (Q1 Correctness, Complete) | Accepted | 2026-07-16 |
-| ADR-131 | Composable Behavior-Tree Building Blocks (formerly docs/adr ADR-008) | Accepted | 2026-06-04 |
-| ADR-132 | Scoped Blackboard for Context Offloading (formerly docs/adr ADR-009) | Accepted | 2026-06-14 |
-| ADR-133 | Personalized Self-Evolving Agents (formerly docs/adr ADR-010) | Accepted — implemented | 2026-07-08 |
-| ADR-134 | `RebuildTarget.Unit` Closes the Deploy-Drift Restart-Handoff Gap: Swapped Sibling Units Restart Too, and `bt-dashboard`/the MCP Binary Join Fleet-Wide Adoption (Q3 Reliability, Milestones 1–3/3) | Accepted | 2026-07-17 |
-| ADR-135 | `GenerateWithModel`/`generateCtx` Adopt Retry-With-Full-Jitter, and `FallbackLLM.generate` Gains a Per-Model Circuit Breaker (Q3 Reliability, Milestones 2–4/5) | Accepted | 2026-07-17 |
-| ADR-136 | `internal/engine/chains.go`'s Chain Executors Adopt the Shared `reliability.RetryPolicy`, Closing Milestone 5/5 of the LLM Text-Generation Reliability Program | Accepted | 2026-07-17 |
-| ADR-137 | Evolved-Tree Structural Metadata, Lineage Edges, and Resurrection-on-Load Survive a Daemon Restart (Q2 Evolvability, Milestones 1–3/4) | Accepted | 2026-07-17 |
-| ADR-138 | `persistEvolvedWinner` Flushes the Feedback Snapshot to Disk on Every Evolved-Winner Registration, Closing Milestone 4/4 of ADR-137's Program (Q2 Evolvability) | Accepted | 2026-07-17 |
-| ADR-139 | `dlqReplayOutcomeError` Extends the Healthy-Outcome Classification to the DLQ Replay Executor, Ending Endless Re-Replay of Rate-Limit and No-Code Outcomes (NotebookLM Research) | Accepted | 2026-07-17 |
-| ADR-140 | `bt_evolve_selection_pressure` Adopts the ADR-127 Lineage-Skip Guard and `bt_evolve_genetic` Writes Fitness Back to the Base Tree, Closing the Q2 Evolvability Fitness-Feedback/Lineage-Skip Consistency Program (Milestones 1–2/2) | Accepted | 2026-07-17 |
-| ADR-141 | `AgentExecutor.RunTaskResult` Joins the Shared Per-Agent Circuit Breaker as a Third Writer/Enforcer, Closing the Dashboard's Dead Task-Metrics Recording Gap (Q3 Reliability, Milestones 1–3/3) | Accepted | 2026-07-17 |
-| ADR-142 | `dashboard.RecordTask` Wired into `AgentExecutor.RunTaskResult` and the Two Direct `agent.RunAgent` Call Sites That Bypass It, Closing the Dashboard's Dead Agent-Metrics Recording Gap (Q3 Reliability, Milestones 1–2/3) | Accepted | 2026-07-17 |
-| ADR-143 | `AgentExecutor.recordBlockFitnessMetric` Wires `RecordBlockFitness` into `RunTaskResult`, Closing the Task-Metrics/Block-Fitness Program (Q3 Reliability, Milestone 3/3) | Accepted | 2026-07-17 |
-| ADR-144 | `historyQualityScore`/`recordedQuality`, `runJob`'s Published `failureReason`, and `AgentExecutor.recordCircuitBreakerOutcome` All Exempt `RateLimitCarryoverOutcome`, Closing Classification Gaps the 2026-07-17 `cycleBreakerSuccess` Fix Left Behind (Q1 Correctness / Q3 Reliability, Milestones 1–3/5) | Accepted | 2026-07-17 |
-| ADR-145 | `AgentExecutor.recordTaskMetric`/`recordBlockFitnessMetric` Exempt `RateLimitCarryoverOutcome`, and `agent.IsRateLimitCarryover` Consolidates the Duplicated Check Across All Call Sites, Closing the ADR-144 Program (Q1 Correctness / Q3 Reliability, Milestones 4–5/5) | Accepted | 2026-07-17 |
-| ADR-146 | `gardener.Config.KnowledgeGraph` Lets `RunCycleV2` Rank Trees by `ComputeAnalytics()` Bottleneck/Selection-Pressure Signals Instead of Flat Alphabetical Order (NotebookLM Research) | Accepted | 2026-07-17 |
-| ADR-147 | The Real GOAP A* Planner Is Wired Into Production Domain Trees Ahead of the Keyword Router, and a Fail-Loud Startup Validation Gate Is Added (Q2 Evolvability / Q1 Correctness, Milestones 1–3/3) | Accepted | 2026-07-17 |
-| ADR-148 | `handleTrees` Merges the `domains.AllDomainTrees()` Catalog into `/api/trees`, Making It a Complete Single Source for Tree Selection (NotebookLM Research) | Accepted | 2026-07-17 |
-| ADR-149 | `BTAgentExecutor.Execute`/`Cancel` and `AuctionDelegate` Are Routed Through the Platform's Shared `agent.History` Chokepoint, Closing the A2A Run-Visibility Gap (Q1 Correctness / Q3 Reliability, Milestones 1–2/2) | Accepted | 2026-07-17 |
-| ADR-150 | `WebhookPublisher.handleEvent` Adopts Retry-With-Full-Jitter, a Per-Subscription Circuit Breaker, and an In-Memory DLQ with Replay, Closing the Hermes Webhook-Delivery Reliability Program (Q3 Reliability, Milestones 1–3/3) | Accepted | 2026-07-17 |
-| ADR-151 | `RunPanel` Adopts `SafeGo` and a Package-Level Circuit Breaker, and `Run` Enforces `cfg.Timeout` via `context.WithTimeout` (Q3 Reliability, Milestones 1–3/4) | Accepted | 2026-07-17 |
-| ADR-152 | `Judge` and `Synthesize` Adopt Retry-With-Full-Jitter for Their Single-Shot LLM Calls, Closing the Fusion-Panel Reliability Program (Q3 Reliability, Milestone 4/4) | Accepted | 2026-07-17 |
-| ADR-153 | `agents.js` Fetches `/api/trees` and Groups the Create-Agent Dropdown into `<optgroup>`s by Category, and `handleTrees` Carries `domains.Descriptions` Text, Closing the ADR-148 Program (Q4 Personalization & Self-Growth / Q2 Evolvability) | Accepted | 2026-07-17 |
-| ADR-154 | `Registry.SaveTree` and `MetricsTracker.Save` Check the `os.WriteFile` Error Before Renaming, and `evolveTreeV2`/`RunCycleV2` Propagate Save Failures Instead of Discarding Them (Q3 Reliability, Milestones 1–3/4) | Accepted | 2026-07-17 |
-| ADR-155 | `RunTask` Nil-Guards `bb.ChainState` at Its Single Choke Point, Closing Milestone 1/4 of the ChainState Nil-Map-Panic Program (Q1 Correctness / Q3 Reliability) | Accepted | 2026-07-17 |
-| ADR-156 | `Execute` Reads `bb.ChainState["auction_award"]` Back to Attribute the History Record to the Auction Winner, Closing Milestone 4/4 of the ChainState Nil-Map-Panic Program (Q1 Correctness / Q3 Reliability) | Accepted | 2026-07-17 |
-| ADR-157 | `BuildKnowledgeGraph` Registers the 24 Domain Trees `AllDomainTrees()` Was Missing, Closing the KG-Registry Domain-Tree-Drift Gap (NotebookLM Research) | Accepted | 2026-07-17 |
-| ADR-158 | `buildGardenerConfig` Wires a Live `*knowledge.KnowledgeGraph` into the Gardener Daemon, and `evolveTreeV2` Writes Accepted Mutations Back into It, Closing ADR-146's Production-Wiring Gap (Q2 Evolvability, Milestones 1–3/4) | Accepted | 2026-07-17 |
-| ADR-159 | `buildDashboardKnowledgeGraph` Loads Persisted Feedback into `bt-dashboard`'s Knowledge Graph, Closing Milestone 4/4 of the ADR-158 Program (Q2 Evolvability) | Accepted | 2026-07-18 |
-| ADR-160 | `loadGoapChargeStampsDurable` Reads the Durable Charge Stamps Back into a Resumed Tick's `ChainState`, Closing ADR-129's Flagged Remainder (Q3 Reliability) | Accepted | 2026-07-18 |
-| ADR-161 | Automation-Status Execution Gate, Rejected-Tree Quarantine, and a Live Gardener `Rescan()`, Closing Milestones 1–3/4 of the HITL-Adoption/Live-Rescan Program (Q4 Personalization & Self-Growth) | Accepted | 2026-07-18 |
-| ADR-162 | `recordUserFeedback`'s `flagged_for_review` Signal Raises a Real HITL Escalation and Pauses the Automation via a New `"flagged"` Status, Closing Milestone 4/4 of the HITL-Adoption Program (Q4 Personalization & Self-Growth) | Accepted | 2026-07-18 |
-| ADR-163 | `Server.rpcHandler` Is Built Once at Construction and Shared Across Every `handleAgentEndpoint` Request, Fixing a Per-Request-Throwaway A2A Task Store (NotebookLM Research) | Accepted | 2026-07-18 |
-| ADR-164 | `AuctionDelegate` Widens Its Fallback Condition to a Winner's Open Circuit Breaker or Exhausted Retry Policy, Closing ADR-064's Flagged No-Fallback Gap (NotebookLM Research) | Accepted | 2026-07-18 |
-| ADR-165 | `A2AHandoffBlock`'s `side_effect_class` Moves from the Inert Root `Sequence` to the `A2AApproval` `HumanApprovalGate` Itself, Making External A2A Delegation Actually Mandatory-HITL (NotebookLM Research) | Accepted | 2026-07-18 |
-| ADR-166 | `DelegateToA2AFn` Threads the Tree's `context.Context` Through to the A2A Client Instead of Substituting `context.Background()`, Closing Milestone 1/5 of the DelegateToA2A Hardening Program (Q3 Reliability) | Accepted | 2026-07-18 |
-| ADR-167 | `generateWithRetry`/`generateWithRetryPolicy` Honor `ChainConfig.MaxTokens` via `GenerateWithMaxTokens`, `bb.TokensUsed` Becomes Real, and `SerializableNode.Validate()` Flags Implausibly Small `max_tokens`, Closing Milestones 1–3/4 of ADR-006's Flagged max_tokens Gap (Q1 Correctness / Q3 Reliability) | Accepted | 2026-07-18 |
-| ADR-168 | Domain-Tree `max_tokens` Values Re-Audited and Corrected Across `kanban.go`, `hermes_evolve.go`, and `hermes_obsidian.go`, Closing Milestone 4/4 of ADR-167's max_tokens Program (Q1 Correctness / Q3 Reliability) | Accepted | 2026-07-18 |
-| ADR-169 | `a2a.Server`/`BTAgentExecutor` `CardCache` Gains a `sync.RWMutex`, Closing a Refresh-vs-Read Data Race (NotebookLM Research) | Accepted | 2026-07-18 |
-| ADR-170 | `KnowledgeGraph.BuildIndex` and Three `factory.go` Read Sites Snapshot `kg.Trees` Under `kg.mu.RLock`, Closing an Unsynchronized Map-Access Race (NotebookLM Research) | Accepted | 2026-07-18 |
-| ADR-171 | The Entropy/Gini-Based `DTAnalyzer`/`BTOptimizer` Engine Gains a Telemetry Bridge and Non-Destructive Reordering Passes Mirroring `SelectorOptimizer`'s, Closing Milestones 1–3/4 of the DTAnalyzer Production-Wiring Program (Q2 Evolvability) | Accepted | 2026-07-18 |
-| ADR-172 | `Gardener.AnalyzeTreeDiagnostics` Runs `BTOptimizer.AnalyzeTree` Against a Clone, Surfacing Destructive-Analysis Counts for HITL Review Without Risking the Live Tree, Closing Milestone 4/4 of the ADR-171 DTAnalyzer Program (Q2 Evolvability) | Accepted | 2026-07-18 |
-| ADR-173 | `finalizeFeedbackEscalation` Resumes a Flagged Automation on HITL Approval, `AutomationBlocked` Closes a Fallback-to-Default-Tree Bypass, and Re-Escalation Is Suppressed While a Tree Is Already Pending Review, Closing the ADR-162 Feedback-Escalation Resume-Loop Gap (Q4 Personalization & Self-Growth) | Accepted | 2026-07-18 |
-| ADR-174 | `internal/llm.Client` and Its `ErrorRecorder`/`TracedLLM`/`FallbackLLM` Decorators Implement `GenerateWithMaxTokens`, Closing ADR-167's Flagged Production-Stack Gap (NotebookLM Research) | Accepted | 2026-07-18 |
-| ADR-175 | `internal/persona.FinalizeAutomationApproval`/`FinalizeFeedbackEscalation` Are Extracted as Binary-Agnostic Functions and Wired into `bt-dashboard`'s `HandleHITL`, Closing the Dashboard/MCP HITL-Finalization Parity Gap (Q4 Personalization & Self-Growth) | Accepted | 2026-07-18 |
-| ADR-176 | `util.SaveJSONAtomic`/`LoadJSON` Become the One Canonical Implementation of ADR-003's Atomic-Write Pattern, Fixing Three Sites That Had Silently Drifted from It (Q5 Consistency & Reuse) | Accepted | 2026-07-18 |
-| ADR-177 | `reapOrphanedSuperpowersBranches` Force-Reaps Unmerged `superpowers/*` Branches Behind a 7-Day Age Gate, an Abandonment Check, and an Archive-Before-Delete Safety Net (Q3 Reliability) | Accepted | 2026-07-19 |
-| ADR-178 | `gitStageArgs` Stops Re-Staging `graphify-out/`'s Regenerated Artifacts and `sectionAwareGraphContext` Becomes the One Canonical Graphify-Report Reader (Q5 Consistency & Reuse, Milestones 1–3/5) | Accepted | 2026-07-19 |
-| ADR-179 | `goapResearchGoalKey` Strips a Scoped Goal Line's `(files: …)` Suffix and `executeSuperpowersTaskBatch` Gates Each Task's RED Phase on Remaining Cycle Budget, Closing Milestones 4–5/5 of the ADR-178 Q5 Program | Accepted | 2026-07-22 |
-| ADR-180 | `reliability.ScoreOutcome` Becomes the One Canonical Block-Fitness Scoring Formula, Replacing Two of Its Three Copy-Pasted Sites (Q5 Consistency & Reuse, Milestones 1–3/4) | Accepted | 2026-07-22 |
-| ADR-181 | `AgentExecutor.recordBlockFitnessMetric` Adopts `reliability.ScoreOutcome`, Closing Milestone 4/4 of the ADR-180 Block-Fitness Consolidation Program (Q5 Consistency & Reuse) | Accepted | 2026-07-22 |
-| ADR-182 | `bt-dashboard` Refreshes Its Own KG Analytics Gauges on Every `/api/metrics` Scrape Instead of Depending on `bt-agent`'s Separate-Process `bt_kg_analytics` Tool (NotebookLM Research) | Accepted | 2026-07-22 |
-| ADR-183 | `reliability.AcquireFileLock` Is Exported and `research.UpdatePrograms` Wraps Every `ProgramStore` Read-Modify-Write Under It, Closing Milestones 1–3/5 of the ProgramStore Concurrent-Writer Lost-Update Program (Q3 Reliability) | Accepted | 2026-07-22 |
-| ADR-184 | `PrioritizeGoapGoals`'s Milestone-Attempt Charge and `seedCodeFixProgram`'s Program-Store Write Move onto `research.UpdatePrograms`, Closing Milestones 4–5/5 of the ADR-183 ProgramStore Lost-Update Program (Q3 Reliability) | Accepted | 2026-07-22 |
-| ADR-185 | `ReportSuperpowersImplementation`/`VerifyGoapFusionEvidence` Recognize the `committed_pr_opened` ApplyStatus, Closing a Fleet-PR Evidence-Gate False Negative (Q3 Reliability) | Accepted | 2026-07-23 |
-| ADR-186 | `BT_SELECTOR_ORDERING_STRATEGY` Wires `OrderByIG`/`OrderByGini`/`OrderByHybrid`/`OrderByKiller` into Both Production Selector-Ordering Call Sites Instead of Deleting Them, Closing Milestone 4/5 of the Selector-Reordering Consolidation Program (Q2 Evolvability) | Accepted | 2026-07-23 |
-| ADR-187 | `NewRunDeps`'s Config-Load-Failure Fallback Adopts `config.DefaultConfig()` Instead of a Zero-Value `Config`, Closing Milestone 1/3 of the agentexec Characterization Program (Q1 Correctness) | Accepted | 2026-07-23 |
-| ADR-188 | `Judge` and `Synthesize` Derive Their Timeout from the Original Caller `ctx`, Making `cfg.Timeout` a Per-Stage Budget Instead of an End-to-End One, Amending ADR-151 (NotebookLM Research) | Accepted | 2026-07-23 |
-| ADR-189 | `reliability.ScoreOutcome`'s Outcome-String Fallback Is Removed — `success` Is the Sole Signal, Correcting ADR-180/ADR-181's False "Byte-Identical" Claim (Self-Fix, Fleet Review 2026-07-22) | Accepted | 2026-07-23 |
-| ADR-190 | `domains.ExpectedDomainIDs` Becomes the One Canonical `ExpectedDomains` Conversion, and `cmd/bt-dashboard` Wires It So `bt_kg_coverage_gaps` Can Actually Go Non-Zero, Closing a Self-Fix Gap in ADR-182 (Self-Fix, Fleet Review 2026-07-22) | Accepted | 2026-07-23 |
-| ADR-191 | `wireDTOrdering` Sets `Config.DTStatsPath`/`EvolveV2Config.DTOrdering` on the Live Gardener Daemon, Closing ADR-171's Flagged DT-Reordering Production-Wiring Gap (Q2 Evolvability) | Accepted | 2026-07-23 |
-| ADR-192 | `bt_gardener_dt_diagnostics` MCP Tool Surfaces `Gardener.AnalyzeTreeDiagnostics` for HITL Review, Closing ADR-172's Flagged "No Production Caller" Gap (Q2 Evolvability) | Accepted | 2026-07-23 |
-| ADR-193 | `reflection.Store.LoadAll` Filters to the `reflection-*.json` Prefix `Save` Actually Writes, Closing a Phantom-Record Gap That Inflated `ev_evaluate`/`la_fitness` Success Counts (Self-Fix, Fleet Review 2026-07-22) | Accepted | 2026-07-23 |
-| ADR-194 | `execFusion` Threads `chainContext(bb)` Into `fusion.Run` Instead of a Bare `context.Background()`, and `fusion.RunPanel` Checks `ctx.Err()` Before Dispatch (NotebookLM Research) | Accepted | 2026-07-23 |
-| ADR-195 | `AgentExecutor.Execute` Carries the Caller's Context, Goap Cycles Get One Scheduler Attempt Per Slot, and Evidence-Shape Rejections Are Non-Retryable (Fleet Review 2026-07-23, Gap 2) | Accepted | 2026-07-23 |
-| ADR-196 | Deploy Adoption Deduplicates (Tree-Identity, Built-At-Head, Adoption Stamps, Gardener Self-Restart), Crisis Detection Fires on Decline Transitions Only, Stale Milestones Complete on a Charge-Time Red Pre-Check, and the Researcher Gains Slot Rotation + a Novelty Gate (Fleet Review 2026-07-23, Gaps 4–8) | Accepted | 2026-07-23 |
-| ADR-197 | Self-Fix Programs Preempt the General Program Queue (Fixes-First Scheduling) | Accepted | 2026-07-23 |
-| ADR-198 | `cmd/bt-agent`'s Two Shutdown Paths Call `a2aSrv.Stop()` on SIGINT/SIGTERM, Closing a Graceful-Shutdown Gap Left Open Since the A2A Server's Introduction (NotebookLM Research) | Accepted | 2026-07-23 |
-| ADR-199 | `Population.EvolveQLearning` Takes a `*ReinforcementLearner` Instead of Raw `epsilon`/`learningRate` Floats, Annealing Exploration via `DecayEpsilon` Once Per Generation (NotebookLM Research) | Accepted | 2026-07-23 |
-| ADR-200 | `SuiteForTree` Gains Explicit Cases for Every Registered Domain Tree, Closing a Benchmark-Gate Blind Spot That Silently Fell Back to the Unrelated GoDev Suite (Q2 Evolvability) | Accepted | 2026-07-23 |
-| ADR-201 | `RunSuite`/`RunABTest`/`ScoreMutation` Gain a `PathMatchRate` Signal So a Mutation That Mis-Routes Tasks Onto the Wrong `StrategyRouter` Branch Can No Longer Score Neutral-or-Better, and a New Runtime Baseline Check Finds All Ten Finance-Agent Trees Benchmark-Gated on the Wrong Shared Suite (Q2 Evolvability) | Accepted | 2026-07-23 |
-| ADR-202 | `goapFusionApplyAlreadyLanded` Makes a Committed `ApplyStatus` Authoritative Over the No-Plan Guard, Closing Milestone 1/2 of the Partial-Apply-Landings-Misclassified-as-Failed Program (Q3 Reliability) | Accepted | 2026-07-23 |
-| ADR-203 | `dtStatsPathFor` Resolves DT-Reordering Telemetry from the Real Per-Tree `agent.DecisionTreeStatsFile`, Not Only the Producer-less `Config.DTStatsPath`, Closing ADR-191's Inert-Activation Gap (Q2 Evolvability, Milestones 1–2/2) | Accepted | 2026-07-23 |
-| ADR-204 | `RestoreTreeBeforeRegressionStreak` Walks Rollback Back Past a Multi-Cycle Regression Streak Instead of Restoring Only the Latest Snapshot, and `Registry.RollbackTree` Adopts It (NotebookLM Research) | Accepted | 2026-07-23 |
-| ADR-205 | A Bounded Claim/Lease on the Program Store Stops a Sibling Cycle from Planning or Charging a Program Another Cycle Is Actively Landing (Q3 Reliability, Milestones 1–2/3 — Superseded by ADR-210 for Milestone 3/3) | Accepted | 2026-07-24 |
-| ADR-206 | `runPRShepherd` Pins an Open PR's Head SHA for the Life of Its Batch — New Local-Master Landings No Longer Force-Push Onto It, Only Fix-Red Commits May (Q3 Reliability, Milestone 1/2) | Accepted | 2026-07-23 |
-| ADR-207 | A Per-Tree-Name `MAPElitesGrid` Archive Feeds `evolveTreeV2`'s `BehavioralDiversity`, Closing ADR-196's Explicitly Deferred Diversity-Collapse Wiring (Q2 Evolvability) | Accepted | 2026-07-24 |
-| ADR-208 | `ComposePresetWithTools`'s `"default"`/`"hitl"` Cases Stop Double-Applying `PipelineWithToolsProfile` to an Already-Profiled Package-Level Slice, Closing Milestone 2/3 of the `compose_presets.go` Characterization Program (Q1 Correctness) | Accepted | 2026-07-24 |
-| ADR-209 | `DelegateBlock`'s `side_effect_class` Moves from the Inert Root `Sequence` to the `DelegateApproval` `HumanApprovalGate` Itself, Making Tree Delegation Actually Mandatory-HITL, Mirroring ADR-165, Closing Milestone 3/3 of the `compose_presets.go` Characterization Program (Q1 Correctness) | Accepted | 2026-07-24 |
-| ADR-210 | `completeGoapProgramMilestone` and the Red-Evidence Pre-Check Completion Branch Both Call `ReleaseClaim` on Successful `MarkDone`, Closing Milestone 3/3 of the ADR-205 Program-Claim/Lease Program (Q3 Reliability) | Accepted | 2026-07-24 |
-| ADR-211 | `RunOnce` Self-Records SLO Evidence, Closing the Interactive/MCP Gap in the Gardener's Validation Gate, with a New `SkipSLORecording` Opt-Out Keeping the Scheduler's `recordSchedulerAttempt` the Sole Recorder for Its Own Path (NotebookLM Research) | Accepted | 2026-07-24 |
-| ADR-212 | `cmd/bt-dashboard` Wires `a2a.AuctionCardsFn` from Its Own Live Agent Registry, Closing the Second Production Call Site ADR-008 Left Dashboard-Side (NotebookLM Research) | Accepted | 2026-07-24 |
-| ADR-213 | `SerializableNode.validateRecursive`'s Cycle Detection Skips Childless Leaf Nodes, No Longer Flagging a Composite/Lone-Child Same-Name Idiom as a False-Positive Cycle, Closing Milestone 1/3 of the `fanout.go` Characterization Program (Q1 Correctness) | Accepted | 2026-07-24 |
-| ADR-214 | `composeWithMiddle` Inserts `spec.Blocks` Instead of a Hardcoded Three-Block Sequence, Restoring the `core:human_gate`/`core:tools_default` Blocks `ComposeTaskTreeWithHITL` Had Silently Dropped Since Introduction, Closing Milestone 3/3 of the `fanout.go`-and-2-More Characterization Program (Q1 Correctness) | Accepted | 2026-07-24 |
-| ADR-215 | `precheckGoapStaleMilestones`'s Completion Branch Calls the New `ProgramStore.ClearClaim` Instead of `ReleaseClaim`, Correcting ADR-210's Claim That Both `MarkDone` Call Sites Already Released Their Claim (NotebookLM Research) | Accepted | 2026-07-24 |
-| ADR-216 | `SaveSLOMetrics` Serializes Concurrent Callers with a Package-Level Mutex, Closing a Race ADR-211's Own Concurrent Callers Introduced (NotebookLM Research) | Accepted | 2026-07-24 |
-| ADR-217 | `gardener.CollectAgentSLOs` Reads Persisted Cross-Process SLO Evidence via `engine.LoadSLOEvidence`, Closing a Permanent-Empty Gap in the Dashboard's `GardenerMetrics.SLOs` (NotebookLM Research) | Accepted | 2026-07-24 |
-| ADR-218 | `BuildKnowledgeGraph` Registers the 13 Bare Resolver-Special-Case Tree IDs `AllDomainTrees()` Never Returns, and `ComputeAnalytics` Audits Them Alongside `ExpectedDomains`, Extending the ADR-157/ADR-190 Registry-Drift Guard to a Second Drift Source (NotebookLM Research) | Accepted | 2026-07-24 |
-| ADR-219 | `RegisterNotebookLMFitness` Also Wires the Hyphenated `notebooklm-consumer` Tree ID — the Consumer Chain-Agent's Real Production ID — Correcting ADR-097's Underscore-Only Registration (NotebookLM Research) | Accepted | 2026-07-24 |
-| ADR-220 | `internal/reliability.CircuitBreaker` Absorbs `internal/agent`'s Duplicate 3-State Breaker — `AgentCircuitBreaker`/`AgentCircuitBreakerStore` Become Type Aliases, Closing the Drift Risk Between Two Independently-Maintained Copies of ADR-007's State Machine (NotebookLM Research) | Accepted | 2026-07-24 |
-| ADR-221 | `resolveTreeIDWithResolver` Wires `evolution.TelegramClarifyTree()` Under the Bare `"telegram_clarify"` ID to Match Its Standalone Sibling Trees — Left Outside ADR-218's `resolverSpecialCaseTreeIDs` Coverage-Gap List (NotebookLM Research) | Accepted | 2026-07-24 |
-| ADR-222 | `WebhookPublisher` Adopts `reliability.CircuitBreakerStore`, Closing One of ADR-220's Three Flagged Unconsolidated Registries, and `replayDeadLetters` Gains the Missing Per-Subscription Breaker Check It Was Bypassing (NotebookLM Research) | Accepted | 2026-07-24 |
-| ADR-223 | `SignAgentCard`/`VerifyAgentCard` Move from an Unkeyed SHA-256 Hash to a Keyed HMAC-SHA256 Signature, Closing ADR-090's Flagged Authentication Gap (NotebookLM Research) | Accepted | 2026-07-28 |
-| ADR-224 | `engine.walkValidate`'s Cycle Detection Skips Childless Leaf Nodes, Mirroring ADR-213's `internal/evolution` Fix in the `internal/engine` Validation Path (Q1 Correctness) | Accepted | 2026-07-28 |
-| ADR-225 | `parseClaudeRateLimitReset` Parses the Weekly-Quota Reset Shape in Its Own IANA Zone, and `claudeBackoffDeadline` Trusts a Multi-Day Deadline for It, Closing ADR-016's Flagged Heuristic-Window Gap for the Weekly Case (NotebookLM Research) | Accepted | 2026-07-28 |
-| ADR-226 | `evaluateCondition` Requires an Exact `"true"` Match Instead of a 4-Character Prefix Check, Closing a False-Positive Condition-Match Bug (NotebookLM Research) | Accepted | 2026-07-28 |
-| ADR-227 | `wireSelectorReorder` Also Wires `domains.DTStatsPathFn` Under `BT_SELECTOR_REORDER=1`, Closing ADR-171's Resolve-Time `domains.DTStatsPath` Production-Wiring Gap (Q2 Evolvability) | Accepted | 2026-07-28 |
-| ADR-228 | `bt-dashboard` and `bt-gardener` Wire an `InFlightFn` Guard into Their `DriftWatchConfig`, Closing ADR-050's Flagged AutoRestart-Mid-Request/Mid-Cycle Gap (NotebookLM Research) | Accepted | 2026-07-28 |
-| ADR-229 | `loadOrCreateSigningKey` Logs a Warning Instead of Silently Swallowing a Signing-Key Persistence Failure (NotebookLM Research) | Accepted | 2026-07-28 |
-| ADR-230 | `IsCIBuildTask`/`IsTradingTask` Gain Broader Keyword Coverage, Closing a StrategyRouter Branch-Reachability Gap a New Cross-Domain Suite Test Surfaced (NotebookLM Research) | Accepted | 2026-07-28 |
-| ADR-231 | `evolution.CloneMetadata` Becomes the One Canonical Recursive Deep-Copy of Tree Node Metadata, Replacing `cloneTree`'s Shallow Copy and `gardener`'s Private `cloneMetadataForGardener` (NotebookLM Research) | Accepted | 2026-07-29 |
-| ADR-232 | `internal/a2a`'s `treeTags` Sources Skill/Bid Tags from `internal/knowledge.GlobalGraph`'s Fitness-Weighted `Capability` List Instead of an Ad Hoc Tree-ID String Split, Routing Auction Capability Matching Through the Knowledge Graph's Canonical Model (NotebookLM Research) | Accepted | 2026-07-29 |
-| ADR-233 | `TaskStore.Approve`/`Reject` and `Workflow.ApproveTask`/`RejectTask` Both Resolve the Matching `hitl.Request` via a Shared `resolveHITLAudit` Helper, Giving HITL Approve/Reject One Canonical Audit-Trail Code Path (NotebookLM Research) | Accepted | 2026-07-29 |
-| ADR-234 | `hashTree` Fingerprints the Full Subtree via `json.Marshal` Instead of Only the Root Node's Name+Type+Child-Count, Closing a Genome-Collision Bug in Diversity Tracking (NotebookLM Research) | Accepted | 2026-07-29 |
-| ADR-235 | `RecordRun` Marks Its Own Feedback Dirty, Closing a Silent-Loss Gap in Evolved-Tree Feedback Persistence (NotebookLM Research) | Accepted | 2026-07-29 |
-| ADR-236 | `CompanyState` Gets Its Own Mutex, Closing a Shared-Pointer Race Across `Workflow` and `CompanyOrchestrator` Wrappers (NotebookLM Research) | Accepted | 2026-07-29 |
-| ADR-237 | `TranspositionTable.Save` and a New `exportSLOMetrics` Helper Adopt `util.SaveJSONAtomic`, Closing Two More ADR-176 Stragglers (NotebookLM Research) | Accepted | 2026-07-30 |
-| ADR-238 | `KanbanAndHermesDomainTrees` Gives the Eight Kanban/Hermes Trees Their Own Smoke and Condition-Description Coverage, Closing a Guard Gap `AllDomainTrees()` Never Covered (NotebookLM Research) | Accepted | 2026-07-30 |
-| ADR-239 | `CompanyOrchestrator.RunSprint` Snapshots State Under a Short Lock Instead of Holding It Across Three 120s `runTree` Calls, Amending ADR-236's Whole-Body Locking (NotebookLM Research) | Accepted | 2026-07-30 |
-| ADR-240 | Three GOAP-Fronted Domain Trees Gain a `SetupGoapTools` Action, Making Their Previously-Unreachable `GOAP_Root` Branch Actually Reachable (NotebookLM Research) | Accepted | 2026-07-30 |
-| ADR-241 | Every Keyword-Matching Condition in `conditions_domain.go` Routes Through One `strings.ToLower(bb.Task)`, Closing an Inconsistent Case-Sensitivity Gap the File's Own Existing Conditions Already Disagreed On (NotebookLM Research) | Accepted | 2026-07-30 |
-| ADR-242 | `BuildCircuitBreaker` Stops Clearing Its Failure Streak and Open State on a Merely-Running Child Tick, Matching `circuitBreakerCmd`'s Already-Correct Semantics (Q1 Correctness) | Accepted | 2026-07-30 |
-| ADR-243 | `ExpectedDomainIDs` Gains a Guaranteed Sort, Closing a Non-Reproducible-Output Gap Its First Direct Test Coverage Surfaced (Q1 Correctness) | Accepted | 2026-07-30 |
-| ADR-244 | `IsCritical`/`IsHealthAlert` Gain Realistic Keyword Coverage and `IsTAPath`'s Ambiguous Short Keywords Become Word-Bounded, Closing Two More StrategyRouter Branch-Reachability Gaps `AlertRouterSuite`/`TradingSignalSuite` Already Declared (NotebookLM Research) | Accepted | 2026-07-30 |
-| ADR-245 | A Package-Level Injectable Random Source (`SetEvolutionRand`) Replaces the No-Op `rand.Seed` Across `internal/evolution`'s Shared Breeding Path (Q1 Correctness / Q2 Evolvability) | Accepted | 2026-08-01 |
-| ADR-246 | The Gardener's Live Cycle Drives Three More Evolution Algorithms — Island-Model Exploration, MAP-Elites Reseeding, and Local-Search Refinement — Each Adopted Only After Re-Scoring Against the Target Tree's Own Records (Q2 Evolvability) | Accepted | 2026-08-01 |
-| ADR-247 | `MCTSMutator` Becomes a Second Structural-Mutation Generator Merged Into One Scored Competition With `evaluator.OrderMutations`, Chosen Per Tree by a Combined Specialist/Selector Affinity (Q2 Evolvability, Milestone 4/5) | Accepted | 2026-08-01 |
-| ADR-248 | The Gardener's `ValidationGate` Accepts on Pareto Non-Domination Against the Threshold Reference Point Instead of Per-Threshold Scalar Checks, Bounded by a `MaxObjectiveRegression` Trade-Off Band, and NSGA-II's Duplicated Sort/Crowding Implementations Collapse Into One Canonical Pair (Q2 Evolvability, Milestone 5/5) | Accepted | 2026-08-01 |
-| ADR-249 | `refineTreeParameters` Moves Above `evolveTreeV2`'s `ValidationGate` Block So Local-Search Deltas Are Gate-Covered, Amending ADR-246's Flagged Ungated-Adoption Path (Q1 Correctness, NotebookLM Research) | Accepted | 2026-08-01 |
-| ADR-250 | Every `cond()`-Built Condition Node Carries a Machine-Readable `EdgeGuard` Typed Edge, Extending ADR-014's Prose-Only Condition Coverage to the Field Production Code Actually Evaluates | Accepted | 2026-08-01 |
-| ADR-251 | `SmokeTestableDomainTrees()` Becomes the Single Enumeration of Coverable Domain Trees, and `NonRegistryDescriptions`/`DescriptionFor` plus `SuiteForTreeNamed` Turn Three Hand-Maintained Lists Into Derived, Build-Enforced Invariants | Accepted | 2026-08-01 |
-| ADR-252 | `BuildMemSelector` Clamps a Negative Persisted Cursor to a Fresh Pass Instead of Indexing `children[-1]`, Adopting the Range Check `BuildBanditSelector` Already Applies to Its Own Resume Cursor (Q1 Correctness) | Accepted | 2026-08-01 |
-| ADR-253 | `adoptIslandWinner` Clears the Quality, Evidence and Validation Gates Before It Overwrites a Live Tree, Closing the Second Half of ADR-246's Ungated-Adoption Debt That ADR-249 Left Open (Q1 Correctness) | Accepted | 2026-08-02 |
-| ADR-254 | The Plan-Resume Path Sets and Persists `run.Phase = implementation` Before Handing the Next ~90 Minutes to the Task Batch, Mirroring the `ExecuteSuperpowersTaskBatch` BT Action (NotebookLM Research) | Accepted | 2026-08-02 |
-| ADR-255 | A Third Description Map, `ResolverReachableDescriptions`, Gives `ResolveTreeID`-Only Trees a Describable Home Without Weakening the Orphan Guards on the Other Two, Extending ADR-014's Coverage to `superpowers_pipeline` | Accepted | 2026-08-02 |
-| ADR-256 | `QualityGate.Probe`'s Composite Floor Becomes Absolute, Making `RefineGated`'s Gate Check Reachable Instead of an Unconditional Accept (Q1 Correctness) | Accepted | 2026-08-02 |
-| ADR-257 | `AgentCircuitBreakerStore` Becomes the Single Implementation of `circuit_breakers.json` Persistence — `internal/a2a`'s Hand-Rolled Winner-Breaker Load/Save Is Deleted and the Read-Merge-Write Runs Under ADR-024's Sidecar flock (NotebookLM Research) | Accepted | 2026-08-02 |
-| ADR-258 | `ResolverReachableDomainTrees()` Ships ADR-255's Work List as a Production Registry, and an AST Sweep of `tree_resolver.go` Makes Resolver-Reachable Coverage Fail Closed Instead of Fail Open | Accepted | 2026-08-02 |
+| ADR-001 | [Behavior Trees as Core Execution Model](#adr-001) | Accepted | 2026-05-26 |
+| ADR-002 | [MCP as External Interface](#adr-002) | Accepted | 2026-05-26 |
+| ADR-003 | [File-Based Persistence over SQL](#adr-003) | Accepted | 2026-05-27 |
+| ADR-004 | [YAML-Defined Agent Platform](#adr-004) | Accepted | 2026-05-27 |
+| ADR-005 | [Stockfish-Adapted Evolution Engine](#adr-005) | Accepted | 2026-05-27 |
+| ADR-006 | [ChainAction — LLM Integration via BT Nodes](#adr-006) | Accepted | 2026-05-28 |
+| ADR-007 | [Reliability Architecture — Circuit Breakers, Retry, DLQ](#adr-007) | Accepted | 2026-05-29 |
+| ADR-008 | [Auction-Based A2A Task Allocation](#adr-008) | Accepted | 2026-07-04 |
+| ADR-009 | [Deterministic, LLM-Free Evolution MCP Tools](#adr-009) | Accepted | 2026-07-05 |
+| ADR-010 | [Non-Wedging Self-Halting Circuit Gates for the GOAP Fusion Loop](#adr-010) | Accepted | 2026-07-05 |
+| ADR-011 | [Adopting the Horizontal-Scaling Substrate (RemoteExecutor + AgentRouter)](#adr-011) | Accepted | 2026-07-05 |
+| ADR-012 | [Wiring the Scalability Substrate into the Dashboard Endpoint and Probe (Milestones 3–4)](#adr-012) | Accepted | 2026-07-05 |
+| ADR-013 | [Making the Production Superpowers Pipeline Tree Operator-Selectable and Guarded](#adr-013) | Accepted | 2026-07-05 |
+| ADR-014 | [Mandatory Descriptions for Every Node Class in Curated Domain Trees](#adr-014) | Accepted | 2026-07-05 |
+| ADR-015 | [Domain-Mapped Island-Model Evolution as a Deterministic MCP Tool](#adr-015) | Accepted | 2026-07-05 |
+| ADR-016 | [Durable Claude Rate-Limit Backoff for the GOAP Fusion Loop](#adr-016) | Accepted | 2026-07-08 |
+| ADR-017 | [Experience-Grounded Evolution Closes the Learn→Discover→Evolve Loop](#adr-017) | Accepted | 2026-07-08 |
+| ADR-018 | [Bounded ExperienceBank with Quality-Aware Eviction](#adr-018) | Accepted | 2026-07-08 |
+| ADR-019 | [Production Entry Points for Memetic and Q-Learning Evolution](#adr-019) | Accepted | 2026-07-08 |
+| ADR-020 | [CMA-ES Parameter Tuning Routed Through the Bottleneck Tool](#adr-020) | Accepted | 2026-07-08 |
+| ADR-021 | [Gardener Cycles Record Into and Retrieve From the Shared ExperienceBank](#adr-021) | Accepted | 2026-07-08 |
+| ADR-022 | [Two-Writer-Safe ExperienceBank Persistence and Uniform Evolve-Population Validation](#adr-022) | Accepted | 2026-07-08 |
+| ADR-023 | [Full Prometheus Histogram Exposition and a Build-Identity Gauge](#adr-023) | Accepted | 2026-07-08 |
+| ADR-024 | [Fail-Loud Compose, Feedback, and CLI Input Boundaries](#adr-024-composition) | Accepted | 2026-07-08 |
+| ADR-024 | [Sidecar flock Serializes All ExperienceBank Write Paths](#adr-024-experience-bank) | Accepted | 2026-07-08 |
+| ADR-025 | [Drop-Safe, Bounded Dead-Letter Replay and an Honest Deferred SLO Outcome](#adr-025) | Accepted | 2026-07-09 |
+| ADR-026 | [QD/Island Elite Fitness Write-Back into the Knowledge Graph](#adr-026) | Accepted | 2026-07-09 |
+| ADR-027 | [Fitness-Driven Selection Pressure in Deterministic Breeding and Discovery](#adr-027) | Accepted | 2026-07-09 |
+| ADR-028 | [Separate Structural Fitness from the Runtime-Success EMA](#adr-028) | Accepted | 2026-07-09 |
+| ADR-029 | [Durable, Merge-Safe Telemetry for the Selector-Ordering Optimizers](#adr-029) | Accepted | 2026-07-09 |
+| ADR-030 | [Analytics Signals Drive Registration, Breeding, and Failure-Targeted Evolution](#adr-030) | Accepted | 2026-07-09 |
+| ADR-031 | [Proactive Crisis Intervention Wired into the GA Evolution Loop](#adr-031) | Accepted | 2026-07-09 |
+| ADR-032 | [Aggregated Gardener Metrics Document and a GA Population-Health Snapshot](#adr-032) | Accepted | 2026-07-09 |
+| ADR-033 | [Durable, Merge-Safe Archives for Island-Model and MAP-Elites Evolution](#adr-033) | Accepted | 2026-07-10 |
+| ADR-034 | [Per-Base-Tree Scoping of the Durable Island Archive](#adr-034) | Accepted | 2026-07-10 |
+| ADR-035 | [Seeding-Faithful Evolved-Fitness Attribution in Domains-Mode Island Evolution](#adr-035) | Accepted | 2026-07-10 |
+| ADR-036 | [Crash-Safe, Merge-on-Save DLQ Persistence and Reload-Before-Consume Replay](#adr-036) | Accepted | 2026-07-10 |
+| ADR-037 | [GA Population-Health Snapshot Wired into the Evolve Tool Responses](#adr-037) | Accepted | 2026-07-11 |
+| ADR-038 | [Self-Healing Envelope Shared Between Evolve and EvolveWithExperience](#adr-038) | Accepted | 2026-07-12 |
+| ADR-039 | [CheckCodebaseFit Probe Failures No Longer Hard-Fail the bt_fusion Cycle](#adr-039) | Accepted | 2026-07-12 |
+| ADR-040 | [Bounding the Durable Island-Model Archive Against Runaway Growth](#adr-040) | Accepted | 2026-07-12 |
+| ADR-041 | [Durable, Bounded Cross-Run Memory for Q-Learning Evolution](#adr-041) | Accepted | 2026-07-12 |
+| ADR-042 | [Persisting Evolved Winner Trees from the Production Genetic-Evolution Tools](#adr-042) | Accepted | 2026-07-12 |
+| ADR-043 | [Wiring the Durable MAP-Elites Archive into bt_evolve_qd](#adr-043) | Accepted | 2026-07-12 |
+| ADR-044 | [Zero-Risk Deploy-Drift Diagnosis via Build-Revision Stamping](#adr-044) | Accepted | 2026-07-12 |
+| ADR-045 | [Closing the Deploy-Drift Loop — Dashboard Self-Rebuild and Retry-Storm Guardrails](#adr-045) | Accepted | 2026-07-12 |
+| ADR-046 | [SafeGo Panic Recovery Adopted Across A2A, Dashboard, and Knowledge-Graph Fan-Out](#adr-046) | Accepted | 2026-07-12 |
+| ADR-047 | [SafeGo Extended to reactive_parallel Fan-Out; DLQ ID Defaulting and bt_dlq_list Reload Close Two Residual Gaps](#adr-047) | Accepted | 2026-07-12 |
+| ADR-048 | [SafeGo Extended to LLM Health Monitor, Request-Timeout Middleware, and Scalability Probe Fan-Out (milestones 1–3/5)](#adr-048) | Accepted | 2026-07-12 |
+| ADR-049 | [SafeGo Extended to the Dashboard Pipeline-Run Goroutine and bt-agent's KG-Index/DLQ-Scan Goroutines (closes milestones 4–5/5)](#adr-049) | Accepted | 2026-07-12 |
+| ADR-050 | [Wiring RebuildBackoff and Scheduler.AnyInFlight into the Production Deploy-Drift Watchers](#adr-050) | Accepted | 2026-07-12 |
+| ADR-051 | [Extending the Self-Healing Envelope to NSGA-II, the Last Zero-Observability Evolve Variant](#adr-051) | Accepted | 2026-07-13 |
+| ADR-052 | [Change-Impact Graph Exposed via a CLI Subcommand and an MCP Tool](#adr-052) | Accepted | 2026-07-13 |
+| ADR-053 | [SafeGo/Recover Extended to the LLM Subprocess Scanner, the Fallback-Chain Call Loop, and the Scheduler/A2A Start Goroutines](#adr-053) | Accepted | 2026-07-13 |
+| ADR-054 | [Circuit Breaker on ACPClient Stops Failure-Storm Respawns of a Crash-Looping ACP Subprocess](#adr-054) | Accepted | 2026-07-13 |
+| ADR-055 | [RunTask Backstops bb.Result on Every Non-Success Terminal Outcome](#adr-055) | Accepted | 2026-07-13 |
+| ADR-056 | [HITL Escalated Requests Terminate Waits and Become Resolvable](#adr-056) | Accepted | 2026-07-13 |
+| ADR-057 | [Deterministic `bt_evolve_pareto` MCP Entry Point for `ParetoPopulation.EvolvePareto`](#adr-057) | Accepted | 2026-07-13 |
+| ADR-058 | [`DecisionTrace.Steps` Populated from `bb.ChildTicks()` for `ExplainLastFailure`](#adr-058) | Accepted | 2026-07-13 |
+| ADR-059 | [SafeGo Extended to the Webhook-Publisher Loop and the RateLimiter/SessionStore Cleanup Goroutines (milestones 1–3/5)](#adr-059) | Accepted | 2026-07-13 |
+| ADR-060 | [SafeGo Extended to the Key-Rotation, Config-Watcher, and Node-Heartbeat Cleanup Goroutines (closes milestones 4–5/5)](#adr-060) | Accepted | 2026-07-13 |
+| ADR-061 | [`WorkflowApprovalWait` and `FindPendingByTaskID` Stop Treating an Escalated HITL Request as Approved (milestones 1–3/4)](#adr-061) | Accepted | 2026-07-13 |
+| ADR-062 | [Cross-Domain Experience Transfer Closes the Island Model's Own Feedback Loop (Q2 Evolvability, milestone 4/4)](#adr-062) | Accepted | 2026-07-13 |
+| ADR-063 | [Durable Per-Agent Circuit Breaker State Feeds the Dashboard's cb_status Column](#adr-063) | Accepted | 2026-07-13 |
+| ADR-064 | [Honest A2A SendTask Errors and Per-Winner Retry/Circuit-Breaking in Auction Dispatch (A2A Reliability Program, milestones 1 & 3 of 5)](#adr-064) | Accepted | 2026-07-13 |
+| ADR-065 | [A2A Auction Winner Circuit Breakers Persist Across Engine Ticks and Restarts (A2A Reliability Program, milestone 5 of 5)](#adr-065) | Accepted | 2026-07-13 |
+| ADR-066 | [Personal-Tree Reflection Evidence Keyed on the Real Tree ID and Owning User; `bankFor` Stops Permanently Caching a Transient Open Failure](#adr-066) | Accepted | 2026-07-13 |
+| ADR-067 | [User-Scoped Runtime-Generated Tree Resolution (ADR-010 Personalization Hardening Program, milestone 3/5)](#adr-067) | Accepted | 2026-07-13 |
+| ADR-068 | [Distinguishing an Escalated-Origin HITL Resolution from a Routine Pending One (Closes the HITL-Escalation Program, Milestone 4/4)](#adr-068) | Accepted | 2026-07-13 |
+| ADR-069 | [`agent.RunDeps`/`RunOnce` Consult a User-Scoped Tree Resolver, Closing the ADR-010 Personalization Hardening Program (Milestone 5/5)](#adr-069) | Accepted | 2026-07-13 |
+| ADR-070 | [`NormalizeImpactSource` Exported from `internal/knowledge`, Closing Half of the CLI/MCP Normalization Split (Q1 Correctness Program, Milestone 1/3)](#adr-070) | Accepted | 2026-07-13 |
+| ADR-071 | [`bt_impact_tests` Normalizes and Honestly Rejects Out-of-Root Source Paths, Closing the Q1 Correctness Program (Milestone 3/3)](#adr-071) | Accepted | 2026-07-13 |
+| ADR-072 | [Task-ID Collision Fix and a Priority-Ordered Approval Audit Trail for Dashboard Tasks (Q1 Correctness / Q3 Reliability Program, Milestones 1–3/3)](#adr-072) | Accepted | 2026-07-13 |
+| ADR-073 | [`dashboard.PickTreeForTask` Routes Auction-Shaped Tasks to `auction_demo`, Exercising the A2A Auction on the Sprint-Execution Path](#adr-073) | Accepted | 2026-07-13 |
+| ADR-074 | [Bounded HTTP Timeout, Circuit Breaker, Retry, and Lock Scoping Harden the Knowledge-Graph Embedding Client Against an Unresponsive Ollama Backend](#adr-074) | Accepted | 2026-07-13 |
+| ADR-075 | [The Scheduler and DLQ Replay Dispatch Through the AgentRouter Instead of Calling RunOnce Directly, Closing Milestone 5/5 of the Horizontal-Scaling Substrate](#adr-075) | Accepted | 2026-07-13 |
+| ADR-076 | [`bt_evolve_island` Wires Its `IslandModel.Bank` Field, Making Cross-Domain Experience Transfer Live in Production](#adr-076) | Accepted | 2026-07-13 |
+| ADR-077 | [`pending_approval` Survives `engine.RunTask` as a Non-Terminal Outcome and Routes Through `TaskStateBridge` in the A2A Responder](#adr-077) | Accepted | 2026-07-13 |
+| ADR-078 | [`persistEvolvedWinner`/`RegisterEvolved` Only Overwrite a Stored Evolved Winner When the New Fitness Actually Beats It](#adr-078) | Accepted | 2026-07-13 |
+| ADR-079 | [`cmd/bt-gardener` Wires the Learned Selector-Ordering Pass into Its Production Daemon and MCP Tool](#adr-079) | Accepted | 2026-07-13 |
+| ADR-080 | [`handleAnalyze` Adopts the `Workflow` Task-Derivation Engine and Stops Swallowing ThinkTank Orchestrator Errors (Q1 Correctness Program, Milestones 1–3/4)](#adr-080) | Accepted | 2026-07-13 |
+| ADR-081 | [Workflow-Level Approval Endpoints Wired Over HTTP and `RunFullPipeline`'s Auto-Approval Removed (Q1 Correctness Program, Milestone 4/4 — Closes the Program)](#adr-081) | Accepted | 2026-07-13 |
+| ADR-082 | [`Workflow`-Derived Task IDs Made Collision-Resistant and `currentWorkflow`/`Workflow.Tasks` Made Concurrency-Safe](#adr-082) | Accepted | 2026-07-13 |
+| ADR-083 | [`persistEvolvedWinner`'s Knowledge-Graph Bookkeeping and Tree-Store Write Made Atomic](#adr-083) | Accepted | 2026-07-13 |
+| ADR-084 | [`MarkSuccessful` and `EscalateToDeepSeek` Make the `OutcomeSelector`'s Self-Correction and Escalation Paths Real (Q1 Correctness / Q3 Reliability Program, Milestones 1–2/4)](#adr-084) | Accepted | 2026-07-13 |
+| ADR-085 | [`RunTask`'s Terminal Backstop Flips `bb.Outcome` on Failed Quality Validation, Closing the OutcomeSelector Program (Milestone 4/4)](#adr-085) | Accepted | 2026-07-14 |
+| ADR-086 | [`handleWorkflowApprove`/`handleWorkflowReject` Mirror Their Decision into `taskStore`, Closing the Approval-Surface Split ADR-081 Left Open](#adr-086) | Accepted | 2026-07-14 |
+| ADR-087 | [`handleAgentExecute` Carries `RunResult.Quality` into `AgentResult.QualityScore` for Remote-Routed Runs](#adr-087) | Accepted | 2026-07-14 |
+| ADR-088 | [`evolution.MetaValidator` Wired into the Gardener's Live Mutation-Acceptance Loop](#adr-088) | Accepted | 2026-07-14 |
+| ADR-089 | [`handleSprintExecute` Reconciles `currentWorkflow`'s Task State with `taskStore` as Tasks Actually Execute](#adr-089) | Accepted | 2026-07-14 |
+| ADR-090 | [A2A Agent-Card Signing Wired into the Card-Serving and Card-Consuming Paths](#adr-090) | Accepted | 2026-07-14 |
+| ADR-091 | [Durable Cross-Run Archives for the Pareto Front and NSGA-II's Final Front (Q2 Evolvability, Milestones 1–3/5)](#adr-091) | Accepted | 2026-07-14 |
+| ADR-092 | [Characterization Tests for the Goal and Blackboard MCP Tools Surface Two Real Bugs](#adr-092) | Accepted | 2026-07-15 |
+| ADR-093 | [Durable Pre-Mutation Snapshots and Operator-Triggered Tree Rollback for the Gardener](#adr-093) | Accepted | 2026-07-15 |
+| ADR-094 | [Gardener-Embedded Transposition Table and Deterministic Eviction (Q2 Evolvability, Milestones 1–3/3)](#adr-094) | Accepted | 2026-07-15 |
+| ADR-095 | [A Durable, Learning Archive for Expert Knowledge (Q2 Evolvability, Milestones 1–2/2)](#adr-095) | Accepted | 2026-07-15 |
+| ADR-096 | [Benchmark-Suite Gate on the Standalone Evolution Tools' Durable-Archive Winners (Q2 Evolvability, Milestones 1–2/4)](#adr-096) | Accepted | 2026-07-15 |
+| ADR-097 | [Domain-Aware Fitness Override for Genuine Knowledge-Graph Runs (NotebookLM Research)](#adr-097) | Accepted | 2026-07-15 |
+| ADR-098 | [An Operator-Triggered Evolution Kill Switch for the Gardener](#adr-098) | Accepted | 2026-07-15 |
+| ADR-099 | [`DashboardRoutes()` Gains 15 Missing `/api/*` Route Definitions, Closing the Response-Validator's Route-Coverage Blind Spot (Q1 Correctness / Q3 Reliability Program, Milestone 1/4)](#adr-099) | Accepted | 2026-07-15 |
+| ADR-100 | [`dashboard.PickTreeForTask` Consults `knowledge.KnowledgeGraph.Discover` Instead of Relying Solely on Its Static Keyword Switch](#adr-100) | Accepted | 2026-07-15 |
+| ADR-101 | [`dashboard.TaskStore` Load/Save Made Atomic and Fail-Loud on Corruption](#adr-101) | Accepted | 2026-07-15 |
+| ADR-102 | [`Gardener.evolveTreeV2`'s Crisis Mutation Budget Now Scales from the Detector's Calibrated `EmergencyRate` Instead of a Hardcoded Doubling](#adr-102) | Accepted | 2026-07-15 |
+| ADR-103 | [`ExpertKnowledge.LearnedPatterns` Capped at 500, Evicting the Lowest-Gain Entry (Q2 Evolvability, Milestone 1/3)](#adr-103) | Accepted | 2026-07-15 |
+| ADR-104 | [`ExpertKnowledge` Observation Across MAP-Elites/Pareto/NSGA-II/Island and Island Real Breeding (reconstructed)](#adr-104) | Accepted | 2026-07-15 |
+| ADR-105 | [Persist RecentRuns in Knowledge-Graph Feedback (reconstructed)](#adr-105) | Reconstructed | 2026-09-16 |
+| ADR-106 | [`ExpertKnowledge` Warm-Start/Save Wired into `bt_evolve_island`, `bt_evolve_multiobjective`, and `bt_evolve_pareto` (Q2 Evolvability, NotebookLM Research)](#adr-106) | Accepted | 2026-07-15 |
+| ADR-107 | [The Gardener's Deep-Search `BestMutation` Now Feeds Back into the Live Tree (Q2 Evolvability, NotebookLM Research)](#adr-107) | Accepted | 2026-07-15 |
+| ADR-108 | [The A2A Auction Responder Reuses `RespondToAnnouncement` and a Cached, Already-Signed Card (NotebookLM Research)](#adr-108) | Accepted | 2026-07-15 |
+| ADR-109 | [`bt_evolve_bottlenecks`' Genetic Path Conditions Its Warm-Start on the Failing Task, Not Just Tree Type (Q2 Evolvability, Milestones 1–3/3)](#adr-109) | Accepted | 2026-07-15 |
+| ADR-110 | [`bt_evolve_qd` Adopts `MAPElitesPopulation.EvolveMAPElites` Directly and Wires `ExpertKnowledge`, Closing the Q2 Evolvability Learned-Pattern Program (Milestones 1–2/2)](#adr-110) | Accepted | 2026-07-15 |
+| ADR-111 | [Benchmark-Suite Gate Extended to `bt_evolve_qd` and `bt_evolve_qlearning` (Q2 Evolvability, Milestones 2–3/4)](#adr-111) | Accepted | 2026-07-15 |
+| ADR-112 | [Deep-Search-Applied Gardener Mutations Are Re-Validated Before Persisting (Q2 Evolvability, Milestone 4/4)](#adr-112) | Accepted | 2026-07-15 |
+| ADR-113 | [Benchmark-Suite Gate Extended to `bt_evolve_pareto`, Closing Out Q2 Evolvability's Benchmark-Gate Coverage](#adr-113) | Accepted | 2026-07-15 |
+| ADR-114 | [The Gardener's Deep-Search Apply Path Is Gated Through `MetaValidator` and Wired Live in Production (Q2 Evolvability, Milestones 1–3/3)](#adr-114) | Accepted | 2026-07-15 |
+| ADR-115 | [Multi-Revision Snapshot History and Automatic Fail-Closed Rollback for the Gardener (Q2 Evolvability, Milestones 1–3/3)](#adr-115) | Accepted | 2026-07-15 |
+| ADR-116 | [`RunFullPipeline` Executes Every Present Sprint, Halts on a Thinktank-Phase Error, and Gets Its First Production Caller (Q1 Correctness Program, Milestones 1–3/3)](#adr-116) | Accepted | 2026-07-15 |
+| ADR-117 | [The A2A Card Registry Becomes Refreshable at Runtime Instead of a One-Shot `NewServer` Snapshot (NotebookLM Research)](#adr-117) | Accepted | 2026-07-15 |
+| ADR-118 | [`bt_evolve_memetic` and the CMA-ES Branch of `bt_evolve_bottlenecks` Stop Discarding Their Evolved Winner (NotebookLM Research)](#adr-118) | Accepted | 2026-07-15 |
+| ADR-119 | [Adaptive, Track-Record-Driven Generation Budgets for the Five Benchmark-Gated Evolution Tools (Q2 Evolvability, Milestones 1–3/3)](#adr-119) | Accepted | 2026-07-15 |
+| ADR-120 | [`RunTask`'s Terminal Switch Preserves `goap_fusion_rate_limited` Instead of Collapsing It to a Raw Success/Failure Code (NotebookLM Research)](#adr-120) | Accepted | 2026-07-15 |
+| ADR-121 | [The Self-Healing Envelope Reaches the Last Three GA Variants — Q-Learning, Memetic, and MAP-Elites (Q2 Evolvability, Milestones 1–3/3)](#adr-121) | Accepted | 2026-07-15 |
+| ADR-122 | [`BTFusionTree`'s HITL Gate Reclassified `local_reversible`/`auto_approve`, Ending Every Unattended Cycle's Deadlock (Q3 Reliability, Milestone 1/2)](#adr-122) | Accepted | 2026-07-16 |
+| ADR-123 | [`mcpDeps` Gains a `bbMu` Mutex, and `engine.Server` Gains a `RegisterBlackboardTool` Primitive, for the Shared-Blackboard Data Race Across `bt_run_task` and the Cross-File Tool Handlers That Touch `deps.bb` (Q1 Correctness / Q3 Reliability, Milestones 1, 4 & 5/5)](#adr-123) | Accepted | 2026-07-16 |
+| ADR-124 | [`cmd/bt-agent` Migrates All Six Shared-Blackboard Tools onto `Server.RegisterBlackboardTool`, Closing ADR-123's Residual Production Gap](#adr-124) | Accepted | 2026-07-16 |
+| ADR-125 | [The ExperienceBank Write Side Now Threads Failing-Task Context, Closing ADR-109's Warm-Start Loop (Q2 Evolvability, Milestones 1–3/3)](#adr-125) | Accepted | 2026-07-16 |
+| ADR-126 | [`/api/trees` Surfaces Fitness and Evolution Lineage, Closing Milestones 1–2/4 of the Dashboard's Dead Blind Spot (Q1 Correctness / Q2 Evolvability)](#adr-126) | Accepted | 2026-07-16 |
+| ADR-127 | [`bt_evolve_bottlenecks` Consults `EvolutionLineage` Before Re-Evolving a Tree With a Fitter, Non-Regressing Evolved Descendant, Closing Milestone 4/4 of ADR-126's Program (Q1 Correctness / Q2 Evolvability)](#adr-127) | Accepted | 2026-07-16 |
+| ADR-128 | [`ACPClient.GenerateCtx` Guards Its `cmd.Stderr` Buffer With a Mutex, Closing a Data Race Between the Subprocess's Copy Goroutine and the Timeout/Scan-Error Read Path (NotebookLM Research)](#adr-128) | Accepted | 2026-07-16 |
+| ADR-129 | [`setGoapStateDurable` Makes GOAP Fusion Charge Stamps Durable, and `clearSuperpowersPlanState` Retires Them on Cycle Completion (Q3 Reliability, Milestones 1–2/2)](#adr-129) | Accepted | 2026-07-16 |
+| ADR-130 | [`IsKnownChainKind` Closes the ChainAction chain_type / Leaf-Children Validation Gap at Authoring Time (Q1 Correctness, Complete)](#adr-130) | Accepted | 2026-07-16 |
+| ADR-131 | [Composable Behavior-Tree Building Blocks (formerly docs/adr ADR-008)](#adr-131) | Accepted | 2026-06-04 |
+| ADR-132 | [Scoped Blackboard for Context Offloading (formerly docs/adr ADR-009)](#adr-132) | Accepted | 2026-06-14 |
+| ADR-133 | [Personalized Self-Evolving Agents (formerly docs/adr ADR-010)](#adr-133) | Accepted — implemented | 2026-07-08 |
+| ADR-134 | [`RebuildTarget.Unit` Closes the Deploy-Drift Restart-Handoff Gap: Swapped Sibling Units Restart Too, and `bt-dashboard`/the MCP Binary Join Fleet-Wide Adoption (Q3 Reliability, Milestones 1–3/3)](#adr-134) | Accepted | 2026-07-17 |
+| ADR-135 | [`GenerateWithModel`/`generateCtx` Adopt Retry-With-Full-Jitter, and `FallbackLLM.generate` Gains a Per-Model Circuit Breaker (Q3 Reliability, Milestones 2–4/5)](#adr-135) | Accepted | 2026-07-17 |
+| ADR-136 | [`internal/engine/chains.go`'s Chain Executors Adopt the Shared `reliability.RetryPolicy`, Closing Milestone 5/5 of the LLM Text-Generation Reliability Program](#adr-136) | Accepted | 2026-07-17 |
+| ADR-137 | [Evolved-Tree Structural Metadata, Lineage Edges, and Resurrection-on-Load Survive a Daemon Restart (Q2 Evolvability, Milestones 1–3/4)](#adr-137) | Accepted | 2026-07-17 |
+| ADR-138 | [`persistEvolvedWinner` Flushes the Feedback Snapshot to Disk on Every Evolved-Winner Registration, Closing Milestone 4/4 of ADR-137's Program (Q2 Evolvability)](#adr-138) | Accepted | 2026-07-17 |
+| ADR-139 | [`dlqReplayOutcomeError` Extends the Healthy-Outcome Classification to the DLQ Replay Executor, Ending Endless Re-Replay of Rate-Limit and No-Code Outcomes (NotebookLM Research)](#adr-139) | Accepted | 2026-07-17 |
+| ADR-140 | [`bt_evolve_selection_pressure` Adopts the ADR-127 Lineage-Skip Guard and `bt_evolve_genetic` Writes Fitness Back to the Base Tree, Closing the Q2 Evolvability Fitness-Feedback/Lineage-Skip Consistency Program (Milestones 1–2/2)](#adr-140) | Accepted | 2026-07-17 |
+| ADR-141 | [`AgentExecutor.RunTaskResult` Joins the Shared Per-Agent Circuit Breaker as a Third Writer/Enforcer, Closing the Dashboard's Dead Task-Metrics Recording Gap (Q3 Reliability, Milestones 1–3/3)](#adr-141) | Accepted | 2026-07-17 |
+| ADR-142 | [`dashboard.RecordTask` Wired into `AgentExecutor.RunTaskResult` and the Two Direct `agent.RunAgent` Call Sites That Bypass It, Closing the Dashboard's Dead Agent-Metrics Recording Gap (Q3 Reliability, Milestones 1–2/3)](#adr-142) | Accepted | 2026-07-17 |
+| ADR-143 | [`AgentExecutor.recordBlockFitnessMetric` Wires `RecordBlockFitness` into `RunTaskResult`, Closing the Task-Metrics/Block-Fitness Program (Q3 Reliability, Milestone 3/3)](#adr-143) | Accepted | 2026-07-17 |
+| ADR-144 | [`historyQualityScore`/`recordedQuality`, `runJob`'s Published `failureReason`, and `AgentExecutor.recordCircuitBreakerOutcome` All Exempt `RateLimitCarryoverOutcome`, Closing Classification Gaps the 2026-07-17 `cycleBreakerSuccess` Fix Left Behind (Q1 Correctness / Q3 Reliability, Milestones 1–3/5)](#adr-144) | Accepted | 2026-07-17 |
+| ADR-145 | [`AgentExecutor.recordTaskMetric`/`recordBlockFitnessMetric` Exempt `RateLimitCarryoverOutcome`, and `agent.IsRateLimitCarryover` Consolidates the Duplicated Check Across All Call Sites, Closing the ADR-144 Program (Q1 Correctness / Q3 Reliability, Milestones 4–5/5)](#adr-145) | Accepted | 2026-07-17 |
+| ADR-146 | [`gardener.Config.KnowledgeGraph` Lets `RunCycleV2` Rank Trees by `ComputeAnalytics()` Bottleneck/Selection-Pressure Signals Instead of Flat Alphabetical Order (NotebookLM Research)](#adr-146) | Accepted | 2026-07-17 |
+| ADR-147 | [The Real GOAP A* Planner Is Wired Into Production Domain Trees Ahead of the Keyword Router, and a Fail-Loud Startup Validation Gate Is Added (Q2 Evolvability / Q1 Correctness, Milestones 1–3/3)](#adr-147) | Accepted | 2026-07-17 |
+| ADR-148 | [`handleTrees` Merges the `domains.AllDomainTrees()` Catalog into `/api/trees`, Making It a Complete Single Source for Tree Selection (NotebookLM Research)](#adr-148) | Accepted | 2026-07-17 |
+| ADR-149 | [`BTAgentExecutor.Execute`/`Cancel` and `AuctionDelegate` Are Routed Through the Platform's Shared `agent.History` Chokepoint, Closing the A2A Run-Visibility Gap (Q1 Correctness / Q3 Reliability, Milestones 1–2/2)](#adr-149) | Accepted | 2026-07-17 |
+| ADR-150 | [`WebhookPublisher.handleEvent` Adopts Retry-With-Full-Jitter, a Per-Subscription Circuit Breaker, and an In-Memory DLQ with Replay, Closing the Hermes Webhook-Delivery Reliability Program (Q3 Reliability, Milestones 1–3/3)](#adr-150) | Accepted | 2026-07-17 |
+| ADR-151 | [`RunPanel` Adopts `SafeGo` and a Package-Level Circuit Breaker, and `Run` Enforces `cfg.Timeout` via `context.WithTimeout` (Q3 Reliability, Milestones 1–3/4)](#adr-151) | Accepted | 2026-07-17 |
+| ADR-152 | [`Judge` and `Synthesize` Adopt Retry-With-Full-Jitter for Their Single-Shot LLM Calls, Closing the Fusion-Panel Reliability Program (Q3 Reliability, Milestone 4/4)](#adr-152) | Accepted | 2026-07-17 |
+| ADR-153 | [`agents.js` Fetches `/api/trees` and Groups the Create-Agent Dropdown into `<optgroup>`s by Category, and `handleTrees` Carries `domains.Descriptions` Text, Closing the ADR-148 Program (Q4 Personalization & Self-Growth / Q2 Evolvability)](#adr-153) | Accepted | 2026-07-17 |
+| ADR-154 | [`Registry.SaveTree` and `MetricsTracker.Save` Check the `os.WriteFile` Error Before Renaming, and `evolveTreeV2`/`RunCycleV2` Propagate Save Failures Instead of Discarding Them (Q3 Reliability, Milestones 1–3/4)](#adr-154) | Accepted | 2026-07-17 |
+| ADR-155 | [`RunTask` Nil-Guards `bb.ChainState` at Its Single Choke Point, Closing Milestone 1/4 of the ChainState Nil-Map-Panic Program (Q1 Correctness / Q3 Reliability)](#adr-155) | Accepted | 2026-07-17 |
+| ADR-156 | [`Execute` Reads `bb.ChainState["auction_award"]` Back to Attribute the History Record to the Auction Winner, Closing Milestone 4/4 of the ChainState Nil-Map-Panic Program (Q1 Correctness / Q3 Reliability)](#adr-156) | Accepted | 2026-07-17 |
+| ADR-157 | [`BuildKnowledgeGraph` Registers the 24 Domain Trees `AllDomainTrees()` Was Missing, Closing the KG-Registry Domain-Tree-Drift Gap (NotebookLM Research)](#adr-157) | Accepted | 2026-07-17 |
+| ADR-158 | [`buildGardenerConfig` Wires a Live `*knowledge.KnowledgeGraph` into the Gardener Daemon, and `evolveTreeV2` Writes Accepted Mutations Back into It, Closing ADR-146's Production-Wiring Gap (Q2 Evolvability, Milestones 1–3/4)](#adr-158) | Accepted | 2026-07-17 |
+| ADR-159 | [`buildDashboardKnowledgeGraph` Loads Persisted Feedback into `bt-dashboard`'s Knowledge Graph, Closing Milestone 4/4 of the ADR-158 Program (Q2 Evolvability)](#adr-159) | Accepted | 2026-07-18 |
+| ADR-160 | [`loadGoapChargeStampsDurable` Reads the Durable Charge Stamps Back into a Resumed Tick's `ChainState`, Closing ADR-129's Flagged Remainder (Q3 Reliability)](#adr-160) | Accepted | 2026-07-18 |
+| ADR-161 | [Automation-Status Execution Gate, Rejected-Tree Quarantine, and a Live Gardener `Rescan()`, Closing Milestones 1–3/4 of the HITL-Adoption/Live-Rescan Program (Q4 Personalization & Self-Growth)](#adr-161) | Accepted | 2026-07-18 |
+| ADR-162 | [`recordUserFeedback`'s `flagged_for_review` Signal Raises a Real HITL Escalation and Pauses the Automation via a New `"flagged"` Status, Closing Milestone 4/4 of the HITL-Adoption Program (Q4 Personalization & Self-Growth)](#adr-162) | Accepted | 2026-07-18 |
+| ADR-163 | [`Server.rpcHandler` Is Built Once at Construction and Shared Across Every `handleAgentEndpoint` Request, Fixing a Per-Request-Throwaway A2A Task Store (NotebookLM Research)](#adr-163) | Accepted | 2026-07-18 |
+| ADR-164 | [`AuctionDelegate` Widens Its Fallback Condition to a Winner's Open Circuit Breaker or Exhausted Retry Policy, Closing ADR-064's Flagged No-Fallback Gap (NotebookLM Research)](#adr-164) | Accepted | 2026-07-18 |
+| ADR-165 | [`A2AHandoffBlock`'s `side_effect_class` Moves from the Inert Root `Sequence` to the `A2AApproval` `HumanApprovalGate` Itself, Making External A2A Delegation Actually Mandatory-HITL (NotebookLM Research)](#adr-165) | Accepted | 2026-07-18 |
+| ADR-166 | [`DelegateToA2AFn` Threads the Tree's `context.Context` Through to the A2A Client Instead of Substituting `context.Background()`, Closing Milestone 1/5 of the DelegateToA2A Hardening Program (Q3 Reliability)](#adr-166) | Accepted | 2026-07-18 |
+| ADR-167 | [`generateWithRetry`/`generateWithRetryPolicy` Honor `ChainConfig.MaxTokens` via `GenerateWithMaxTokens`, `bb.TokensUsed` Becomes Real, and `SerializableNode.Validate()` Flags Implausibly Small `max_tokens`, Closing Milestones 1–3/4 of ADR-006's Flagged max_tokens Gap (Q1 Correctness / Q3 Reliability)](#adr-167) | Accepted | 2026-07-18 |
+| ADR-168 | [Domain-Tree `max_tokens` Values Re-Audited and Corrected Across `kanban.go`, `hermes_evolve.go`, and `hermes_obsidian.go`, Closing Milestone 4/4 of ADR-167's max_tokens Program (Q1 Correctness / Q3 Reliability)](#adr-168) | Accepted | 2026-07-18 |
+| ADR-169 | [`a2a.Server`/`BTAgentExecutor` `CardCache` Gains a `sync.RWMutex`, Closing a Refresh-vs-Read Data Race (NotebookLM Research)](#adr-169) | Accepted | 2026-07-18 |
+| ADR-170 | [`KnowledgeGraph.BuildIndex` and Three `factory.go` Read Sites Snapshot `kg.Trees` Under `kg.mu.RLock`, Closing an Unsynchronized Map-Access Race (NotebookLM Research)](#adr-170) | Accepted | 2026-07-18 |
+| ADR-171 | [The Entropy/Gini-Based `DTAnalyzer`/`BTOptimizer` Engine Gains a Telemetry Bridge and Non-Destructive Reordering Passes Mirroring `SelectorOptimizer`'s, Closing Milestones 1–3/4 of the DTAnalyzer Production-Wiring Program (Q2 Evolvability)](#adr-171) | Accepted | 2026-07-18 |
+| ADR-172 | [`Gardener.AnalyzeTreeDiagnostics` Runs `BTOptimizer.AnalyzeTree` Against a Clone, Surfacing Destructive-Analysis Counts for HITL Review Without Risking the Live Tree, Closing Milestone 4/4 of the ADR-171 DTAnalyzer Program (Q2 Evolvability)](#adr-172) | Accepted | 2026-07-18 |
+| ADR-173 | [`finalizeFeedbackEscalation` Resumes a Flagged Automation on HITL Approval, `AutomationBlocked` Closes a Fallback-to-Default-Tree Bypass, and Re-Escalation Is Suppressed While a Tree Is Already Pending Review, Closing the ADR-162 Feedback-Escalation Resume-Loop Gap (Q4 Personalization & Self-Growth)](#adr-173) | Accepted | 2026-07-18 |
+| ADR-174 | [`internal/llm.Client` and Its `ErrorRecorder`/`TracedLLM`/`FallbackLLM` Decorators Implement `GenerateWithMaxTokens`, Closing ADR-167's Flagged Production-Stack Gap (NotebookLM Research)](#adr-174) | Accepted | 2026-07-18 |
+| ADR-175 | [`internal/persona.FinalizeAutomationApproval`/`FinalizeFeedbackEscalation` Are Extracted as Binary-Agnostic Functions and Wired into `bt-dashboard`'s `HandleHITL`, Closing the Dashboard/MCP HITL-Finalization Parity Gap (Q4 Personalization & Self-Growth)](#adr-175) | Accepted | 2026-07-18 |
+| ADR-176 | [`util.SaveJSONAtomic`/`LoadJSON` Become the One Canonical Implementation of ADR-003's Atomic-Write Pattern, Fixing Three Sites That Had Silently Drifted from It (Q5 Consistency & Reuse)](#adr-176) | Accepted | 2026-07-18 |
+| ADR-177 | [`reapOrphanedSuperpowersBranches` Force-Reaps Unmerged `superpowers/*` Branches Behind a 7-Day Age Gate, an Abandonment Check, and an Archive-Before-Delete Safety Net (Q3 Reliability)](#adr-177) | Accepted | 2026-07-19 |
+| ADR-178 | [`gitStageArgs` Stops Re-Staging `graphify-out/`'s Regenerated Artifacts and `sectionAwareGraphContext` Becomes the One Canonical Graphify-Report Reader (Q5 Consistency & Reuse, Milestones 1–3/5)](#adr-178) | Accepted | 2026-07-19 |
+| ADR-179 | [`goapResearchGoalKey` Strips a Scoped Goal Line's `(files: …)` Suffix and `executeSuperpowersTaskBatch` Gates Each Task's RED Phase on Remaining Cycle Budget, Closing Milestones 4–5/5 of the ADR-178 Q5 Program](#adr-179) | Accepted | 2026-07-22 |
+| ADR-180 | [`reliability.ScoreOutcome` Becomes the One Canonical Block-Fitness Scoring Formula, Replacing Two of Its Three Copy-Pasted Sites (Q5 Consistency & Reuse, Milestones 1–3/4)](#adr-180) | Accepted | 2026-07-22 |
+| ADR-181 | [`AgentExecutor.recordBlockFitnessMetric` Adopts `reliability.ScoreOutcome`, Closing Milestone 4/4 of the ADR-180 Block-Fitness Consolidation Program (Q5 Consistency & Reuse)](#adr-181) | Accepted | 2026-07-22 |
+| ADR-182 | [`bt-dashboard` Refreshes Its Own KG Analytics Gauges on Every `/api/metrics` Scrape Instead of Depending on `bt-agent`'s Separate-Process `bt_kg_analytics` Tool (NotebookLM Research)](#adr-182) | Accepted | 2026-07-22 |
+| ADR-183 | [`reliability.AcquireFileLock` Is Exported and `research.UpdatePrograms` Wraps Every `ProgramStore` Read-Modify-Write Under It, Closing Milestones 1–3/5 of the ProgramStore Concurrent-Writer Lost-Update Program (Q3 Reliability)](#adr-183) | Accepted | 2026-07-22 |
+| ADR-184 | [`PrioritizeGoapGoals`'s Milestone-Attempt Charge and `seedCodeFixProgram`'s Program-Store Write Move onto `research.UpdatePrograms`, Closing Milestones 4–5/5 of the ADR-183 ProgramStore Lost-Update Program (Q3 Reliability)](#adr-184) | Accepted | 2026-07-22 |
+| ADR-185 | [`ReportSuperpowersImplementation`/`VerifyGoapFusionEvidence` Recognize the `committed_pr_opened` ApplyStatus, Closing a Fleet-PR Evidence-Gate False Negative (Q3 Reliability)](#adr-185) | Accepted | 2026-07-23 |
+| ADR-186 | [`BT_SELECTOR_ORDERING_STRATEGY` Wires `OrderByIG`/`OrderByGini`/`OrderByHybrid`/`OrderByKiller` into Both Production Selector-Ordering Call Sites Instead of Deleting Them, Closing Milestone 4/5 of the Selector-Reordering Consolidation Program (Q2 Evolvability)](#adr-186) | Accepted | 2026-07-23 |
+| ADR-187 | [`NewRunDeps`'s Config-Load-Failure Fallback Adopts `config.DefaultConfig()` Instead of a Zero-Value `Config`, Closing Milestone 1/3 of the agentexec Characterization Program (Q1 Correctness)](#adr-187) | Accepted | 2026-07-23 |
+| ADR-188 | [`Judge` and `Synthesize` Derive Their Timeout from the Original Caller `ctx`, Making `cfg.Timeout` a Per-Stage Budget Instead of an End-to-End One, Amending ADR-151 (NotebookLM Research)](#adr-188) | Accepted | 2026-07-23 |
+| ADR-189 | [`reliability.ScoreOutcome`'s Outcome-String Fallback Is Removed — `success` Is the Sole Signal, Correcting ADR-180/ADR-181's False "Byte-Identical" Claim (Self-Fix, Fleet Review 2026-07-22)](#adr-189) | Accepted | 2026-07-23 |
+| ADR-190 | [`domains.ExpectedDomainIDs` Becomes the One Canonical `ExpectedDomains` Conversion, and `cmd/bt-dashboard` Wires It So `bt_kg_coverage_gaps` Can Actually Go Non-Zero, Closing a Self-Fix Gap in ADR-182 (Self-Fix, Fleet Review 2026-07-22)](#adr-190) | Accepted | 2026-07-23 |
+| ADR-191 | [`wireDTOrdering` Sets `Config.DTStatsPath`/`EvolveV2Config.DTOrdering` on the Live Gardener Daemon, Closing ADR-171's Flagged DT-Reordering Production-Wiring Gap (Q2 Evolvability)](#adr-191) | Accepted | 2026-07-23 |
+| ADR-192 | [`bt_gardener_dt_diagnostics` MCP Tool Surfaces `Gardener.AnalyzeTreeDiagnostics` for HITL Review, Closing ADR-172's Flagged "No Production Caller" Gap (Q2 Evolvability)](#adr-192) | Accepted | 2026-07-23 |
+| ADR-193 | [`reflection.Store.LoadAll` Filters to the `reflection-*.json` Prefix `Save` Actually Writes, Closing a Phantom-Record Gap That Inflated `ev_evaluate`/`la_fitness` Success Counts (Self-Fix, Fleet Review 2026-07-22)](#adr-193) | Accepted | 2026-07-23 |
+| ADR-194 | [`execFusion` Threads `chainContext(bb)` Into `fusion.Run` Instead of a Bare `context.Background()`, and `fusion.RunPanel` Checks `ctx.Err()` Before Dispatch (NotebookLM Research)](#adr-194) | Accepted | 2026-07-23 |
+| ADR-195 | [`AgentExecutor.Execute` Carries the Caller's Context, Goap Cycles Get One Scheduler Attempt Per Slot, and Evidence-Shape Rejections Are Non-Retryable (Fleet Review 2026-07-23, Gap 2)](#adr-195) | Accepted | 2026-07-23 |
+| ADR-196 | [Deploy Adoption Deduplicates (Tree-Identity, Built-At-Head, Adoption Stamps, Gardener Self-Restart), Crisis Detection Fires on Decline Transitions Only, Stale Milestones Complete on a Charge-Time Red Pre-Check, and the Researcher Gains Slot Rotation + a Novelty Gate (Fleet Review 2026-07-23, Gaps 4–8)](#adr-196) | Accepted | 2026-07-23 |
+| ADR-197 | [Self-Fix Programs Preempt the General Program Queue (Fixes-First Scheduling)](#adr-197) | Accepted | 2026-07-23 |
+| ADR-198 | [`cmd/bt-agent`'s Two Shutdown Paths Call `a2aSrv.Stop()` on SIGINT/SIGTERM, Closing a Graceful-Shutdown Gap Left Open Since the A2A Server's Introduction (NotebookLM Research)](#adr-198) | Accepted | 2026-07-23 |
+| ADR-199 | [`Population.EvolveQLearning` Takes a `*ReinforcementLearner` Instead of Raw `epsilon`/`learningRate` Floats, Annealing Exploration via `DecayEpsilon` Once Per Generation (NotebookLM Research)](#adr-199) | Accepted | 2026-07-23 |
+| ADR-200 | [`SuiteForTree` Gains Explicit Cases for Every Registered Domain Tree, Closing a Benchmark-Gate Blind Spot That Silently Fell Back to the Unrelated GoDev Suite (Q2 Evolvability)](#adr-200) | Accepted | 2026-07-23 |
+| ADR-201 | [`RunSuite`/`RunABTest`/`ScoreMutation` Gain a `PathMatchRate` Signal So a Mutation That Mis-Routes Tasks Onto the Wrong `StrategyRouter` Branch Can No Longer Score Neutral-or-Better, and a New Runtime Baseline Check Finds All Ten Finance-Agent Trees Benchmark-Gated on the Wrong Shared Suite (Q2 Evolvability)](#adr-201) | Accepted | 2026-07-23 |
+| ADR-202 | [`goapFusionApplyAlreadyLanded` Makes a Committed `ApplyStatus` Authoritative Over the No-Plan Guard, Closing Milestone 1/2 of the Partial-Apply-Landings-Misclassified-as-Failed Program (Q3 Reliability)](#adr-202) | Accepted | 2026-07-23 |
+| ADR-203 | [`dtStatsPathFor` Resolves DT-Reordering Telemetry from the Real Per-Tree `agent.DecisionTreeStatsFile`, Not Only the Producer-less `Config.DTStatsPath`, Closing ADR-191's Inert-Activation Gap (Q2 Evolvability, Milestones 1–2/2)](#adr-203) | Accepted | 2026-07-23 |
+| ADR-204 | [`RestoreTreeBeforeRegressionStreak` Walks Rollback Back Past a Multi-Cycle Regression Streak Instead of Restoring Only the Latest Snapshot, and `Registry.RollbackTree` Adopts It (NotebookLM Research)](#adr-204) | Accepted | 2026-07-23 |
+| ADR-205 | [A Bounded Claim/Lease on the Program Store Stops a Sibling Cycle from Planning or Charging a Program Another Cycle Is Actively Landing (Q3 Reliability, Milestones 1–2/3 — Superseded by ADR-210 for Milestone 3/3)](#adr-205) | Accepted | 2026-07-24 |
+| ADR-206 | [`runPRShepherd` Pins an Open PR's Head SHA for the Life of Its Batch — New Local-Master Landings No Longer Force-Push Onto It, Only Fix-Red Commits May (Q3 Reliability, Milestone 1/2)](#adr-206) | Accepted | 2026-07-23 |
+| ADR-207 | [A Per-Tree-Name `MAPElitesGrid` Archive Feeds `evolveTreeV2`'s `BehavioralDiversity`, Closing ADR-196's Explicitly Deferred Diversity-Collapse Wiring (Q2 Evolvability)](#adr-207) | Accepted | 2026-07-24 |
+| ADR-208 | [`ComposePresetWithTools`'s `"default"`/`"hitl"` Cases Stop Double-Applying `PipelineWithToolsProfile` to an Already-Profiled Package-Level Slice, Closing Milestone 2/3 of the `compose_presets.go` Characterization Program (Q1 Correctness)](#adr-208) | Accepted | 2026-07-24 |
+| ADR-209 | [`DelegateBlock`'s `side_effect_class` Moves from the Inert Root `Sequence` to the `DelegateApproval` `HumanApprovalGate` Itself, Making Tree Delegation Actually Mandatory-HITL, Mirroring ADR-165, Closing Milestone 3/3 of the `compose_presets.go` Characterization Program (Q1 Correctness)](#adr-209) | Accepted | 2026-07-24 |
+| ADR-210 | [`completeGoapProgramMilestone` and the Red-Evidence Pre-Check Completion Branch Both Call `ReleaseClaim` on Successful `MarkDone`, Closing Milestone 3/3 of the ADR-205 Program-Claim/Lease Program (Q3 Reliability)](#adr-210) | Accepted | 2026-07-24 |
+| ADR-211 | [`RunOnce` Self-Records SLO Evidence, Closing the Interactive/MCP Gap in the Gardener's Validation Gate, with a New `SkipSLORecording` Opt-Out Keeping the Scheduler's `recordSchedulerAttempt` the Sole Recorder for Its Own Path (NotebookLM Research)](#adr-211) | Accepted | 2026-07-24 |
+| ADR-212 | [`cmd/bt-dashboard` Wires `a2a.AuctionCardsFn` from Its Own Live Agent Registry, Closing the Second Production Call Site ADR-008 Left Dashboard-Side (NotebookLM Research)](#adr-212) | Accepted | 2026-07-24 |
+| ADR-213 | [`SerializableNode.validateRecursive`'s Cycle Detection Skips Childless Leaf Nodes, No Longer Flagging a Composite/Lone-Child Same-Name Idiom as a False-Positive Cycle, Closing Milestone 1/3 of the `fanout.go` Characterization Program (Q1 Correctness)](#adr-213) | Accepted | 2026-07-24 |
+| ADR-214 | [`composeWithMiddle` Inserts `spec.Blocks` Instead of a Hardcoded Three-Block Sequence, Restoring the `core:human_gate`/`core:tools_default` Blocks `ComposeTaskTreeWithHITL` Had Silently Dropped Since Introduction, Closing Milestone 3/3 of the `fanout.go`-and-2-More Characterization Program (Q1 Correctness)](#adr-214) | Accepted | 2026-07-24 |
+| ADR-215 | [`precheckGoapStaleMilestones`'s Completion Branch Calls the New `ProgramStore.ClearClaim` Instead of `ReleaseClaim`, Correcting ADR-210's Claim That Both `MarkDone` Call Sites Already Released Their Claim (NotebookLM Research)](#adr-215) | Accepted | 2026-07-24 |
+| ADR-216 | [`SaveSLOMetrics` Serializes Concurrent Callers with a Package-Level Mutex, Closing a Race ADR-211's Own Concurrent Callers Introduced (NotebookLM Research)](#adr-216) | Accepted | 2026-07-24 |
+| ADR-217 | [`gardener.CollectAgentSLOs` Reads Persisted Cross-Process SLO Evidence via `engine.LoadSLOEvidence`, Closing a Permanent-Empty Gap in the Dashboard's `GardenerMetrics.SLOs` (NotebookLM Research)](#adr-217) | Accepted | 2026-07-24 |
+| ADR-218 | [`BuildKnowledgeGraph` Registers the 13 Bare Resolver-Special-Case Tree IDs `AllDomainTrees()` Never Returns, and `ComputeAnalytics` Audits Them Alongside `ExpectedDomains`, Extending the ADR-157/ADR-190 Registry-Drift Guard to a Second Drift Source (NotebookLM Research)](#adr-218) | Accepted | 2026-07-24 |
+| ADR-219 | [`RegisterNotebookLMFitness` Also Wires the Hyphenated `notebooklm-consumer` Tree ID — the Consumer Chain-Agent's Real Production ID — Correcting ADR-097's Underscore-Only Registration (NotebookLM Research)](#adr-219) | Accepted | 2026-07-24 |
+| ADR-220 | [`internal/reliability.CircuitBreaker` Absorbs `internal/agent`'s Duplicate 3-State Breaker — `AgentCircuitBreaker`/`AgentCircuitBreakerStore` Become Type Aliases, Closing the Drift Risk Between Two Independently-Maintained Copies of ADR-007's State Machine (NotebookLM Research)](#adr-220) | Accepted | 2026-07-24 |
+| ADR-221 | [`resolveTreeIDWithResolver` Wires `evolution.TelegramClarifyTree()` Under the Bare `"telegram_clarify"` ID to Match Its Standalone Sibling Trees — Left Outside ADR-218's `resolverSpecialCaseTreeIDs` Coverage-Gap List (NotebookLM Research)](#adr-221) | Accepted | 2026-07-24 |
+| ADR-222 | [`WebhookPublisher` Adopts `reliability.CircuitBreakerStore`, Closing One of ADR-220's Three Flagged Unconsolidated Registries, and `replayDeadLetters` Gains the Missing Per-Subscription Breaker Check It Was Bypassing (NotebookLM Research)](#adr-222) | Accepted | 2026-07-24 |
+| ADR-223 | [`SignAgentCard`/`VerifyAgentCard` Move from an Unkeyed SHA-256 Hash to a Keyed HMAC-SHA256 Signature, Closing ADR-090's Flagged Authentication Gap (NotebookLM Research)](#adr-223) | Accepted | 2026-07-28 |
+| ADR-224 | [`engine.walkValidate`'s Cycle Detection Skips Childless Leaf Nodes, Mirroring ADR-213's `internal/evolution` Fix in the `internal/engine` Validation Path (Q1 Correctness)](#adr-224) | Accepted | 2026-07-28 |
+| ADR-225 | [`parseClaudeRateLimitReset` Parses the Weekly-Quota Reset Shape in Its Own IANA Zone, and `claudeBackoffDeadline` Trusts a Multi-Day Deadline for It, Closing ADR-016's Flagged Heuristic-Window Gap for the Weekly Case (NotebookLM Research)](#adr-225) | Accepted | 2026-07-28 |
+| ADR-226 | [`evaluateCondition` Requires an Exact `"true"` Match Instead of a 4-Character Prefix Check, Closing a False-Positive Condition-Match Bug (NotebookLM Research)](#adr-226) | Accepted | 2026-07-28 |
+| ADR-227 | [`wireSelectorReorder` Also Wires `domains.DTStatsPathFn` Under `BT_SELECTOR_REORDER=1`, Closing ADR-171's Resolve-Time `domains.DTStatsPath` Production-Wiring Gap (Q2 Evolvability)](#adr-227) | Accepted | 2026-07-28 |
+| ADR-228 | [`bt-dashboard` and `bt-gardener` Wire an `InFlightFn` Guard into Their `DriftWatchConfig`, Closing ADR-050's Flagged AutoRestart-Mid-Request/Mid-Cycle Gap (NotebookLM Research)](#adr-228) | Accepted | 2026-07-28 |
+| ADR-229 | [`loadOrCreateSigningKey` Logs a Warning Instead of Silently Swallowing a Signing-Key Persistence Failure (NotebookLM Research)](#adr-229) | Accepted | 2026-07-28 |
+| ADR-230 | [`IsCIBuildTask`/`IsTradingTask` Gain Broader Keyword Coverage, Closing a StrategyRouter Branch-Reachability Gap a New Cross-Domain Suite Test Surfaced (NotebookLM Research)](#adr-230) | Accepted | 2026-07-28 |
+| ADR-231 | [`evolution.CloneMetadata` Becomes the One Canonical Recursive Deep-Copy of Tree Node Metadata, Replacing `cloneTree`'s Shallow Copy and `gardener`'s Private `cloneMetadataForGardener` (NotebookLM Research)](#adr-231) | Accepted | 2026-07-29 |
+| ADR-232 | [`internal/a2a`'s `treeTags` Sources Skill/Bid Tags from `internal/knowledge.GlobalGraph`'s Fitness-Weighted `Capability` List Instead of an Ad Hoc Tree-ID String Split, Routing Auction Capability Matching Through the Knowledge Graph's Canonical Model (NotebookLM Research)](#adr-232) | Accepted | 2026-07-29 |
+| ADR-233 | [`TaskStore.Approve`/`Reject` and `Workflow.ApproveTask`/`RejectTask` Both Resolve the Matching `hitl.Request` via a Shared `resolveHITLAudit` Helper, Giving HITL Approve/Reject One Canonical Audit-Trail Code Path (NotebookLM Research)](#adr-233) | Accepted | 2026-07-29 |
+| ADR-234 | [`hashTree` Fingerprints the Full Subtree via `json.Marshal` Instead of Only the Root Node's Name+Type+Child-Count, Closing a Genome-Collision Bug in Diversity Tracking (NotebookLM Research)](#adr-234) | Accepted | 2026-07-29 |
+| ADR-235 | [`RecordRun` Marks Its Own Feedback Dirty, Closing a Silent-Loss Gap in Evolved-Tree Feedback Persistence (NotebookLM Research)](#adr-235) | Accepted | 2026-07-29 |
+| ADR-236 | [`CompanyState` Gets Its Own Mutex, Closing a Shared-Pointer Race Across `Workflow` and `CompanyOrchestrator` Wrappers (NotebookLM Research)](#adr-236) | Accepted | 2026-07-29 |
+| ADR-237 | [`TranspositionTable.Save` and a New `exportSLOMetrics` Helper Adopt `util.SaveJSONAtomic`, Closing Two More ADR-176 Stragglers (NotebookLM Research)](#adr-237) | Accepted | 2026-07-30 |
+| ADR-238 | [`KanbanAndHermesDomainTrees` Gives the Eight Kanban/Hermes Trees Their Own Smoke and Condition-Description Coverage, Closing a Guard Gap `AllDomainTrees()` Never Covered (NotebookLM Research)](#adr-238) | Accepted | 2026-07-30 |
+| ADR-239 | [`CompanyOrchestrator.RunSprint` Snapshots State Under a Short Lock Instead of Holding It Across Three 120s `runTree` Calls, Amending ADR-236's Whole-Body Locking (NotebookLM Research)](#adr-239) | Accepted | 2026-07-30 |
+| ADR-240 | [Three GOAP-Fronted Domain Trees Gain a `SetupGoapTools` Action, Making Their Previously-Unreachable `GOAP_Root` Branch Actually Reachable (NotebookLM Research)](#adr-240) | Accepted | 2026-07-30 |
+| ADR-241 | [Every Keyword-Matching Condition in `conditions_domain.go` Routes Through One `strings.ToLower(bb.Task)`, Closing an Inconsistent Case-Sensitivity Gap the File's Own Existing Conditions Already Disagreed On (NotebookLM Research)](#adr-241) | Accepted | 2026-07-30 |
+| ADR-242 | [`BuildCircuitBreaker` Stops Clearing Its Failure Streak and Open State on a Merely-Running Child Tick, Matching `circuitBreakerCmd`'s Already-Correct Semantics (Q1 Correctness)](#adr-242) | Accepted | 2026-07-30 |
+| ADR-243 | [`ExpectedDomainIDs` Gains a Guaranteed Sort, Closing a Non-Reproducible-Output Gap Its First Direct Test Coverage Surfaced (Q1 Correctness)](#adr-243) | Accepted | 2026-07-30 |
+| ADR-244 | [`IsCritical`/`IsHealthAlert` Gain Realistic Keyword Coverage and `IsTAPath`'s Ambiguous Short Keywords Become Word-Bounded, Closing Two More StrategyRouter Branch-Reachability Gaps `AlertRouterSuite`/`TradingSignalSuite` Already Declared (NotebookLM Research)](#adr-244) | Accepted | 2026-07-30 |
+| ADR-245 | [A Package-Level Injectable Random Source (`SetEvolutionRand`) Replaces the No-Op `rand.Seed` Across `internal/evolution`'s Shared Breeding Path (Q1 Correctness / Q2 Evolvability)](#adr-245) | Accepted | 2026-08-01 |
+| ADR-246 | [The Gardener's Live Cycle Drives Three More Evolution Algorithms — Island-Model Exploration, MAP-Elites Reseeding, and Local-Search Refinement — Each Adopted Only After Re-Scoring Against the Target Tree's Own Records (Q2 Evolvability)](#adr-246) | Accepted | 2026-08-01 |
+| ADR-247 | [`MCTSMutator` Becomes a Second Structural-Mutation Generator Merged Into One Scored Competition With `evaluator.OrderMutations`, Chosen Per Tree by a Combined Specialist/Selector Affinity (Q2 Evolvability, Milestone 4/5)](#adr-247) | Accepted | 2026-08-01 |
+| ADR-248 | [The Gardener's `ValidationGate` Accepts on Pareto Non-Domination Against the Threshold Reference Point Instead of Per-Threshold Scalar Checks, Bounded by a `MaxObjectiveRegression` Trade-Off Band, and NSGA-II's Duplicated Sort/Crowding Implementations Collapse Into One Canonical Pair (Q2 Evolvability, Milestone 5/5)](#adr-248) | Accepted | 2026-08-01 |
+| ADR-249 | [`refineTreeParameters` Moves Above `evolveTreeV2`'s `ValidationGate` Block So Local-Search Deltas Are Gate-Covered, Amending ADR-246's Flagged Ungated-Adoption Path (Q1 Correctness, NotebookLM Research)](#adr-249) | Accepted | 2026-08-01 |
+| ADR-250 | [Every `cond()`-Built Condition Node Carries a Machine-Readable `EdgeGuard` Typed Edge, Extending ADR-014's Prose-Only Condition Coverage to the Field Production Code Actually Evaluates](#adr-250) | Accepted | 2026-08-01 |
+| ADR-251 | [`SmokeTestableDomainTrees()` Becomes the Single Enumeration of Coverable Domain Trees, and `NonRegistryDescriptions`/`DescriptionFor` plus `SuiteForTreeNamed` Turn Three Hand-Maintained Lists Into Derived, Build-Enforced Invariants](#adr-251) | Accepted | 2026-08-01 |
+| ADR-252 | [`BuildMemSelector` Clamps a Negative Persisted Cursor to a Fresh Pass Instead of Indexing `children[-1]`, Adopting the Range Check `BuildBanditSelector` Already Applies to Its Own Resume Cursor (Q1 Correctness)](#adr-252) | Accepted | 2026-08-01 |
+| ADR-253 | [`adoptIslandWinner` Clears the Quality, Evidence and Validation Gates Before It Overwrites a Live Tree, Closing the Second Half of ADR-246's Ungated-Adoption Debt That ADR-249 Left Open (Q1 Correctness)](#adr-253) | Accepted | 2026-08-02 |
+| ADR-254 | [The Plan-Resume Path Sets and Persists `run.Phase = implementation` Before Handing the Next ~90 Minutes to the Task Batch, Mirroring the `ExecuteSuperpowersTaskBatch` BT Action (NotebookLM Research)](#adr-254) | Accepted | 2026-08-02 |
+| ADR-255 | [A Third Description Map, `ResolverReachableDescriptions`, Gives `ResolveTreeID`-Only Trees a Describable Home Without Weakening the Orphan Guards on the Other Two, Extending ADR-014's Coverage to `superpowers_pipeline`](#adr-255) | Accepted | 2026-08-02 |
+| ADR-256 | [`QualityGate.Probe`'s Composite Floor Becomes Absolute, Making `RefineGated`'s Gate Check Reachable Instead of an Unconditional Accept (Q1 Correctness)](#adr-256) | Accepted | 2026-08-02 |
+| ADR-257 | [`AgentCircuitBreakerStore` Becomes the Single Implementation of `circuit_breakers.json` Persistence — `internal/a2a`'s Hand-Rolled Winner-Breaker Load/Save Is Deleted and the Read-Merge-Write Runs Under ADR-024's Sidecar flock (NotebookLM Research)](#adr-257) | Accepted | 2026-08-02 |
+| ADR-258 | [`ResolverReachableDomainTrees()` Ships ADR-255's Work List as a Production Registry, and an AST Sweep of `tree_resolver.go` Makes Resolver-Reachable Coverage Fail Closed Instead of Fail Open](#adr-258) | Accepted | 2026-08-02 |
+| ADR-259 | [Provider-Selectable Coding Delegation and Bounded Quota Failover](#adr-259) | Accepted implementation | 2026-09-16 |
+| ADR-260 | [Fail-Closed Dashboard Access with Explicit Browser Sessions](#adr-260) | Accepted implementation | 2026-09-16 |
+| ADR-261 | [Codex-Only Coding Delegation by Default](#adr-261) | Accepted | 2026-10-01 |
+| ADR-262 | [Publish Evolution State and Learning After Validated Commit](#adr-262) | Accepted implementation | 2026-10-01 |
+| ADR-263 | [Commit and Reconcile Approval Decisions Before Admission](#adr-263) | Accepted implementation | 2026-10-01 |
+| ADR-264 | [Serialize Snapshot Revision Commit and Preserve Orphan Evidence](#adr-264) | Accepted implementation | 2026-10-01 |
+| ADR-265 | [Configure State Owners Before Runtime Initialization](#adr-265) | Accepted implementation | 2026-10-01 |
+| ADR-266 | [Context-Aware Dashboard Admission and Execution Ownership](#adr-266) | Accepted implementation | 2026-10-01 |
+| ADR-267 | [Terminal Distributed Execution Diagnostics](#adr-267) | Accepted implementation | 2026-10-01 |
+| ADR-268 | [A2A Execution Ownership and Tree Replay Stops](#adr-268) | Accepted implementation | 2026-10-01 |
+| ADR-269 | [Known Execution Stops and Parallel Disposition Evidence](#adr-269) | Accepted implementation | 2026-10-01 |
+| ADR-270 | [Shared Workflow Consent and Completed-Prefix Stops](#adr-270) | Accepted implementation | 2026-10-01 |
+| ADR-271 | [Commit Blackboard State Before Workflow Acknowledgement](#adr-271) | Accepted implementation | 2026-10-01 |
+| ADR-272 | [Rooted Pipeline Selection and Status-Specific Validation](#adr-272) | Accepted implementation | 2026-10-01 |
+| ADR-273 | [Exact Tree Inspection and Safe Presentation](#adr-273) | Accepted implementation | 2026-10-01 |
+| ADR-274 | [Blackboard Owner Admission and Atomic Run Promotion](#adr-274) | Accepted implementation | 2026-10-01 |
+| ADR-275 | [Sprint Result Commit and Metadata Reconciliation](#adr-275) | Accepted implementation | 2026-10-01 |
+| ADR-276 | [Sprint Capacity Reservation and Owned Batch Budgets](#adr-276) | Accepted implementation | 2026-10-01 |
+| ADR-277 | [Conservative Process Restart Recovery Holds](#adr-277) | Accepted implementation | 2026-10-01 |
+| ADR-278 | [Atomic Dashboard Restart Admission and Detached Ownership](#adr-278) | Accepted implementation | 2026-10-01 |
+| ADR-279 | [Target-Owned Sibling Restart and Uncertain Handoff Seals](#adr-279) | Accepted implementation | 2026-10-01 |
+| ADR-280 | [Durable DLQ Replay Claims and Current-Disk Transactions](#adr-280) | Accepted — fixture-tested; production/rollout partial | 2026-10-01 |
+
+<a id="adr-001"></a>
 
 ## ADR-001: Behavior Trees as Core Execution Model
 
@@ -299,6 +324,8 @@ Consolidation notes (2026-07-16):
 
 **Details (from the original ADR file):** Implemented via `rvitorper/go-bt`. Domain experts can author trees declaratively (YAML/JSON) without writing Go; trees must be manually ordered for correct routing (most-specific paths first).
 
+<a id="adr-002"></a>
+
 ## ADR-002: MCP as External Interface
 
 **Context:** Hermes Agent is a Python process. The BT platform is Go. We needed a protocol for them to communicate.
@@ -315,6 +342,8 @@ Consolidation notes (2026-07-16):
 - ⚠️ Gateway restart needed for MCP binary updates (reload doesn't respawn children)
 
 **Details (from the original ADR file):** Three servers: `bt-agent` (core tools), `bt-evaluator` (evolution), `bt-langagent` (ReAct agent).
+
+<a id="adr-003"></a>
 
 ## ADR-003: File-Based Persistence over SQL
 
@@ -334,6 +363,8 @@ Consolidation notes (2026-07-16):
 
 **Details (from the original ADR file):** File format is newline-delimited JSON for append-only logs (history), single JSON arrays for state (DLQ, queue, scheduler). Zero dependencies — works on any platform including Jetson ARM64. Large history files (>100K entries) may need pagination.
 
+<a id="adr-004"></a>
+
 ## ADR-004: YAML-Defined Agent Platform
 
 **Context:** Agents need metadata (name, tree, schedule, I/O contracts, quality gates) separate from the tree definition itself. We needed a registry, scheduler, and catalog.
@@ -351,6 +382,8 @@ Consolidation notes (2026-07-16):
 
 **Details (from the original ADR file):** The runtime additionally provides **History** (JSONL run records with aggregate statistics: success rate, avg duration, quality score) and a **Workflow Orchestrator** (sequential, parallel, conditional, and loop execution across multiple agents). Agent quality scoring composites success rate, output quality, speed, and robustness. Concurrent agent execution is bounded by Jetson memory (qwen3.6:35b ~24 GB/instance).
 
+<a id="adr-005"></a>
+
 ## ADR-005: Stockfish-Adapted Evolution Engine
 
 **Context:** Behavior trees can degrade with random mutations. We needed an evolution engine that systematically improves trees across multiple fitness dimensions.
@@ -367,6 +400,8 @@ Consolidation notes (2026-07-16):
 - ⚠️ Per-tree fitness still evolving (reflection.FilterByTreeName)
 
 **Details (from the original ADR file):** The adapted Stockfish heuristics as accepted: Transposition Table (SHA256(tree+fitness) → cached evaluation), Killer Move Heuristic (fitness-improving mutations get ordering priority), History Heuristic (mutations successful across multiple trees score higher), Alpha-Beta Pruning (prune branches that cannot beat the current best composite), Iterative Deepening (1→5 mutation combos), and Late Move Reductions (promising mutations searched deeper — 3 combo ops; unpromising pruned to a single pass) — together reducing the search space by ~80% vs random exploration. The decision's original companion-engine list was: Genetic Algorithm (k=3 tournament, elitism, 30% mutation rate), Q-Learning (ε=0.2 epsilon-greedy), Decision Tree Optimizer (C4.5/CART Information Gain and Gini impurity on Selector nodes), Ensemble Methods (voting, weighted, stacking), and Memetic Local Search (hill climbing, simulated annealing, tabu search). Quality gates enforce a minimum composite floor (0.3), max regression tolerance (20%), and auto-disable after 5 consecutive failures — these gates eliminated the observed 97.3% regression rate (commit `1c6ebd4d`). The 24/7 gardener daemon runs cycles every 5 minutes. Known gap at acceptance: the transposition table required explicit `ev_tt_save()` — not auto-persisted (closed later by ADR-094/ADR-114).
+
+<a id="adr-006"></a>
 
 ## ADR-006: ChainAction — LLM Integration via BT Nodes
 
@@ -400,6 +435,8 @@ Consolidation notes (2026-07-16):
 
 Operational consequences recorded at acceptance: the `agent` chain type on Jetson takes 20-40 min (11 Ollama calls × 2-4 min each) — limited to scheduled jobs; `max_tokens` below 100 silently truncates agent output to 3-word garbage (auditing required post-evolution); results accumulation required `bb.Results []string` for multi-agent-node trees (a single `bb.Result` was overwritten).
 
+<a id="adr-007"></a>
+
 ## ADR-007: Reliability Architecture — Circuit Breakers, Retry, DLQ
 
 **Context:** LLM calls fail transiently (Ollama OOM, API rate limits). Goroutines can panic (nil dereference in chain processing). Failed tasks must not be silently lost.
@@ -419,6 +456,8 @@ Operational consequences recorded at acceptance: the `agent` chain type on Jetso
 ---
 
 **Details (from the original ADR file):** The full 14-primitive set as accepted: CircuitBreaker (three-state, configurable threshold/cooldown), Backoff (exponential `base × 2^(attempt-1)`, capped), RetryWithBackoff, DeadLetterQueue (file-backed JSON, atomic writes), WorkerPool (fixed-size, graceful shutdown), TaskQueue (file-backed FIFO `Queue`), PriorityTaskQueue (min-heap, 5 levels Critical→Background, persisted), ConcurrencyLimiter (channel semaphore), AgentExecutor (pluggable local/HTTP/gRPC backends), AgentRouter (health-aware round-robin + least-connections), SafeGo/Recover (goroutine panic recovery), AgentResult, ScalabilityStatus, and JobStore (scheduler crash recovery via persisted InFlight flag). Pluggable Queue/PriorityTaskQueue interfaces enable Redis swap-in for distributed mode; AgentRouter failover with weighted least-connections routing supports multi-node horizontal scaling; single-node reliability doesn't address split-brain in multi-node deployments.
+
+<a id="adr-008"></a>
 
 ## ADR-008: Auction-Based A2A Task Allocation
 
@@ -441,6 +480,8 @@ Operational consequences recorded at acceptance: the `agent` chain type on Jetso
 
 ---
 
+<a id="adr-009"></a>
+
 ## ADR-009: Deterministic, LLM-Free Evolution MCP Tools
 
 **Context:** MAP-Elites quality-diversity and NSGA-II multi-objective optimization existed in `internal/evolution`, but neither had a standalone MCP entry point, and their full drivers (e.g. `EvolveMAPElites`) invoke the LLM supervisor — non-deterministic and unusable under `-short`. Separately, asserting or exercising a registered MCP tool by name required driving the stdio JSON-RPC loop, because `Server.tools`/`Server.handler` are private.
@@ -458,6 +499,8 @@ Operational consequences recorded at acceptance: the `agent` chain type on Jetso
 
 ---
 
+<a id="adr-010"></a>
+
 ## ADR-010: Non-Wedging Self-Halting Circuit Gates for the GOAP Fusion Loop
 
 **Context:** The scheduled GOAP fusion loop (`goap-fusion-loop-runner`, §6.4) derives its whole halt/continue verdict from the published state-hash history (`goap_fusion_state_hashes`): `PublishGoapFusionStateHash` is the producer, `EvaluateScheduledGoapFusionCircuitBreaker`/`RunScheduledGoapFusionLoop` the consumers. Two guards protect against the Activity-Progress Confusion failure mode — a repeated-state breaker over a bounded window (`goapFusionCircuitHistoryWindow = 3`) and a runaway-loop backstop that halts once the history reaches a finite ceiling (`goapFusionMaxLoopIterations = 50`) even when every hash is distinct. Both guards, as first shipped, could *permanently* wedge the recurring runner rather than merely halting the offending cycle: the backstop halted but never pruned the durable history, and the history cap equalled the backstop threshold, so every subsequent cron tick re-tripped the backstop and dead-lettered. Symmetrically, an idle tick (no active program milestone and an empty prioritized goal queue) re-derived the identical empty-queue hash and, appended each tick, could pile up a window of identical idle hashes and falsely trip the repeated-state breaker while the loop was merely waiting for work.
@@ -473,6 +516,8 @@ Operational consequences recorded at acceptance: the `agent` chain type on Jetso
 - ⚠️ A half-open backstop trades a hard stop for a bounded retry — a genuinely pathological plan can burn one more window of cycles per tick before re-tripping, relying on the plan-clear-on-failure path (§6.4) to break out
 
 ---
+
+<a id="adr-011"></a>
 
 ## ADR-011: Adopting the Horizontal-Scaling Substrate (RemoteExecutor + AgentRouter)
 
@@ -491,6 +536,8 @@ Operational consequences recorded at acceptance: the `agent` chain type on Jetso
 
 ---
 
+<a id="adr-012"></a>
+
 ## ADR-012: Wiring the Scalability Substrate into the Dashboard Endpoint and Probe (Milestones 3–4)
 
 **Context:** ADR-011 constructed the `RemoteExecutor` + `AgentRouter` substrate in `bt-agent`, but the surfaces that report and exercise it lagged behind. The dashboard's `/api/scalability` endpoint (`handleScalability`) still passed hard-coded placeholders to `NewScalabilityStatus` — `0` queue pending, `0`/`0` router total/healthy, `nil` heartbeat — even though the dashboard had no router of its own to read. The `bt-scalability-probe` only poked each node's execute endpoint independently, so it never demonstrated that a routed task stream actually fans out across backends.
@@ -507,6 +554,8 @@ Operational consequences recorded at acceptance: the `agent` chain type on Jetso
 
 ---
 
+<a id="adr-013"></a>
+
 ## ADR-013: Making the Production Superpowers Pipeline Tree Operator-Selectable and Guarded
 
 **Context:** `SuperpowersPipelineTree()` (`internal/domains/superpowers_pipeline.go`) is a production Superpowers SDLC tree — design artifact → safe worktree/baseline → implementation plan → native HITL approval gate → Claude Code TDD execution → verification → finish evidence — with no ChainAgent placeholders or unconditional skip paths. Yet `ResolveTreeID` (`internal/domains/tree_resolver.go`, the resolver consumed by bt-agent, A2A, and `switch_tree`) had no id mapping to it, so any request for it fell through the resolver's final `return evolution.DefaultTree()` and operators could never actually select it. It also escaped every coverage guard: it is absent from the `AllDomainTrees` registry (so `*HaveDescriptions` never checked it) and from the executable-structure smoke registries, leaving it exposed to blank-description and build-nil regressions.
@@ -522,6 +571,8 @@ Operational consequences recorded at acceptance: the `agent` chain type on Jetso
 - ⚠️ The coverage guards live in the domains test registry, not in the resolver itself; a future resolver-reachable domains tree must be added to `resolverReachableExtraDomainTrees()` by hand to inherit the same protection
 
 ---
+
+<a id="adr-014"></a>
 
 ## ADR-014: Mandatory Descriptions for Every Node Class in Curated Domain Trees
 
@@ -544,6 +595,8 @@ Operational consequences recorded at acceptance: the `agent` chain type on Jetso
 
 ---
 
+<a id="adr-015"></a>
+
 ## ADR-015: Domain-Mapped Island-Model Evolution as a Deterministic MCP Tool
 
 **Context (2026-07-05):** `IslandModel` (`internal/evolution/island.go`) — the algorithm documented since ADR-005 as "maintaining genetic diversity across domains" — was constructed by zero production binaries, and its instrumentation could not support one: migration counts were discarded (`Migrate()` returned a per-call count nobody accumulated) and `EvolveAll` incremented `Generation` a second time whenever migration fired, skewing the `MigrationInterval` cadence and misreporting generation numbers.
@@ -560,6 +613,8 @@ Operational consequences recorded at acceptance: the `agent` chain type on Jetso
 
 ---
 
+<a id="adr-016"></a>
+
 ## ADR-016: Durable Claude Rate-Limit Backoff for the GOAP Fusion Loop
 
 **Context (2026-07-08):** Rate-limited Claude outcomes were recorded but consumed nowhere: `goap_fusion_claude_review_rate_limited` was set by the review fallback and read only by its own test, and the plan-resume runtime re-attempted its 45-minute batch every tick against a quota known to be closed — so a closed Claude session burned a 15-minute doomed review run plus a doomed resume attempt on every half-hourly cron tick until the quota reopened.
@@ -574,6 +629,8 @@ Operational consequences recorded at acceptance: the `agent` chain type on Jetso
 - ⚠️ The "resets \<time\>" hint in the CLI output is not machine-parsed, so the window is a heuristic: too short re-probes a still-closed quota, too long idles a reopened one — the half-open expiry bounds the damage to one skipped-or-doomed tick either way
 
 ---
+
+<a id="adr-017"></a>
 
 ## ADR-017: Experience-Grounded Evolution Closes the Learn→Discover→Evolve Loop
 
@@ -591,6 +648,8 @@ Operational consequences recorded at acceptance: the `agent` chain type on Jetso
 
 ---
 
+<a id="adr-018"></a>
+
 ## ADR-018: Bounded ExperienceBank with Quality-Aware Eviction
 
 **Context (2026-07-08):** Once ADR-017 wired the `ExperienceBank` into the daemon, it accumulated forever: `Add` only ever appended, and `Persist` rewrites the whole `experience.json` on every addition, so an unbounded bank meant unbounded per-Add I/O and an ever-growing O(n) `Retrieve` scan. With the bank now fed by every fitness-improving mutation across restarts, growth was structural, not hypothetical.
@@ -605,6 +664,8 @@ Operational consequences recorded at acceptance: the `agent` chain type on Jetso
 - ⚠️ Eviction is permanent — a low-quality entry that would have become relevant to a future tree type is lost; the reuse-protection threshold (3) is a heuristic, not learned
 
 ---
+
+<a id="adr-019"></a>
 
 ## ADR-019: Production Entry Points for Memetic and Q-Learning Evolution
 
@@ -622,6 +683,8 @@ Operational consequences recorded at acceptance: the `agent` chain type on Jetso
 
 ---
 
+<a id="adr-020"></a>
+
 ## ADR-020: CMA-ES Parameter Tuning Routed Through the Bottleneck Tool
 
 **Context (2026-07-08):** CMA-ES was the last registered evolution algorithm without a production entry point (the open ⚠️ of ADR-019). It was also unreachable in practice: `collectParams` gated every extraction behind `node.Metadata != nil` and only recognized `timeout_ms`/`threshold` as Metadata keys, while `ApplyParameters` wrote back to the `TimeoutMs`/`MaxRetries` struct fields — so real trees with `TimeoutMs > 0` or `MaxRetries > 0` but nil Metadata yielded an empty parameter set and any selection gate on "has tunable parameters" could never fire.
@@ -637,6 +700,8 @@ Operational consequences recorded at acceptance: the `agent` chain type on Jetso
 - ⚠️ CMA-ES-routed trees bypass the ExperienceBank — parameter tuning neither consumes nor records mutation experience (ADR-017 applies only to the genetic fallback)
 
 ---
+
+<a id="adr-021"></a>
 
 ## ADR-021: Gardener Cycles Record Into and Retrieve From the Shared ExperienceBank
 
@@ -654,6 +719,8 @@ Operational consequences recorded at acceptance: the `agent` chain type on Jetso
 
 ---
 
+<a id="adr-022"></a>
+
 ## ADR-022: Two-Writer-Safe ExperienceBank Persistence and Uniform Evolve-Population Validation
 
 **Context (2026-07-08):** ADR-021 made daemon and gardener share one `experience.json`, but each writer's `Add` rewrote the whole file from its own in-memory view loaded at construction — so two concurrent processes silently dropped each other's entries (the documented ADR-021 single-writer caveat). Separately, `bt_evolve_qd` and `bt_evolve_island` still handled degenerate populations with bare `population <= 0` defaulting instead of the shared `resolveEvolvePopulation` boundary check the other evolve tools use, so an explicit `population: 1` reached the engine's clamp paths rather than being rejected ("Make the gardener experience-grounded" program, milestones 4–5, Q3 Reliability).
@@ -670,6 +737,8 @@ Operational consequences recorded at acceptance: the `agent` chain type on Jetso
 
 ---
 
+<a id="adr-023"></a>
+
 ## ADR-023: Full Prometheus Histogram Exposition and a Build-Identity Gauge
 
 **Context (2026-07-08):** Q3 Reliability program "Make platform health measurable and deployment drift self-evident", milestones 1–3 of 4. The node/block duration `LabeledHistogram`s (`nodeDurationHist`/`blockDurationHist`, `internal/dashboard/bt_nodes.go`) were observed on every tick but rendered nowhere on the exposition — `HistogramSnap` carried only `Sum`/`Count`, so no bucket data existed to derive percentiles from and no latency alert could fire. `RecordTask` accumulated only a per-agent total-duration counter (`bt_agent_duration_ms_total`), which cannot answer percentile questions either. And the recurring stale-daemon-binary drift (three incidents to date) was detectable only by DLQ-message text heuristics — the running binaries carried no machine-readable identity.
@@ -684,6 +753,8 @@ Operational consequences recorded at acceptance: the `agent` chain type on Jetso
 - ⚠️ Detection is passive — no alert rule or watchdog yet compares `bt_build_info` revision against HEAD or restarts a stale daemon (the program's remaining milestone)
 - ⚠️ The exposition is served only by bt-dashboard (`/api/metrics` on :9800); in bt-agent and bt-gardener the identity surfaces primarily as the startup log line unless those processes gain their own exposition endpoint
 
+<a id="adr-024-composition"></a>
+
 ## ADR-024: Fail-Loud Compose, Feedback, and CLI Input Boundaries
 
 **Status:** Accepted (2026-07-08)
@@ -691,6 +762,8 @@ Operational consequences recorded at acceptance: the `agent` chain type on Jetso
 **Context and decision (2026-07-08):** `bt_blocks_compose` silently dropped an unresolvable `strategy` tree while still reporting `composed: true`, and its `save: true` path discarded the `treeStore.Save` error and unconditionally activated the composition as the live tree — so a typo'd router id or an invalid composition (unknown node types, the `auction_demo` precedent of §8.12) shipped without any signal. The tool's boundary is now fail-loud (§8.15): a shared `resolveStrategyTree` rejects unknown strategy ids across all three compose branches, and persistence + live-tree activation are gated on `engine.ValidateTree` passing and `Save` succeeding, with `"saved": true` as the explicit success signal and the active tree left untouched on any failure. The same landing canonicalizes `recordUserFeedback`'s `user`/`treeID` once at entry (`cmd/bt-agent/feedback_tools.go`) so the stored record and the cumulative `FilterByTreeNameStrict` tally see the identifier the validator saw — previously a trailing-space tree id created reflection records no strict lookup could ever match — and guards the CLI's `test`/`logs`/`delete` positional-argument read (`requireNameArg`, `cmd/bt-agent-cli/main.go`) so a missing agent name prints a usage error instead of panicking. **Status:** Accepted (2026-07-08). Pinned by `TestBTBlocksComposeRejectsUnknownStrategyTree`, `TestBTBlocksComposeSaveGatesActivation`, `TestRecordUserFeedback_TrimsUserAndTreeID`, and `TestRequireNameArg`.
 
 ---
+
+<a id="adr-024-experience-bank"></a>
 
 ## ADR-024: Sidecar flock Serializes All ExperienceBank Write Paths
 
@@ -707,6 +780,8 @@ Operational consequences recorded at acceptance: the `agent` chain type on Jetso
 - ⚠️ ADR-022's field-wise caveat stands: only `TimesReused` is reconciled on ID conflicts — divergence in other fields still resolves to whichever writer rewrites last
 
 ---
+
+<a id="adr-025"></a>
 
 ## ADR-025: Drop-Safe, Bounded Dead-Letter Replay and an Honest Deferred SLO Outcome
 
@@ -727,6 +802,8 @@ Operational consequences recorded at acceptance: the `agent` chain type on Jetso
 
 ---
 
+<a id="adr-026"></a>
+
 ## ADR-026: QD/Island Elite Fitness Write-Back into the Knowledge Graph
 
 **Context (2026-07-09):** Q2 Evolvability program "Make the MAP-Elites quality-diversity archive durable and accumulating." The deterministic `bt_evolve_qd` (ADR-009) and `bt_evolve_island` (ADR-015) tools illuminated and evolved elites but only *reported* their fitness in the JSON response — nothing wrote it back into the `KnowledgeGraph`. So an archive-improved tree kept whatever runtime-EMA fitness (§8.4) it had before evolution, and `KnowledgeGraph` discovery could never surface it as improved. This was the QD/island analogue of ADR-017's open caveat that evolved trees are reported, not fed back.
@@ -740,6 +817,8 @@ Operational consequences recorded at acceptance: the `agent` chain type on Jetso
 - ✅ The write-back is monotone and clamped, so it can only raise a tree's fitness within the valid range — a lucky-then-unlucky evolution sequence cannot degrade a tree below a prior best
 - ⚠️ Only the elite's *fitness* is fed back, not the evolved tree structure itself; persisting the illuminated tree into the tree store remains a later milestone (consistent with ADR-017's open caveat)
 - ⚠️ Elite structural fitness and the runtime-success EMA were different metrics sharing one `Fitness` field, so a high evolved value could outrank a tree's live success rate — **resolved by ADR-028**, which moves the write-back into a dedicated `StructuralFitness` field (leaving `Fitness` a pure EMA) and stops the `"evolved"` outcome from incrementing `RunCount`
+
+<a id="adr-027"></a>
 
 ## ADR-027: Fitness-Driven Selection Pressure in Deterministic Breeding and Discovery
 
@@ -760,6 +839,8 @@ Operational consequences recorded at acceptance: the `agent` chain type on Jetso
 - ✅ Breeding weights off *live* graph fitness (milestone 4), and proven-but-underbred trees are now reported by `ComputeAnalytics` (milestone 5), so a high-fitness tree the loop is starving of runs is both preferred when bred and visible for the loop to exercise
 - ⚠️ Selection weight reads the same `Fitness` field that mixes runtime-success EMA and evolved elite fitness (the ADR-026/ADR-017 caveat), so an evolved-but-unproven tree can attract breeding/discovery pressure ahead of its live success rate until it accrues runs — **resolved by ADR-028**, which splits structural fitness into its own field and blends it into selection gated by `RunCount`
 
+<a id="adr-028"></a>
+
 ## ADR-028: Separate Structural Fitness from the Runtime-Success EMA
 
 **Context (2026-07-09):** ADR-026 fed a QD/island elite's structural fitness back into the `KnowledgeGraph` by overwriting `tree.Fitness` — the same field the 0.9/0.1 success EMA (§8.4) maintains from genuine executions — and routed the write through `RecordRun("evolved")`, which also incremented `RunCount`. Both ADR-026 and ADR-027 recorded the same ⚠️ caveat: one `Fitness` field conflated two different metrics, so a high evolved value could outrank a tree's measured live success rate, and a synthetic evolution pass inflated `RunCount`, the very counter cold-start confidence (ADR-027 milestone 3) uses to gauge how *proven* a tree is.
@@ -776,6 +857,8 @@ Operational consequences recorded at acceptance: the `agent` chain type on Jetso
 - ✅ `RunCount` and cold-start confidence again mean "genuine executions"; synthetic evolution passes are visible in `EvolvedCount` without skewing the proven-ness signal
 - ✅ Breeding and discovery share one `blendedSelectionFitness` blend, so an unproven-but-archive-improved tree still surfaces on structural merit while a well-run tree is judged on measured runtime success
 - ⚠️ Only the elite's structural *fitness* is fed back, not the evolved tree structure itself (ADR-026's remaining open caveat is unchanged)
+
+<a id="adr-029"></a>
 
 ## ADR-029: Durable, Merge-Safe Telemetry for the Selector-Ordering Optimizers
 
@@ -801,6 +884,8 @@ Operational consequences recorded at acceptance: the `agent` chain type on Jetso
 - ⚠️ **Automatic loop still operator-triggered:** the `Gardener.evolveTreeV2` pre-persist pass, the `domains.ResolveTreeID` build-time pass, and the trace→store bridge (`RecordSelectorOutcomes`) all exist, but no production binary sets `EvolveV2Config.SelectorOrdering`/`Config.SelectorStatsPath` or `domains.SelectorStatsPath`, and no scheduler calls `RecordSelectorOutcomes` — so continuous, unattended learn-and-reorder is not yet wired; an operator must drive it through the MCP tool
 - ⚠️ The flock is advisory Linux `flock` and blocks without timeout (ADR-024's caveat), and the merge reconciles only counts — divergence in any non-count field resolves to whichever writer rewrites last
 
+<a id="adr-030"></a>
+
 ## ADR-030: Analytics Signals Drive Registration, Breeding, and Failure-Targeted Evolution
 
 **Context (2026-07-09):** Q1 Correctness / Q2 Evolvability program "Close the knowledge-graph analytics→action loop — make `ComputeAnalytics` signals drive registration, breeding, and observability instead of text-only reports." Three of the signals `ComputeAnalytics` (`internal/knowledge/analytics.go`) produces were dead ends. (1) `CoverageGaps` audited against a hardcoded eight-entry `knownDomains` slice, so it reported missing domains against a stale list that had drifted from the live registry (`domains.AllDomainTrees()`, ~30 domains) — a Q1 correctness bug that both invented false gaps and hid real ones. (2) `SelectionPressure` (ADR-027 milestone 5) — proven-but-underbred trees — was surfaced only in `FormatAnalytics`/`SuggestedActions` prose with no production consumer, so the loop was told which winners it was starving of runs but nothing bred them. (3) A bottleneck's most recent failing trace was concatenated only into the human-readable `SuggestedAction` string, so `bt_evolve_bottlenecks` could not tie its re-evolution to the concrete failing task without re-parsing prose.
@@ -820,6 +905,8 @@ Operational consequences recorded at acceptance: the `agent` chain type on Jetso
 - ✅ Analytics drift is measurable (milestone 4): `bt_kg_coverage_gaps`/`bt_kg_bottlenecks`/`bt_kg_selection_pressure_trees` expose each `ComputeAnalytics` run's counts as last-run gauges, so graph health is alertable in Prometheus rather than trapped in the text report
 - ⚠️ `bt_evolve_selection_pressure` writes back only elite *fitness*, not the evolved tree structure (the ADR-017/ADR-026 caveat), and milestone 3 surfaces the failing task in the report but the genetic/CMA-ES operators do not yet condition mutation on it — the failure context steers reporting, not (yet) the search itself
 - ⚠️ The gauges update only when `bt_kg_analytics` is invoked (they carry the last run's counts, not a live graph subscription), so a Grafana panel goes stale until the tool is next called
+
+<a id="adr-031"></a>
 
 ## ADR-031: Proactive Crisis Intervention Wired into the GA Evolution Loop
 
@@ -846,6 +933,8 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 - ⚠️ ~~The experience-warm-started `EvolveWithExperience` (the `bt_evolve_genetic`/`bt_evolve_bottlenecks` path, ADR-017) and `EvolveQLearning` still do not run the intervention, so it is not universal across the evolve tools~~ — resolved for `EvolveWithExperience` by ADR-038 milestone 2 (2026-07-12); `EvolveQLearning` and `MemeticEvolve` resolved by ADR-121 (2026-07-15)
 - Resurrection is live in production (superseding this ADR's original "stays inert" caveat): `newProductionPopulation` (`cmd/bt-agent/tools.go`) seeds every MCP-tool population's `Specialists` via `SeedSpecialistRegistry`, so `Observe`/resurrection run at every deterministic prod call site the intervention reaches, not only from tests
 
+<a id="adr-032"></a>
+
 ## ADR-032: Aggregated Gardener Metrics Document and a GA Population-Health Snapshot
 
 **Context (2026-07-09):** Q3 Reliability program "Make evolution self-healing observable end-to-end" (milestones 2–4 of 5). The self-healing machinery of ADR-031 and the gardener's cycle-level crisis detector was invisible after the fact: `MetricsTracker.Save` (`internal/gardener/gardener.go`) dumped a bare `CycleMetrics` array with no aggregates and no timestamp; the dashboard's `loadGardenerMetrics` (`internal/dashboard/metrics.go`) hardcoded `Improvements: 0` and `LastRun: "recent"` even when real data was on disk; and the GA's crisis signals lived on scattered `Population` fields with no stable read surface and no resurrection count at all.
@@ -861,6 +950,8 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 - ✅ (2026-07-13) Producer and consumer key sets now meet: `MetricsTracker.Save` writes `total_cycles`/`active_trees`/`best_fitness`/`total_improvements` alongside the existing `total_crisis_interventions`, so `loadGardenerMetrics`'s `raw.Cycles == 0` guard no longer discards a document `Save` just produced and the dashboard panel lights up — see §8.11
 - ✅ (2026-07-13) `CycleMetrics.CrisisIntervened`/`MutationBudget` give metrics/dashboard consumers the same crisis signal and boosted budget the gardener's own `crisis_intervention` flag already carried, without needing to know that field's history — see §8.11
 - ⚠️ `PopulationHealth` had no production caller when this ADR landed — the snapshot was the seam, not yet the wire; wired into the deterministic evolve tools' JSON responses by ADR-037 (2026-07-11)
+
+<a id="adr-033"></a>
 
 ## ADR-033: Durable, Merge-Safe Archives for Island-Model and MAP-Elites Evolution
 
@@ -878,6 +969,8 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 - ⚠️ ~~The island archive has no cap analogous to the grid's `Cap`: unions dedup by genome but only ever grow, so a long-lived archive grows monotonically with unique genomes~~ — resolved by ADR-040
 - ⚠️ As decided here the archive was a single global file shared by every base tree, so runs on unrelated trees warm-start-merged each other's genomes through it — superseded by ADR-034's per-base-tree scoping (2026-07-10)
 
+<a id="adr-034"></a>
+
 ## ADR-034: Per-Base-Tree Scoping of the Durable Island Archive
 
 **Context (2026-07-10):** Program "Make the island-model durable archive production-safe — per-tree scoped, bounded, and self-healing-preserving" (Q2 Evolvability, Q3 Reliability), milestone 1/5. ADR-033's durable island archive was a single global `island_archive.json`: every `bt_evolve_island` call, whatever its `tree` parameter, warm-start-merged from and re-persisted the same file, and because default runs name their islands `island_0..N` regardless of base tree, the merge-on-load unioned genomes evolved from one base tree into islands freshly seeded from another — silent cross-tree pollution that also compounded the archive's already-uncapped growth.
@@ -891,6 +984,8 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 - ✅ A pre-existing global `island_archive.json` is simply no longer read — legacy state is orphaned, not corrupted, and each per-tree archive cold-starts once
 - ⚠️ ~~Per-tree archives remain uncapped (ADR-033's open item; boundedness is a later milestone of this program)~~ — resolved by ADR-040; the fleet's total archive footprint still scales with the number of distinct base trees evolved (each tree's own archive is bounded independently, not in aggregate)
 - ⚠️ Sanitization is lossy: tree IDs differing only in sanitized-away characters collide onto one archive file
+
+<a id="adr-035"></a>
 
 ## ADR-035: Seeding-Faithful Evolved-Fitness Attribution in Domains-Mode Island Evolution
 
@@ -907,6 +1002,8 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 
 ---
 
+<a id="adr-036"></a>
+
 ## ADR-036: Crash-Safe, Merge-on-Save DLQ Persistence and Reload-Before-Consume Replay
 
 **Context (2026-07-10):** Q3 Reliability program "Make dead-letter replay fire in the production multi-process topology", milestones 1–3/4 — the follow-up defect to ADR-025, which shipped the `Requeue`/executor machinery but left cross-process consumption dead. Three coupled defects in `internal/reliability/reliability.go` and its consumers: (1) `DeadLetterQueue.save()` was a blind `os.WriteFile` — a crash mid-write could truncate the queue — and `load()` discarded the `json.Unmarshal` error, silently starting an empty queue whose next save persisted the wipe (despite §8.4/ADR-003 already claiming atomic-write behavior for the DLQ). (2) The daemon, dashboard, and MCP siblings each hold an independent in-memory queue over the same file, and each whole-file save rewrote it from the local view — so the daemon's saves clobbered `RequeuedAt` stamps written by siblings. (3) The daemon's replay-scan tick called `RequeuedReady()` against its stale in-memory view, so a dashboard/MCP requeue was never seen, let alone replayed.
@@ -922,6 +1019,8 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 - ⚠️ Membership is deliberately memory-authoritative: an entry *pushed* by a sibling after this process last read the file is not adopted by a merged save — new-entry visibility comes only from `Reload`, so the sibling's own next save must restore it (all production consume sites now reload first, narrowing the window)
 - Pinned by `TestDeadLetterQueue_SaveAtomicReplace`, `TestDeadLetterQueue_LoadQuarantinesCorruptFile`, `TestDeadLetterQueue_SaveMergesSiblingRequeueStamps`, `TestDeadLetterQueue_SaveMergesSiblingAbandoned`, and the two-instance pickup `TestDeadLetterQueue_CrossProcessRequeuePickup` (`internal/reliability/reliability_test.go`), plus the source-level wiring assertion `TestDLQCrossProcessConsumersReloadFirst` (`cmd/bt-agent/main_test.go`) covering all three consume sites
 
+<a id="adr-037"></a>
+
 ## ADR-037: GA Population-Health Snapshot Wired into the Evolve Tool Responses
 
 **Context (2026-07-11):** NotebookLM research goal "Surface `Population.HealthSnapshot()` in the JSON responses of the production evolve tools." ADR-032 introduced the read-only `HealthSnapshot() PopulationHealth` accessor exporting the ADR-031 self-healing signals — crisis reasons, the actually-applied mutation rate, and the resurrection count — but closed with the caveat that nothing in production called it: the snapshot was readable only from tests and by reaching into `Evolve` internals, so an operator driving the deterministic evolve tools could not see whether a run tripped a crisis, boosted its mutation rate, or resurrected an extinct specialist.
@@ -934,6 +1033,8 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 - ✅ Resolves ADR-032's open "no production caller" caveat: the deterministic evolve tools now expose GA population health per run through one stable field instead of leaving the ADR-031 intervention invisible after the fact
 - ⚠️ At the time this ADR landed, all three tools drove `EvolveWithExperience` (ADR-017), whose live-bank path did not run the ADR-031 crisis intervention, so a wired experience bank reported the null `health` baseline (empty `crisis_reasons`, `resurrections` 0, `last_mutation_rate` 0) and only the nil-bank fallback to plain `Evolve` carried real intervention data — closed by ADR-038 milestone 2 (2026-07-12), which routes `EvolveWithExperience` through the same `selfHealGeneration` envelope as `Evolve`, so the `health` field now reflects real intervention data on the live-bank path too
 - ⚠️ The CMA-ES branch of `bt_evolve_bottlenecks` emits no `health` (it tunes parameters via `TuneTreeParameters` and never builds a `Population`), so a tuned entry and a genetically-evolved entry in the same report differ in shape
+
+<a id="adr-038"></a>
 
 ## ADR-038: Self-Healing Envelope Shared Between Evolve and EvolveWithExperience
 
@@ -958,6 +1059,8 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 - ⚠️ ~~`EvolveQLearning` (`bt_evolve_qlearning`) and `MemeticEvolve` (`bt_evolve_memetic`) still run outside the envelope: they neither detect crises nor consult `Specialists`, so those two tools remain silent on self-healing regardless of a seeded registry~~ — resolved 2026-07-15 (ADR-121 milestones 1 and 3)
 - ⚠️ ~~`EvolveMAPElites` was not migrated onto `selfHealGeneration` in this pass — it keeps its ADR-031-milestone-5 duplicate of the same detect→act→resurrect→reset sequence, so the envelope now has two implementations (`Population`'s and `MAPElitesPopulation`'s) rather than one shared one; unifying them is a candidate for a later milestone~~ — resolved 2026-07-15 (ADR-121 milestone 2), which also notes the unification fixed a latent blind spot in the old grid-aware crisis signal
 
+<a id="adr-039"></a>
+
 ## ADR-039: CheckCodebaseFit Probe Failures No Longer Hard-Fail the bt_fusion Cycle
 
 **Context (2026-07-12):** NotebookLM research goal. `CheckCodebaseFit` (`internal/engine/actions_btfusion.go`) runs `fusionCodebaseFitCmd`, a diagnostic-only shell probe that greps `git … HEAD` for the bt_fusion/hermes_update/notebooklm_pipeline_monitor trees, lists agent YAMLs, and reads `systemctl --user show bt-agent.service`. Its own doc comment already noted the probe's exit code hinges on live external state the action doesn't control — but a nonzero exit still set `bb.Outcome = "fusion_codebase_fit_failed"` and returned `-1`, aborting the whole `bt_fusion` research/report cycle over what was meant to be best-effort evidence gathering, not a gate.
@@ -972,6 +1075,8 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 - ⚠️ Because the exit code no longer gates the cycle, a genuine regression in the probe command itself (e.g. a broken `git grep` invocation, not just an absent daemon) now also passes the action silently — only the `Warn` log line flags it, with no `bb.Outcome` signal for downstream routing to react to
 
 ---
+
+<a id="adr-040"></a>
 
 ## ADR-040: Bounding the Durable Island-Model Archive Against Runaway Growth
 
@@ -997,6 +1102,8 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 
 ---
 
+<a id="adr-041"></a>
+
 ## ADR-041: Durable, Bounded Cross-Run Memory for Q-Learning Evolution
 
 **Context (2026-07-12):** Q2 Evolvability program "Give Q-learning evolution durable cross-run memory," milestones 1–3 of 4. ADR-019 wired `bt_evolve_qlearning` to `Population.EvolveQLearning`, but flagged as an open caveat that its `QTable` was constructed fresh per call (`qt := evolution.NewQTable()`, `cmd/bt-agent/tools.go`) and discarded with the response — unlike the island/QD archives (ADR-033/034/040) or the ExperienceBank (ADR-017/018), the learned state→action policy never accumulated across invocations, so every call restarted epsilon-greedy learning from an empty table.
@@ -1012,6 +1119,8 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 - ✅ ~~`bt_evolve_qlearning` does not set `Cap` on the `QTable` it constructs — the durable archive is unbounded in production today, unlike the island archive which ADR-040 already bounded end to end~~ — resolved by milestone 4: `Cap` now defaults to `population*10` and is set before `Load`, so a warm-started table can no longer grow without bound across repeated calls against one base tree
 - ⚠️ Unlike `IslandModel.Load`'s multi-domain merge, `QTable.Load` only ever merges into a single table — there is no per-domain partitioning to reason about, so the merge is simpler but also means a corrupt archive's error path has only one table's worth of state to protect (verified by the corrupt-archive test, not a design gap)
 - ⚠️ The `population*10` default is a heuristic, not a config value an operator can tune without also overriding the explicit `state_cap` parameter — the same caveat ADR-040 milestone 3 recorded for the island tool's `population_cap`/`island_cap` defaults
+
+<a id="adr-042"></a>
 
 ## ADR-042: Persisting Evolved Winner Trees from the Production Genetic-Evolution Tools
 
@@ -1029,6 +1138,8 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 - ⚠️ `RegisterEvolved` is called unconditionally after `persistGeneratedTree`, regardless of whether persistence actually succeeded — a validation failure (`engine.ValidateTreeFull`) or a `nil` `deps.treeStore` still registers the KG entry and its `evolved_from` edge, so `evolved_tree_id` can point at a knowledge-graph entry with no backing tree-store file until the next successful run overwrites it
 - ⚠️ Only the genetic-family tools (`bt_evolve_genetic`, `bt_evolve_bottlenecks`, `bt_evolve_selection_pressure`) persist their winner this way; `bt_evolve_qd` and `bt_evolve_island` remain fitness-only write-backs (ADR-026's original caveat still applies to them)
 
+<a id="adr-043"></a>
+
 ## ADR-043: Wiring the Durable MAP-Elites Archive into bt_evolve_qd
 
 **Context (2026-07-12):** NotebookLM research goal, Q2 Evolvability. ADR-033 built `MAPElitesGrid.Save`/`Load`/`Cap` with the same fitter-copy-wins merge and eviction idiom `IslandModel` uses, but flagged as an open caveat that the primitives had no production caller: `bt_evolve_qd` built a fresh `NewMAPElitesGrid` every call and discarded it with the response, so illuminated niches never accumulated across runs — the QD analogue of the island tool's pre-ADR-033 state, left unresolved while ADR-033/034/040 wired and bounded the island half.
@@ -1045,6 +1156,8 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 - ⚠️ The `population*5` default is a heuristic like the island tool's `population*3`/`len(seeded)*3` (ADR-040) and the QTable's `population*10` (ADR-041) — not independently tuned against MAP-Elites' actual niche-count-vs-population dynamics, just chosen to stay generous while no longer unbounded
 
 ---
+
+<a id="adr-044"></a>
 
 ## ADR-044: Zero-Risk Deploy-Drift Diagnosis via Build-Revision Stamping
 
@@ -1064,6 +1177,8 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 
 ---
 
+<a id="adr-045"></a>
+
 ## ADR-045: Closing the Deploy-Drift Loop — Dashboard Self-Rebuild and Retry-Storm Guardrails
 
 **Context (2026-07-12):** Program 94b0b31 milestones 4–5/5, plus a same-day fix to the second `BuildRevision` push site. ADR-044 shipped milestone 1 (drift detection); milestones 2–3 (`RebuildBinaries` out-of-place swap, `AutoRebuild` wiring into `StartDriftWatcher` for all three mains) landed in the same commit but were never exercised end to end for `bt-dashboard` specifically, and nothing throttled a broken commit from retrying the rebuild every watcher tick.
@@ -1081,6 +1196,8 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 
 ---
 
+<a id="adr-046"></a>
+
 ## ADR-046: SafeGo Panic Recovery Adopted Across A2A, Dashboard, and Knowledge-Graph Fan-Out
 
 **Context (2026-07-12):** Program "Adopt SafeGo panic recovery across unguarded production fan-out goroutines" (Q3 Reliability). ADR-007 introduced `reliability.SafeGo` and this document's §8.6/glossary described it as applied to "all goroutine spawns," but three production fan-out sites still used a bare `go func()`: `internal/a2a/auction.go`'s `CollectBids` (one goroutine per candidate bidder, unmarshaling responses from untrusted remote agents), `internal/dashboard/workflow_orchestrator.go`'s `executeParallel` (one goroutine per parallel workflow sub-step, running pluggable agent/step logic), and `internal/knowledge/embeddings.go`'s `BuildIndex` (one goroutine per tree, feeding a channel a synchronous `for`-range receive loop drains exactly `len(kg.Trees)` times). A panic in any of the three could crash the host process outright; in `BuildIndex`'s case a panic before the channel send would instead deadlock the receive loop forever.
@@ -1096,6 +1213,8 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 - Pinned by the three tests named above.
 
 ---
+
+<a id="adr-047"></a>
 
 ## ADR-047: SafeGo Extended to reactive_parallel Fan-Out; DLQ ID Defaulting and bt_dlq_list Reload Close Two Residual Gaps
 
@@ -1114,6 +1233,8 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 
 ---
 
+<a id="adr-048"></a>
+
 ## ADR-048: SafeGo Extended to LLM Health Monitor, Request-Timeout Middleware, and Scalability Probe Fan-Out (milestones 1–3/5)
 
 **Context (2026-07-12):** Program "Q3 Reliability — extend SafeGo panic recovery to the remaining unguarded daemon, dashboard, and middleware goroutines," picking up the residual ADR-047 explicitly left open: bare `go func()` spawns outside the A2A/dashboard/knowledge-graph/reactive_parallel sites ADR-046/047 already closed. Three were addressed in this pass. (1) `HealthMonitor.Start()` (`internal/llm/health.go`) spawns an immediate-probe goroutine and a periodic ticker-loop goroutine, both calling `m.Probe()` — an HTTP call plus JSON parse of an LLM backend's health response — with no recovery; a panic in either would kill the daemon that started the monitor, and a panic inside the ticker's `for`/`select` body would additionally stop all future probes even if the process survived. (2) `RequestTimeoutMiddleware` (`internal/security/security.go:333`) spawns one goroutine per request to call `next.ServeHTTP`; since this middleware fronts arbitrary downstream handlers, it has the largest blast radius of the unguarded set — any handler panic crashed the whole server process. (3) `ProbeMultiNodeDashboard` (`internal/reliability/scalability_probe.go:113`) spawns one goroutine per peer node under a shared `sync.WaitGroup`; a panic probing one misbehaving node would previously abort that `wg.Done()` and hang the `wg.Wait()` for the entire scalability check.
@@ -1129,6 +1250,8 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 - ⚠️ Milestones 4–5 of this program (`cmd/bt-dashboard/pipeline_handlers.go`, and the remaining bare `go func()` sites in `cmd/bt-agent/main.go` and `internal/agent/deploy_drift.go`) are still open — this pass closed exactly the three sites named above, not the full unguarded set ADR-047 flagged. **Milestones 4–5 (`cmd/bt-dashboard/pipeline_handlers.go` and `cmd/bt-agent/main.go`) closed the same day by ADR-049; `internal/agent/deploy_drift.go`'s own `StartDriftWatcher` ticker and `cmd/bt-dashboard/main.go`'s sprint-dispatch goroutine remain out of this program's scope.**
 
 ---
+
+<a id="adr-049"></a>
 
 ## ADR-049: SafeGo Extended to the Dashboard Pipeline-Run Goroutine and bt-agent's KG-Index/DLQ-Scan Goroutines (closes milestones 4–5/5)
 
@@ -1147,6 +1270,8 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 
 ---
 
+<a id="adr-050"></a>
+
 ## ADR-050: Wiring RebuildBackoff and Scheduler.AnyInFlight into the Production Deploy-Drift Watchers
 
 **Context (2026-07-12):** Follow-up to ADR-045, whose own consequences flagged the gap: `RebuildBackoff` (retry-storm throttling) and `Scheduler.AnyInFlight()` (in-flight job protection) were implemented and unit-tested but dead code from the running daemon's perspective — `cmd/bt-agent/main.go`, `cmd/bt-dashboard/main.go`, and `cmd/bt-gardener/main.go` all constructed their `DriftWatchConfig` without a `Backoff`, and nothing consulted an in-flight check before a rebuild. A broken HEAD could therefore still retry-storm `go build` every 20-minute watcher tick in production, and a rebuild could still swap the live binary out from under an in-flight scheduled job.
@@ -1161,6 +1286,8 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 - ⚠️ ~~`bt-dashboard` and `bt-gardener` still have no in-flight guard of their own — neither owns a `Scheduler` instance, so there is nothing to plug into `InFlightFn` today; a rebuild triggered by either could still swap its own binary mid-request (`bt-dashboard`) or mid-cycle (`bt-gardener`). Only `bt-agent`'s scheduled-job case is covered.~~ — resolved 2026-07-28 (ADR-228): both daemons now track their own in-flight state and wire it into `InFlightFn` without needing a `Scheduler`.
 - Pinned by the tests named above.
 
+<a id="adr-051"></a>
+
 ## ADR-051: Extending the Self-Healing Envelope to NSGA-II, the Last Zero-Observability Evolve Variant
 
 **Context (2026-07-13):** Q2 Evolvability / Q3 Reliability program "Close the NSGA-II self-healing wiring gap, the last production Evolve variant with zero specialist/crisis observability." ADR-038 brought `Population.Evolve`, `Population.EvolveWithExperience`, `ParetoPopulation.EvolvePareto`, and `IslandModel.EvolveAll` onto the shared `selfHealGeneration` envelope, but `NSGAIIPopulation.Evolve` (`internal/evolution/multi_objective.go`) — the algorithm `bt_evolve_multiobjective` actually drives — was never migrated: `NewNSGAIIPopulation` left `Specialists` nil, and `Evolve` ran its own hand-rolled tournament-select/SBX-crossover/polynomial-mutation generation loop that called `nsga2.Evaluate` directly and never touched `Population.Crisis` or `Population.Specialists`. It was the one remaining `bt_evolve_*` GA/multi-objective tool with no crisis detection, no specialist archiving, and no resurrection path.
@@ -1174,6 +1301,8 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 - ✅ Every `bt_evolve_*` GA/multi-objective/island tool except `bt_evolve_qlearning` and `bt_evolve_memetic` now shares one `selfHealGeneration` implementation instead of NSGA-II carrying an independent, self-healing-free copy of the generation loop
 - ✅ `bt_evolve_multiobjective`'s response now surfaces `Population.HealthSnapshot()` under `health`, matching the sibling evolve tools, so an operator can observe crisis reasons/resurrections/applied mutation rate without re-running the tool with different logging
 - ⚠️ ~~`EvolveQLearning` and `MemeticEvolve` (ADR-038's residual gap) remain outside the envelope, as does `EvolveMAPElites`'s independent duplicate implementation — this program did not touch either~~ — resolved 2026-07-15 (ADR-121): all three now share `selfHealGeneration` too, leaving no `Population`-backed evolve variant outside the envelope
+
+<a id="adr-052"></a>
 
 ## ADR-052: Change-Impact Graph Exposed via a CLI Subcommand and an MCP Tool
 
@@ -1192,6 +1321,8 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 
 ---
 
+<a id="adr-053"></a>
+
 ## ADR-053: SafeGo/Recover Extended to the LLM Subprocess Scanner, the Fallback-Chain Call Loop, and the Scheduler/A2A Start Goroutines
 
 **Context (2026-07-13):** Program "Q3 Reliability — harden the LLM subprocess and fallback-chain execution path against unrecovered panics and subprocess failure storms." The ADR-046→049 sweep wrapped every fan-out and long-running goroutine its four passes identified, but none of those passes touched the LLM call path itself, and two more bare `go` spawns in `cmd/bt-agent/main.go` went unnoticed by all four. `ACPClient.GenerateCtx`'s `scanJSONLines` goroutine (`internal/llm/acp.go:94`) parses newline-delimited JSON from an external ACP subprocess's stdout — attacker- or bug-controlled output a panic in `encoding/json` or the message-dispatch logic could turn into a crashed daemon. `FallbackLLM.generate` (`internal/llm/fallback.go`) calls each fallback model's `Generate`/`GenerateCtx`/`GenerateWithTimeout` directly in its retry loop; a panic from one model (a nil client, a malformed response triggering a bad type assertion) unwound past the loop instead of being recorded as that model's failure, defeating the whole point of a fallback chain. And `cmd/bt-agent/main.go` still ran `globalSched.Start(...)`'s callback registration (line ~362) and `a2aSrv.Start()` (line ~610) as bare `go` statements — a panic in either would take the scheduler or the A2A server down along with every other in-process subsystem.
@@ -1209,6 +1340,8 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 
 ---
 
+<a id="adr-054"></a>
+
 ## ADR-054: Circuit Breaker on ACPClient Stops Failure-Storm Respawns of a Crash-Looping ACP Subprocess
 
 **Context (2026-07-13):** Milestone 4/4 of the same "Q3 Reliability — harden the LLM subprocess and fallback-chain execution path against unrecovered panics and subprocess failure storms" program ADR-053 covered milestones 1–3 of. ADR-053 made a panicking scanner or fallback model degrade gracefully, but said nothing about a subprocess that simply fails to start or respond cleanly on every attempt — a missing `hermes` binary, a crash-looping agent process. Before this change, `ACPClient` had no memory of past failures: every `GenerateCtx` call unconditionally launched a fresh subprocess via `cmd.Start()`, so a persistently broken ACP command was relaunched (and timed out or errored) on every single call, burning a process spawn and a full timeout window per attempt with no backoff.
@@ -1224,6 +1357,8 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 - Pinned by the test named above.
 
 ---
+
+<a id="adr-055"></a>
 
 ## ADR-055: RunTask Backstops bb.Result on Every Non-Success Terminal Outcome
 
@@ -1241,6 +1376,8 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 
 ---
 
+<a id="adr-056"></a>
+
 ## ADR-056: HITL Escalated Requests Terminate Waits and Become Resolvable
 
 **Context (2026-07-13):** NotebookLM research goal. `Store.WaitForRequest` (`internal/hitl/store_extensions.go`) polled a request's status and returned only on `StatusApproved`/`StatusSkipped` (success) or `StatusRejected`/`StatusExpired` (error); `StatusEscalated` — set by `Store.Escalate` when an operator escalates a request via the dashboard's `POST /api/hitl/<id>/escalate` handler (`internal/dashboard/hitl_handlers.go`) — matched neither case, so a waiter kept polling until its own context deadline instead of noticing the escalation. Worse, `Store.Approve`/`Store.Reject` (`internal/hitl/store.go`) both hard-required `r.Status == StatusPending`, so once a request was escalated, the two REST endpoints an operator would actually use to resolve it (`POST /api/hitl/<id>/approve`/`reject`) always failed with a "not pending" error — an escalated request could never be approved or rejected, only left to expire.
@@ -1256,6 +1393,8 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 - Pinned by the tests named above.
 
 ---
+
+<a id="adr-057"></a>
 
 ## ADR-057: Deterministic `bt_evolve_pareto` MCP Entry Point for `ParetoPopulation.EvolvePareto`
 
@@ -1273,6 +1412,8 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 
 ---
 
+<a id="adr-058"></a>
+
 ## ADR-058: `DecisionTrace.Steps` Populated from `bb.ChildTicks()` for `ExplainLastFailure`
 
 **Context (2026-07-13):** NotebookLM research goal. `internal/agent/scheduler.go`'s two production `DecisionTrace` record sites (`RunNow`, `runJob`) always recorded a trace with `Steps` left at its zero value (nil), so `KnowledgeGraph.ExplainLastFailure` (`internal/knowledge/traces.go`, exposed as the `bt_kg_explain` MCP tool) rendered a `Path:` header with nothing under it for every run — the "explain why this tree last failed" feature had no execution path to show, regardless of how the tree actually failed.
@@ -1287,6 +1428,8 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 - Pinned by the tests named above.
 
 ---
+
+<a id="adr-059"></a>
 
 ## ADR-059: SafeGo Extended to the Webhook-Publisher Loop and the RateLimiter/SessionStore Cleanup Goroutines (milestones 1–3/5)
 
@@ -1304,6 +1447,8 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 - Pinned by the tests named above.
 
 ---
+
+<a id="adr-060"></a>
 
 ## ADR-060: SafeGo Extended to the Key-Rotation, Config-Watcher, and Node-Heartbeat Cleanup Goroutines (closes milestones 4–5/5)
 
@@ -1324,6 +1469,8 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 
 ---
 
+<a id="adr-061"></a>
+
 ## ADR-061: `WorkflowApprovalWait` and `FindPendingByTaskID` Stop Treating an Escalated HITL Request as Approved (milestones 1–3/4)
 
 **Context (2026-07-13):** Program "Q1 Correctness / Q3 Reliability — stop HITL escalation from silently auto-approving workflow steps." ADR-056 made `Store.WaitForRequest` return as soon as a request's status became `StatusEscalated`, alongside its two success statuses `StatusApproved`/`StatusSkipped` — but `WorkflowApprovalWait` (`internal/dashboard/approval.go`) discarded the returned `*hitl.Request` and set `result.Approved = true` unconditionally on any non-error return, so an escalated request was indistinguishable from a genuinely approved one on this call path. Downstream, `internal/dashboard/workflow_orchestrator.go`'s `executeStep` mapped that false `Approved = true` straight to `sr.Outcome = "success"` / `sr.Output = "approved"`, so an escalation let dependent side-effecting pipeline steps run as if a human had signed off. Separately, `internal/hitl/store_extensions.go`'s `FindPendingByTaskID` still filtered on `r.Status != StatusPending` only, so `ApproveByTaskID`/`RejectByTaskID` — the by-task-ID resolution path a dashboard operator or the REST handlers would use — could not find an escalated request at all, even though ADR-056 had already relaxed `Store.Approve`/`Store.Reject`'s own precondition to accept it.
@@ -1341,6 +1488,8 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 
 ---
 
+<a id="adr-062"></a>
+
 ## ADR-062: Cross-Domain Experience Transfer Closes the Island Model's Own Feedback Loop (Q2 Evolvability, milestone 4/4)
 
 **Context (2026-07-13):** ADR-017/ADR-021 made mutation experience durable across restarts and shared it across the daemon and gardener binaries, but `IslandModel.Migrate` (`internal/evolution/island.go`) — which copies elite individuals from a fitter source domain island into a weaker target domain island every migration cycle — moved genomes without moving the experience that made them fit. The seam existed but was broken: `ExperienceBank.TransferExperiences(sourceTree, targetTree)` ignored `sourceTree` entirely and instead called `Retrieve(targetTree, 5)`, the Jaccard-similarity query — so the entries it returned were whatever was already similar to `targetTree`'s own name, with no actual provenance from the domain the migrating individuals came from. No caller invoked it from `Migrate` either, so the stub was doubly dead.
@@ -1357,6 +1506,8 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 
 ---
 
+<a id="adr-063"></a>
+
 ## ADR-063: Durable Per-Agent Circuit Breaker State Feeds the Dashboard's cb_status Column
 
 **Context (2026-07-13):** `internal/dashboard/agents.go`'s `loadCircuitBreakers`/`ListAgentsWithCB` were fully built and tested to read `agent.CircuitBreakersFile()` (`circuit_breakers.json`) into each agent's `cb_status` field — but `AgentCircuitBreakerStore` (`internal/agent/scheduler_cb.go`), the scheduler's actively-used per-agent breaker (consulted on every run via `Allowed`/`validateAgentRun` and updated via `reportAgentOutcome`), tracked all state in memory only. The file had zero writers anywhere in the repo, so `cb_status` rendered `"unknown"` for every agent regardless of actual breaker state, and a process restart silently forgot which agents had tripped.
@@ -1372,6 +1523,8 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 - Pinned by `TestAgentCircuitBreakerStore_Save_WritesDashboardShape`, `TestAgentCircuitBreakerStore_SaveThenLoad_RestoresState`, `TestAgentCircuitBreakerStore_Load_MissingFileIsNotError`, and the end-to-end `TestScheduler_PersistsCircuitBreakerOnFailure` (`internal/agent/scheduler_cb_test.go`)
 
 ---
+
+<a id="adr-064"></a>
 
 ## ADR-064: Honest A2A SendTask Errors and Per-Winner Retry/Circuit-Breaking in Auction Dispatch (A2A Reliability Program, milestones 1 & 3 of 5)
 
@@ -1391,6 +1544,8 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 
 ---
 
+<a id="adr-065"></a>
+
 ## ADR-065: A2A Auction Winner Circuit Breakers Persist Across Engine Ticks and Restarts (A2A Reliability Program, milestone 5 of 5)
 
 **Context (2026-07-13):** ADR-064's per-winner `reliability.CircuitBreaker` only ever worked in theory in production. `AuctionDelegate` (`internal/a2a/auction.go`) — the sole seam `engine.AuctionDelegateFn` calls in production, on every engine tick that reaches an `AuctionDelegate` node — built a brand-new `Auctioneer` via `NewAuctioneer(newAuctionCollector())` on every single invocation. Because the breaker lives on `Auctioneer.breakers`, a fresh `Auctioneer` means a fresh, empty breaker map: a winner's failure count reset to zero on every tick, so the circuit guarding the real production path could never actually open no matter how many times that winner failed. `TestAuctioneer_RunAuction_CircuitBreaksWinnerAfterRepeatedFailures` (ADR-064) only proved the breaker works when one `Auctioneer` is reused across `RunAuction` calls — a shape production never exercises. Separately, even a reused `Auctioneer`'s breaker state was in-memory only and did not survive a process restart, unlike the scheduler's per-agent breakers ADR-063 made durable the same day.
@@ -1408,6 +1563,8 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 
 ---
 
+<a id="adr-066"></a>
+
 ## ADR-066: Personal-Tree Reflection Evidence Keyed on the Real Tree ID and Owning User; `bankFor` Stops Permanently Caching a Transient Open Failure
 
 **Context (2026-07-13):** Program "Harden the ADR-010 personalization layer — user isolation, crash safety, and real task execution" (Q1 Correctness, Q3 Reliability; the personalization design is `docs/adr/ADR-010-personalized-self-evolving-agents.md`'s "Feedback-as-fitness" per-user gardener registries and experience banks — a different decision from this log's own ADR-010), milestone 4/5. `internal/gardener/user_trees.go` carried two correctness bugs in the per-user gardener's evidence path. (1) `recordsForEntry` scored a personal tree's reflection evidence by strict-matching `evolution.Record.TreeName` against the registry entry's *display* `Name` — but `loadUserTreesLocked` disambiguates a colliding second-loaded entry by prefixing its display `Name` with `"<user>_"` while the tree's real ID (`entry.Tree.Name`) and every reflection `Record` recorded against it still carry the bare ID. A renamed entry therefore matched none of its own history — permanently evidence-starved at the gate — while the still-plain-named first entry matched by tree ID alone and silently absorbed *both* users' records, so two users owning trees with the same real tree ID scored on each other's feedback. (2) `bankFor` cached the shared `ExperienceBank` into `g.userBanks[entry.User]` whenever `evolution.NewExperienceBank` failed to open the per-user path — including transient, recoverable errors — permanently stranding that user on the shared bank even after the underlying problem cleared, since the cache hit on every later call short-circuited before a retry could happen.
@@ -1423,6 +1580,8 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 - Pinned by `TestRecordsForEntry_CollidingUsersFilterByRecordUser` (plain-named vs. collision-renamed entries, `internal/gardener/user_trees_test.go`) and `TestBankFor_TransientOpenErrorDoesNotPermanentlyCacheSharedBank` (blocks the per-user experience path with a regular file, asserts fallback, clears the block, asserts the next call no longer returns the shared bank).
 
 ---
+
+<a id="adr-067"></a>
 
 ## ADR-067: User-Scoped Runtime-Generated Tree Resolution (ADR-010 Personalization Hardening Program, milestone 3/5)
 
@@ -1440,6 +1599,8 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 
 ---
 
+<a id="adr-068"></a>
+
 ## ADR-068: Distinguishing an Escalated-Origin HITL Resolution from a Routine Pending One (Closes the HITL-Escalation Program, Milestone 4/4)
 
 **Context (2026-07-13):** Program "Q1 Correctness / Q3 Reliability — stop HITL escalation from silently auto-approving workflow steps," milestone 4/4. ADR-061 (milestones 1–3) made `FindPendingByTaskID` match `StatusEscalated` alongside `StatusPending`, so `ApproveByTaskID`/`RejectByTaskID` could resolve an escalated request by task ID — but the callers of those methods gave no sign of which case had actually happened. `handleTaskApprove`/`handleTaskReject` (`cmd/bt-dashboard/main.go`) returned the same `{"status": "approved"/"rejected", "id": ...}` shape regardless of whether the resolved request had been a routine pending approval or one a human operator had already escalated for review — and if `hitl.DefaultStore` held no matching request at all, the resulting error from `ApproveByTaskID`/`RejectByTaskID` was silently discarded, so the dashboard task still flipped to `"approved"`/`"rejected"` with no indication the HITL side had done nothing. The `bt_workflow_approve` MCP tool's by-task-ID branch (`cmd/bt-agent/tools.go`) had the identical blind spot: it `json.Marshal`ed the resolved `*hitl.Request` verbatim with no signal of its originating status.
@@ -1454,6 +1615,8 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 - Pinned by `TestHandleTaskApproveReject_EscalatedVsPending` (`cmd/bt-dashboard/main_test.go`), a table-driven test covering approve/reject × pending/escalated/no-request.
 
 ---
+
+<a id="adr-069"></a>
 
 ## ADR-069: `agent.RunDeps`/`RunOnce` Consult a User-Scoped Tree Resolver, Closing the ADR-010 Personalization Hardening Program (Milestone 5/5)
 
@@ -1471,6 +1634,8 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 
 ---
 
+<a id="adr-070"></a>
+
 ## ADR-070: `NormalizeImpactSource` Exported from `internal/knowledge`, Closing Half of the CLI/MCP Normalization Split (Q1 Correctness Program, Milestone 1/3)
 
 **Context (2026-07-13):** Program "Q1 Correctness — make `bt_impact_tests` honestly normalize and reject source paths like its CLI sibling," milestone 1/3. ADR-052 wired two consumers onto `knowledge.ImpactedTests`, but only the CLI subcommand got path normalization: `cmd/bt-agent-cli/impact.go`'s unexported `normalizeImpactSource` converted an absolute or cwd-relative path into the module-relative form the impact graph indexes and rejected anything outside `root`, while `cmd/bt-agent`'s `bt_impact_tests` MCP tool documented `source` as "already module-relative" and passed it straight to `knowledge.ImpactedTests` with no such conversion. Since `ImpactGraph.TestsFor` simply returns an empty slice for a key it doesn't recognize, an MCP caller that supplied an absolute path (or one relative to a different working directory) got a silent empty test list indistinguishable from "no tests are impacted," rather than either a correct lookup or an explicit error — and because the normalization logic lived only in the CLI package, `impact_tools.go` had no seam to reuse it.
@@ -1487,6 +1652,8 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 
 ---
 
+<a id="adr-071"></a>
+
 ## ADR-071: `bt_impact_tests` Normalizes and Honestly Rejects Out-of-Root Source Paths, Closing the Q1 Correctness Program (Milestone 3/3)
 
 **Context (2026-07-13):** Program "Q1 Correctness — make `bt_impact_tests` honestly normalize and reject source paths like its CLI sibling," milestone 3/3, following ADR-070's milestone-1/3 extract-and-export of `knowledge.NormalizeImpactSource`. `cmd/bt-agent/impact_tools.go`'s `impactTests` still passed `source` straight to `knowledge.ImpactedTests` unnormalized: an MCP caller supplying an absolute path (or one relative to a different working directory than `root`) got a silent `{"tests": []}` — indistinguishable from "no tests are impacted" — instead of a correct lookup or an explicit error, while `cmd/bt-agent-cli`'s `impactedTestsForSource` (its sibling, already calling `NormalizeImpactSource` since ADR-070) honestly rejected the same input with an error.
@@ -1501,6 +1668,8 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 - Pinned by `TestImpactTests_NormalizesAbsoluteSourceUnderRoot`/`TestImpactTests_RejectsSourceOutsideRoot` (`cmd/bt-agent/impact_tools_test.go`).
 
 ---
+
+<a id="adr-072"></a>
 
 ## ADR-072: Task-ID Collision Fix and a Priority-Ordered Approval Audit Trail for Dashboard Tasks (Q1 Correctness / Q3 Reliability Program, Milestones 1–3/3)
 
@@ -1518,6 +1687,8 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 
 ---
 
+<a id="adr-073"></a>
+
 ## ADR-073: `dashboard.PickTreeForTask` Routes Auction-Shaped Tasks to `auction_demo`, Exercising the A2A Auction on the Sprint-Execution Path
 
 **Context (2026-07-13):** NotebookLM research noted that `internal/a2a`'s announce→bid→award auction machinery (§8.12, ADR-008/064/065) was reachable only through an explicit `switch_tree` onto `auction_demo` behind its `IsAuctionTask` engine condition. The dashboard's own task-to-tree picker, `dashboard.PickTreeForTask` (`internal/dashboard/executor.go`), fed every task minted by `handleAnalyze`, manual creation, and the sprint-execution loop (§6.3) through its own independent keyword switch with no auction case, so an auction/delegation-shaped task created on that live path (e.g. from thinktank insight text mentioning "delegate" or "bid") could never actually route to the auction — it fell through to a generic tree pick instead.
@@ -1533,6 +1704,8 @@ Pinned by `internal/evolution/learning_test.go` (after a diversity-collapse gene
 - Pinned by `internal/dashboard/executor_test.go` (auction/delegation-shaped task titles route to `auction_demo`; a passing mention like "unrelated to auctions" does not) and the existing `internal/engine/actions_a2a_test.go` coverage of `IsAuctionTask`.
 
 ---
+
+<a id="adr-074"></a>
 
 ## ADR-074: Bounded HTTP Timeout, Circuit Breaker, Retry, and Lock Scoping Harden the Knowledge-Graph Embedding Client Against an Unresponsive Ollama Backend
 
@@ -1557,6 +1730,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 
 ---
 
+<a id="adr-075"></a>
+
 ## ADR-075: The Scheduler and DLQ Replay Dispatch Through the AgentRouter Instead of Calling RunOnce Directly, Closing Milestone 5/5 of the Horizontal-Scaling Substrate
 
 **Context (2026-07-13):** ADR-011/ADR-012 built the `RemoteExecutor` + `AgentRouter` substrate and wired milestones 1–4 (construction from the live A2A card registry, dashboard `/api/scalability`, `bt-scalability-probe`), but left milestone 5 open: `agentRouter` was constructed in `cmd/bt-agent/main.go`, logged, and then never referenced again. Both live dispatch paths — the scheduler's `AgentRunner` closure passed to `globalSched.Start` and the DLQ replay executor installed via `dlq.SetReplayExecutor` — called `agentRunner.RunOnce(...)` directly. A peer joining the A2A card registry therefore had no way to ever receive a scheduled or replayed task; the router was reachable only from its own construction-site log line.
@@ -1575,6 +1750,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 
 ---
 
+<a id="adr-076"></a>
+
 ## ADR-076: `bt_evolve_island` Wires Its `IslandModel.Bank` Field, Making Cross-Domain Experience Transfer Live in Production
 
 **Context (2026-07-13):** ADR-062 implemented `IslandModel.Migrate`'s cross-domain experience transfer — copying elite mutation experience into a migrating individual's target domain via `Bank.SeedDomain` — behind an optional, caller-wired `Bank *ExperienceBank` field. The transfer was fully implemented and covered by `internal/evolution/island_model_test.go`, but `bt_evolve_island` (`cmd/bt-agent/tools.go`), the sole production caller of `IslandModel.Migrate`, constructed its model via the bare `evolution.NewIslandModel(interval, rate)` constructor and never assigned `.Bank` — so the feedback loop ADR-062 closed was, in production, still dead: `Bank` stayed `nil` and `Migrate` never called `SeedDomain` no matter how many domains migrated.
@@ -1587,6 +1764,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 - ✅ Migration between domain islands in production now genuinely transfers experience: an elite migrating from a fitter domain into a weaker one seeds the target domain's `ExperienceBank` pool with up to 5 re-tagged entries from the source, exactly as ADR-062 specified
 - ✅ No behavior changes for callers that never populate `expBank`: `Migrate` already treated a `nil` `Bank` as a no-op, so the assignment is safe regardless of deployment configuration
 - Pinned by `TestBTEvolveIslandWiresExperienceBankIntoMigration` (`cmd/bt-agent/tools_test.go`), which seeds a bank entry for one domain, runs `bt_evolve_island` with `migration_interval=1` across two domains, and asserts a re-tagged entry for the other domain appears in the bank after migration
+
+<a id="adr-077"></a>
 
 ## ADR-077: `pending_approval` Survives `engine.RunTask` as a Non-Terminal Outcome and Routes Through `TaskStateBridge` in the A2A Responder
 
@@ -1602,6 +1781,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 - ✅ `Execute`'s outcome handling is now centralized in `TaskStateBridge.BTToA2A` rather than a duplicated binary check — the existing `"running"`→`TaskStateWorking` and `"input-required"`→`TaskStateInputRequired` bridge cases, previously unreachable from `Execute`, now take effect there too.
 - ⚠️ An A2A caller still has no way to resolve the pending approval through the A2A protocol itself — resolution remains only through the dashboard's `/api/hitl/<id>/approve|reject` REST path or the MCP `bt_workflow_approve` tool; an A2A-native approve/reject is not part of this change.
 
+<a id="adr-078"></a>
+
 ## ADR-078: `persistEvolvedWinner`/`RegisterEvolved` Only Overwrite a Stored Evolved Winner When the New Fitness Actually Beats It
 
 **Context (2026-07-13):** NotebookLM research goal, Q1 Correctness. ADR-042 wired `persistEvolvedWinner` to persist every genetic-family evolve tool's bred winner to `"<baseTreeID>-evolved"` and register it in the knowledge graph unconditionally — a run's winner always overwrote whatever `<base>-evolved` tree file and KG metadata already existed for that id, regardless of whether the new run's fitness was actually better. Because `bt_evolve_genetic`/`bt_evolve_bottlenecks`/`bt_evolve_selection_pressure` are ordinary genetic runs whose population/generation parameters a caller controls per call, a later, weaker run could silently clobber a stronger elite a prior run had already earned and persisted.
@@ -1615,6 +1796,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 - ✅ (amends ADR-042) The `evolved_from` edge still connects on every call regardless of the fitness outcome, matching ADR-042's original "discoverable either way" semantics — only the bookkeeping fields and the file write are now conditional.
 - ⚠️ (amends ADR-042's caveat on unconditional registration) The order is inverted rather than the caveat being fully closed: `RegisterEvolved`'s bookkeeping bump now happens *before* `persistGeneratedTree` is even attempted, so a subsequent validation failure (`engine.ValidateTreeFull`) or a `nil` `deps.treeStore` can still leave `NodeCount`/`StructuralFitness` already bumped to the new winner's values with no matching tree-store file backing them — the same class of KG/file divergence ADR-042 flagged, just triggered by the later step failing instead of the earlier one. **Resolved by ADR-083 (2026-07-13):** the fitness check is split into a non-mutating peek run first, and the bookkeeping commit now runs only after `persistGeneratedTree` reports success.
 - ⚠️ The comparison is strict (`fitness > meta.StructuralFitness`), so a new winner with fitness exactly equal to the stored one is treated as non-improving and skipped — ties never overwrite.
+
+<a id="adr-079"></a>
 
 ## ADR-079: `cmd/bt-gardener` Wires the Learned Selector-Ordering Pass into Its Production Daemon and MCP Tool
 
@@ -1631,6 +1814,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 - ⚠️ `selector-stats.json` under `metricsDir` is a new durable file with no explicit cap or rotation, alongside the existing gardener metrics/reference files in the same directory (§7.2.2).
 
 ---
+
+<a id="adr-080"></a>
 
 ## ADR-080: `handleAnalyze` Adopts the `Workflow` Task-Derivation Engine and Stops Swallowing ThinkTank Orchestrator Errors (Q1 Correctness Program, Milestones 1–3/4)
 
@@ -1650,6 +1835,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 
 ---
 
+<a id="adr-081"></a>
+
 ## ADR-081: Workflow-Level Approval Endpoints Wired Over HTTP and `RunFullPipeline`'s Auto-Approval Removed (Q1 Correctness Program, Milestone 4/4 — Closes the Program)
 
 **Context (2026-07-13):** ADR-080 closed milestones 1–3 of "Q1 Correctness — Adopt the dashboard's ThinkTank→Workflow task-derivation engine in production and stop swallowing analysis failures," explicitly leaving milestone 4/4 open: `internal/dashboard/workflow_engine.go`'s `Workflow.PendingApprovals`/`ApproveTask`/`RejectTask` were fully unit-tested but had zero callers outside `workflow_engine_test.go` — `handleAnalyze` built a `*dashboard.Workflow` purely as a local variable to derive `WorkflowTask`s, copied them into `dashboard.Task` values, and let the `Workflow` itself fall out of scope, so the approval gate its own methods enforced could never be exercised outside a test. Separately, `Workflow.RunFullPipeline` (`internal/dashboard/workflow_engine.go:346-351`) auto-approved every task with `Priority <= PriorityHigh` as `"system"` immediately after deriving it, before `ExecuteSprint` ran — a bypass of the same approval gate the program was trying to make reachable, silently self-approving the majority of realistic workloads (critical/high priority tasks are the common case) the moment `RunFullPipeline` ran.
@@ -1667,6 +1854,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 
 ---
 
+<a id="adr-082"></a>
+
 ## ADR-082: `Workflow`-Derived Task IDs Made Collision-Resistant and `currentWorkflow`/`Workflow.Tasks` Made Concurrency-Safe
 
 **Context (2026-07-13):** NotebookLM research goal. ADR-080/081's residual caveats named two related gaps left by wiring `handleAnalyze` onto the `Workflow` task-derivation engine and exposing it over HTTP. First, `RecommendationsToTasks` (`internal/dashboard/workflow_engine.go`) minted `WorkflowTask.ID` as a fixed per-category string (`rec-001`, `agree-001`, …), and `NewWorkflow`'s `wf.ID` only carries second, not nanosecond, granularity (`fmt.Sprintf("wf-%d", time.Now().Unix())`); two `handleAnalyze` calls landing in the same wall-clock second produced identical composed `dashboard.Task.ID` (`wf.ID + "-" + wt.ID`) values, reintroducing the collision class ADR-072 had already fixed once on the dashboard's older ID scheme. Second, the package-level `currentWorkflow *dashboard.Workflow` var ADR-081 introduced was read and reassigned by `handleAnalyze`/`handleWorkflowPending`/`handleWorkflowApprove`/`handleWorkflowReject` from separate HTTP goroutines with no synchronization at all, and every `Workflow` method (`RecommendationsToTasks`, `ApproveTask`, `RejectTask`, `Prioritize`, `GetApprovedTasks`, `GetTasksByRole`, `GetTasksBySprint`, `PendingApprovals`, `ExecuteSprint`) read or mutated the shared `Tasks` slice with no lock — a genuine Go data race under concurrent requests, not just the already-documented last-write-wins overwrite semantics.
@@ -1680,6 +1869,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 - ✅ (amends ADR-081) `currentWorkflow` and `Workflow.Tasks` are now guarded by `currentWorkflowMu`/`Workflow.mu` respectively. Pinned by `TestCurrentWorkflow_GuardedByMutex` (`cmd/bt-dashboard/main_test.go`) and `TestWorkflow_ApproveTask_SynchronizesOnMutex` (`internal/dashboard/workflow_engine_test.go`), both of which hold the relevant mutex from an external goroutine and assert the guarded call blocks until it is released.
 - ⚠️ Neither fix touches the last-write-wins semantics ADR-081 already flagged: a second `handleAnalyze` call still replaces `currentWorkflow` outright, discarding a prior workflow's pending approvals — now race-free, not multi-tenant.
 - ⚠️ The nonce is per-`RecommendationsToTasks`-call, not per-`WorkflowTask` — every task minted by one call shares the same nonce, so uniqueness holds across calls but the four fixed category prefixes (`rec-001`, `agree-%03d`, …) remain the within-call disambiguator exactly as before.
+
+<a id="adr-083"></a>
 
 ## ADR-083: `persistEvolvedWinner`'s Knowledge-Graph Bookkeeping and Tree-Store Write Made Atomic
 
@@ -1696,6 +1887,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 
 ---
 
+<a id="adr-084"></a>
+
 ## ADR-084: `MarkSuccessful` and `EscalateToDeepSeek` Make the `OutcomeSelector`'s Self-Correction and Escalation Paths Real (Q1 Correctness / Q3 Reliability Program, Milestones 1–2/4)
 
 **Context (2026-07-13):** The universal `PreGate→StrategyRouter→OutcomeSelector` pattern (§8.1) routes every task's outcome through a three-child `Selector`: `MarkSuccessful` → `SelfCorrect` (retried up to 3x) → `EscalateToDeepSeek`. `MarkSuccessful` (`internal/engine/registry.go`) unconditionally returned `1`, so the Selector's first child never failed — `SelfCorrect` and `EscalateToDeepSeek` were unreachable from any tree built on this pattern regardless of output quality. Compounding this, `EscalateToDeepSeek` was itself a no-op stub (`func(_ *btcore.BTContext[Blackboard]) int { return 1 }`) that made no LLM call and wrote no result, so even a tree that reached it would falsely report success.
@@ -1710,6 +1903,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 - ⚠️ `EscalateToDeepSeek`'s name is now slightly misleading: like `SelfCorrect`, it calls whatever `bb.LLM` is configured (fallback chain included), not specifically a DeepSeek endpoint — this matches `SelfCorrect`'s existing behavior and the pre-existing naming convention, not a new gap introduced here.
 
 ---
+
+<a id="adr-085"></a>
 
 ## ADR-085: `RunTask`'s Terminal Backstop Flips `bb.Outcome` on Failed Quality Validation, Closing the OutcomeSelector Program (Milestone 4/4)
 
@@ -1726,6 +1921,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 
 ---
 
+<a id="adr-086"></a>
+
 ## ADR-086: `handleWorkflowApprove`/`handleWorkflowReject` Mirror Their Decision into `taskStore`, Closing the Approval-Surface Split ADR-081 Left Open
 
 **Context (2026-07-14):** ADR-081 gave `Workflow.PendingApprovals`/`ApproveTask`/`RejectTask` their first production callers — `GET /api/workflow/pending`, `POST /api/workflow/approve`, `POST /api/workflow/reject` — but flagged in its own consequences that these endpoints mutate only the in-memory `currentWorkflow.Tasks` copy, keyed on the bare `WorkflowTask.ID` (e.g. `rec-001`). `handleAnalyze` separately persists each derived `WorkflowTask` into `taskStore` as a `dashboard.Task`, keyed on the composed ID `wf.ID + "-" + wt.ID` (ADR-080), and `handleSprintExecute`'s dispatch loop reads exclusively from `TaskStore.Approved()` (ADR-072). The two records never stayed in sync: approving a task through `/api/workflow/approve` left its `taskStore` counterpart stuck at `Status: "pending"` forever, so the approval was reachable over HTTP but had no effect on what a sprint actually dispatched.
@@ -1741,6 +1938,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 
 ---
 
+<a id="adr-087"></a>
+
 ## ADR-087: `handleAgentExecute` Carries `RunResult.Quality` into `AgentResult.QualityScore` for Remote-Routed Runs
 
 **Context (2026-07-14):** `cmd/bt-agent/main.go`'s in-process `newLocalAgentExecutor` (the `LocalExecutor` adapter ADR-011 introduced for the horizontal-scaling substrate) has always set `QualityScore: res.Quality` straight from `agent.RunOnce`'s result. The dashboard's HTTP counterpart, `handleAgentExecute` (`POST /api/agents/execute` — the endpoint `reliability.RemoteExecutor.Execute` calls into, per ADR-011/ADR-075, whenever an `AgentRouter` routes a task to a remote dashboard node), built its `reliability.AgentResult` from `AgentExecutor.RunTask`'s `(output, outcome, err)` triple, which drops the `agent.RunResult.Quality` value the richer `RunTaskResult` method (which `RunTask` itself wraps) had already computed. Every remote-routed successful run therefore reported `QualityScore: 0.0` regardless of its actual quality — a silent blind spot for any fitness/quality tracking downstream of a routed, as opposed to purely local, execution.
@@ -1753,6 +1952,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 - ✅ Remote-routed agent runs dispatched through `/api/agents/execute` now report a real `QualityScore`, matching the in-process `LocalExecutor` path's behavior — closing a gap that would otherwise widen as more nodes join the `AgentRouter` registry (ADR-011/ADR-075). Pinned by `TestHandleAgentExecute_SetsQualityScoreFromRunResult` (`cmd/bt-dashboard/main_test.go`), which forces the synchronous fallback path with a bare `AlwaysSucceed` tree and asserts `QualityScore > 0`.
 - ✅ The worker-pool and synchronous-fallback branches of `handleAgentExecute` no longer duplicate the `AgentResult`-construction logic — both now call the same `agentExecuteResult` helper.
 - ⚠️ `TraceID`/`SpanID` still do not round-trip through `reliability.AgentResult` (ADR-075's pre-existing caveat) — this fix only addresses `QualityScore`, not the tracing-correlation gap.
+
+<a id="adr-088"></a>
 
 ## ADR-088: `evolution.MetaValidator` Wired into the Gardener's Live Mutation-Acceptance Loop
 
@@ -1767,6 +1968,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 - ✅ Callers outside `cmd/bt-gardener` (tests, any future binary constructing `gardener.Config` directly) are unaffected unless they opt in by setting the field — no behavior change for existing callers that leave it nil.
 - ⚠️ `MetaValidator` is consulted only inside `evolveTreeV2`'s gardener cycle; the daemon/MCP-tool `bt_evolve_*` genetic-algorithm paths (`Population.Evolve`, `EvolveWithExperience`, etc., §8.5) have no equivalent structural gate — a follow-up would need its own wiring into `newProductionPopulation` or the tools that construct populations directly.
 
+<a id="adr-089"></a>
+
 ## ADR-089: `handleSprintExecute` Reconciles `currentWorkflow`'s Task State with `taskStore` as Tasks Actually Execute
 
 **Context (2026-07-14):** The dashboard carries two independent representations of the same sprint task: `dashboard.Task` records in the package-level `taskStore`, and `dashboard.WorkflowTask` records inside the package-level `currentWorkflow.Tasks`, keyed by a composed `wf.ID+"-"+wt.ID` / bare `wt.ID` respectively (§6.3). ADR-086 reconciled one direction — an `/api/workflow/approve`/`/api/workflow/reject` decision now also updates the matching `taskStore` record. The opposite direction stayed open: `handleSprintExecute`'s per-task dispatch loop (`cmd/bt-dashboard/main.go`) called `taskStore.UpdateStatus`/`taskStore.SetOutput` as each dispatched task started, timed out, failed, or completed, but never touched `currentWorkflow` at all. Any dashboard surface reading `currentWorkflow` directly — `GET /api/workflow/pending`, the sprint-goal UI, `Workflow.Company.CurrentSprint` — stayed frozen showing a task as merely `"approved"` even after a sprint had actually run and finished it.
@@ -1779,6 +1982,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 - ✅ `currentWorkflow` now advances alongside `taskStore` as a sprint actually executes, not just as tasks are approved/rejected — closing the reverse direction ADR-086 left open. Pinned by `TestHandleSprintExecute_UpdatesCurrentWorkflow` (`cmd/bt-dashboard/main_test.go`), which seeds a `currentWorkflow` task and its composed-ID `taskStore` counterpart, runs a real sprint dispatch against a stubbed always-succeeding tree, and asserts both `currentWorkflow.Tasks[0].Status == StatusCompleted` and `Company.CurrentSprint` advanced to the task's `SprintTarget`.
 - ✅ A task dispatched by `handleSprintExecute` whose composed ID does not carry the active `currentWorkflow.ID+"-"` prefix (e.g. a manually-created `dashboard.Task` with no `Workflow` origin) is a no-op for `syncWorkflowTaskStatus` — sprint dispatch for non-workflow-derived tasks is unaffected.
 - ⚠️ This closes the execution-outcome direction only; the two records remain structurally independent (separate structs, separate stores) rather than unified into one source of truth — a future change to either's shape still risks the sync drifting again.
+
+<a id="adr-090"></a>
 
 ## ADR-090: A2A Agent-Card Signing Wired into the Card-Serving and Card-Consuming Paths
 
@@ -1794,6 +1999,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 - ⚠️ Only `auctionCandidates` checks signatures before use; other card readers in `internal/a2a` (e.g. direct `CardCache` lookups outside the auction path) do not yet consult `cardSignatureValid`.
 
 ---
+
+<a id="adr-091"></a>
 
 ## ADR-091: Durable Cross-Run Archives for the Pareto Front and NSGA-II's Final Front (Q2 Evolvability, Milestones 1–3/5)
 
@@ -1811,6 +2018,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 - ⚠️ `bt_evolve_pareto`'s reported `front_size`/`diversity_score`/`best_per_dim` changed meaning with this ADR: they now describe the durable archive across all runs on this base tree, not just the individuals this call's `EvolvePareto` produced — a caller diffing consecutive responses to gauge one run's contribution needs to account for the merge.
 - Pinned by `TestParetoFront_Load_MissingFileColdStart`, `TestParetoFront_Save_EvictsLowestFitnessFirst`, and `TestParetoFront_Load_MergeKeepsFitterCopy` (`internal/evolution/pareto_test.go`); `TestBTEvolveParetoAccumulatesDurableArchive` (`cmd/bt-agent/tools_test.go`); `TestNSGAIIPopulation_Load_MissingFileColdStart`, `TestNSGAIIPopulation_Save_EvictsLowestFitnessFirst`, and `TestNSGAIIPopulation_Load_MergeKeepsFitterCopy` (`internal/evolution/multi_objective_test.go`).
 
+<a id="adr-092"></a>
+
 ## ADR-092: Characterization Tests for the Goal and Blackboard MCP Tools Surface Two Real Bugs
 
 **Context (2026-07-15):** Program "Deterministic coverage backlog: characterization tests for `cmd/benchcmp/main.go` and 2 more (Q1 Correctness)," milestones 2–3 of 3. `cmd/bt-agent/blackboard_tools.go` and `cmd/bt-agent/goal_tools.go` had no direct test files of their own; the milestone's mandate was to pin currently-observed behavior with new `blackboard_tools_test.go`/`goal_tools_test.go` files, table-driven where natural, and to touch production code only if a test exposed a real bug. Writing the tables exposed two.
@@ -1825,6 +2034,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 - ✅ Goal names with trailing punctuation or symbol-only words no longer mint tree/task IDs with stray double underscores, which previously risked two distinct goal names slugging to visually-confusable-but-distinct IDs and made generated IDs harder to read.
 - ✅ `bt_bb_read` now agrees with `bt_bb_write`/`bt_bb_delete`/`bt_bb_list` on whitespace/slash-padded keys, closing the one asymmetric path in the `scopedStore` key contract.
 - Pinned by `TestGoalTreeSlug` (`cmd/bt-agent/goal_tools_test.go`, table-driven, including a `"strips punctuation"` case asserting `"watch & alert!"` → `"watch_alert"`) and `TestBTBBWriteThenReadNormalizesKeyIdentically` (`cmd/bt-agent/blackboard_tools_test.go`); both new test files otherwise characterize the pre-existing behavior of their respective tool files with no further production changes.
+
+<a id="adr-093"></a>
 
 ## ADR-093: Durable Pre-Mutation Snapshots and Operator-Triggered Tree Rollback for the Gardener
 
@@ -1841,6 +2052,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 - ⚠️ `RollbackTree` restores unconditionally — it does not re-run `QualityGate.ValidateFor`/`MetaValidator.ValidateMutation` against the restored tree, nor does it reset a tree's `QualityGate` fail-streak (`ResetFailCount`/`IsDisabledFor`) if the mutation that made rollback necessary had already disabled the gate for that tree; this caveat carries forward unresolved into the automatic rollback path ADR-115 (2026-07-15) adds
 - Pinned by `TestEvolveTreeV2_SnapshotsTreeBeforeMutation`, `TestRegistry_RollbackTree`, `TestRegistry_RollbackTree_UnknownTree` (`internal/gardener`), and `TestGardenerRollbackTool_CallRestoresSnapshot` (`cmd/bt-gardener`)
 
+<a id="adr-094"></a>
+
 ## ADR-094: Gardener-Embedded Transposition Table and Deterministic Eviction (Q2 Evolvability, Milestones 1–3/3)
 
 **Context (2026-07-15):** Program "Q2 Evolvability — Wire the Stockfish transposition-table search into the gardener's live evolution loop." `evaluator.TranspositionTable` (`internal/evaluator/stockfish.go`) already cached `(tree, task)` fitness evaluations, but its only production caller was the standalone `bt-evaluator` MCP binary — the gardener's own `RunCycleV2` never constructed, stored into, or persisted one, so cached evaluations were lost on every gardener restart and re-computed from scratch even when `bt-evaluator` had already scored the same position. Eviction was also non-deterministic: `Store`'s over-capacity path and `load`'s startup trim both deleted whatever entry Go's randomized map iteration visited first.
@@ -1856,6 +2069,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 - ⚠️ ~~`IterativeDeepening`'s result is recorded in `CycleMetrics` but not yet consulted by the mutation-acceptance path — deep search runs and reports, but doesn't (yet) change which mutation the cycle applies.~~ — resolved by ADR-107 (2026-07-15): a `BestMutation` that beats the cycle's current fitness is now applied to the live tree.
 - ⚠️ ~~No production binary sets `Config.TranspositionTablePath` yet, so milestones 1–2 are reachable only from tests until a follow-up wires it into `cmd/bt-gardener/config.go`.~~ — resolved by ADR-114 milestone 2 (2026-07-15).
 - Pinned by `TestRunCycleV2_TranspositionTablePersistsAcrossGardenerInstances` (`internal/gardener/evolve_v2_test.go`); `TestEvolveTreeV2_DeepSearchMetrics_PopulatedWhenTTConfigured`, `TestEvolveTreeV2_DeepSearchMetrics_ZeroWithoutTranspositionTable` (`internal/gardener/gardener_test.go`); and `TestTranspositionTable_StoreProbeRoundTrip`, `TestTranspositionTable_StoreProbeMiss`, `TestTranspositionTable_SaveLoadRoundTrip`, `TestTranspositionTable_Store_EvictsLowestValueDeterministically`, `TestTranspositionTable_Store_EvictsLowestValueRepeated`, `TestTranspositionTable_Store_EvictionPreservesLowestAmongSurvivors` (`internal/evaluator/stockfish_test.go`)
+
+<a id="adr-095"></a>
 
 ## ADR-095: A Durable, Learning Archive for Expert Knowledge (Q2 Evolvability, Milestones 1–2/2)
 
@@ -1874,6 +2089,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 - ⚠️ `RecommendMutations`/`DetectAntiPatterns` still score and rank using only the hardcoded `Patterns`/`AntiPatterns` catalog — `LearnedPatterns` is surfaced in `bt_evolve_expert`'s JSON response for a caller to read, but does not yet feed back into which recommendations are generated or how they're ranked.
 - Pinned by `TestExpertKnowledge_ObservesLearnedPatternFromQLearning` and `TestPopulation_EvolveQLearning_NilExpertKnowledgeNoOp` (`internal/evolution/learning_test.go`) and `TestBTEvolveExpertSurfacesLearnedPatternFromQLearning` (`cmd/bt-agent/tools_test.go`).
 
+<a id="adr-096"></a>
+
 ## ADR-096: Benchmark-Suite Gate on the Standalone Evolution Tools' Durable-Archive Winners (Q2 Evolvability, Milestones 1–2/4)
 
 **Context (2026-07-15):** Program "Q2 Evolvability — Gate the standalone evolution-algorithm tools' durable-archive winners through the benchmark suite, not structural fitness alone." Every `bt_evolve_*` tool that persists a winner to a durable cross-run archive (`bt_evolve_multiobjective`/ADR-091, `bt_evolve_island`/ADR-033, and — pending milestones 3–4 — `bt_evolve_pareto`, `bt_evolve_qlearning`) picks that winner using only `evolution.StructuralMultiFitness`/its siblings — success_rate/node_efficiency/stability computed from tree shape via structural heuristics, never an actual execution. A mutation can score as structurally elite while performing worse than the untouched base tree against the tree's own `internal/benchmark` suite; the "Mutation quality gates" Known Technical Debt row (§11) already flagged this exact gap for the daemon's `bt_evolve_*` tools after ADR-088 closed the analogous gap for the gardener's `evolveTreeV2`.
@@ -1891,6 +2108,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 - ⚠️ ~~Milestones 3–4 (`bt_evolve_pareto`, `bt_evolve_qlearning`) remain open — those two tools still persist their durable archives on structural fitness alone.~~ — `bt_evolve_qlearning` gated by ADR-111 (2026-07-15), which also gates `bt_evolve_qd` (outside this ADR's original four-tool count — `bt_evolve_qd` has its own durable MAP-Elites archive, ADR-043). `bt_evolve_pareto` gated by ADR-113 (2026-07-15) — every durable-archive `bt_evolve_*` tool now has this gate.
 - Pinned by `TestBTEvolveMultiObjectiveBenchmarkGateRejectsRegressedWinner` and, since milestone 2, `TestBTEvolveIslandBenchmarkGateRejectsRegressedWinner` (both `cmd/bt-agent/tools_test.go`).
 
+<a id="adr-097"></a>
+
 ## ADR-097: Domain-Aware Fitness Override for Genuine Knowledge-Graph Runs (NotebookLM Research)
 
 **Context (2026-07-15):** NotebookLM research goal. `domains.NotebookLMFitness` (`internal/domains/notebooklm_fitness.go`) computes a 0.0–1.0 score from a run's outcome, an anti-fabrication penalty, and output quality — but nothing in the repo ever called it. Every tree's `Fitness`, including `"notebooklm"`/`"notebooklm_consumer"`, was driven solely by `RecordRun`'s generic 0.9/0.1 runtime-success EMA (§8.4, ADR-028), which cannot distinguish an honestly-reported research run from a fabricated one.
@@ -1906,6 +2125,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 - ⚠️ `RecentRuns` is not part of the `feedback_persist.go` snapshot (only `Fitness`/`RunCount`/`EvolvedCount`/`LastOutcome`/`LastDuration` are, ADR-028) — a daemon restart preserves the last computed `Fitness` but resets the run-history window the domain function scores from, so it only ever sees genuine runs recorded since the most recent restart.
 - ⚠️ `domainFitness` registrations are equally unpersisted — every process start must re-register via `RegisterNotebookLMFitness`, the same re-registration contract other in-memory seams (e.g. `RegisterEvolved`'s callers) already rely on.
 - Pinned by `TestRecordRun_DomainFitness_OverridesGenericEMA`, `TestRecordRun_TracksBoundedRecentRunsWindow`, `TestRecordRun_NoDomainFitness_KeepsGenericEMA` (`internal/knowledge/graph_test.go`) and `TestRegisterNotebookLMFitness_WiresIntoKnowledgeGraph`/`TestRegisterNotebookLMFitness_DoesNotAffectOtherTrees` (`internal/domains/notebooklm_fitness_wiring_test.go`).
+
+<a id="adr-098"></a>
 
 ## ADR-098: An Operator-Triggered Evolution Kill Switch for the Gardener
 
@@ -1923,6 +2144,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 
 ---
 
+<a id="adr-099"></a>
+
 ## ADR-099: `DashboardRoutes()` Gains 15 Missing `/api/*` Route Definitions, Closing the Response-Validator's Route-Coverage Blind Spot (Q1 Correctness / Q3 Reliability Program, Milestone 1/4)
 
 **Context (2026-07-15):** `cmd/bt-dashboard/main.go` wires `api.ResponseValidator(api.DashboardRoutes(), ...)` as the last middleware in the dashboard's stack, comparing every `/api/*` response against the documented schema for that method+path. `ResponseValidator`'s route lookup (`internal/api/response_validator.go`) is an exact method+path match against a `RouteIndex` built from `DashboardRoutes()`; on a miss it silently passes the response through unvalidated — a documented `// TODO: support path parameter matching` (`response_validator.go:358`), not a bug, but one with no test pinning which live endpoints it left uncovered. `DashboardRoutes()` (`internal/api/openapi.go`) had drifted out of lockstep with the mux registrations added by many prior ADRs: agents lifecycle, workflow approval, HITL, and pipelines/blackboard endpoints were all live on `main.go`'s mux with zero matching `Route`, so their responses bypassed schema-drift detection entirely and — because a miss is silent — with no signal that they were unchecked.
@@ -1938,6 +2161,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 - Pinned by `TestDashboardAPIRoutesHaveOpenAPICoverage` (`cmd/bt-dashboard/main_test.go`).
 
 ---
+
+<a id="adr-100"></a>
 
 ## ADR-100: `dashboard.PickTreeForTask` Consults `knowledge.KnowledgeGraph.Discover` Instead of Relying Solely on Its Static Keyword Switch
 
@@ -1956,6 +2181,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 
 ---
 
+<a id="adr-101"></a>
+
 ## ADR-101: `dashboard.TaskStore` Load/Save Made Atomic and Fail-Loud on Corruption
 
 **Context (2026-07-15):** NotebookLM research noted that `dashboard.TaskStore` (`internal/dashboard/tasks.go`) — the persisted record `handleSprintExecute`'s dispatch loop and the approval endpoints (ADR-072/080/081/086) all read and write — did not follow the atomic-write, fail-loud idiom §8.4/ADR-003 documents for every other store in this section (the DLQ's `save()`/`load()`, ADR-036; `QTable.Save`/`Load`, ADR-041; `IslandModel.Save`/`Load`, ADR-033). `Load` discarded `json.Unmarshal`'s error via a bare `_ = json.Unmarshal(data, s)`, so a corrupted `tasks.json` was indistinguishable from a freshly created empty store — the dashboard would silently start with zero tasks and no signal that anything had been lost. `saveLocked` wrote via a direct `os.WriteFile(s.path, data, 0644)`, truncating the live file in place rather than writing to a sibling temp file and renaming it into place, so a save that failed partway (disk full, process killed mid-write) could leave `tasks.json` truncated or corrupt instead of leaving the prior valid content untouched.
@@ -1971,6 +2198,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 - ⚠️ A caller that still wants the historical "log and continue with whatever's in memory" behavior on a corrupt file has no way to opt out — `NewTaskStore` always panics. This matches the deliberate severity choice already made for `agent.FileJobStore`/`goap.GoalStore` elsewhere in the codebase, not a new departure.
 
 ---
+
+<a id="adr-102"></a>
 
 ## ADR-102: `Gardener.evolveTreeV2`'s Crisis Mutation Budget Now Scales from the Detector's Calibrated `EmergencyRate` Instead of a Hardcoded Doubling
 
@@ -1988,6 +2217,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 
 ---
 
+<a id="adr-103"></a>
+
 ## ADR-103: `ExpertKnowledge.LearnedPatterns` Capped at 500, Evicting the Lowest-Gain Entry (Q2 Evolvability, Milestone 1/3)
 
 **Context (2026-07-15):** Program "Q2 Evolvability — Feed Expert Knowledge's learned-pattern archive back into mutation recommendations and every production evolution algorithm." ADR-095 gave `ExpertKnowledge.LearnedPatterns` durable, cross-run growth via `Observe` but explicitly left it uncapped, the one durable archive in the evolution package without a bound — `QTable` (ADR-041 milestone 4), `IslandModel`/`MAPElitesGrid` (ADR-033/ADR-040), and `ParetoFront` (ADR-091) all cap; `ExperienceBank` set the original precedent (ADR-018, cap 500). Every `bt_evolve_qlearning` call against a base tree that finds a fitness-improving mutation appends to the same archive `bt_evolve_expert` loads and re-persists, so the slice — and the JSON file `ExpertKnowledge.Save` rewrites in full on every call — grows without bound across a tree's lifetime.
@@ -2002,6 +2233,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 - ⚠️ Eviction is an unweighted linear scan over the full slice on every over-cap `Observe` call (O(n) per call, n ≤ 501) — cheap at this cap but, unlike `ExperienceBank`'s reuse-count protection, gives no special treatment to a lower-gain entry that has proven repeatedly useful, so a single high-gain outlier observed once can outlast a modest-gain pattern matched far more often.
 - ⚠️ Milestones 2–3 of this program remain open: `LearnedPatterns` is still surfaced only as advisory JSON in `bt_evolve_expert`'s response (ADR-095) and still observed only from `EvolveQLearning`'s mutation loop — capping its growth does not yet change what it's used for or how it's populated.
 - Pinned by `TestExpertKnowledge_Observe_CapsLearnedPatterns` (`internal/evolution/expert_test.go`), which observes 600 strictly-increasing-gain entries and asserts the surviving 500 all have gain > 100 (i.e. the lowest 100 were evicted, not an arbitrary subset).
+
+<a id="adr-104"></a>
 
 ## ADR-104: `ExpertKnowledge` Observation Across MAP-Elites/Pareto/NSGA-II/Island and Island Real Breeding (reconstructed)
 
@@ -2018,6 +2251,36 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 
 **Consequences:** `Observe` coverage reached five of the six production algorithm families — `Population.Evolve`/`EvolveWithExperience` (the plain and experience-bank-warm-started GA) remain the one family that does not call it. Within-island evolutionary progress across generations, previously driven only by `Migrate` copying elites in from other islands, is now real.
 
+<a id="adr-105"></a>
+
+## ADR-105: Persist RecentRuns in Knowledge-Graph Feedback (reconstructed)
+
+**Status:** Reconstructed on 2026-09-16 from an existing implementation; original decision date was not recorded.
+
+**Provenance:** The July consolidation notes and ADR-137/ADR-235 refer to
+ADR-105 without a standalone record. This entry recovers the documented
+contract from `feedback_persist.go` and its regression test; it does not
+invent an original acceptance date or a historical alternatives discussion.
+
+**Context:** Domain-aware fitness can depend on recent genuine-run summaries.
+Persisting counters without these summaries changes available evidence after
+a daemon restart.
+
+**Decision:** Include `RecentRuns` in the feedback snapshot and restore it
+with the other per-tree runtime feedback fields.
+
+**Evidence:** [Snapshot implementation](../../internal/knowledge/feedback_persist.go)
+and `TestSaveLoadFeedback_RecentRunsRoundTrip` in
+[feedback persistence tests](../../internal/knowledge/feedback_persist_test.go).
+
+**Consequences:** Recent-run evidence survives a successful save/load.
+Correct dirty marking and flush lifecycle remain required (ADR-235);
+this is not a multi-store transaction or backup guarantee.
+
+---
+
+<a id="adr-106"></a>
+
 ## ADR-106: `ExpertKnowledge` Warm-Start/Save Wired into `bt_evolve_island`, `bt_evolve_multiobjective`, and `bt_evolve_pareto` (Q2 Evolvability, NotebookLM Research)
 
 **Context (2026-07-15):** ADR-104 gave `NSGAIIPopulation`, `ParetoPopulation`, `IslandModel`, and `MAPElitesPopulation` each an optional `ExpertKnowledge` field that their mutation-application step `Observe`s into on every genuinely fitness-improving mutation — the same signal `EvolveQLearning`'s `qLearnMutate` already reports (ADR-095). But that wiring was algorithm-level only: none of the four production MCP tools that construct these types (`bt_evolve_multiobjective`, `bt_evolve_pareto`, `bt_evolve_island`, `bt_evolve_qd`) ever set the field, so the durable per-tree archive `bt_evolve_expert` reads kept growing from exactly one caller — `bt_evolve_qlearning`'s own tool-level `ek := evolution.NewExpertKnowledge(); ek.Load(expertArchivePath(...)); ...; ek.Save(...)` sequence (ADR-095 milestone 2) — no matter how many other algorithms could now observe into it.
@@ -2032,6 +2295,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 - ⚠️ ~~`bt_evolve_qd` remains unwired — `MAPElitesPopulation.ExpertKnowledge` (ADR-104) still has no production caller that sets it.~~ — resolved by ADR-110 (2026-07-15)
 - ⚠️ Milestone 3 of the ADR-103 program (folding `LearnedPatterns` into `RecommendMutations`/`DetectAntiPatterns`' ranking) is untouched by this change — the archive now grows faster but is still consulted only advisory-JSON-side by `bt_evolve_expert`.
 - Pinned by `TestBTEvolveIslandFeedsExpertKnowledgeArchive`, `TestBTEvolveMultiObjectiveFeedsExpertKnowledgeArchive`, and `TestBTEvolveParetoFeedsExpertKnowledgeArchive` (`cmd/bt-agent/tools_test.go`), each asserting `bt_evolve_expert` surfaces a non-empty `learned_patterns` after the sibling tool runs.
+
+<a id="adr-107"></a>
 
 ## ADR-107: The Gardener's Deep-Search `BestMutation` Now Feeds Back into the Live Tree (Q2 Evolvability, NotebookLM Research)
 
@@ -2048,6 +2313,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 - ⚠️ ~~`cmd/bt-gardener/config.go` still does not set `Config.TranspositionTablePath` (ADR-094), so this feedback path — like deep search itself — is reachable only from tests until a follow-up wires a table into the production daemon.~~ — resolved by ADR-114 milestone 2 (2026-07-15).
 - Pinned by `TestEvolveTreeV2_DeepSearchResultAppliedWhenGreedyLoopFindsNothing` (`internal/gardener/evolve_v2_test.go`).
 
+<a id="adr-108"></a>
+
 ## ADR-108: The A2A Auction Responder Reuses `RespondToAnnouncement` and a Cached, Already-Signed Card (NotebookLM Research)
 
 **Context (2026-07-15):** `RespondToAnnouncement` (`internal/a2a/server.go`, introduced with ADR-008) already implemented the candidate-side parse → score → marshal sequence and was covered by its own tests, but `BTAgentExecutor.Execute`'s auction-bid branch never called it — it duplicated the same parse/score/marshal steps inline instead. That branch also called `ConvertToAgentCard(inst.Definition, "")` fresh on every inbound announcement, re-deriving (and re-`SignAgentCard`-ing, ADR-090) a card from the tree definition rather than reusing the already-signed card the server had built once at startup and was already advertising via `Server.CardCache`.
@@ -2061,6 +2328,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 - ✅ The card scored against an announcement is now the same card the A2A server actually advertises and signs, rather than a freshly re-derived (and separately re-signed) one computed per request — removing both the redundant signing work and the possibility that the two cards for one agent silently diverge.
 - ⚠️ ~~`CardCache` is set once at `NewServer` construction and never reassigned in production; if the underlying card registry needed to change at runtime, the map itself would need in-place mutation (which both `Server.CardCache` and `BTAgentExecutor.CardCache` would observe, since they alias the same map) rather than a wholesale replacement of one side only.~~ — resolved by ADR-117 (2026-07-15): `Server.RefreshCards()` reassigns both `s.CardCache` and `s.Executor.CardCache` from a fresh `BuildCardRegistry` snapshot, called from `bt_agent_create` and autopilot's `activateAutomation` after each mutates the registry.
 - Pinned by `TestExecute_AnnouncementScoresAgainstCardCacheNotFreshConversion` (`internal/a2a/server_test.go`), which gives the cached card different tag coverage than the tree-derived one would have and asserts `Execute` scores against the cached card.
+
+<a id="adr-109"></a>
 
 ## ADR-109: `bt_evolve_bottlenecks`' Genetic Path Conditions Its Warm-Start on the Failing Task, Not Just Tree Type (Q2 Evolvability, Milestones 1–3/3)
 
@@ -2077,6 +2346,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 - Pinned by `TestEvolveWithExperienceContext_QueryRetrievesAcrossTreeTypes`/`TestEvolveWithExperienceContext_EmptyQueryFallsBackToTreeType` (`internal/evolution/learning_test.go`, milestone 1), `TestAddFromMutation_RecordsFailureContext`/`TestRetrieve_MatchesOnFailureContext` (`internal/evolution/experience_bank_test.go`, milestone 2), and `TestBTEvolveBottlenecksGeneticPathQueriesExperienceByFailureTask` (`cmd/bt-agent/tools_test.go`, milestone 3), which seeds an off-tree-type entry that `RetrieveByTreeType` could never find and asserts it is retrieved and marked reused once the handler threads `LastFailureTask` through.
 
 ---
+
+<a id="adr-110"></a>
 
 ## ADR-110: `bt_evolve_qd` Adopts `MAPElitesPopulation.EvolveMAPElites` Directly and Wires `ExpertKnowledge`, Closing the Q2 Evolvability Learned-Pattern Program (Milestones 1–2/2)
 
@@ -2095,6 +2366,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 - ⚠️ ~~`bt_evolve_qd` has no benchmark gate either.~~ — resolved by ADR-111 (2026-07-15): `grid.Save`/`ek.Save` are now gated by `benchmarkGateEvolvedWinner` the same way `bt_evolve_multiobjective`/`bt_evolve_island` already were (ADR-096).
 - Pinned by `TestMCTSMutator_Mutate_ReturnsWinningMutationOp` (`internal/evolution/mcts_mutate_test.go`, milestone 1) and `TestBTEvolveQdFeedsExpertKnowledgeArchive` (`cmd/bt-agent/tools_test.go`, milestone 2), which asserts `bt_evolve_expert` surfaces a non-empty `learned_patterns` after `bt_evolve_qd` runs — mirroring the sibling assertions ADR-106 added for the other three tools.
 
+<a id="adr-111"></a>
+
 ## ADR-111: Benchmark-Suite Gate Extended to `bt_evolve_qd` and `bt_evolve_qlearning` (Q2 Evolvability, Milestones 2–3/4)
 
 **Context (2026-07-15):** Program "Q2 Evolvability — Finish gating every evolution algorithm's durable-archive winner through the real benchmark suite." ADR-096 gave `bt_evolve_multiobjective` and `bt_evolve_island` a `benchmarkGateEvolvedWinner` check before their durable-archive `Save`, but explicitly left the other durable-archive tools ungated: `bt_evolve_qlearning` (ADR-096's own milestone 4) unconditionally called `qt.Save`/`ek.Save` on `EvolveQLearning`'s returned `best`, and `bt_evolve_qd` — outside ADR-096's original four-tool count, since its own durable MAP-Elites archive (ADR-043) predates that program — unconditionally called `grid.Save`/`ek.Save` on `grid.BestIndividual().Tree` with a comment noting explicitly it "has no benchmark gate" (ADR-110). Both winners are still picked by `evolution.StructuralMultiFitness`/its siblings alone, so both tools could persist a structurally-elite-but-behaviorally-regressed tree into their durable archives exactly like the pre-ADR-096 `bt_evolve_multiobjective`/`bt_evolve_island`.
@@ -2109,6 +2382,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 - ✅ `bt_evolve_qd`'s gate also covers the ADR-106 `ek.Save` — like the `bt_evolve_multiobjective`/`bt_evolve_island` gating, the ExpertKnowledge archive now only grows alongside a benchmark-accepted winner, not unconditionally as ADR-110 left it.
 - ⚠️ Both `EvolveMAPElites`'s and `EvolveQLearning`'s mutation use unseeded `math/rand`, so — mirroring the ADR-096 caveat for NSGA-II/`IslandModel` — an ordinary run can also regress and trip the gate; every pre-existing archive-accumulation/ExpertKnowledge test for these two tools now pins `benchmarkRunSuiteFn` to a non-regressing stub to stay deterministic (`TestBTEvolveQDAccumulatesDurableArchive`, `TestBTEvolveQLearningAccumulatesDurableArchive`, `TestBTEvolveExpertSurfacesLearnedPatternFromQLearning`, `TestBTEvolveQdFeedsExpertKnowledgeArchive`).
 - Pinned by `TestBTEvolveQDBenchmarkGateRejectsRegressedWinner` and `TestBTEvolveQLearningBenchmarkGateRejectsRegressedWinner` (both `cmd/bt-agent/tools_test.go`), each forcing a regression via `benchmarkRunSuiteFn` and asserting `benchmark_gate_rejected: true` plus no new archive file on disk.
+
+<a id="adr-112"></a>
 
 ## ADR-112: Deep-Search-Applied Gardener Mutations Are Re-Validated Before Persisting (Q2 Evolvability, Milestone 4/4)
 
@@ -2125,6 +2400,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 - ⚠️ ~~`cmd/bt-gardener/config.go` still does not set `Config.TranspositionTablePath` (ADR-094), so deep search — and therefore this gate — remains reachable only from tests until a follow-up wires a table into the production daemon.~~ — resolved by ADR-114 milestone 2 (2026-07-15).
 - Pinned by `TestEvolveTreeV2_DeepSearchMutationRejectedByValidationGateNotPersisted` (`internal/gardener/evolve_v2_test.go`), which configures `ValidationGate` with no SLO evidence for the test tree (fail-closed) and asserts the mutation count, fitness, in-memory tree, and on-disk tree file are all reverted to their pre-deep-search state.
 
+<a id="adr-113"></a>
+
 ## ADR-113: Benchmark-Suite Gate Extended to `bt_evolve_pareto`, Closing Out Q2 Evolvability's Benchmark-Gate Coverage
 
 **Context (2026-07-15):** ADR-096 gated `bt_evolve_multiobjective`/`bt_evolve_island`'s durable-archive saves through `benchmarkGateEvolvedWinner`, and ADR-111 extended the same gate to `bt_evolve_qd`/`bt_evolve_qlearning` — but both ADRs' own Consequences explicitly named `bt_evolve_pareto` as the one remaining durable-archive `bt_evolve_*` tool with no benchmark gate: its handler (`cmd/bt-agent/tools.go`, ~1240) called `archive.Save(archivePath)`/`ek.Save(expertPath)` unconditionally on the front-elitism winner `EvolvePareto` returned, picked using only `evolution.StructuralMultiFitness` — the same structural-heuristic-only risk ADR-096 first flagged for NSGA-II/Island.
@@ -2138,6 +2415,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 - ✅ No new gating logic: reuses `benchmarkGateEvolvedWinner`/`benchmarkRunSuiteFn` exactly as ADR-096 wrote them, only supplying `bt_evolve_pareto`'s own winner tree.
 - ⚠️ `EvolvePareto`'s mutation uses unseeded `math/rand`, so — mirroring the ADR-096/ADR-111 caveat for the other four tools — an ordinary run can also regress and trip the gate; the pre-existing `TestBTEvolveParetoAccumulatesDurableArchive` and `TestBTEvolveParetoFeedsExpertKnowledgeArchive` now pin `benchmarkRunSuiteFn` to a non-regressing stub to stay deterministic.
 - Pinned by `TestBTEvolveParetoBenchmarkGateRejectsRegressedWinner` (`cmd/bt-agent/tools_test.go`), which forces a regression via `benchmarkRunSuiteFn` and asserts `benchmark_gate_rejected: true` plus no new Pareto front archive file on disk.
+
+<a id="adr-114"></a>
 
 ## ADR-114: The Gardener's Deep-Search Apply Path Is Gated Through `MetaValidator` and Wired Live in Production (Q2 Evolvability, Milestones 1–3/3)
 
@@ -2158,6 +2437,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 - ⚠️ The transposition table now persists to `<metricsDir>/transposition` in production, adding one more file the gardener's metrics directory must remain writable for; a save failure there is a non-fatal warning (ADR-094 milestone 1), not a cycle abort.
 - Pinned by `TestEvolveTreeV2_DeepSearchMutationRejectedByMetaValidatorNotPersisted` (`internal/gardener/evolve_v2_test.go`, milestone 1 — a strict `MetaValidator{MinScore: 1.0}` with `ValidationGate` disabled, isolating `MetaValidator` as the sole rejection source), `TestBuildGardenerConfig_TranspositionTableWired` (`cmd/bt-gardener/config_test.go`, milestone 2), and `TestMetricsTracker_SaveAggregatesDeepSearchCoverage` (`internal/gardener/gardener_test.go`, milestone 3).
 
+<a id="adr-115"></a>
+
 ## ADR-115: Multi-Revision Snapshot History and Automatic Fail-Closed Rollback for the Gardener (Q2 Evolvability, Milestones 1–3/3)
 
 **Context (2026-07-15):** Program "Q2 Evolvability — Make gardener mutation rollback automatic, multi-revision, and observable instead of a dead-code-guarded manual snapshot." ADR-093 wired `evolution.SnapshotTree`/`RestoreTree` and `Registry.RollbackTree` into the gardener, but left two gaps: `SnapshotTree` (`internal/evolution/quality_gate.go`) overwrote a single `snapshot_<treeName>.json` on every cycle, so a regression discovered several cycles after it was introduced had no earlier state to roll back to — only the immediately-preceding (and possibly already-regressed) one; and `evolveTreeV2`'s (`internal/gardener/evolve_v2.go:229-235`) fail-closed branch, reached once `QualityGate.IsDisabledFor` trips after `ConsecutiveFails` regressions, only skipped that cycle's mutation candidates — `RollbackTree` existed but was reachable solely through an operator- or LLM-triggered `gardener_rollback` call, so a tree stayed frozen in its regressed state until someone noticed and intervened, or the process restarted.
@@ -2176,6 +2457,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 - ✅ Rollback activity is now observable in `gardener-metrics.json` (`total_rollbacks`) and the dashboard's `GardenerMetrics.Rollbacks`, closing the "silently dropped" gap `CycleMetrics.Rollbacks` had carried since its own introduction.
 - ⚠️ The ADR-093 caveat still applies to the automatic path too: rollback restores unconditionally, without re-running `QualityGate.ValidateFor`/`MetaValidator.ValidateMutation` against the restored tree and without resetting the fail-streak (`ResetFailCount`) — a tree that auto-rolls-back stays gate-disabled (mutations still paused) until a process restart, it is simply no longer left sitting in the regressed state while paused.
 - Pinned by `TestSnapshotTreeMultiRevision`, `TestListRevisionsEmpty` (`internal/evolution/quality_gate_test.go`), `TestEvolveTreeV2_DisabledGateTriggersAutomaticRollback` (`internal/gardener/evolve_v2_test.go`), `TestMetricsTracker_SaveAggregatesRollbacks` (`internal/gardener/gardener_test.go`), and `TestLoadGardenerMetricsParsesRollbacks` (`internal/dashboard/metrics_test.go`).
+
+<a id="adr-116"></a>
 
 ## ADR-116: `RunFullPipeline` Executes Every Present Sprint, Halts on a Thinktank-Phase Error, and Gets Its First Production Caller (Q1 Correctness Program, Milestones 1–3/3)
 
@@ -2196,6 +2479,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 - ⚠️ Because `RunFullPipeline` still never auto-approves (ADR-081) and each call to `/api/workflow/run-full-pipeline` builds a brand-new `Workflow`, every task it derives starts `StatusPending`; `ExecuteSprint`'s per-sprint loop still runs `compOrch.RunSprint()` (the company-state simulation) but advances no task status on that first pass. Real per-task bt-agent dispatch for these tasks still depends on a subsequent explicit `/api/workflow/approve` or `/api/tasks/approve` decision and `handleSprintExecute` picking them up from `taskStore` — this endpoint drives the full research-through-sprint-simulation pipeline in one call, but does not itself bypass the human approval gate.
 - Pinned by `TestRunFullPipeline_ExecutesEverySprintPresent`, `TestRunFullPipeline_HaltsOnPhaseFailure` (`internal/dashboard/workflow_engine_test.go`), and `TestHandleWorkflowRunFullPipeline_PersistsWorkflowAndTasks` (`cmd/bt-dashboard/main_test.go`).
 
+<a id="adr-117"></a>
+
 ## ADR-117: The A2A Card Registry Becomes Refreshable at Runtime Instead of a One-Shot `NewServer` Snapshot (NotebookLM Research)
 
 **Context (2026-07-15):** `Server.CardCache` and its mirrored `BTAgentExecutor.CardCache` (ADR-108) were both built exactly once, inside `NewServer`, from a single `BuildCardRegistry(reg, baseURL)` snapshot of the agent registry at process-startup time. Neither field was ever reassigned afterward. An agent created after that point — via the `bt_agent_create` MCP tool or autopilot's `activateAutomation` (both call `Create`/`InstallFromTemplate` against the very same live `*agent.Registry` the server was built from) — had no card in either cache: it was unreachable at its own per-agent A2A endpoint, absent from the global agent card, and invisible to `AuctionCardSource`'s candidate pool, so it could neither be delegated to directly nor win an auction, until the whole process restarted and `NewServer` ran again. ADR-108 flagged this gap explicitly as an open caveat.
@@ -2211,6 +2496,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 - ⚠️ `RefreshCards` rebuilds the entire registry from scratch on every call rather than incrementally adding the one new/changed agent; fine at today's agent-fleet scale, but a large registry would make every creation pay a full rebuild.
 - Pinned by `TestServer_RefreshCards_PicksUpAgentCreatedAfterStartup` (`internal/a2a/server_test.go`), which creates an agent after `NewServer`, calls `RefreshCards`, and asserts the new agent appears in `Server.CardCache`, `Executor.CardCache`, and the `AuctionCardSource()` candidate pool.
 
+<a id="adr-118"></a>
+
 ## ADR-118: `bt_evolve_memetic` and the CMA-ES Branch of `bt_evolve_bottlenecks` Stop Discarding Their Evolved Winner (NotebookLM Research)
 
 **Context (2026-07-15):** ADR-042 gave the genetic-family tools (`bt_evolve_genetic`, `bt_evolve_bottlenecks`'s genetic-fallback branch, `bt_evolve_selection_pressure`) a `persistEvolvedWinner` seam so their bred winner survives as a resolvable, discoverable tree instead of vanishing with the tool call. Two production evolve tools were never migrated onto that seam and still computed a winner only to throw it away: `bt_evolve_memetic`'s handler called `pop.MemeticEvolve(...)`, consulted the returned `best` only for `evolution.CountNodes(best)` and `pop.BestFitness` in the JSON report, then discarded `best` itself; and `bt_evolve_bottlenecks`'s CMA-ES branch destructured `evolution.TuneTreeParameters(...)`'s tuned `*evolution.SerializableNode` return value into `_`, keeping only `bestFitness`.
@@ -2224,6 +2511,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 - ✅ A `cmaes`-routed and a `genetic`-routed entry in the same `bt_evolve_bottlenecks` report are no longer asymmetric in whether their winner survives the tool call — only in `algorithm` and the parameter-vs-topology fields ADR-020 already documents.
 - ⚠️ `bt_evolve_qd` and `bt_evolve_island` still remain fitness-only write-backs (ADR-042's original caveat, unchanged by this).
 - Pinned by `TestBTEvolveMemeticPersistsEvolvedWinnerTree` and `TestBTEvolveBottlenecksCMAESPersistsEvolvedWinnerTree` (`cmd/bt-agent/tools_test.go`).
+
+<a id="adr-119"></a>
 
 ## ADR-119: Adaptive, Track-Record-Driven Generation Budgets for the Five Benchmark-Gated Evolution Tools (Q2 Evolvability, Milestones 1–3/3)
 
@@ -2247,6 +2536,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 
 ---
 
+<a id="adr-120"></a>
+
 ## ADR-120: `RunTask`'s Terminal Switch Preserves `goap_fusion_rate_limited` Instead of Collapsing It to a Raw Success/Failure Code (NotebookLM Research)
 
 **Context (2026-07-15):** ADR-077 (2026-07-13) taught `RunTask`'s terminal `switch` (`internal/engine/tree.go`) to special-case `bb.Outcome == "pending_approval"`, but the tree's other deliberate outcome sentinel — `goap_fusion_rate_limited`, the Claude rate-limit carryover ADR-016 introduced and ADR-025/ADR-075 built a deferred-vs-failed dispatch chain around — got no equivalent protection. The leaf that sets it (`runSuperpowersRuntimeFromExistingPlanAction` and the Claude review fallback, `internal/engine/actions_superpowers_prod.go`) deliberately returns `-1`, not `0`, so a parent `Selector` still falls through to `ScheduledAnalysisPath`; consumers that read `bb.Outcome` mid-tree (`goapFusionImplDegradedSection`, `isGoapInfraCycleFailure`'s milestone-refund check) saw the sentinel correctly, since they run as leaf/deferred logic inside `tree.Run()`, before RunTask's post-loop switch ever executes. But every consumer *outside* the tree — `internal/agent/runner.go`'s `result.Outcome = bb.Outcome` immediately after `RunTask` returns, which is exactly what `recordSchedulerAttempt` (ADR-025) and `AgentResult.Outcome` (ADR-075) read — instead saw whatever the terminal switch had already stamped `bb.Outcome` to: `case code == 1: bb.Outcome = Success` if the in-tree fallback completed, or `case code == -1: bb.Outcome = Failure` otherwise. The sentinel never survived to reach the scheduler, so the deferred-vs-failed routing ADR-025 built was silently inert for rate-limited cycles.
@@ -2261,6 +2552,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 - ⚠️ How many past cycles this actually mis-routed to a false success/failure, rather than the intended deferral, is not recoverable from this fix alone — it removes the clobber going forward without auditing historical scheduler/DLQ records.
 
 ---
+
+<a id="adr-121"></a>
 
 ## ADR-121: The Self-Healing Envelope Reaches the Last Three GA Variants — Q-Learning, Memetic, and MAP-Elites (Q2 Evolvability, Milestones 1–3/3)
 
@@ -2286,6 +2579,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 
 **Consolidation note (2026-07-16, from §5.3's annotations):** when `EvolveQLearning` joined the shared `selfHealGeneration` envelope, the per-offspring mutation stays Q-table-selected regardless of the envelope's emitted `mutationRate` — the envelope's rate still drives crisis response and health reporting; it does not override the Q-table's own action selection.
 
+<a id="adr-122"></a>
+
 ## ADR-122: `BTFusionTree`'s HITL Gate Reclassified `local_reversible`/`auto_approve`, Ending Every Unattended Cycle's Deadlock (Q3 Reliability, Milestone 1/2)
 
 **Context (2026-07-16):** Program "Q3 Reliability — Fix the bt-fusion HITL gate misclassification that deadlocks every unattended hourly cycle." `BTFusionTree()`'s (`internal/domains/bt_fusion.go`) `ApproveFusionReportWrite` gate — guarding only the write of a durable Obsidian research report plus a build/test verification pass, no destructive or irreversible action — carried `side_effect_class: "external"` with no `auto_approve` key. Per `internal/engine/hitl_gate.go`, `sideEffectRequiresHITL` treats `"external"` (alongside `"destroy"`) as always requiring a live human regardless of `hitl.Policy.Enabled`, and with no `auto_approve` metadata the created request defaulted to `hitl.StatusPending`: `humanApprovalGateCmd.Run` set `bb.Outcome = "pending_approval"` and returned `0` (Running) every tick, so a scheduled, unattended `bt_fusion` cycle could never self-resolve the gate and stalled on it indefinitely. `GoapFusionTree()`'s own write gate, `ApproveGoapFusionApply` (`internal/domains/goap_fusion.go`), already classified the equivalent local, reversible write as `side_effect_class: "local_reversible"` with `auto_approve: true` — the same shape this gate should have had from the start.
@@ -2300,6 +2595,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 - ⚠️ `hitl.Policy.Enabled` behavior is otherwise unchanged for genuinely external/destructive gates elsewhere in the tree registry; this reclassification applies only to `ApproveFusionReportWrite`, not as a blanket policy change.
 
 ---
+
+<a id="adr-123"></a>
 
 ## ADR-123: `mcpDeps` Gains a `bbMu` Mutex, and `engine.Server` Gains a `RegisterBlackboardTool` Primitive, for the Shared-Blackboard Data Race Across `bt_run_task` and the Cross-File Tool Handlers That Touch `deps.bb` (Q1 Correctness / Q3 Reliability, Milestones 1, 4 & 5/5)
 
@@ -2322,6 +2619,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 
 ---
 
+<a id="adr-124"></a>
+
 ## ADR-124: `cmd/bt-agent` Migrates All Six Shared-Blackboard Tools onto `Server.RegisterBlackboardTool`, Closing ADR-123's Residual Production Gap
 
 **Context (2026-07-16):** Program "Q1 Correctness / Q3 Reliability — Close the remaining unguarded `deps.bb`/`deps.bt` races in `cmd/bt-agent`'s tree-switching and delegation tools," milestones 2–4/4. ADR-123 milestone 5 added `engine.Server.RegisterBlackboardTool` (`internal/engine/mcp_server.go`) — a registration-time locking primitive — but explicitly left `cmd/bt-agent`'s own tool registrations untouched: `bt_delegate_to_tree` and the four `bt_use_*_tree` switchers still called plain `server.RegisterTool` with zero synchronization around the `*deps.bb`/`*deps.bt` they read and mutate, and the handlers that already had protection (`bt_run_task`, `bt_blocks_compose`, `bt_hitl_compose_task`, `injectPersonaContext`) relied on the ad hoc `mcpDeps.bbMu`/`lockBB()`/`unlockBB()` scaffolding — the exact "a handler author must remember to opt in" failure mode `RegisterBlackboardTool` exists to close.
@@ -2340,6 +2639,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 
 ---
 
+<a id="adr-125"></a>
+
 ## ADR-125: The ExperienceBank Write Side Now Threads Failing-Task Context, Closing ADR-109's Warm-Start Loop (Q2 Evolvability, Milestones 1–3/3)
 
 **Context (2026-07-16):** Program "Q2 Evolvability — Thread failing-task context through the ExperienceBank write side so gardener mutations close the ADR-109 warm-start loop." ADR-109 conditioned `bt_evolve_bottlenecks`' genetic-path *retrieval* on the bottleneck's own `LastFailureTask`, and gave `ExperienceBank.AddFromMutation` an optional `failureContext` parameter for the *write* side — but flagged that no production recorder actually supplied it: `Population.mutateAndRecord` (driven by `EvolveWithExperienceContext`) and both `AddFromMutation` call sites in `internal/gardener/evolve_v2.go` still recorded with no failure context, so every entry the live GA and 24/7 gardener loops wrote carried no `failing_task=` text, and `bt_evolve_bottlenecks`' query-conditioned retrieval could only re-rank on `TreeType`/`MutationOp`/`TargetNode`/`Strategy`/`Summary`/`QualityScore` — the same fields `RetrieveByTreeType` already scored on — not on genuine failing-task semantic overlap.
@@ -2356,6 +2657,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 
 ---
 
+<a id="adr-126"></a>
+
 ## ADR-126: `/api/trees` Surfaces Fitness and Evolution Lineage, Closing Milestones 1–2/4 of the Dashboard's Dead Blind Spot (Q1 Correctness / Q2 Evolvability)
 
 **Context (2026-07-16):** Program "Q1 Correctness / Q2 Evolvability — Surface knowledge-graph fitness and evolution lineage from the dashboard's dead `/api/trees` blind spot." `RegisterEvolved` (ADR-042) has written `evolved_from` edges and maintained `StructuralFitness`/`EvolvedCount` since 2026-07-13, and `DiscoverRelated` has walked those edges since even earlier — but `handleTrees` (`GET /api/trees`, `cmd/bt-dashboard/main.go`) returned only `id`/`name`/`category`/`node_count`, so none of that knowledge-graph state — fitness, structural fitness, run count, evolved count, last outcome, or lineage — ever reached the dashboard. The Evolution tab's "Algorithms Active" panel and `best_fitness` stat were sourced only from the disconnected `gardener-metrics.json` aggregate (§8.11 ADR-032), never from live `KnowledgeGraph` state.
@@ -2371,6 +2674,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 - Pinned by `TestEvolutionLineage_BaseToEvolved`, `TestEvolutionLineage_EvolvedToBase`, `TestEvolutionLineage_NotFound` (`internal/knowledge/graph_discover_test.go`, milestone 1), `TestHandleTrees_IncludesFitnessAndLineage` (`cmd/bt-dashboard/main_test.go`, milestone 2), and `TestCollect_SurfacesTopEvolvedWinnersFromTrees` (`internal/dashboard/metrics_test.go`, milestone 2).
 
 ---
+
+<a id="adr-127"></a>
 
 ## ADR-127: `bt_evolve_bottlenecks` Consults `EvolutionLineage` Before Re-Evolving a Tree With a Fitter, Non-Regressing Evolved Descendant, Closing Milestone 4/4 of ADR-126's Program (Q1 Correctness / Q2 Evolvability)
 
@@ -2391,6 +2696,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 
 ---
 
+<a id="adr-128"></a>
+
 ## ADR-128: `ACPClient.GenerateCtx` Guards Its `cmd.Stderr` Buffer With a Mutex, Closing a Data Race Between the Subprocess's Copy Goroutine and the Timeout/Scan-Error Read Path (NotebookLM Research)
 
 **Context (2026-07-16):** NotebookLM research goal 1: fix the `internal/llm/acp.go` stderr data race in `ACPClient.GenerateCtx`. `GenerateCtx` set `cmd.Stderr` to a plain `*bytes.Buffer`. Because that target is not an `*os.File`, Go's `os/exec` package starts its own goroutine that continuously copies the subprocess's stderr pipe into the buffer for as long as the subprocess is alive — a detail internal to `exec.Cmd`, not visible from `GenerateCtx`'s own code. Meanwhile `GenerateCtx`'s `request` closure reads `stderr.String()` on its `ctx.Done()`/`scanErr` branches to enrich a timeout or failure error, with no synchronization against that background copy goroutine — a live `bytes.Buffer.Write`/`bytes.Buffer.String` data race whenever the context deadline or a scan error fires while the subprocess is still writing to stderr, exactly the case of a hung or crash-looping ACP subprocess the surrounding call path already hardens against (ADR-053/ADR-054).
@@ -2403,6 +2710,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 - ✅ `GenerateCtx`'s stderr-enriched timeout/scan-error path is race-free under `-race` even when the subprocess is still alive and actively writing to stderr at the moment the deadline fires.
 - ✅ No behavior change for callers: `stderr.String()` still returns whatever content has been captured so far, only now safely.
 - Pinned by `TestACPClientGenerateCtx_StderrBufferRace` (`internal/llm/acp_test.go`), which drives a helper subprocess that floods stderr continuously and never responds on stdout, forcing the context deadline to fire while the copy goroutine is still writing.
+
+<a id="adr-129"></a>
 
 ## ADR-129: `setGoapStateDurable` Makes GOAP Fusion Charge Stamps Durable, and `clearSuperpowersPlanState` Retires Them on Cycle Completion (Q3 Reliability, Milestones 1–2/2)
 
@@ -2420,6 +2729,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 
 ---
 
+<a id="adr-130"></a>
+
 ## ADR-130: `IsKnownChainKind` Closes the ChainAction chain_type / Leaf-Children Validation Gap at Authoring Time (Q1 Correctness, Complete)
 
 **Context (2026-07-16):** Program "Q1 Correctness — Close the ChainAction pre-execution validation gap so a mistyped chain_type or nested children fails at authoring time, not at LLM-call runtime." Two related authoring-time holes existed for `ChainAction` nodes. First, `parseChainConfig` reads `ChainConfig.ChainType` from the segment before `:` in a node's `Name` (§8.2), but neither validation entry point (`validateNode`/`ValidateTree`, `walkValidate`/`ValidateTreeFull`) checked it against the declared `ChainKind` constants — a mistyped or stale `chain_type` produced no signal until the node ticked and `buildChainActionFn`'s dispatch `switch` (`internal/engine/chains.go`) fell through to its `default` case, setting `bb.Outcome = "chain_failed"`. Second, `ChainAction` was missing from the shared `leafNodeTypes` set (§8.13) even though `buildNode`'s `case "ChainAction":` (`tree.go:322-325`) builds a childless `BuildChainAction` leaf and never looks at `node.Children` — a `ChainAction` with declared children silently dropped its subtree at build time, the same gap class §8.13 had already closed for `Action`/`Condition`/`AlwaysSucceed`.
@@ -2436,10 +2747,12 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 
 ---
 
-*Generated by bt-agent arc42 pipeline — section9Decisions tree*
+
 
 
 ---
+
+<a id="adr-131"></a>
 
 ## ADR-131: Composable Behavior-Tree Building Blocks (formerly docs/adr ADR-008)
 
@@ -2464,6 +2777,8 @@ Both `BuildIndex` and `discoverWithEmbeddings` remain callers of `GetEmbedding` 
 - Migration: Domain trees can adopt composed presets incrementally; expert archetypes reference block IDs.
 
 **References:** `.hermes/plans/2026-06-04-agentic-blocks-master-roadmap.md`; Phases 0–5 implementation plans under `.hermes/plans/`.
+
+<a id="adr-132"></a>
 
 ## ADR-132: Scoped Blackboard for Context Offloading (formerly docs/adr ADR-009)
 
@@ -2491,6 +2806,8 @@ Each `RunOnce` attaches a `blackboard.Handle` to `engine.Blackboard` and registe
 - **Negative**: Agent-scoped persistence is available but not yet auto-populated from runs (manual/MCP only).
 
 **Related:** ADR-003 (file persistence), ADR-004 (agent platform); operator guide: [docs/agents.md](../agents.md) — Blackboard section.
+
+<a id="adr-133"></a>
 
 ## ADR-133: Personalized Self-Evolving Agents (formerly docs/adr ADR-010)
 
@@ -2522,6 +2839,8 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 
 ---
 
+<a id="adr-134"></a>
+
 ## ADR-134: `RebuildTarget.Unit` Closes the Deploy-Drift Restart-Handoff Gap: Swapped Sibling Units Restart Too, and `bt-dashboard`/the MCP Binary Join Fleet-Wide Adoption (Q3 Reliability, Milestones 1–3/3)
 
 **Context (2026-07-17):** Program "Q3 Reliability — Close the deploy-drift restart-handoff gap: adopted binaries must restart their services." The restart-handoff mechanism itself (`driftRestartFn`, smoke-test-then-restart, `.previous` rollback on a failed smoke test, `AutoRestartEnabled`/`BT_AUTO_RESTART_ON_DRIFT`) had already landed (commit 4b5e413) but only ever restarted the daemon's *own* unit — `DriftWatchOnce` (`internal/agent/deploy_drift.go`) called `driftRestartFn(cfg.Binary)` once, after a successful rebuild+swap, with no notion that `RebuildBinaries` can swap several sibling binaries in one pass. Live case 2026-07-16 23:46: `bt-agent`'s fleet-wide rebuild swapped `bin/bt-gardener` to `fd0746d`, but the running gardener process — a separate systemd unit — kept executing `ce20198` until a human ran `systemctl restart` by hand. Separately, `DefaultRebuildTargets` deliberately excluded `bt-dashboard` ("callers pass the set they own"), so the daemon's fleet-wide sweep rebuilt nothing for it, and `bt-dashboard`'s own `DashboardRebuildTargets` wrote its rebuilt binary to the repo root while the production unit's 2026-07-15 drop-in `ExecStart` override actually runs it from `bin/` — a "successful" self-rebuild that never landed where the running unit executed from. The MCP server binary `bin/bt-agent`, which `.mcp.json` spawns fresh per cycle-session, was nobody's rebuild target at all and needed two manual rebuilds on 2026-07-16 (30+ commits stale at b2a318a).
@@ -2539,6 +2858,8 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 - Pinned by the tests named above; §7.2.2 (`07-deployment.md`) records the corresponding binary-layout fix (`bt-gardener`/`bt-dashboard` under `bin/`, matching each unit's `ExecStart`).
 
 ---
+
+<a id="adr-135"></a>
 
 ## ADR-135: `GenerateWithModel`/`generateCtx` Adopt Retry-With-Full-Jitter, and `FallbackLLM.generate` Gains a Per-Model Circuit Breaker (Q3 Reliability, Milestones 2–4/5)
 
@@ -2558,6 +2879,8 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 
 ---
 
+<a id="adr-136"></a>
+
 ## ADR-136: `internal/engine/chains.go`'s Chain Executors Adopt the Shared `reliability.RetryPolicy`, Closing Milestone 5/5 of the LLM Text-Generation Reliability Program
 
 **Context (2026-07-17):** Program "Q3 Reliability — Harden the LLM text-generation call path with retry-with-full-jitter and circuit breakers" (ADR-135, milestones 2–4/5). `internal/engine/chains.go`'s chain executors call `bb.LLM.Generate` directly and predate ADR-135: `execMapReduce` (decompose, per-subtask, reduce) and `execRefine` (initial, critique, revise) each hand-rolled an un-jittered "call, if err retry exactly once" pattern with no Retry-After awareness, and the six single-shot executors (`execLLMCall`, `execRAGQuery`, `execToolCall`, `execConversation`, `execStructuredOutput`, `execRetrievalQA`) had no retry at all. A 429 hitting any of these paths was retried (or first-tried) immediately, ignoring the backend's `Retry-After` hint that `reliability.RetryPolicy.ExecuteContext` already knows how to honor via `RetryAfterFromError`/`ParseRetryAfter`.
@@ -2574,6 +2897,8 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 - Pinned by the tests named above; see ADR-135 for the sibling milestones (2–4/5) at the `internal/llm` client layer this milestone's chain executors ultimately call through.
 
 ---
+
+<a id="adr-137"></a>
 
 ## ADR-137: Evolved-Tree Structural Metadata, Lineage Edges, and Resurrection-on-Load Survive a Daemon Restart (Q2 Evolvability, Milestones 1–3/4)
 
@@ -2592,6 +2917,8 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 
 ---
 
+<a id="adr-138"></a>
+
 ## ADR-138: `persistEvolvedWinner` Flushes the Feedback Snapshot to Disk on Every Evolved-Winner Registration, Closing Milestone 4/4 of ADR-137's Program (Q2 Evolvability)
 
 **Context (2026-07-17):** Program "Q2 Evolvability — Make evolved-tree knowledge-graph metadata survive a daemon restart, not just the tree file on disk." ADR-137 (milestones 1–3/4) taught `SaveFeedback`/`LoadFeedback` to round-trip an evolved tree's `StructuralFitness`/`NodeCount`/`Category` and its `evolved_from` lineage edge, and to resurrect a `TreeMeta` for an evolved tree missing from `kg.Trees` after a restart — but left milestone 4/4's scope unidentified. The gap: nothing in the `bt_evolve_*` MCP tool path ever calls `FlushFeedback`. `persistEvolvedWinner` (`cmd/bt-agent/tools.go`) commits `RegisterEvolved`'s bookkeeping into the in-memory `KnowledgeGraph` only; the sole production caller of `MarkFeedbackDirty`+`FlushFeedback` was `internal/agent/scheduler.go`'s `persistRunFeedback`, invoked after a *scheduled run* completes (§8.4). An evolution winner registered purely through an interactive `bt_evolve_*` MCP call — with no scheduled run landing in between — had its ADR-137 metadata correct in memory but never reached the feedback snapshot file, so a daemon restart before the next scheduled run silently dropped it, even though the evolved tree file itself survived on disk — exactly the gap ADR-137's program targeted, just on the write side instead of the load side.
@@ -2608,6 +2935,8 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 
 ---
 
+<a id="adr-139"></a>
+
 ## ADR-139: `dlqReplayOutcomeError` Extends the Healthy-Outcome Classification to the DLQ Replay Executor, Ending Endless Re-Replay of Rate-Limit and No-Code Outcomes (NotebookLM Research)
 
 **Context (2026-07-17):** ADR-025 taught `recordSchedulerAttempt` to classify the Claude rate-limit carryover (`agent.RateLimitCarryoverOutcome`, §6.4/ADR-016) as a healthy, terminal, non-failing disposition rather than a failure or a success, and a later scheduler-path fix (2026-07-15) extended the same treatment to the other "healthy no-code" outcomes `agent.IsHealthyOutcome` recognizes (`no_change`: analysis-only; `degraded`: deterministic fallback) after retrying them was found to burn a full Claude cycle per attempt and dead-letter otherwise-honest runs. The scheduler's own circuit-breaker success classifier, `cycleBreakerSuccess` (`internal/agent/scheduler.go`), applies the identical definition. The drop-safe DLQ replay executor installed by `dlq.SetReplayExecutor` (`cmd/bt-agent/main.go`, ADR-025/ADR-036) never received the same fix: its inline classification was a blanket `res.Outcome != "success"`, so a replayed dead letter that gracefully paused on a rate limit — or legitimately landed on `no_change`/`degraded` — was treated as a failed replay. Because `reliability.DeadLetterQueue.Replay` only drops an entry on a nil error (reliability.go:249–251), that misclassification kept a healthy replay's entry in the DLQ, where it was requeued and re-replayed on every subsequent scan until ADR-025's `MaxReplayAttempts` (5) terminally `Abandoned` it — silently discarding a task that had never actually failed.
@@ -2620,6 +2949,8 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 - ✅ A replayed dead letter that gracefully pauses on a rate limit, or lands on `no_change`/`degraded`, is now dropped as a healthy result instead of endlessly re-replayed toward `Abandoned` — pinned by `TestDLQReplayOutcomeError_HealthyNonSuccessNotFailing` (table-driven over success/rate-limit-carryover/no_change/degraded, plus a genuine-failure and a nil-result control) and `TestDLQReplayExecutorUsesOutcomeClassifier`, a source-audit test that fails if the closure ever reverts to re-inlining the old blanket check instead of delegating to `dlqReplayOutcomeError`.
 - ✅ All three outcome-classification call sites — `recordSchedulerAttempt` (scheduler retries), `cycleBreakerSuccess` (per-agent circuit breaker), and now the DLQ replay executor — apply the identical healthy-outcome definition (`agent.IsHealthyOutcome` plus `agent.RateLimitCarryoverOutcome`), closing the classification drift between the scheduler path and the replay path that ADR-025's original fix never reached.
 - ⚠️ A genuine failure still keeps its DLQ entry and is retried up to `MaxReplayAttempts` before `Abandoned`, unchanged from ADR-025/ADR-036 — this fix narrows what counts as a failure, it does not change the abandonment mechanics.
+
+<a id="adr-140"></a>
 
 ## ADR-140: `bt_evolve_selection_pressure` Adopts the ADR-127 Lineage-Skip Guard and `bt_evolve_genetic` Writes Fitness Back to the Base Tree, Closing the Q2 Evolvability Fitness-Feedback/Lineage-Skip Consistency Program (Milestones 1–2/2)
 
@@ -2637,6 +2968,8 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 - ⚠️ `bt_evolve_qd` and `bt_evolve_island` still have no lineage-skip guard of their own. `lineageSkipsReEvolution` reads `EvolutionLineage`, which `RegisterEvolved` populates (the ADR-042 genetic-family persistence path) — QD/island's fitness-only write-back (ADR-026) never calls `RegisterEvolved`, so extending the guard to those two tools is not a drop-in repeat of this ADR's milestone 1 and remains open if ever proposed.
 
 ---
+
+<a id="adr-141"></a>
 
 ## ADR-141: `AgentExecutor.RunTaskResult` Joins the Shared Per-Agent Circuit Breaker as a Third Writer/Enforcer, Closing the Dashboard's Dead Task-Metrics Recording Gap (Q3 Reliability, Milestones 1–3/3)
 
@@ -2656,6 +2989,8 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 
 ---
 
+<a id="adr-142"></a>
+
 ## ADR-142: `dashboard.RecordTask` Wired into `AgentExecutor.RunTaskResult` and the Two Direct `agent.RunAgent` Call Sites That Bypass It, Closing the Dashboard's Dead Agent-Metrics Recording Gap (Q3 Reliability, Milestones 1–2/3)
 
 **Context (2026-07-17):** Program "Q3 Reliability — Wire the dashboard's dead task-metrics and block-fitness recorders into every production agent-execution path," milestones 1–2/3. ADR-023 (2026-07-08) added `RecordTask` (`internal/dashboard/metrics_utils.go`) to accumulate the per-agent counters and duration histogram backing `GetAgentMetrics()` — the data behind the dashboard's agent metrics panel and `/api/metrics`/`/api/alerts` surfaces — but no production path ever called it: `AgentExecutor.RunTaskResult` (`internal/dashboard/executor.go`), the dashboard's own single-task dispatch path, called only `recordCircuitBreakerOutcome` (ADR-141) after every run and never touched `RecordTask`, leaving `GetAgentMetrics()` permanently empty for every agent run through the dashboard's HTTP endpoints. Two further production call sites invoke `agent.RunAgent` directly and bypass `AgentExecutor` — and `RecordTask` — entirely: `internal/agentexec/pipeline.go`'s `RunPipelineWithID` (YAML-workflow-driven pipeline runs, used by the CLI and other pipeline callers) and `cmd/bt-dashboard/pipeline_handlers.go`'s `runPipelineAgentStep` (the dashboard's own pipeline-runner step closure). Distinct from this gap, ADR-141 landed the same day but only extended the shared circuit-breaker store to `RunTaskResult`; despite its title referencing a "dead task-metrics recording gap," its content and consequences are entirely about circuit-breaker enforcement, not `RecordTask`/`GetAgentMetrics` — this ADR is the actual task-metrics fix.
@@ -2671,6 +3006,8 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 - ⚠️ `cmd/bt-dashboard/main.go`'s `handleAgentExecute`/`handleAgentRun` and any other callers that construct an `agent.RunResult` by hand outside these three call sites still bypass `RecordTask` — this program only covers the three call sites enumerated above, not a blanket sweep of every `agent.RunAgent` invocation in the tree.
 
 ---
+
+<a id="adr-143"></a>
 
 ## ADR-143: `AgentExecutor.recordBlockFitnessMetric` Wires `RecordBlockFitness` into `RunTaskResult`, Closing the Task-Metrics/Block-Fitness Program (Q3 Reliability, Milestone 3/3)
 
@@ -2688,6 +3025,8 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 
 ---
 
+<a id="adr-144"></a>
+
 ## ADR-144: `historyQualityScore`/`recordedQuality`, `runJob`'s Published `failureReason`, and `AgentExecutor.recordCircuitBreakerOutcome` All Exempt `RateLimitCarryoverOutcome`, Closing Classification Gaps the 2026-07-17 `cycleBreakerSuccess` Fix Left Behind (Q1 Correctness / Q3 Reliability, Milestones 1–3/5)
 
 **Context (2026-07-17):** Commit `ca2a152` ("preserve run results across the executor boundary; rate-limit pause never trips retries or the breaker") fixed the `AgentExecutor` boundary so a `goap_fusion_rate_limited` carryover (`agent.RateLimitCarryoverOutcome`, §6.4/ADR-016) survives as far as `internal/agent/scheduler.go`'s `cycleBreakerSuccess`, which now correctly treats it as breaker-healthy. That fix stopped short of the rest of `runJob`'s own downstream classification logic, which still applied the older `outcome != "success"` blanket check in places that share no code with `cycleBreakerSuccess`: `historyQualityScore`/`recordedQuality` (used to persist each run's quality field to scheduler history) scored a healthy rate-limit pause as `0.0`, indistinguishable from a genuine failure in every history-driven view and fitness computation; and the `GlobalAgentBus.Publish` block in `runJob` set `failureReason = "agent outcome: goap_fusion_rate_limited"` on the published `AgentEvent`, which the Hermes webhook/Telegram template renders as an alarm, even though the cycle was a healthy, expected backoff. Separately, ADR-141's `AgentExecutor.recordCircuitBreakerOutcome` (`internal/dashboard/executor.go`) keys `CBStore.RecordSuccess`/`RecordFailure` purely off the literal `"success"` string, so a rate-limit carryover routed through the dashboard's own dispatch path (not the scheduler) called `RecordFailure` and could trip the shared `circuit_breakers.json` breaker on a pause that never should have counted against it — the same class of drift `cycleBreakerSuccess` exists to prevent, just on the dashboard's copy of the check.
@@ -2704,6 +3043,8 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 
 ---
 
+<a id="adr-145"></a>
+
 ## ADR-145: `AgentExecutor.recordTaskMetric`/`recordBlockFitnessMetric` Exempt `RateLimitCarryoverOutcome`, and `agent.IsRateLimitCarryover` Consolidates the Duplicated Check Across All Call Sites, Closing the ADR-144 Program (Q1 Correctness / Q3 Reliability, Milestones 4–5/5)
 
 **Context (2026-07-17):** ADR-144 closed milestones 1–3 of the 5-milestone audit into `RateLimitCarryoverOutcome` classification gaps but left the dashboard's own task/block-fitness metrics unaudited. `AgentExecutor.recordTaskMetric` (`internal/dashboard/executor.go`) fed `dashboard.RecordTask` purely off `res.Outcome == "success"`, so a rate-limit carryover run dispatched through `RunTaskResult` — the Hermes-fallback dashboard path, not the scheduler — logged as a task error, inflating `GetAgentMetrics().ErrorCount` for a healthy backoff pause. `recordBlockFitnessMetric`'s `score <= 0` fallback had the same gap: a carryover run's `RunResult.Quality` is always zero (the Hermes-CLI fallback path never sets it), so it fell through to the failure-tier score of 25 instead of the healthy tier (75) `"success"`/`"completed"` outcomes get. Separately, the `outcome == RateLimitCarryoverOutcome` comparison this whole audit chases had been re-typed independently in `internal/agent/scheduler.go`, `cmd/bt-agent/main.go` (as the now-redundant `schedulerRateLimitCarryover` alias), and `internal/dashboard/executor.go` — three independent copies that could silently drift out of sync, which is exactly how ADR-144's gaps accumulated in the first place.
@@ -2719,6 +3060,8 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 
 ---
 
+<a id="adr-146"></a>
+
 ## ADR-146: `gardener.Config.KnowledgeGraph` Lets `RunCycleV2` Rank Trees by `ComputeAnalytics()` Bottleneck/Selection-Pressure Signals Instead of Flat Alphabetical Order (NotebookLM Research)
 
 **Context (2026-07-17):** `Gardener.RunCycleV2` (`internal/gardener/evolve_v2.go`) sorted the registry's tree entries with `sort.Slice(entries, ... entries[i].Name < entries[j].Name)` — a flat alphabetical ordering with no signal from the system's own health data. `internal/knowledge.KnowledgeGraph.ComputeAnalytics()` (§8, KG cold-start confidence work) already computes `Bottlenecks` (trees with enough runs to trust and a low success rate) and `SelectionPressure` (proven trees that are underbred relative to their fitness), but nothing read that output to influence which trees the gardener's limited per-cycle mutation budget (`MaxMutations`) actually reaches — a tree named `zzz_broken_tree` could starve behind a dozen healthy, alphabetically-earlier trees indefinitely.
@@ -2733,6 +3076,8 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 - ⚠️ ~~The daemon (`cmd/bt-gardener`) does not construct or pass a `KnowledgeGraph` today — this ADR closes the in-package mechanism, not the production wiring; do not treat the daemon as KG-prioritized until `buildGardenerConfig` is updated.~~ — resolved 2026-07-17 (ADR-158).
 
 ---
+
+<a id="adr-147"></a>
 
 ## ADR-147: The Real GOAP A* Planner Is Wired Into Production Domain Trees Ahead of the Keyword Router, and a Fail-Loud Startup Validation Gate Is Added (Q2 Evolvability / Q1 Correctness, Milestones 1–3/3)
 
@@ -2750,6 +3095,8 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 
 ---
 
+<a id="adr-148"></a>
+
 ## ADR-148: `handleTrees` Merges the `domains.AllDomainTrees()` Catalog into `/api/trees`, Making It a Complete Single Source for Tree Selection (NotebookLM Research)
 
 **Context (2026-07-17):** `cmd/bt-dashboard`'s `/api/trees` endpoint (`handleTrees`, `cmd/bt-dashboard/main.go`) only echoed `kg.Trees` — the runtime `knowledge.KnowledgeGraph` registry (trees a domain/finance agent has actually run at least once, ~43 entries). Meanwhile the Create-Agent dropdown (`cmd/bt-dashboard/static/js/tabs/agents.js`) is a static HTML `<select>` with 10 hardcoded `<option>` values, unchanged since 2026-06-14, and has no `fetch`/`/api/trees` call at all. `internal/domains.AllDomainTrees()` defines the full curated catalog — 29 entries including `goap_fusion`, `goap_fusion_loop`, `bt_fusion`, `bt_manager`, `notebooklm`, `auction_demo`, and the `arc42:section1`–`section12` family — most of which never appear in `kg` until first run, so even a dropdown that *did* fetch `/api/trees` could not have offered a complete, correct list: the endpoint itself was missing most of the catalog.
@@ -2765,6 +3112,8 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 
 ---
 
+<a id="adr-149"></a>
+
 ## ADR-149: `BTAgentExecutor.Execute`/`Cancel` and `AuctionDelegate` Are Routed Through the Platform's Shared `agent.History` Chokepoint, Closing the A2A Run-Visibility Gap (Q1 Correctness / Q3 Reliability, Milestones 1–2/2)
 
 **Context (2026-07-17):** `runJob`/`AgentExecutor.RunTaskResult` — the scheduler- and dashboard-driven run paths — both call `agent.History.Record` after every run (ADR-141/142), so `bt-agent-cli agent history` and the dashboard's per-agent run list see them. `BTAgentExecutor.Execute` (`internal/a2a/server.go`) is a third, independent run path — tasks delivered over the A2A protocol, direct or as an auction winner — but it ran `engine.RunTask` and computed the outcome/duration only to discard them: no `History` field existed on the executor at all, so every A2A-driven run was invisible to both surfaces. `Cancel` (`internal/a2a/server.go:204`) compounded the gap by discarding its own `ctx` parameter (`_ context.Context`), so a task cancelled mid-run left no trace anywhere — it simply vanished from the caller's perspective. Separately, `AuctionDelegate` (`internal/a2a/auction.go:566`) returned only `res.Result` on a win, discarding `AuctionResult.Award`; a caller wiring `Execute`'s new `History.Record` call to the actual winning agent (rather than a bare result string) had no way to recover which agent won.
@@ -2779,6 +3128,8 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 - ~~⚠️ `Execute`'s `History.Record` call attributes the run to `agentName` (the executor's own identity), not to the auction winner threaded through `chainState["auction_award"]` — a task that reaches `Execute` only after `AuctionDelegate` awarded it to a different agent is still recorded under the executing agent's own name, since no call site yet reads `chainState["auction_award"]` back out to override attribution. Closing that requires the still-open milestone 3.~~ — resolved 2026-07-17, see ADR-156.
 
 ---
+
+<a id="adr-150"></a>
 
 ## ADR-150: `WebhookPublisher.handleEvent` Adopts Retry-With-Full-Jitter, a Per-Subscription Circuit Breaker, and an In-Memory DLQ with Replay, Closing the Hermes Webhook-Delivery Reliability Program (Q3 Reliability, Milestones 1–3/3)
 
@@ -2802,6 +3153,8 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 
 ---
 
+<a id="adr-151"></a>
+
 ## ADR-151: `RunPanel` Adopts `SafeGo` and a Package-Level Circuit Breaker, and `Run` Enforces `cfg.Timeout` via `context.WithTimeout` (Q3 Reliability, Milestones 1–3/4)
 
 **Context (2026-07-17):** Program "Q3 Reliability — Harden the fusion multi-model panel (`internal/fusion`) against unrecovered panics, unbounded hangs, and silent repeated failures." `RunPanel` (`internal/fusion/run.go`) dispatched one bare `go func() { ... }()` per configured analysis model with no panic recovery — unlike every other concurrent call path in the platform, which already carries ADR-007's `SafeGo` (e.g. the A2A executor, the gardener daemon loop). A panicking `ModelCaller.GenerateWithModel` implementation would crash the whole daemon process instead of failing just that model's response. Separately, `Config.Timeout` was already defaulted (`DefaultConfig`) and range-checked (`Config.Validate`), but nothing in `Run` ever derived a bounded `context.Context` from it — the field was validated and then silently unused, so a hung model call could block `Run` indefinitely regardless of the configured timeout. Finally, `RunPanel` had no failure memory across calls: a fully-down model backend was re-dispatched to (and re-timed-out on) on every single panel invocation, the same shape ADR-135/ADR-074/ADR-054 already fixed at the underlying LLM-client layer — but the fusion panel's own dispatch loop sat above those breakers with none of its own.
@@ -2819,6 +3172,8 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 - ⚠️ `fusionBreaker` is a single package-level breaker shared across every `RunPanel` call regardless of which models are configured (see rejected alternative above) — a caller that intentionally varies `cfg.AnalysisModels` between calls shares one breaker state across all of them, unlike the per-model-name breakers `FallbackLLM` uses.
 - ⚠️ Milestone 4/4 of the stated program is not addressed by this change and remains open; its scope was not identified in this pass.
 
+<a id="adr-152"></a>
+
 ## ADR-152: `Judge` and `Synthesize` Adopt Retry-With-Full-Jitter for Their Single-Shot LLM Calls, Closing the Fusion-Panel Reliability Program (Q3 Reliability, Milestone 4/4)
 
 **Context (2026-07-17):** ADR-151 closed milestones 1–3/4 of the "Q3 Reliability — Harden the fusion multi-model panel" program but left milestone 4/4 open, its scope not yet identified. Unlike `RunPanel`, which tolerates individual model failures via `successfulResponses` and dispatches every configured model concurrently, `Judge` and `Synthesize` (`internal/fusion/run.go`) each make exactly one LLM call apiece, with no retry. A single transient upstream failure in either call — after `RunPanel` had already produced a successful multi-model panel — discarded the entire fusion result: the same "successful work thrown away by a downstream blip" shape ADR-135 already fixed at the `FallbackLLM`/`GenerateWithModel` layer and ADR-150 fixed for Hermes webhook delivery.
@@ -2835,6 +3190,8 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 - ⚠️ `RetryUnknown: true` means a genuinely non-transient error (e.g. a prompt the model will never accept) is retried up to 3 times before `Judge`/`Synthesize` returns it, adding retry latency to a call that was always going to fail — the same tradeoff ADR-135 already accepted at the `FallbackLLM` layer for the same reason (raw upstream errors predate category classification).
 
 ---
+
+<a id="adr-153"></a>
 
 ## ADR-153: `agents.js` Fetches `/api/trees` and Groups the Create-Agent Dropdown into `<optgroup>`s by Category, and `handleTrees` Carries `domains.Descriptions` Text, Closing the ADR-148 Program (Q4 Personalization & Self-Growth / Q2 Evolvability)
 
@@ -2857,6 +3214,8 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 
 ---
 
+<a id="adr-154"></a>
+
 ## ADR-154: `Registry.SaveTree` and `MetricsTracker.Save` Check the `os.WriteFile` Error Before Renaming, and `evolveTreeV2`/`RunCycleV2` Propagate Save Failures Instead of Discarding Them (Q3 Reliability, Milestones 1–3/4)
 
 **Context (2026-07-17):** Program "Q3 Reliability — Stop silent write-failure and breaker-bypass gaps in gardener persistence, dashboard circuit-breaker gating, and A2A history recording," milestones 1–3/4. `Registry.SaveTree` and `MetricsTracker.Save` (`internal/gardener/gardener.go`) implement the atomic write .tmp-then-rename idiom ADR-003 mandates for every persisted store, but both had drifted from it the same way ADR-036's DLQ and ADR-101's `dashboard.TaskStore` once had: `_ = os.WriteFile(tmp, data, 0644)` discarded the write error and fell straight through to an unconditional `os.Rename(tmp, path)`. Because rename permission is governed by the *directory*, not the file being renamed, a write that failed partway (full disk, a permission error, an unwritable tmp dir) still left a partial or stale `tmp` file on disk, and the rename then clobbered the last-known-good tree/metrics file with that corrupt content instead of leaving it untouched. `evolveTreeV2` and `RunCycleV2` compounded the gap on the call side: all four save call sites (`evolve_v2.go` lines 371, 441, 633, 654) discarded the returned error via `_ = g.cfg.Registry.SaveTree(...)` / `_ = g.cfg.MetricsTracker.Save()`, so a cycle whose in-memory mutation never reached disk was indistinguishable from one that had, and `RunCycleV2` always returned a `nil` error regardless.
@@ -2873,6 +3232,8 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 - ✅ `evolveTreeV2`'s in-memory mutation and its durable persistence are no longer conflated: `CycleMetrics.SaveFailed` lets a caller distinguish "evolved but not saved" from "evolved and saved," and `RunCycleV2`'s non-nil `error` return means both the `gardener_run_cycle` MCP tool (`cmd/bt-gardener/main.go`, which surfaces it as `{"error": ...}`) and the daemon's *scheduled* (ticker-driven) cycle loop (which logs it via `engine.Error` and skips that cycle's summary) now see the failure instead of it vanishing behind a discarded return value.
 - ⚠️ `cmd/bt-gardener/main.go`'s *initial* cycle at startup (`results, _ := g.RunCycleV2(v2Cfg)`, before the ticker loop begins) still discards the error via `_` — only the recurring scheduled-cycle path (inside the `for { select { ... } }` loop) was already wired to consume it. A save failure on the very first cycle after daemon startup is still silent at that one call site.
 - ⚠️ Milestone 4/4 of the originating program — dashboard circuit-breaker gating and A2A history recording — is unrelated to file-based persistence and was not addressed by this change.
+
+<a id="adr-155"></a>
 
 ## ADR-155: `RunTask` Nil-Guards `bb.ChainState` at Its Single Choke Point, Closing Milestone 1/4 of the ChainState Nil-Map-Panic Program (Q1 Correctness / Q3 Reliability)
 
@@ -2892,6 +3253,8 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 
 ---
 
+<a id="adr-156"></a>
+
 ## ADR-156: `Execute` Reads `bb.ChainState["auction_award"]` Back to Attribute the History Record to the Auction Winner, Closing Milestone 4/4 of the ChainState Nil-Map-Panic Program (Q1 Correctness / Q3 Reliability)
 
 **Context (2026-07-17):** Milestone 4/4 of the "Q1 Correctness / Q3 Reliability — Close the ChainState nil-map panic across `engine.RunTask`'s production Blackboard-construction sites" program (ADR-155), and simultaneously the open remainder ADR-149 flagged in its own consequences: `Execute`'s `e.History.Record` call always attributed a run to `agentName` — the executor's own identity — even when the tree it ran was a thin auction wrapper whose real work `AuctionDelegate` (`internal/a2a/auction.go`) had already dispatched to a different, winning bidder, leaving that winner's `Award` sitting unread in `bb.ChainState["auction_award"]`. Milestones 2 and 3 of ADR-155's program turned out to require no code change on inspection — `internal/a2a/checkpoint_verifier.go` has been nil-safe since its original commit, and the `bt_run_task` MCP tool's shared `Blackboard` is doubly guarded (the `RunTask` choke point plus unconditional persona injection) — leaving milestone 4 as the program's only remaining code change.
@@ -2908,6 +3271,8 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 
 ---
 
+<a id="adr-157"></a>
+
 ## ADR-157: `BuildKnowledgeGraph` Registers the 24 Domain Trees `AllDomainTrees()` Was Missing, Closing the KG-Registry Domain-Tree-Drift Gap (NotebookLM Research)
 
 **Context (2026-07-17):** `knowledge.RecordRun` looks up `kg.Trees[rec.TreeID]` and silently no-ops when the ID isn't present — there is no error, log line, or metric, so a domain tree missing from the registry has every run outcome it ever produces dropped on the floor, invisible to `ComputeAnalytics`, `RegisterDomainFitness`, and the gardener's tree-prioritization ranking (ADR-146). `internal/knowledge/registry.go`'s `BuildKnowledgeGraph()` hand-registers each `domain:*` tree as a `TreeMeta` literal, a manual step independent of `internal/domains.AllDomainTrees()`, the actual catalog of runnable domain trees. The two had drifted: 24 trees present in `AllDomainTrees()` — including `bt_fusion`, `goap_fusion`, `goap_fusion_loop`, `notebooklm`, `superpowers_workflow`, `arc42_seeder`, `arc42:docsync`, and all twelve `arc42:section1`–`section12` generators — had no `TreeMeta` entry at all, so every cycle of the platform's own self-improvement loops (the GOAP fusion loop, the arc42 docsync trees, superpowers workflow runs) was running blind: none of that activity ever reached analytics or influenced gardener prioritization, even though those are exactly the trees the platform relies on to improve itself.
@@ -2922,6 +3287,8 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 - ⚠️ ~~This closes the registry-side of the gap only. The gardener daemon's own `Config.KnowledgeGraph` field is still never set in `cmd/bt-gardener/config.go` (a separate, previously-identified production-wiring gap — ADR-146's algorithm is tested but not live), so the newly-visible analytics do not yet reach the running gardener daemon's prioritization until that field is wired.~~ — resolved 2026-07-17 (ADR-158): `buildGardenerConfig` now sets `Config.KnowledgeGraph`.
 
 ---
+
+<a id="adr-158"></a>
 
 ## ADR-158: `buildGardenerConfig` Wires a Live `*knowledge.KnowledgeGraph` into the Gardener Daemon, and `evolveTreeV2` Writes Accepted Mutations Back into It, Closing ADR-146's Production-Wiring Gap (Q2 Evolvability, Milestones 1–3/4)
 
@@ -2944,6 +3311,8 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 
 ---
 
+<a id="adr-159"></a>
+
 ## ADR-159: `buildDashboardKnowledgeGraph` Loads Persisted Feedback into `bt-dashboard`'s Knowledge Graph, Closing Milestone 4/4 of the ADR-158 Program (Q2 Evolvability)
 
 **Context (2026-07-18):** Program "Q2 Evolvability — Wire the knowledge graph into the gardener daemon's live prioritization loop and write evolution outcomes back into it" (ADR-158, milestones 1–3/4; milestone 4 left as "a further write-back or consumption path... not part of this change"). `cmd/bt-gardener/config.go`'s `buildGardenerConfig` and `internal/agent/scheduler.go`'s scheduler constructor both call `knowledge.BuildKnowledgeGraph()` followed by `kg.LoadFeedback(agent.FeedbackFile())`, so each process's in-memory graph is overlaid with the shared, persisted runtime fitness/run-count history before it's used. `cmd/bt-dashboard/main.go`'s `main()` was the one remaining call site still assigning `kg = knowledge.BuildKnowledgeGraph()` directly, with no `LoadFeedback` step — so `dashboard.DiscoverTreeFn` and any analytics views built on the dashboard's `kg` always showed the zero-feedback seed catalog (every `TreeMeta.Fitness`/`RunCount` at its construction default) regardless of how much real evolution/run history the platform had accumulated in the shared feedback file.
@@ -2959,6 +3328,8 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 
 ---
 
+<a id="adr-160"></a>
+
 ## ADR-160: `loadGoapChargeStampsDurable` Reads the Durable Charge Stamps Back into a Resumed Tick's `ChainState`, Closing ADR-129's Flagged Remainder (Q3 Reliability)
 
 **Context (2026-07-18):** ADR-129 (2026-07-16) made the four GOAP fusion charge stamps — `program_milestone_charged`, `program_milestone`, `research_goal_charged`, `research_goal_charged_text` — durable by writing them into the agent-scope blackboard alongside `ChainState` (`setGoapStateDurable`), but its own consequences flagged the write as only half the fix: `chargeGoapResearchGoalFailure` (`actions_goap_fusion_goal_budget.go:60`) and the refund path's `goapChargedMilestoneRef` (`actions_goap_fusion_refund.go:122`) still read the stamp from `bb.ChainState` only. A tick that resumes a saved plan straight into `Implement` (§6.4's Preflight "resume saved plan" branch, entered via `runSuperpowersRuntimeFromExistingPlanAction`) never re-runs `PrioritizeGoapGoals` — the only site that stamps ChainState — so its fresh `RunOnce`-built `Blackboard` had nothing in `ChainState` for these readers to find on a genuine failure, even though the stamp existed durably on disk. A genuine failure on a resumed tick therefore silently failed to charge (or refund) the budget it should have hit.
@@ -2973,6 +3344,8 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 - Pinned by the three tests named above.
 
 ---
+
+<a id="adr-161"></a>
 
 ## ADR-161: Automation-Status Execution Gate, Rejected-Tree Quarantine, and a Live Gardener `Rescan()`, Closing Milestones 1–3/4 of the HITL-Adoption/Live-Rescan Program (Q4 Personalization & Self-Growth)
 
@@ -2996,6 +3369,8 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 
 ---
 
+<a id="adr-162"></a>
+
 ## ADR-162: `recordUserFeedback`'s `flagged_for_review` Signal Raises a Real HITL Escalation and Pauses the Automation via a New `"flagged"` Status, Closing Milestone 4/4 of the HITL-Adoption Program (Q4 Personalization & Self-Growth)
 
 **Context (2026-07-18):** Program "Q4 Personalization & Self-Growth — Close the HITL-adoption and live-rescan gaps in the self-generated GOAP tree lifecycle," milestone 4/4. `cmd/bt-agent/feedback_tools.go`'s `recordUserFeedback` already set `result["flagged_for_review"] = true` and logged a warning once a tree crossed `feedbackReviewThreshold` consecutive negative signals — but did nothing else with that signal: no HITL request was raised, and the tree's automation kept running exactly as before. ADR-161 closed milestones 1–3/4 of this program (gating tree resolution/execution on `AutomationRecord.Status`, quarantining a rejected tree's file, and a live gardener `Rescan()`), all of which depend on an `AutomationRecord.Status` that repeated bad feedback could never actually change — the flagged signal was a dead end.
@@ -3011,6 +3386,8 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 - Pinned by the two tests named above.
 
 ---
+
+<a id="adr-163"></a>
 
 ## ADR-163: `Server.rpcHandler` Is Built Once at Construction and Shared Across Every `handleAgentEndpoint` Request, Fixing a Per-Request-Throwaway A2A Task Store (NotebookLM Research)
 
@@ -3028,6 +3405,8 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 
 ---
 
+<a id="adr-164"></a>
+
 ## ADR-164: `AuctionDelegate` Widens Its Fallback Condition to a Winner's Open Circuit Breaker or Exhausted Retry Policy, Closing ADR-064's Flagged No-Fallback Gap (NotebookLM Research)
 
 **Context (2026-07-18):** ADR-064 gave the A2A auction's winner dispatch a per-winner circuit breaker and a retry policy, but its own Consequences flagged the result as incomplete: "No runner-up fallback yet: if the winner's breaker is open or all retries are exhausted, `RunAuction` still fails the auction outright rather than trying the next-best bid." `AuctionDelegate` (`internal/a2a/auction.go`)'s only fallback condition was `errors.Is(err, ErrNoEligibleBids)` — a winner-breaker-open refusal (from `breaker.Allow()`) or a retry-exhausted transient dispatch failure both surfaced as a bare `fmt.Errorf`, which `AuctionDelegate` treated as a hard error rather than "no usable winner," so the whole engine action — and the tree tick driving it — hard-failed instead of falling back to the node's configured delegate tree, even though that delegate tree exists for precisely this "the auction didn't produce a usable winner" case.
@@ -3043,6 +3422,8 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 - Pinned by the two tests named above.
 
 ---
+
+<a id="adr-165"></a>
 
 ## ADR-165: `A2AHandoffBlock`'s `side_effect_class` Moves from the Inert Root `Sequence` to the `A2AApproval` `HumanApprovalGate` Itself, Making External A2A Delegation Actually Mandatory-HITL (NotebookLM Research)
 
@@ -3060,6 +3441,8 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 
 ---
 
+<a id="adr-166"></a>
+
 ## ADR-166: `DelegateToA2AFn` Threads the Tree's `context.Context` Through to the A2A Client Instead of Substituting `context.Background()`, Closing Milestone 1/5 of the DelegateToA2A Hardening Program (Q3 Reliability)
 
 **Context (2026-07-18):** `engine.DelegateToA2AFn` (`internal/engine/a2a_nodes.go`), the function the `a2a` package injects at startup for the `DelegateToA2A` action node to call, took only `(targetURL, task string)`. `InitEngineDelegate` (`internal/a2a/task_bridge.go`) wired it to `client.SendTask(context.Background(), targetURL, task)` — even though `BTAgentClient.SendTask` (`internal/a2a/client.go:31`) already accepted a `context.Context` and the tree's own `*btcore.BTContext[Blackboard]` (which embeds `context.Context`) was available at the `DelegateToA2A` call site and simply discarded. Any cancellation, deadline, or trace value set on the running tree's context — by a caller's timeout, a parent `context.WithCancel`, or future request-scoped tracing — stopped propagating at the delegation boundary, and every remote A2A call ran under a fresh, uncancellable background context regardless of what the tree above it was doing. This is milestone 1 of the 5-milestone Q3 Reliability program to harden the direct A2A delegation path with context propagation, retry, and a circuit breaker; the retry and circuit-breaker milestones that follow need a live, cancellable context to bound their own backoff/retry loops, so threading the context through is the load-bearing first step the rest of the program builds on.
@@ -3075,6 +3458,8 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 - Pinned by `TestDelegateToA2A_ContextPropagates`; the pre-existing `DelegateToA2A` test suite (`internal/engine/a2a_nodes_test.go`) and `TestInitEngineDelegate` (`internal/a2a/init_test.go`) continue to pass against the new signature.
 
 ---
+
+<a id="adr-167"></a>
 
 ## ADR-167: `generateWithRetry`/`generateWithRetryPolicy` Honor `ChainConfig.MaxTokens` via `GenerateWithMaxTokens`, `bb.TokensUsed` Becomes Real, and `SerializableNode.Validate()` Flags Implausibly Small `max_tokens`, Closing Milestones 1–3/4 of ADR-006's Flagged max_tokens Gap (Q1 Correctness / Q3 Reliability)
 
@@ -3098,6 +3483,8 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 
 ---
 
+<a id="adr-168"></a>
+
 ## ADR-168: Domain-Tree `max_tokens` Values Re-Audited and Corrected Across `kanban.go`, `hermes_evolve.go`, and `hermes_obsidian.go`, Closing Milestone 4/4 of ADR-167's max_tokens Program (Q1 Correctness / Q3 Reliability)
 
 **Context (2026-07-18):** Program "Q1 Correctness / Q3 Reliability — Make ChainAction `max_tokens` output-budget metadata actually govern LLM calls instead of being silently discarded," milestone 4/4. ADR-167 (milestones 1–3) made `ChainConfig.MaxTokens` load-bearing — `generateWithRetry`/`generateWithRetryPolicy` now pass it to `GenerateWithMaxTokens`, and `SerializableNode.Validate()` flags any `llm_call`/`rag_query`/`structured_output` node below `minPlausibleMaxTokens = 16` — but three domain-tree files (`internal/domains/kanban.go`, `hermes_evolve.go`, `hermes_obsidian.go`) were authored back when `max_tokens` was silently discarded, and seeded many `llm_call` `ChainAction` nodes with values as low as `4`–`12`: plausible-looking integers at the time, chosen with no functional consequence. Once ADR-167 landed, every one of those nodes either failed `Validate()` outright (below the floor of 16) or — for the handful just above the floor but still tiny — would silently truncate a real card-drafting, refinement, QA, or vault-synthesis LLM response to a handful of words in production, which is the exact failure mode ADR-006 originally flagged and ADR-167 built the floor check to catch going forward.
@@ -3115,6 +3502,8 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 
 ---
 
+<a id="adr-169"></a>
+
 ## ADR-169: `a2a.Server`/`BTAgentExecutor` `CardCache` Gains a `sync.RWMutex`, Closing a Refresh-vs-Read Data Race (NotebookLM Research)
 
 **Context (2026-07-18):** NotebookLM research on `internal/a2a/server.go` surfaced that `Server.CardCache` and `BTAgentExecutor.CardCache` were plain `map[string]*a2a.AgentCard` fields reassigned wholesale by `Server.RefreshCards` — called from `bt_agent_create` and autopilot's `activateAutomation` per the field's own doc comment — with no synchronization at all. Meanwhile every inbound HTTP request reads the same fields concurrently from its own goroutine: `handleAgentEndpoint`'s per-agent routing, `handleGlobalAgentCard`'s skill aggregation, `handleHealth`'s agent count, `AuctionCardSource`'s closure (the production seam auctions draw candidates from, per ADR-008), and `Execute`'s auction-bid scoring branch on `BTAgentExecutor`. A `RefreshCards` call racing any of these reads is an unsynchronized concurrent map read/write — undefined behavior under the Go memory model and a `go test -race` failure, independent of whether it happens to also trip a runtime crash.
@@ -3131,6 +3520,8 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 
 ---
 
+<a id="adr-170"></a>
+
 ## ADR-170: `KnowledgeGraph.BuildIndex` and Three `factory.go` Read Sites Snapshot `kg.Trees` Under `kg.mu.RLock`, Closing an Unsynchronized Map-Access Race (NotebookLM Research)
 
 **Context (2026-07-18):** NotebookLM research on `internal/knowledge` surfaced that `KnowledgeGraph.mu` (a `sync.RWMutex` already guarding `kg.Trees` for every registered writer — `Register`, `RegisterEvolved`, and others, all under `kg.mu.Lock()`) was not consulted by every reader. `BuildIndex` (`embeddings.go`) read `kg.Trees` via two separate unsynchronized calls — `len(kg.Trees)` to size its result channel, then a `range kg.Trees` to launch per-tree embedding goroutines, then `len(kg.Trees)` again to bound its receive loop — and `factory.go`'s `extractTemplates`, `structuralCrossover`, and `refreshTemplateFitness` each read `f.Graph.Trees` directly with no lock at all. A concurrent `Register` call racing any of these reads can trip Go's runtime "concurrent map iteration and map write" fatal error — an unrecoverable process crash, not merely a `-race`-flagged data race — and `BuildIndex`'s two independent unsynchronized `len(kg.Trees)` reads compound the problem: if `Register` grows the map between the channel-sizing read and the receive-loop's re-evaluated bound, the receive loop waits for more results than were ever sent into the channel, hanging indefinitely.
@@ -3146,6 +3537,8 @@ Phase 6 consolidation: `engine.PlannerNode` now delegates to the `internal/goap`
 - Pinned by the two tests named above.
 
 ---
+
+<a id="adr-171"></a>
 
 ## ADR-171: The Entropy/Gini-Based `DTAnalyzer`/`BTOptimizer` Engine Gains a Telemetry Bridge and Non-Destructive Reordering Passes Mirroring `SelectorOptimizer`'s, Closing Milestones 1–3/4 of the DTAnalyzer Production-Wiring Program (Q2 Evolvability)
 
@@ -3169,6 +3562,8 @@ Pinned by `TestRecordDecisionTreeChildOutcomes_WritesAndAccumulates`/`TestRecord
 
 ---
 
+<a id="adr-172"></a>
+
 ## ADR-172: `Gardener.AnalyzeTreeDiagnostics` Runs `BTOptimizer.AnalyzeTree` Against a Clone, Surfacing Destructive-Analysis Counts for HITL Review Without Risking the Live Tree, Closing Milestone 4/4 of the ADR-171 DTAnalyzer Program (Q2 Evolvability)
 
 **Context (2026-07-18):** Program "Q2 Evolvability — Wire the entropy/Gini-based `BTOptimizer`/`DTAnalyzer` decision-tree engine into the same production telemetry and mutation paths its sibling `SelectorOptimizer` already uses." ADR-171 (milestones 1–3/4) gave `DTAnalyzer` a telemetry bridge and a non-destructive `OptimizeSelectors` reordering pass applied at tree resolution and at gardener mutation-apply time. `BTOptimizer` also exposes `AnalyzeTree` (`internal/evolution/decision_tree.go`), which builds a `DTImprovementReport` by actually invoking the engine's destructive analysis methods — `PruneDeadPaths` and `MergeOverlappingPaths` — and counting what they remove/merge; this method and its report type existed in `evolution` before ADR-171 but had no caller anywhere in `internal/gardener`, so the improvement counts an HITL reviewer would want to see before deciding whether to enable `DTOrdering`/deeper pruning were unreachable without hand-invoking destructive methods against a real tree.
@@ -3187,6 +3582,8 @@ Pinned by `TestRecordDecisionTreeChildOutcomes_WritesAndAccumulates`/`TestRecord
 - Pinned by the two tests named above.
 
 ---
+
+<a id="adr-173"></a>
 
 ## ADR-173: `finalizeFeedbackEscalation` Resumes a Flagged Automation on HITL Approval, `AutomationBlocked` Closes a Fallback-to-Default-Tree Bypass, and Re-Escalation Is Suppressed While a Tree Is Already Pending Review, Closing the ADR-162 Feedback-Escalation Resume-Loop Gap (Q4 Personalization & Self-Growth)
 
@@ -3208,6 +3605,8 @@ Pinned by `TestRecordDecisionTreeChildOutcomes_WritesAndAccumulates`/`TestRecord
 
 ---
 
+<a id="adr-174"></a>
+
 ## ADR-174: `internal/llm.Client` and Its `ErrorRecorder`/`TracedLLM`/`FallbackLLM` Decorators Implement `GenerateWithMaxTokens`, Closing ADR-167's Flagged Production-Stack Gap (NotebookLM Research)
 
 **Context (2026-07-18):** ADR-167 made `ChainConfig.MaxTokens` load-bearing inside the engine — `generateWithRetry`/`generateWithRetryPolicy` route through a `maxTokensLLM` interface checked via type assertion on `bb.LLM` — but flagged at acceptance that this only takes effect "when the configured `bb.LLM` supports it," and that the type-assertion design "match[es] the pre-existing per-provider capability gap rather than closing it universally." None of the real production LLM types implemented the capability: `internal/llm.Client` (the Ollama-backed production client) had no `GenerateWithMaxTokens` method, and none of its decorator chain — `ErrorRecorder` (error tracking), `TracedLLM` (span instrumentation), `FallbackLLM` (multi-model failover) — forwarded such a method even if the wrapped model had one. Every real `bb.LLM` in production therefore silently fell back to `generateOnce`'s unbounded-`Generate` branch regardless of a node's configured `cfg.MaxTokens`, leaving ADR-167's mechanism fully inert outside of engine-package tests using mock LLMs.
@@ -3224,6 +3623,8 @@ Pinned by `TestRecordDecisionTreeChildOutcomes_WritesAndAccumulates`/`TestRecord
 - Pinned by the tests named above.
 
 ---
+
+<a id="adr-175"></a>
 
 ## ADR-175: `internal/persona.FinalizeAutomationApproval`/`FinalizeFeedbackEscalation` Are Extracted as Binary-Agnostic Functions and Wired into `bt-dashboard`'s `HandleHITL`, Closing the Dashboard/MCP HITL-Finalization Parity Gap (Q4 Personalization & Self-Growth)
 
@@ -3246,6 +3647,8 @@ Pinned by `TestRecordDecisionTreeChildOutcomes_WritesAndAccumulates`/`TestRecord
 
 ---
 
+<a id="adr-176"></a>
+
 ## ADR-176: `util.SaveJSONAtomic`/`LoadJSON` Become the One Canonical Implementation of ADR-003's Atomic-Write Pattern, Fixing Three Sites That Had Silently Drifted from It (Q5 Consistency & Reuse)
 
 **Context (2026-07-18):** ADR-003 mandates atomic file persistence — write a temp file, then `os.Rename` it over the destination — precisely so a crash mid-write can never leave a truncated state file. In practice the pattern had been hand-copied at every call site instead of shared: `internal/evolution/pareto.go`'s `ParetoFront.Save`/`Load`, `internal/reliability/reliability.go`'s `DeadLetterQueue.save`, `internal/hitl/store.go`'s `Store.save`, `internal/doormate/store.go`'s `Store.atomicWrite`, `internal/research/store.go`'s `Store.Save`, and `internal/gardener/gardener.go`'s `Registry.SaveTree` each reimplemented marshal→`MkdirAll`→write-`.tmp`→rename with small variations in indentation, permissions, and error wrapping. Three sites in the same `reliability.go` file had drifted further than a cosmetic variation: `TaskQueue.save`, `SchedulerState.persist`, and `PriorityQueue.save` called plain `os.WriteFile` directly to the destination path — an in-place rewrite that keeps the same inode, so a crash mid-write truncates the live queue/scheduler-state file, silently violating the ADR-003 guarantee that the file sitting next to `DeadLetterQueue.save` in the same source file already honored.
@@ -3262,6 +3665,8 @@ Pinned by `TestRecordDecisionTreeChildOutcomes_WritesAndAccumulates`/`TestRecord
 - Cross-process locking remains deliberately out of scope — see `DeadLetterQueue`'s `acquireExperienceLock` (→ §8) for the pattern call sites should follow when they need it.
 
 ---
+
+<a id="adr-177"></a>
 
 ## ADR-177: `reapOrphanedSuperpowersBranches` Force-Reaps Unmerged `superpowers/*` Branches Behind a 7-Day Age Gate, an Abandonment Check, and an Archive-Before-Delete Safety Net (Q3 Reliability)
 
@@ -3280,6 +3685,8 @@ Pinned by `TestRecordDecisionTreeChildOutcomes_WritesAndAccumulates`/`TestRecord
 
 ---
 
+<a id="adr-178"></a>
+
 ## ADR-178: `gitStageArgs` Stops Re-Staging `graphify-out/`'s Regenerated Artifacts and `sectionAwareGraphContext` Becomes the One Canonical Graphify-Report Reader (Q5 Consistency & Reuse, Milestones 1–3/5)
 
 **Context (2026-07-19):** `.gitignore` has excluded `graphify-out/` wholesale since the repo's earliest history, yet `graphify-out/graph.json` and `graphify-out/manifest.json` were force-tracked at some point and stayed tracked — a `graphify update .` regenerates both every cycle, and each cycle's landing commit re-staged and re-committed the resulting ~55k-line diffs, a direct contributor to `.git` reaching 781MB. The exclusion logic that should have prevented this was already inconsistent: `isGeneratedSuperpowersOrGraphifyPath` (`blockingMainRepoDirtySummary`'s dirty-repo gate) and `superpowersGeneratedCommitExclusions` (the per-task commit's `git add` pathspec, `actions_superpowers_prod.go`) both already treated `graphify-out/` as generated, but `gitStageArgs` — the apply-stage landing commit's own `git add -A` pathspec (`superpowers_apply.go:388`, also used by the auto-fix re-stage loop) — carried its own separate, hardcoded exclusion list covering only `docs/superpowers/runs/**` and `docs/superpowers/plans/**`. Separately, every LLM prompt that grounds itself in `GRAPH_REPORT.md` (`buildSeedProgramPrompt`, the NotebookLM query builder, the GrillMe query builder — all `actions_goap_fusion.go`/`goap_seed_program.go`) truncated the raw ~900KB report to its first 2500–3500 characters; on a report that size, only the header ever survived — none of the God Nodes, Community Hubs, Surprising Connections, or Low-Cohesion Files sections a research prompt actually needs. The arc42 `ReadGraphReport` action and `GraphIsFresh` condition (`arc42_nodes.go`) read/checked the same report through their own further-drifted logic, and `GraphIsFresh` treated the report file merely existing as proof it was current.
@@ -3295,6 +3702,8 @@ Pinned by `TestRecordDecisionTreeChildOutcomes_WritesAndAccumulates`/`TestRecord
 - ⚠️ Milestones 4/5 and 5/5 of the program are not part of this change; the goal-note key fix and budget-aware task batching remain open.
 
 ---
+
+<a id="adr-179"></a>
 
 ## ADR-179: `goapResearchGoalKey` Strips a Scoped Goal Line's `(files: …)` Suffix and `executeSuperpowersTaskBatch` Gates Each Task's RED Phase on Remaining Cycle Budget, Closing Milestones 4–5/5 of the ADR-178 Q5 Program
 
@@ -3312,6 +3721,8 @@ Pinned by `TestRecordDecisionTreeChildOutcomes_WritesAndAccumulates`/`TestRecord
 
 ---
 
+<a id="adr-180"></a>
+
 ## ADR-180: `reliability.ScoreOutcome` Becomes the One Canonical Block-Fitness Scoring Formula, Replacing Two of Its Three Copy-Pasted Sites (Q5 Consistency & Reuse, Milestones 1–3/4)
 
 **Context (2026-07-22):** The block-fitness scoring formula — scale `qualityScore` to a 0–100 percentage; if that's zero or below, fall back to 75 when `success` is true or `outcome` case-insensitively matches "success"/"completed", else 25; clamp to `[0,100]` — was hand-copied identically at three sites: `internal/blocks/fitness.go`'s `ScoreFromBlackboard`, `internal/engine/ops_actions.go`'s `fitnessScoreFromBB`, and an inline block in `internal/dashboard/executor.go`'s `recordBlockFitnessMetric`. A future change to the formula (e.g. a different fallback split, or an additional outcome keyword) would need three coordinated edits, with no test tying them together to catch drift.
@@ -3327,6 +3738,8 @@ Pinned by `TestRecordDecisionTreeChildOutcomes_WritesAndAccumulates`/`TestRecord
 
 ---
 
+<a id="adr-181"></a>
+
 ## ADR-181: `AgentExecutor.recordBlockFitnessMetric` Adopts `reliability.ScoreOutcome`, Closing Milestone 4/4 of the ADR-180 Block-Fitness Consolidation Program (Q5 Consistency & Reuse)
 
 **Context (2026-07-22):** ADR-180 (milestones 1–3/4) extracted `reliability.ScoreOutcome` as the one canonical block-fitness scoring formula and delegated `blocks.ScoreFromBlackboard`/`engine.fitnessScoreFromBB` to it, but deliberately left `internal/dashboard/executor.go`'s `recordBlockFitnessMetric` on its own byte-for-byte-identical inline copy for that pass. The formula still had two independent implementations in the codebase — a future change (a different fallback split, an additional outcome keyword) would still need a coordinated edit against the dashboard's copy in addition to `reliability.ScoreOutcome`, with no test tying the two together to catch drift.
@@ -3341,6 +3754,8 @@ Pinned by `TestRecordDecisionTreeChildOutcomes_WritesAndAccumulates`/`TestRecord
 - Rejected: leaving the dashboard's copy in place indefinitely on the reasoning that `internal/dashboard` shouldn't depend on `internal/reliability` — rejected because block fitness is itself a reliability signal (ADR-180's own reasoning for the package choice), and the dependency direction is safe; `internal/dashboard` already imports `internal/agent` and `internal/engine`, both of which sit alongside `internal/reliability` in the same layer.
 
 ---
+
+<a id="adr-182"></a>
 
 ## ADR-182: `bt-dashboard` Refreshes Its Own KG Analytics Gauges on Every `/api/metrics` Scrape Instead of Depending on `bt-agent`'s Separate-Process `bt_kg_analytics` Tool (NotebookLM Research)
 
@@ -3358,6 +3773,8 @@ Pinned by `TestRecordDecisionTreeChildOutcomes_WritesAndAccumulates`/`TestRecord
 
 ---
 
+<a id="adr-183"></a>
+
 ## ADR-183: `reliability.AcquireFileLock` Is Exported and `research.UpdatePrograms` Wraps Every `ProgramStore` Read-Modify-Write Under It, Closing Milestones 1–3/5 of the ProgramStore Concurrent-Writer Lost-Update Program (Q3 Reliability)
 
 **Context (2026-07-22):** `research.ProgramStore` (`internal/research/programs.go`) backs the single shared `programs.json` the goap-fusion loop's self-tracked research programs live in — milestone attempt charges/refunds, red-pass completion streaks, and program registration/completion all read-modify-write it. Every one of those call sites did a bare `OpenPrograms` → mutate → `Save` with no cross-process coordination: `ProgramStore.Save`, unlike `reliability.DeadLetterQueue.save` (ADR-024), never merges against what is currently on disk, so two concurrent read-modify-write callers race and the second `Save` silently clobbers the first's already-persisted change with a stale in-memory copy — the same lost-update shape ADR-021/022/024 closed for ExperienceBank two Q3 Reliability cycles earlier. `self_fix_seed.go`'s own doc comment already named this gap explicitly ("that broader programs.json multi-writer LOCK gap is pre-existing and engine-wide ... tracked for the combined review") without fixing it, since a real fix touches every call site rather than just self-fix's own producers. The highest-risk instances are the milestone-attempt charge/refund/block paths (a lost update there mis-abandons or wrongly un-abandons a milestone) and program registration via `persistGoapProgram`, reached from several distinct sources in the same running fleet (notebooklm/grill research, claude_review, design-followup, arc42-seeder) — any two firing concurrently could drop a whole proposed program.
@@ -3374,6 +3791,8 @@ Pinned by `TestRecordDecisionTreeChildOutcomes_WritesAndAccumulates`/`TestRecord
 
 ---
 
+<a id="adr-184"></a>
+
 ## ADR-184: `PrioritizeGoapGoals`'s Milestone-Attempt Charge and `seedCodeFixProgram`'s Program-Store Write Move onto `research.UpdatePrograms`, Closing Milestones 4–5/5 of the ADR-183 ProgramStore Lost-Update Program (Q3 Reliability)
 
 **Context (2026-07-22):** ADR-183 migrated the highest-risk `research.ProgramStore` writers onto `research.UpdatePrograms`'s shared flock but explicitly flagged two write call sites left racing every migrated writer and each other: `PrioritizeGoapGoals`'s milestone-attempt charge in `internal/engine/actions_goap_fusion.go` (a bare `OpenPrograms` → `RecordAttemptAndMaybeBlock` → `ps.Save()`), and `self_fix_seed.go`'s `seedCodeFixProgram`, whose own file doc comment named the gap explicitly — its cap-check/seed/ledger-stamp/`ps.Save()` sequence was guarded only by an in-process mutex and an on-disk lock file scoped to self-fix-vs-self-fix contention, not against the rest of the engine. Auditing the remaining `research.OpenPrograms` call sites named in ADR-183's own file doc comment (`arc42_seeder.go`, `actions_superpowers.go`, `goap_seed_program.go`, `graphify_components.go`, `nlm_quota.go`) found only reads: each either inspects `ps.Active()`/`ps.Programs` to decide whether to seed or to render a prompt, or (for `goap_seed_program.go`'s `SeedNextProgram`) delegates its actual write to `persistGoapProgram`, already migrated in ADR-183's milestones 1–3. None of the five ever calls `ps.Save()` themselves, so none was ever part of the lost-update gap.
@@ -3389,6 +3808,8 @@ Pinned by `TestRecordDecisionTreeChildOutcomes_WritesAndAccumulates`/`TestRecord
 
 ---
 
+<a id="adr-185"></a>
+
 ## ADR-185: `ReportSuperpowersImplementation`/`VerifyGoapFusionEvidence` Recognize the `committed_pr_opened` ApplyStatus, Closing a Fleet-PR Evidence-Gate False Negative (Q3 Reliability)
 
 **Context (2026-07-23):** `pushLandingMasterToOrigin` (`internal/engine/actions_pr_shepherd.go`) sets `run.ApplyStatus = "committed_pr_opened"` when a bare-repo landing's direct `git push origin master` is rejected for a protected branch and it ships the commit to a fleet PR branch instead — a genuine success the PR shepherd drives to merge on later cycles. But `ReportSuperpowersImplementation` (`internal/engine/actions_goap_fusion_prod_additions.go`, ~line 348) only emitted the `## Superpowers Implementation Complete` heading for a fixed status list (`committed`, `applied`, `applied_no_commit`, `main_repo`, `dry_run`) that omitted `committed_pr_opened`, so the report fell back to `## Superpowers Implementation Pending Patch`. `VerifyGoapFusionEvidence`'s Complete-branch check (~line 218) compounded this with its own false negative: it tested for the exact substring `` Apply status: `committed` `` — which never matches `` Apply status: `committed_pr_opened` `` (no backtick immediately follows `committed`) — so even a corrected heading would still fail evidence verification. Together the two gaps meant a real fleet-PR landing success was reported and verified as an unrecognized/pending run.
@@ -3402,6 +3823,8 @@ Pinned by `TestRecordDecisionTreeChildOutcomes_WritesAndAccumulates`/`TestRecord
 - ⚠️ Both fixes are a status-list/substring-match extension, not a structural change to the evidence gate (§8) — any future `ApplyStatus` value added to `pushLandingMasterToOrigin` or its siblings must be added to both call sites by hand, as this one was; nothing enforces the two lists stay in sync.
 
 ---
+
+<a id="adr-186"></a>
 
 ## ADR-186: `BT_SELECTOR_ORDERING_STRATEGY` Wires `OrderByIG`/`OrderByGini`/`OrderByHybrid`/`OrderByKiller` into Both Production Selector-Ordering Call Sites Instead of Deleting Them, Closing Milestone 4/5 of the Selector-Reordering Consolidation Program (Q2 Evolvability)
 
@@ -3417,6 +3840,8 @@ Pinned by `TestRecordDecisionTreeChildOutcomes_WritesAndAccumulates`/`TestRecord
 - Rejected alternative: delete the four unused strategies as inert options (the fallback this milestone's own goal text offered) — rejected because they read the same already-collected `SelectorStats` store as `OrderBySuccessRate`, making the opt-in wiring cheap, and the sibling "delete the redundant subsystem" milestone of this same program was independently found to rest on a false premise when tried against `DTAnalyzer`/`BTOptimizer`.
 - ⚠️ A third `SelectorOptimizer` construction site, `cmd/bt-agent/tools.go`'s `bt_evolve_selectors` MCP tool (~line 2018), still hardcodes `evolution.NewSelectorOptimizer(evolution.OrderBySuccessRate)` directly and does not read `BT_SELECTOR_ORDERING_STRATEGY` — an operator-invoked one-shot reorder through that tool cannot yet select an alternate strategy, unlike the two continuously-running production passes this change wires.
 
+<a id="adr-187"></a>
+
 ## ADR-187: `NewRunDeps`'s Config-Load-Failure Fallback Adopts `config.DefaultConfig()` Instead of a Zero-Value `Config`, Closing Milestone 1/3 of the agentexec Characterization Program (Q1 Correctness)
 
 **Context (2026-07-23):** Program "Deterministic coverage backlog: characterization tests for `internal/agentexec/deps.go` and 2 more (Q1 Correctness)," milestone 1 of 3. `deps.go` had no direct test file of its own; the milestone's mandate was to pin `NewRunDeps`'s currently-observed behavior with a new `deps_test.go`, table-driven where natural, and to touch production code only if a test exposed a real bug. Writing the config-load-failure case exposed one: on a `config.Load()` error (e.g. an unreadable `BT_CONFIG_FILE`), `NewRunDeps` fell back to `&config.Config{}` — an all-zero-value struct with an empty `LLMProvider`, no host/model, and a zero timeout — rather than the platform's actual documented defaults (`config.DefaultConfig()`: `ollama` provider, `http://localhost:11434`, `qwen3.6:35b-a3b`, a 300s LLM timeout, etc.). A broken or transiently-unreadable config file silently downgraded a fresh `RunDeps` build to this crippled provider config instead of the same sane defaults every other config-load path in the platform already falls back to.
@@ -3431,6 +3856,8 @@ Pinned by `TestRecordDecisionTreeChildOutcomes_WritesAndAccumulates`/`TestRecord
 - Pinned by `TestNewRunDeps_ConfigLoadFailure_FallsBackToZeroConfig`, plus `TestNewRunDeps_PopulatesAllFields`, `TestNewRunDeps_SharedReflectionsRoot`, `TestNewRunDeps_ResolveTree_MatchesDomainsResolver`, and `TestNewRunDeps_ResolveTreeForUser_MatchesDomainsResolver` (all `internal/agentexec/deps_test.go`), which otherwise characterize `NewRunDeps`'s pre-existing behavior with no further production changes.
 
 ---
+
+<a id="adr-188"></a>
 
 ## ADR-188: `Judge` and `Synthesize` Derive Their Timeout from the Original Caller `ctx`, Making `cfg.Timeout` a Per-Stage Budget Instead of an End-to-End One, Amending ADR-151 (NotebookLM Research)
 
@@ -3449,6 +3876,8 @@ Pinned by `TestRecordDecisionTreeChildOutcomes_WritesAndAccumulates`/`TestRecord
 
 ---
 
+<a id="adr-189"></a>
+
 ## ADR-189: `reliability.ScoreOutcome`'s Outcome-String Fallback Is Removed — `success` Is the Sole Signal, Correcting ADR-180/ADR-181's False "Byte-Identical" Claim (Self-Fix, Fleet Review 2026-07-22)
 
 **Context (2026-07-23):** ADR-180 described the block-fitness formula as "hand-copied identically at three sites" and ADR-181 migrated `internal/dashboard/executor.go`'s `recordBlockFitnessMetric` onto `reliability.ScoreOutcome` on that premise, relying on `TestRecordBlockFitnessMetric_RateLimitCarryoverOutcome_UsesHealthyTier` and friends staying green as proof the change was behavior-preserving. The premise was false: the dashboard's *pre-ADR-181* inline copy (`git show 4c7006a^:internal/dashboard/executor.go`) only ever checked `success` for its 75/25 fallback — it had no `strings.EqualFold(outcome, "success"/"completed")` disjunct at all, unlike `blocks.ScoreFromBlackboard`/`engine.fitnessScoreFromBB`'s copies (and the `reliability.ScoreOutcome` ADR-180 extracted from them). ADR-181's delegation therefore didn't preserve the dashboard's existing behavior — it silently *added* the outcome-string fallback to a call site that previously never had one. Concretely (fleet review 2026-07-22): `recordBlockFitnessMetric` computes `success` via `agent.IsBreakerSuccess(res.Outcome, runErr)`, which is `false` whenever `runErr != nil` regardless of `res.Outcome`'s text. Once delegated to the buggy `reliability.ScoreOutcome`, a zero-`Quality` run with a non-nil `runErr` but a stale `res.Outcome` of `"success"`/`"completed"` scored 75 (healthy) instead of the pre-ADR-181 25 (failure) — a real regression the "byte-identical"/behavior-preserving framing in ADR-180/181 missed, because none of their pinning tests exercised `runErr != nil` together with a still-"success"-labeled outcome.
@@ -3466,6 +3895,8 @@ Pinned by `TestRecordDecisionTreeChildOutcomes_WritesAndAccumulates`/`TestRecord
 
 ---
 
+<a id="adr-190"></a>
+
 ## ADR-190: `domains.ExpectedDomainIDs` Becomes the One Canonical `ExpectedDomains` Conversion, and `cmd/bt-dashboard` Wires It So `bt_kg_coverage_gaps` Can Actually Go Non-Zero, Closing a Self-Fix Gap in ADR-182 (Self-Fix, Fleet Review 2026-07-22)
 
 **Context (2026-07-23):** ADR-182 wired `dashboard.KGAnalyticsRefreshFn` so `bt-dashboard` recomputes and republishes its own KG analytics gauges — `bt_kg_coverage_gaps`, `bt_kg_bottlenecks`, `bt_kg_selection_pressure_trees` — on every `/api/metrics` scrape, the endpoint Prometheus/Grafana (§8.11) actually polls, instead of depending on `bt-agent`'s separate-process `bt_kg_analytics` tool. That closed the cross-process staleness gap but left a narrower one unflagged: `cmd/bt-dashboard/main.go`'s `buildDashboardKnowledgeGraph` never set `kg.ExpectedDomains`, only `cmd/bt-agent/main.go` did, inline, by iterating its `domainRegistry`. Left unset, `knowledge.CoverageGaps` (`internal/knowledge/graph.go`) falls back to the package's `defaultExpectedDomains` — an 8-entry hardcoded list every one of whose entries is always present in the static catalog — so `bt_kg_coverage_gaps`, ADR-182's own headline metric, was structurally guaranteed to compute zero gaps in the one process that serves the scrape ADR-182 made live.
@@ -3481,6 +3912,8 @@ Pinned by `TestRecordDecisionTreeChildOutcomes_WritesAndAccumulates`/`TestRecord
 - Rejected: duplicating the `"domain:"+name` conversion loop a second time in `cmd/bt-dashboard/main.go`, mirroring `cmd/bt-agent`'s original inline copy — rejected because a second hand-copy would recreate the exact drift this fix exists to close (`cmd/bt-agent` had the loop; `cmd/bt-dashboard` simply never got one), not just move it.
 
 ---
+
+<a id="adr-191"></a>
 
 ## ADR-191: `wireDTOrdering` Sets `Config.DTStatsPath`/`EvolveV2Config.DTOrdering` on the Live Gardener Daemon, Closing ADR-171's Flagged DT-Reordering Production-Wiring Gap (Q2 Evolvability)
 
@@ -3498,6 +3931,8 @@ Pinned by `TestRecordDecisionTreeChildOutcomes_WritesAndAccumulates`/`TestRecord
 
 ---
 
+<a id="adr-192"></a>
+
 ## ADR-192: `bt_gardener_dt_diagnostics` MCP Tool Surfaces `Gardener.AnalyzeTreeDiagnostics` for HITL Review, Closing ADR-172's Flagged "No Production Caller" Gap (Q2 Evolvability)
 
 **Context (2026-07-23):** ADR-172 added `Gardener.AnalyzeTreeDiagnostics` as a read-only entry point that clones a tree before running `BTOptimizer`'s destructive `PruneDeadPaths`/`MergeOverlappingPaths` analysis, specifically so an HITL reviewer could see a `DTImprovementReport`'s dead-path/overlap counts before deciding whether to enable `DTOrdering` (production-wired by ADR-191) or deeper pruning. It explicitly flagged at acceptance: "`AnalyzeTreeDiagnostics` has no dashboard route, MCP tool, or `cmd/` subcommand invoking it... 'surfaced for HITL review' describes the entry point's contract, not yet an operational reviewer-facing surface."
@@ -3512,6 +3947,8 @@ Pinned by `TestRecordDecisionTreeChildOutcomes_WritesAndAccumulates`/`TestRecord
 - ⚠️ The tool constructs a fresh `gardener.NewGardener(gardener.Config{DTStatsPath: params.StatsPath})` per call rather than reusing the daemon's own wired `Config` (ADR-191) — an operator must pass the same `dt-stats.json` path the daemon uses (or accept an unseeded analysis) to get diagnostics consistent with what the live `DTOrdering` pass would apply; the two are not automatically kept in sync.
 
 ---
+
+<a id="adr-193"></a>
 
 ## ADR-193: `reflection.Store.LoadAll` Filters to the `reflection-*.json` Prefix `Save` Actually Writes, Closing a Phantom-Record Gap That Inflated `ev_evaluate`/`la_fitness` Success Counts (Self-Fix, Fleet Review 2026-07-22)
 
@@ -3530,6 +3967,8 @@ Pinned by `TestRecordDecisionTreeChildOutcomes_WritesAndAccumulates`/`TestRecord
 
 ---
 
+<a id="adr-194"></a>
+
 ## ADR-194: `execFusion` Threads `chainContext(bb)` Into `fusion.Run` Instead of a Bare `context.Background()`, and `fusion.RunPanel` Checks `ctx.Err()` Before Dispatch (NotebookLM Research)
 
 **Context (2026-07-23):** `internal/engine/chains.go`'s `execFusion` (`ChainFusion`'s executor) called `fusion.Run(context.Background(), caller, fcfg, prompt, fusionToolsFromBB(bb))` — a fresh, never-cancelable context — while every other chain executor in the same file (`execLLMCall`, `execRAGQuery`, `execStructuredOutput`, `execRetrievalQA`, `execMapReduce`, `execRefine`, per ADR-136) already runs its LLM call under `chainContext(bb)` (`chains.go:261`), which returns `bb.TraceContext` when the caller set one and only falls back to `context.Background()` otherwise. `execFusion` was the one remaining chain executor substituting a hardcoded background context for the tree's actual cancellation signal — a caller tearing down a run (timeout, HITL abort, shutdown) had no way to stop an in-flight fusion panel/judge/synthesize call, unlike every sibling executor.
@@ -3546,6 +3985,8 @@ Pinned by `TestRecordDecisionTreeChildOutcomes_WritesAndAccumulates`/`TestRecord
 - No further milestones are open for this fix; it does not extend an existing multi-milestone program.
 
 ---
+
+<a id="adr-195"></a>
 
 ## ADR-195: `AgentExecutor.Execute` Carries the Caller's Context, Goap Cycles Get One Scheduler Attempt Per Slot, and Evidence-Shape Rejections Are Non-Retryable (Fleet Review 2026-07-23, Gap 2)
 
@@ -3565,6 +4006,8 @@ Pinned by `TestRecordDecisionTreeChildOutcomes_WritesAndAccumulates`/`TestRecord
 - ⚠️ The reporter/validator ApplyStatus recognition lists remain two hand-maintained lists (ADR-185's ⚠ stands); the non-retryable classification bounds the blast radius of the *next* drift to a single attempt, it does not remove the drift class — the one-canonical-classifier ask from the 2026-07-17 review is still open.
 
 ---
+
+<a id="adr-196"></a>
 
 ## ADR-196: Deploy Adoption Deduplicates (Tree-Identity, Built-At-Head, Adoption Stamps, Gardener Self-Restart), Crisis Detection Fires on Decline Transitions Only, Stale Milestones Complete on a Charge-Time Red Pre-Check, and the Researcher Gains Slot Rotation + a Novelty Gate (Fleet Review 2026-07-23, Gaps 4–8)
 
@@ -3586,6 +4029,8 @@ Pinned by `TestRecordDecisionTreeChildOutcomes_WritesAndAccumulates`/`TestRecord
 
 ---
 
+<a id="adr-197"></a>
+
 ## ADR-197: Self-Fix Programs Preempt the General Program Queue (Fixes-First Scheduling)
 
 **Context:** `ProgramStore.Active()` picked the first program in array order with a pending milestone, so self-fix programs (error-handler escalations, self-review findings, operator review seeds — Source prefix `self-fix:`) competed with the continuously refilling feature backlog on equal terms. The 2026-07-22 review's five self-fix seeds happened to land within twelve hours, but nothing guaranteed it: a steady stream of freshly seeded feature programs could starve platform repairs indefinitely.
@@ -3601,6 +4046,8 @@ Pinned by `TestRecordDecisionTreeChildOutcomes_WritesAndAccumulates`/`TestRecord
 
 ---
 
+<a id="adr-198"></a>
+
 ## ADR-198: `cmd/bt-agent`'s Two Shutdown Paths Call `a2aSrv.Stop()` on SIGINT/SIGTERM, Closing a Graceful-Shutdown Gap Left Open Since the A2A Server's Introduction (NotebookLM Research)
 
 **Context (2026-07-23):** NotebookLM research on `cmd/bt-agent/main.go` found that neither shutdown branch — the `--no-mcp` early-return path, or the daemon-mode fallback reached after the MCP server exits (e.g. stdin closed) — ever called `a2aSrv.Stop()` after receiving `SIGINT`/`SIGTERM`. Both blocks already blocked on `<-sigCh` and logged `"bt-agent shutdown signal received"`, but `internal/a2a.Server.Stop()` (which gracefully closes the underlying `http.Server`) was never invoked from either one, so the A2A HTTP listener was left to be killed by process exit instead of shutting down gracefully — unlike `tracingShutdown`/`logShutdown`, which already run via `defer` on the same path.
@@ -3615,6 +4062,8 @@ Pinned by `TestRecordDecisionTreeChildOutcomes_WritesAndAccumulates`/`TestRecord
 
 ---
 
+<a id="adr-199"></a>
+
 ## ADR-199: `Population.EvolveQLearning` Takes a `*ReinforcementLearner` Instead of Raw `epsilon`/`learningRate` Floats, Annealing Exploration via `DecayEpsilon` Once Per Generation (NotebookLM Research)
 
 **Context (2026-07-23):** ADR-019 wired `bt_evolve_qlearning` to `Population.EvolveQLearning`, threading a single `epsilon`/`learningRate` float64 pair statically through every generation's `qLearnMutate` call. `ReinforcementLearner` (`internal/evolution/learning.go:822-836`) already implemented `DecayEpsilon`/`ConfigureEpsilonSchedule` for annealing exploration over time, but nothing in the Q-learning-guided evolution loop drove them — `EvolveQLearning` never touched a `ReinforcementLearner` at all — so `bt_evolve_qlearning` explored at the same fixed epsilon in generation 1 as in generation N regardless of how many generations the run requested.
@@ -3627,6 +4076,8 @@ Pinned by `TestRecordDecisionTreeChildOutcomes_WritesAndAccumulates`/`TestRecord
 - ✅ `bt_evolve_qlearning` now actually exercises the epsilon-decay schedule `ReinforcementLearner` already shipped, instead of exploring at one fixed rate for the whole run.
 - ✅ `EvolveQLearning` had exactly one production call site (`bt_evolve_qlearning`) plus tests, so the signature change is a clean cut with no back-compat shim needed.
 - ⚠️ `bt_evolve_qlearning` does not yet expose a request parameter for the decay rate or floor — every run anneals on `NewReinforcementLearner`'s fixed defaults (`EpsilonDecay: 0.995`, `MinEpsilon: 0.01`) regardless of the request's `generations` count, so a short run barely decays while a long one saturates at the floor early.
+
+<a id="adr-200"></a>
 
 ## ADR-200: `SuiteForTree` Gains Explicit Cases for Every Registered Domain Tree, Closing a Benchmark-Gate Blind Spot That Silently Fell Back to the Unrelated GoDev Suite (Q2 Evolvability)
 
@@ -3643,6 +4094,8 @@ Pinned by `TestRecordDecisionTreeChildOutcomes_WritesAndAccumulates`/`TestRecord
 - ⚠️ `BTFusionSuite`'s tasks can only ever reach the `BTFusion_NoNewResearch` branch: benchmark scoring runs actions in `Sandbox` mode, which stubs `SearchForBTPatterns`/`QueryNotebookLMResearch` — the actions that would record new knowledge-store entries — so `bt_fusion_research_new_count` always reads 0 under benchmark scoring and `BTFusion_NewResearch` is untested by this suite.
 - ⚠️ `BTManagerSuite`'s tasks can only ever reach `NewAgentBootstrapPath`: its routing conditions read `bb.Reflections` directly, and `RunSuite` never seeds it, so an empty reflection store always routes new-agent bootstrapping regardless of task wording — `DegradedPerformancePath`/`HealthyReportPath` are reachable only by tests that seed the store directly (see `TestBTManagerTreeRecordsRealPathDuringExecution`), not by this benchmark suite.
 - Pinned by `TestSuiteForTree_CoversAllRegisteredTrees`, `TestSuiteForTree_Matching` (`internal/benchmark/integration_test.go`, `internal/benchmark/benchmark_test.go`); `TestEvolveTreeV2_SuiteForTreeExpectedPathsMatchRealNodes` (`internal/gardener/evolve_v2_test.go`); `TestBTFusionTreeUsesStrategyRouterNaming`, `TestBTFusionTreeRecordsRealPathDuringExecution`, `TestBTManagerTreeUsesStrategyRouterNaming`, `TestBTManagerTreeRecordsRealPathDuringExecution` (`internal/domains/bt_fusion_test.go`); and `TestNotebookLMTreeRecordsRealPathDuringExecution` (`internal/domains/notebooklm_test.go`).
+
+<a id="adr-201"></a>
 
 ## ADR-201: `RunSuite`/`RunABTest`/`ScoreMutation` Gain a `PathMatchRate` Signal So a Mutation That Mis-Routes Tasks Onto the Wrong `StrategyRouter` Branch Can No Longer Score Neutral-or-Better, and a New Runtime Baseline Check Finds All Ten Finance-Agent Trees Benchmark-Gated on the Wrong Shared Suite (Q2 Evolvability)
 
@@ -3664,6 +4117,8 @@ A new `TestAllRegisteredSuites_BaselinePathMatchRate` (`internal/benchmark/integ
 
 ---
 
+<a id="adr-202"></a>
+
 ## ADR-202: `goapFusionApplyAlreadyLanded` Makes a Committed `ApplyStatus` Authoritative Over the No-Plan Guard, Closing Milestone 1/2 of the Partial-Apply-Landings-Misclassified-as-Failed Program (Q3 Reliability)
 
 **Context (2026-07-23):** Program "Q3 Reliability — Partial-apply landings classify as landed: `committed*` apply status is authoritative over trailing task failures." Run `20260723T091452` landed commit `3d6a13b` — `ExecuteSuperpowersTaskBatchRuntime` (`internal/engine/actions_superpowers_prod.go`) had already committed a partial apply and set `run.ApplyStatus = "committed_pr_opened"` (ADR-185), and an earlier invocation of `runSuperpowersRuntimeFromExistingPlanAction` within the same cycle had already written the landing report into `bb.Result` and called `clearSuperpowersPlanState` on its `return 1` success path. But a trailing re-invocation of the same action later in the same cycle then hit the function's top-of-function guard — `planPath == ""`, now that the plan was cleared — which unconditionally set `bb.Result = "## GOAP Superpowers Runtime Failed\n\nNo existing plan path found."` and returned `-1`. The deferred failure handler at the top of the function then called `markGoapFusionImplDegraded`, logging "Claude path failed, no code landed" and, via the `default` branch of `classifyGoapCycleFailure`, charging a genuine-failure budget hit against the research goal — even though the cycle's own tracked `SuperpowersRun` showed a committed landing. The cycle's final logged outcome was `"no_change"`, discarding the evidence that code had already landed.
@@ -3678,6 +4133,8 @@ A new `TestAllRegisteredSuites_BaselinePathMatchRate` (`internal/benchmark/integ
 - Pinned by the test named above.
 
 ---
+
+<a id="adr-203"></a>
 
 ## ADR-203: `dtStatsPathFor` Resolves DT-Reordering Telemetry from the Real Per-Tree `agent.DecisionTreeStatsFile`, Not Only the Producer-less `Config.DTStatsPath`, Closing ADR-191's Inert-Activation Gap (Q2 Evolvability, Milestones 1–2/2)
 
@@ -3695,6 +4152,8 @@ A new `TestAllRegisteredSuites_BaselinePathMatchRate` (`internal/benchmark/integ
 
 ---
 
+<a id="adr-204"></a>
+
 ## ADR-204: `RestoreTreeBeforeRegressionStreak` Walks Rollback Back Past a Multi-Cycle Regression Streak Instead of Restoring Only the Latest Snapshot, and `Registry.RollbackTree` Adopts It (NotebookLM Research)
 
 **Context (2026-07-23):** `SnapshotTree`/`RestoreTree` (`internal/evolution/quality_gate.go`, milestone 1 of the durable pre-mutation-snapshot mechanism) persist an ordered per-tree revision history and let `Registry.RollbackTree` recover the single most-recent pre-mutation snapshot after a bad mutation. But quality-gate regression detection can trip several cycles after a tree was actually last good — a disabled gate, or a per-cycle delta within tolerance that compounds over consecutive cycles, both leave the "most recent snapshot" itself partway through an unbroken decline. `RollbackTree` calling `evolution.RestoreTree` in that state restores the least-bad cycle of a losing streak rather than the last known-good peak, leaving the tree persistently degraded relative to where it stood before the streak began.
@@ -3710,6 +4169,8 @@ A new `TestAllRegisteredSuites_BaselinePathMatchRate` (`internal/benchmark/integ
 - ⚠️ "Streak" is defined purely as strictly-decreasing consecutive fitness; a single regressed cycle followed immediately by a rebound that doesn't fully recover past the prior peak is not walked back any further than that rebound, since the decline check stops at the first non-decreasing step.
 
 ---
+
+<a id="adr-205"></a>
 
 ## ADR-205: A Bounded Claim/Lease on the Program Store Stops a Sibling Cycle from Planning or Charging a Program Another Cycle Is Actively Landing (Q3 Reliability, Milestones 1–2/3 — Superseded by ADR-210 for Milestone 3/3)
 
@@ -3730,6 +4191,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 
 ---
 
+<a id="adr-206"></a>
+
 ## ADR-206: `runPRShepherd` Pins an Open PR's Head SHA for the Life of Its Batch — New Local-Master Landings No Longer Force-Push Onto It, Only Fix-Red Commits May (Q3 Reliability, Milestone 1/2)
 
 **Context (2026-07-23):** `runPRShepherd` (`internal/engine/actions_pr_shepherd.go`) previously force-pushed `refs/heads/master` onto the open `fleet/landing` PR branch whenever `pr.Head.SHA != localSHA` — i.e. on *every* shepherd pass where any new commit had landed on local master since the PR's branch was last updated, not only when opening a fresh PR. Because new landings accrue continuously while a PR's CI is still running, this restarted CI on every pass, and a PR could never accumulate enough consecutive green cycles to be seen as mergeable. PR #25 sat in `ci_pending` for multiple hours on 2026-07-23 as a direct result — a batch that could otherwise have merged in one CI run was repeatedly restarted by unrelated new landings.
@@ -3745,6 +4208,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - Pinned by the test named above.
 
 ---
+
+<a id="adr-207"></a>
 
 ## ADR-207: A Per-Tree-Name `MAPElitesGrid` Archive Feeds `evolveTreeV2`'s `BehavioralDiversity`, Closing ADR-196's Explicitly Deferred Diversity-Collapse Wiring (Q2 Evolvability)
 
@@ -3764,6 +4229,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 
 ---
 
+<a id="adr-208"></a>
+
 ## ADR-208: `ComposePresetWithTools`'s `"default"`/`"hitl"` Cases Stop Double-Applying `PipelineWithToolsProfile` to an Already-Profiled Package-Level Slice, Closing Milestone 2/3 of the `compose_presets.go` Characterization Program (Q1 Correctness)
 
 **Context (2026-07-24):** Program "Deterministic coverage backlog: characterization tests for `internal/blocks/compose.go` and 2 more (Q1 Correctness)," milestone 2 of 3. `compose_presets.go` had no direct test file of its own; the milestone's mandate was to pin `ComposePresetWithTools`'s currently-observed behavior with a new `compose_presets_test.go`, table-driven where natural, and to touch production code only if a test exposed a real bug. Writing the table exposed one: the `"default"` and `"hitl"` cases built their block list by calling `PipelineWithToolsProfile(append([]string{}, DefaultTaskBlocks...), profileOrDefault(profile))` / `...DefaultTaskBlocksWithHITL...`, but `DefaultTaskBlocks` (`builtin.go`) and `DefaultTaskBlocksWithHITL` (`hitl.go`) are themselves package-level vars already built by `PipelineWithToolsProfile(..., "default")` — each already carries a `core:tools_default` block inserted after `core:pre_gate`. Re-running `PipelineWithToolsProfile` over that already-profiled slice with a caller-supplied `toolsProfile` (e.g. `"dev"`) inserted a *second* tools block (`core:tools_dev`) immediately before the surviving `core:tools_default` from the shared var, rather than replacing it — so `ComposePresetWithTools(reg, "default", "dev", ...)` composed a tree carrying both `core:tools_dev` and a stray `core:tools_default` block instead of `core:tools_dev` alone, silently double-loading the tool-setup step and leaving the default profile's tools active alongside the requested one.
@@ -3779,6 +4246,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 
 ---
 
+<a id="adr-209"></a>
+
 ## ADR-209: `DelegateBlock`'s `side_effect_class` Moves from the Inert Root `Sequence` to the `DelegateApproval` `HumanApprovalGate` Itself, Making Tree Delegation Actually Mandatory-HITL, Mirroring ADR-165, Closing Milestone 3/3 of the `compose_presets.go` Characterization Program (Q1 Correctness)
 
 **Context (2026-07-24):** Program "Deterministic coverage backlog: characterization tests for `internal/blocks/compose.go` and 2 more (Q1 Correctness)," milestone 3 of 3. `delegate.go`'s `DelegateBlock()` had no direct test file; writing `delegate_test.go` to pin its node structure exposed the same defect ADR-165 found and fixed in `A2AHandoffBlock` five days earlier: `"side_effect_class": "external"` was set on the block's root `Sequence` node's `Metadata`, not on `DelegateApproval`, the `HumanApprovalGate` node one level down that actually gates `DelegateToTree`. Per `sideEffectRequiresHITL` (`internal/engine/hitl_gate.go:253`) and `humanApprovalGateCmd.Run` (`hitl_gate.go:121`), only the `HumanApprovalGate` node's own `Metadata` is consulted — a `Sequence`'s metadata is never read for HITL classification. With no `side_effect_class` on `DelegateApproval` itself, `sideEffectRequiresHITL` returned `false` for it, so whenever the global `hitl.Policy.Enabled` was `false` the gate skipped straight to `DelegateToTree` with no approval request ever created — a task could be handed off to another behavior tree with no human approval, identical in shape and root cause to the A2A handoff gap.
@@ -3793,6 +4262,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - Pinned by the tests named above.
 
 ---
+
+<a id="adr-210"></a>
 
 ## ADR-210: `completeGoapProgramMilestone` and the Red-Evidence Pre-Check Completion Branch Both Call `ReleaseClaim` on Successful `MarkDone`, Closing Milestone 3/3 of the ADR-205 Program-Claim/Lease Program (Q3 Reliability)
 
@@ -3810,6 +4281,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 
 ---
 
+<a id="adr-211"></a>
+
 ## ADR-211: `RunOnce` Self-Records SLO Evidence, Closing the Interactive/MCP Gap in the Gardener's Validation Gate, with a New `SkipSLORecording` Opt-Out Keeping the Scheduler's `recordSchedulerAttempt` the Sole Recorder for Its Own Path (NotebookLM Research)
 
 **Context (2026-07-24):** `gardener.ValidationGate` (`internal/gardener/validation_gate.go`) reads `engine.SLOMetrics` (in-process) with a file-based fallback (`EvidencePath`, `AllowUnverified`) so a mutation with no observed runs can still pass. But the *only* writer of `engine.SLOMetrics` was `recordSchedulerAttempt` (`cmd/bt-agent/main.go`, ADR-025), called exclusively from the cron-scheduler closure right after `agentRouter.Execute` returns. `agent.RunOnce` (`internal/agent/runner.go`) — the method every other execution path calls directly, including the `bt_agent_run` MCP tool and the `thinktank:synthesis` chat tool (`cmd/bt-agent/tools.go`) and the CLI (`cmd/bt-agent-cli/main.go`) — never touched `engine.SLOMetrics` at all. Any tree exercised only through chat/MCP therefore never accumulated evidence, making `AllowUnverified=true` a permanent, silent no-op for it rather than the "no data yet" escape hatch it was designed as.
@@ -3825,6 +4298,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - Pinned by the tests named above.
 
 ---
+
+<a id="adr-212"></a>
 
 ## ADR-212: `cmd/bt-dashboard` Wires `a2a.AuctionCardsFn` from Its Own Live Agent Registry, Closing the Second Production Call Site ADR-008 Left Dashboard-Side (NotebookLM Research)
 
@@ -3842,6 +4317,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 
 ---
 
+<a id="adr-213"></a>
+
 ## ADR-213: `SerializableNode.validateRecursive`'s Cycle Detection Skips Childless Leaf Nodes, No Longer Flagging a Composite/Lone-Child Same-Name Idiom as a False-Positive Cycle, Closing Milestone 1/3 of the `fanout.go` Characterization Program (Q1 Correctness)
 
 **Context (2026-07-24):** Program "Deterministic coverage backlog: characterization tests for `internal/blocks/fanout.go` and 2 more (Q1 Correctness)," milestone 1 of 3. `fanout.go` had no direct test file of its own; the milestone's mandate was to pin `ParallelFanoutBlock`/`MergeResultsBlock`'s currently-observed behavior with a new `fanout_test.go`, table-driven where natural, and to touch production code only if a test exposed a real bug. Writing `TestMergeResultsBlock_Validates` exposed one: `MergeResultsBlock()` returns a `Sequence` named `"MergeResults"` wrapping a single child `Action` also named `"MergeResults"` — a common idiom for a composite that exists only to host one leaf step under a descriptive name. `SerializableNode.validateRecursive`'s cycle detection (`internal/evolution/node_types.go`) tracked every named node, leaf or not, in a `visited` map keyed by name and flagged a repeat as `"cycle detected — duplicate name in ancestry path"`; since the child leaf's name matched its immediate composite parent's, this same-name-by-convention idiom was misdiagnosed as an ancestry cycle, and `Validate()` failed a tree with no actual cycle in it.
@@ -3856,6 +4333,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - Pinned by the tests named above.
 
 ---
+
+<a id="adr-214"></a>
 
 ## ADR-214: `composeWithMiddle` Inserts `spec.Blocks` Instead of a Hardcoded Three-Block Sequence, Restoring the `core:human_gate`/`core:tools_default` Blocks `ComposeTaskTreeWithHITL` Had Silently Dropped Since Introduction, Closing Milestone 3/3 of the `fanout.go`-and-2-More Characterization Program (Q1 Correctness)
 
@@ -3872,6 +4351,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - Pinned by the tests named above.
 
 ---
+
+<a id="adr-215"></a>
 
 ## ADR-215: `precheckGoapStaleMilestones`'s Completion Branch Calls the New `ProgramStore.ClearClaim` Instead of `ReleaseClaim`, Correcting ADR-210's Claim That Both `MarkDone` Call Sites Already Released Their Claim (NotebookLM Research)
 
@@ -3891,6 +4372,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 
 ---
 
+<a id="adr-216"></a>
+
 ## ADR-216: `SaveSLOMetrics` Serializes Concurrent Callers with a Package-Level Mutex, Closing a Race ADR-211's Own Concurrent Callers Introduced (NotebookLM Research)
 
 **Context (2026-07-24):** ADR-211 made `agent.RunOnce` self-record SLO evidence via `defer engine.SaveSLOMetrics(SLOMetricsFile())`, reachable from every `RunOnce` caller including `bt_agent_run` and `cmd/bt-dashboard`'s in-process executor. `cmd/bt-dashboard` runs its worker pool with multiple concurrent agent tasks, each independently deferring a `SaveSLOMetrics` call to the same fixed path. `SaveSLOMetrics` writes atomically per ADR-003 (tmp file + `os.Rename`), but the tmp file uses a single fixed name (`path + ".tmp"`) with no per-caller uniqueness or locking — concurrent callers race on that shared tmp file, either corrupting the persisted JSON (one writer's partial write overwritten mid-flight by another) or failing `os.Rename` outright when an earlier caller already consumed the tmp file first.
@@ -3908,6 +4391,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 
 ---
 
+<a id="adr-217"></a>
+
 ## ADR-217: `gardener.CollectAgentSLOs` Reads Persisted Cross-Process SLO Evidence via `engine.LoadSLOEvidence`, Closing a Permanent-Empty Gap in the Dashboard's `GardenerMetrics.SLOs` (NotebookLM Research)
 
 **Context (2026-07-24):** `gardener.CollectAgentSLOs` (`internal/gardener/gardener.go`) read `engine.AllSLOMetrics()` — the same in-process `sync.Map` registry ADR-211/ADR-216 established is only ever written by `agent.RunOnce`, which runs in the `bt-agent`/`bt-dashboard` processes, never in the separate `bt-gardener` process. `RunCycleV2` (`internal/gardener/evolve_v2.go`) called `CollectAgentSLOs()` after every evolution cycle and exported its result to `slo-metrics.json` for the dashboard's `GardenerMetrics.SLOs` field, but since the gardener process never populates `engine.AllSLOMetrics()`, that call unconditionally returned `nil` in production — the exact cross-process gap `ValidationGate` (`internal/gardener/validation_gate.go`) already solves for its own read path via a file-based fallback (`EvidencePath`, reading through `loadTreeEvidence`/`engine.LoadSLOEvidence`).
@@ -3924,6 +4409,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 
 ---
 
+<a id="adr-218"></a>
+
 ## ADR-218: `BuildKnowledgeGraph` Registers the 13 Bare Resolver-Special-Case Tree IDs `AllDomainTrees()` Never Returns, and `ComputeAnalytics` Audits Them Alongside `ExpectedDomains`, Extending the ADR-157/ADR-190 Registry-Drift Guard to a Second Drift Source (NotebookLM Research)
 
 **Context (2026-07-24):** ADR-157 closed the drift between `internal/domains.AllDomainTrees()` and `internal/knowledge/registry.go`'s hand-registered `TreeMeta` catalog for `"domain:*"`-prefixed IDs, and pinned it with `TestKnowledgeGraphRegistersAllDomainTrees`. But `internal/domains/tree_resolver.go`'s `resolveTreeIDWithResolver` special-cases 13 further tree IDs directly — `vault_manager`, the seven `kanban:*` trees, `notebooklm`/`notebooklm-consumer`/`notebooklm-bridge`, `hermes_obsidian`, `superpowers_pipeline`, and `fusion` — as bare, non-`"domain:"`-prefixed IDs outside `AllDomainTrees()` entirely, so ADR-157's guard never covered them. `knowledge.RecordRun` no-ops silently on any `kg.Trees[rec.TreeID]` miss (the same silent-drop behavior ADR-157's context described), so every run of these 13 trees — including `notebooklm-bridge`'s 4-hour cron and `fusion`'s multi-model deliberation tree — had its outcome dropped on the floor, invisible to `ComputeAnalytics`, `RegisterDomainFitness`, and gardener tree-prioritization, with no error or metric marking the loss.
@@ -3938,6 +4425,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - ⚠️ `resolverSpecialCaseTreeIDs` is a hand-maintained list duplicated between `internal/knowledge/registry.go` and `internal/domains/kg_registry_coverage_test.go`, each kept in sync with `tree_resolver.go`'s actual special-case branches by hand rather than through a shared import (to avoid a `knowledge`→`domains` cycle) — both copies can still drift from `tree_resolver.go` itself if a special case is added without updating either list; only the two coverage tests staying green closes that loop.
 
 ---
+
+<a id="adr-219"></a>
 
 ## ADR-219: `RegisterNotebookLMFitness` Also Wires the Hyphenated `notebooklm-consumer` Tree ID — the Consumer Chain-Agent's Real Production ID — Correcting ADR-097's Underscore-Only Registration (NotebookLM Research)
 
@@ -3954,6 +4443,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - Pinned by `TestRegisterNotebookLMFitness_WiresIntoRealProductionTree` (`internal/domains/notebooklm_fitness_wiring_test.go`), which records runs under `"notebooklm-consumer"` against a real `BuildKnowledgeGraph()` and asserts `Fitness` matches `NotebookLMFitness`'s output rather than the generic EMA.
 
 ---
+
+<a id="adr-220"></a>
 
 ## ADR-220: `internal/reliability.CircuitBreaker` Absorbs `internal/agent`'s Duplicate 3-State Breaker — `AgentCircuitBreaker`/`AgentCircuitBreakerStore` Become Type Aliases, Closing the Drift Risk Between Two Independently-Maintained Copies of ADR-007's State Machine (NotebookLM Research)
 
@@ -3972,6 +4463,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 
 ---
 
+<a id="adr-221"></a>
+
 ## ADR-221: `resolveTreeIDWithResolver` Wires `evolution.TelegramClarifyTree()` Under the Bare `"telegram_clarify"` ID to Match Its Standalone Sibling Trees — Left Outside ADR-218's `resolverSpecialCaseTreeIDs` Coverage-Gap List (NotebookLM Research)
 
 **Context (2026-07-24):** `evolution.TelegramClarifyTree()` (`internal/evolution/telegram_clarify.go`) validates that a Telegram-facing response used the `clarify()` action instead of plain text, backed by conditions/actions already registered in `internal/engine/telegram_init.go`. But `internal/domains/tree_resolver.go`'s `resolveTreeIDWithResolver` never special-cased an ID for it, so the tree was unreachable via `ResolveTreeID`/`bt_delegate_to_tree` even though everything it depends on was already wired — the same "reachable dependencies, unreachable tree" gap earlier ADRs (e.g. ADR-212, ADR-215) have repeatedly closed for other standalone trees. Its siblings — `vault_manager`, the `notebooklm`/`notebooklm-consumer`/`notebooklm-bridge` family, `hermes_obsidian`, `superpowers_pipeline`, `fusion`/`fusion_deliberation` — are all reachable through exactly this bare, non-`"domain:"`-prefixed special-case mechanism in the same function.
@@ -3987,6 +4480,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 
 ---
 
+<a id="adr-222"></a>
+
 ## ADR-222: `WebhookPublisher` Adopts `reliability.CircuitBreakerStore`, Closing One of ADR-220's Three Flagged Unconsolidated Registries, and `replayDeadLetters` Gains the Missing Per-Subscription Breaker Check It Was Bypassing (NotebookLM Research)
 
 **Context (2026-07-24):** ADR-220 added `reliability.CircuitBreakerStore` as the generic, reusable form of the named-breaker registry pattern, but flagged as a consequence that `internal/llm`, `internal/a2a`, and `internal/agent/webhook_publisher.go` still each hand-rolled their own `map[string]*CircuitBreaker` registry, unconsolidated. `WebhookPublisher.breakers` (`internal/agent/webhook_publisher.go`) was one such registry, built and populated once in `NewWebhookPublisher` from `secrets` and read/written directly by `handleEvent`. Separately, `replayDeadLetters` — the background sweep `handleEvent` triggers after any subscription's successful delivery — replayed every queued DLQ entry via `dlq.Requeue`/the shared `SetReplayExecutor` regardless of which subscription it belonged to, with no `breakers.Allowed()` check at all: a successful `bt-evolution-event` delivery re-hammered a still-open `bt-agent-alert` breaker's endpoint instead of leaving its queued entry alone until its own breaker recovered.
@@ -4001,6 +4496,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - Pinned by the tests named above.
 
 ---
+
+<a id="adr-223"></a>
 
 ## ADR-223: `SignAgentCard`/`VerifyAgentCard` Move from an Unkeyed SHA-256 Hash to a Keyed HMAC-SHA256 Signature, Closing ADR-090's Flagged Authentication Gap (NotebookLM Research)
 
@@ -4018,6 +4515,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 
 ---
 
+<a id="adr-224"></a>
+
 ## ADR-224: `engine.walkValidate`'s Cycle Detection Skips Childless Leaf Nodes, Mirroring ADR-213's `internal/evolution` Fix in the `internal/engine` Validation Path (Q1 Correctness)
 
 **Context (2026-07-28):** ADR-213 (2026-07-24) fixed `SerializableNode.validateRecursive` (`internal/evolution/node_types.go`) so its cycle detector no longer flags the common composite-wraps-lone-same-named-child idiom as a false-positive ancestry cycle. `engine.ValidateTreeFull`'s own cycle check in `walkValidate` (`internal/engine/verifier.go`) is a separate, independently-maintained implementation of the same idea and was never given the equivalent fix: it tracked every named node — leaf or composite — in `visitedNames`, so a `Sequence` named `"X"` wrapping a single `Action` also named `"X"` still failed `ValidateTreeFull` with a spurious "cycle detected" error. `internal/blocks/ops.go`'s `TraceCheckpointBlock` carries a workaround for exactly this: its composite is named `"TraceCheckpointBlock"` while its child `Action` is named `"TraceCheckpoint"`, purely to dodge this checker, with two comments citing `ValidateTreeFull`'s cycle detector as the reason the names must differ.
@@ -4033,6 +4532,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - Cross-reference: → ADR-213 for the original `internal/evolution` fix this mirrors.
 
 ---
+
+<a id="adr-225"></a>
 
 ## ADR-225: `parseClaudeRateLimitReset` Parses the Weekly-Quota Reset Shape in Its Own IANA Zone, and `claudeBackoffDeadline` Trusts a Multi-Day Deadline for It, Closing ADR-016's Flagged Heuristic-Window Gap for the Weekly Case (NotebookLM Research)
 
@@ -4050,6 +4551,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 
 ---
 
+<a id="adr-226"></a>
+
 ## ADR-226: `evaluateCondition` Requires an Exact `"true"` Match Instead of a 4-Character Prefix Check, Closing a False-Positive Condition-Match Bug (NotebookLM Research)
 
 **Context (2026-07-28):** `evaluateCondition` (`internal/dashboard/workflow_orchestrator.go`), the workflow engine's condition gate for `StepConditional`/branching steps, expanded a step's condition template against the run's `wfState` and then tested the result with `len(expanded) > 3 && expanded[:4] == "true"` — a prefix check, not an equality check. Any expanded string that merely *starts with* `"true"` matched: `"truest"`, `"truthfully, that is correct"`, or LLM-generated condition text like `"true but only partially"` all evaluated as condition-met, even though none of them is the clean boolean `"true"` a condition template is meant to expand to. Since condition text can come from templated step output — including LLM-authored text — this false-positive class was reachable in production, not just from adversarial input.
@@ -4063,6 +4566,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - ⚠️ `evaluateCondition` remains a small set of string-equality checks, not a real expression evaluator — the function's own comment already flags this ("Full expression evaluation would need a proper expression engine"); this fix narrows one false-positive source within that existing design, it does not add expression evaluation.
 
 ---
+
+<a id="adr-227"></a>
 
 ## ADR-227: `wireSelectorReorder` Also Wires `domains.DTStatsPathFn` Under `BT_SELECTOR_REORDER=1`, Closing ADR-171's Resolve-Time `domains.DTStatsPath` Production-Wiring Gap (Q2 Evolvability)
 
@@ -4080,6 +4585,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 
 ---
 
+<a id="adr-228"></a>
+
 ## ADR-228: `bt-dashboard` and `bt-gardener` Wire an `InFlightFn` Guard into Their `DriftWatchConfig`, Closing ADR-050's Flagged AutoRestart-Mid-Request/Mid-Cycle Gap (NotebookLM Research)
 
 **Context (2026-07-28):** ADR-050 (2026-07-12) wired `RebuildBackoff` into all three daemons' `DriftWatchConfig` but explicitly flagged, as a ⚠️ consequence, that only `bt-agent` also wired `InFlightFn` (`globalSched.AnyInFlight`) — `bt-dashboard` and `bt-gardener` had no equivalent guard because neither owned a `Scheduler` instance, so a deploy-drift-triggered `AutoRestart` could still `SIGTERM` `bt-dashboard` mid-HTTP-request or `bt-gardener` mid-evolution-cycle.
@@ -4094,6 +4601,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - ⚠️ Unlike `internal/agent/deploy_drift_test.go`'s `TestDriftWatchOnce_SkipsRebuildWhileJobInFlight`, which exercises the `InFlightFn` skip path end-to-end, this change has no equivalent end-to-end test for the dashboard's HTTP-in-flight case or the gardener's `main.go` wiring — only the gardener's `AnyInFlight()` unit itself is pinned.
 - Cross-reference: → ADR-050 (original `InFlightFn`/`RebuildBackoff` wiring and its flagged gap).
 
+<a id="adr-229"></a>
+
 ## ADR-229: `loadOrCreateSigningKey` Logs a Warning Instead of Silently Swallowing a Signing-Key Persistence Failure (NotebookLM Research)
 
 **Context (2026-07-28):** ADR-223 introduced HMAC-SHA256 agent-card signing keyed by a process-wide key persisted at `agent.HomeDir()/a2a_signing.key` so every process on a machine signs and verifies with the same key across restarts. `loadOrCreateSigningKey` (`internal/a2a/signing.go`) treated both the parent-directory creation and the key write as best-effort, discarding each error (`_ = os.MkdirAll(...)`, `_ = os.WriteFile(...)`) behind a comment noting only that "an unwritable dir just re-generates the key next process" — true, but silent: an operator whose `HomeDir` became unwritable would see every process restart mint a fresh key and cross-process card verification start failing, with nothing in the logs pointing at why.
@@ -4106,6 +4615,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - ✅ An operator now gets an immediate log signal when signing-key persistence fails, instead of discovering it indirectly through unexplained cross-process verification failures.
 - The best-effort recovery itself (regenerate the key in memory and continue) is unchanged — this closes the silent-failure gap only, not the underlying unwritable-directory scenario.
 - Cross-reference: → ADR-223 (the keyed-signature mechanism this persistence path serves).
+
+<a id="adr-230"></a>
 
 ## ADR-230: `IsCIBuildTask`/`IsTradingTask` Gain Broader Keyword Coverage, Closing a StrategyRouter Branch-Reachability Gap a New Cross-Domain Suite Test Surfaced (NotebookLM Research)
 
@@ -4123,6 +4634,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 
 ---
 
+<a id="adr-231"></a>
+
 ## ADR-231: `evolution.CloneMetadata` Becomes the One Canonical Recursive Deep-Copy of Tree Node Metadata, Replacing `cloneTree`'s Shallow Copy and `gardener`'s Private `cloneMetadataForGardener` (NotebookLM Research)
 
 **Context (2026-07-29):** `cloneTree` (`internal/evolution/learning.go`) is documented as evolution's "sole deep-copy" (→ §5.4) but its `Metadata` copy was a single-level `for k, v := range` shallow copy — a nested `map[string]any`, `[]any`, or `[]string` value reachable from a cloned node's `Metadata` was shared with the original, not copied, so a mutation reached through the clone (GA mutation/breeding, or a gardener rollback snapshot) could leak back into the pre-mutation tree it was supposed to be isolated from. Separately, `internal/gardener/evolve_v2.go`'s `cloneTreeForGardener` already had the correct recursive deep-copy behavior in a private `cloneMetadataForGardener` — the same nested map/slice recursion — but scoped to gardener only, so evolution's own mutation/rollback path never benefited from it: the platform carried two independently-maintained implementations of the same deep-copy contract, one shallow and wrong, one correct.
@@ -4138,6 +4651,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - Rejected: keeping `cloneMetadataForGardener` private and duplicating its body into `evolution.CloneMetadata` — rejected as exactly the two-copy drift risk (ADR-220's circuit-breaker precedent) this change closes; gardener now imports evolution's exported function instead of maintaining its own copy.
 
 ---
+
+<a id="adr-232"></a>
 
 ## ADR-232: `internal/a2a`'s `treeTags` Sources Skill/Bid Tags from `internal/knowledge.GlobalGraph`'s Fitness-Weighted `Capability` List Instead of an Ad Hoc Tree-ID String Split, Routing Auction Capability Matching Through the Knowledge Graph's Canonical Model (NotebookLM Research)
 
@@ -4155,6 +4670,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 
 ---
 
+<a id="adr-233"></a>
+
 ## ADR-233: `TaskStore.Approve`/`Reject` and `Workflow.ApproveTask`/`RejectTask` Both Resolve the Matching `hitl.Request` via a Shared `resolveHITLAudit` Helper, Giving HITL Approve/Reject One Canonical Audit-Trail Code Path (NotebookLM Research)
 
 **Context (2026-07-29):** `internal/dashboard` carries two parallel task models — `TaskStore`'s `Task`/`Approval` (`tasks.go`) and `Workflow`'s `WorkflowTask`/`Approval` (`workflow_engine.go`) — each with its own `Approve`/`Reject` method that only flipped its own in-memory `Approval` field. Resolving the corresponding `hitl.Request` (the actual HITL audit-trail record dashboard operators and MCP tools see via `hitl.DefaultStore`) was previously done only by `cmd/bt-dashboard`'s HTTP handlers (`handleTaskApprove`/`handleTaskReject`), which called `hitl.DefaultStore.ApproveByTaskID`/`RejectByTaskID` directly after the `TaskStore` call succeeded — and only for the Task path. `Workflow.ApproveTask`/`RejectTask` never touched `hitl.DefaultStore` at all, so a workflow-level decision on a HITL-gated task left its `hitl.Request` pending indefinitely even though the `WorkflowTask` itself already showed approved/rejected.
@@ -4170,6 +4687,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - Rejected: keeping HTTP-handler-only HITL resolution and adding a second, handler-shaped call into `Workflow.ApproveTask`/`RejectTask` instead of a shared helper — rejected as recreating, one level deeper, the two-parallel-model divergence risk this ADR's own goal is to close.
 
 ---
+
+<a id="adr-234"></a>
 
 ## ADR-234: `hashTree` Fingerprints the Full Subtree via `json.Marshal` Instead of Only the Root Node's Name+Type+Child-Count, Closing a Genome-Collision Bug in Diversity Tracking (NotebookLM Research)
 
@@ -4193,6 +4712,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 
 ---
 
+<a id="adr-235"></a>
+
 ## ADR-235: `RecordRun` Marks Its Own Feedback Dirty, Closing a Silent-Loss Gap in Evolved-Tree Feedback Persistence (NotebookLM Research)
 
 **Context (2026-07-29):** The knowledge-graph feedback persistence lifecycle (§8.4, ADR-105) assumes every feedback-producing caller either goes through the scheduler's `persistRunFeedback` — which explicitly calls `MarkFeedbackDirty` after `RecordRun` — or otherwise remembers to mark the graph dirty itself. `internal/gardener`'s `recordEvolvedRun` (`evolve_v2.go`) does neither: at the end of every `evolveTreeV2` cycle it calls `KnowledgeGraph.RecordRun` directly with `Outcome: "evolved"`, updating `EvolvedCount`/`StructuralFitness` in memory, but never flags the graph dirty. A configured `FlushFeedback` never picked up evolved-tree feedback, so it was silently lost on process restart even though genuine-run feedback (routed through the scheduler) persisted correctly.
@@ -4213,6 +4734,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - Rejected: patching only the known gardener gap, in favor of fixing the shared mutation point (see Alternatives).
 
 ---
+
+<a id="adr-236"></a>
 
 ## ADR-236: `CompanyState` Gets Its Own Mutex, Closing a Shared-Pointer Race Across `Workflow` and `CompanyOrchestrator` Wrappers (NotebookLM Research)
 
@@ -4239,6 +4762,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 
 ---
 
+<a id="adr-237"></a>
+
 ## ADR-237: `TranspositionTable.Save` and a New `exportSLOMetrics` Helper Adopt `util.SaveJSONAtomic`, Closing Two More ADR-176 Stragglers (NotebookLM Research)
 
 **Context (2026-07-30):** ADR-176 made `util.SaveJSONAtomic` the one canonical implementation of ADR-003's write-`.tmp`-then-rename pattern and migrated six call sites onto it, but two more had drifted the same way and were missed. `TranspositionTable.Save` (`internal/evaluator/stockfish.go`) discarded its `os.WriteFile` error via `_ =` and then unconditionally renamed the (possibly partial or absent) tmp file over the live transposition-table file — the exact error-discarding hazard ADR-154 had already fixed once in `gardener.Registry.SaveTree`/`MetricsTracker.Save`. `Gardener.RunCycleV2`'s inline SLO-metrics persistence block (`internal/gardener/evolve_v2.go`) hand-rolled the same write-`.tmp`-then-rename idiom correctly (it did check the write error before renaming) but as an inline block with no name of its own, so it was untestable except by driving a full cycle run, and — like the pre-ADR-176 call sites — never created missing parent directories.
@@ -4258,6 +4783,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - ✅ Both call sites now create missing parent directories automatically, which neither hand-rolled version did.
 - ✅ `RunCycleV2`'s SLO-metrics persistence is now unit-testable in isolation via `exportSLOMetrics` rather than only reachable through a full cycle run.
 - Rejected: hand-rolled per-site fixes, in favor of migrating both remaining stragglers onto the ADR-176 canonical helper (see Alternatives) — → [§8](08-crosscutting-concepts.md) for the shared atomic-write pattern.
+
+<a id="adr-238"></a>
 
 ## ADR-238: `KanbanAndHermesDomainTrees` Gives the Eight Kanban/Hermes Trees Their Own Smoke and Condition-Description Coverage, Closing a Guard Gap `AllDomainTrees()` Never Covered (NotebookLM Research)
 
@@ -4281,6 +4808,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 
 ---
 
+<a id="adr-239"></a>
+
 ## ADR-239: `CompanyOrchestrator.RunSprint` Snapshots State Under a Short Lock Instead of Holding It Across Three 120s `runTree` Calls, Amending ADR-236's Whole-Body Locking (NotebookLM Research)
 
 **Context (2026-07-30):** ADR-236 gave `CompanyState` its own mutex specifically to stop concurrent readers from racing on its fields, and as part of that decision had `CompanyOrchestrator.RunSprint` take `state.Lock()` for its entire body via `defer state.Unlock()`. But `RunSprint`'s body runs three sequential `o.runTree()` calls (`EngineerTree`, `MarketingTree`, `SalesTree`), each carrying a 120s timeout and, in production, a real LLM round-trip — up to ~6 minutes worst case per sprint. Because `cmd/bt-dashboard/main.go`'s `handleDefaultCompany` (fetched by `app.js:18` on every dashboard page load) and `CompanyOrchestrator.Summary` both take that same `state.Lock()` before reading, ADR-236's whole-body locking on `RunSprint` reintroduced the exact blocking failure mode it was meant to close: any GET to `/api/company/default` or `Summary()` call now stalls for the full sprint duration whenever `handleWorkflowRunFullPipeline` is running `wf.RunFullPipeline` synchronously in a request goroutine.
@@ -4303,6 +4832,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 
 ---
 
+<a id="adr-240"></a>
+
 ## ADR-240: Three GOAP-Fronted Domain Trees Gain a `SetupGoapTools` Action, Making Their Previously-Unreachable `GOAP_Root` Branch Actually Reachable (NotebookLM Research)
 
 **Context (2026-07-30):** `GoapPlanningTree`, `GoapResearchTree`, and `GoapDevopsTree` (`internal/domains/trees.go`) each front their `StrategyRouter` selector with `*evolution.GOAPPlanningTree()`/`GOAPResearchTree()`/`GOAPDevOpsTree()` — the shared `GOAP_Root` shape whose first child is the `HasGoapGoal` condition (`internal/engine/goap_nodes.go`), gating the real GOAP A* planner. `HasGoapGoal` only returns true once the blackboard's `ChainState` already holds a `goap_goals` entry, which is seeded exclusively by the `SetupGoapTools` action — the same action `internal/evolution/merged.go`'s `GoapPlanningPath` calls in its `PreGate` before routing into that identical `GOAP_Root` shape. But the three `domains` package trees only called `SetupUniversalTools`/`SetupResearchTools`/`SetupDevTools` beforehand, none of which touch `goap_goals`. `HasGoapGoal` could therefore never be true for any of the three trees, making the "real GOAP A* planner" branch each tree's own `Description` advertises as tried first permanently unreachable dead code — a `Condition` node with a description and a registered engine implementation, but zero possible runtime coverage. The existing `TestGoapPlanningRunsRealGOAPPlannerFirst`/`TestGoapResearchRunsRealGOAPPlannerFirst`/`TestGoapDevopsRunsRealGOAPPlannerFirst` tests only asserted the branch was *present* in the tree shape, not that it was ever *reachable*.
@@ -4324,6 +4855,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 
 ---
 
+<a id="adr-241"></a>
+
 ## ADR-241: Every Keyword-Matching Condition in `conditions_domain.go` Routes Through One `strings.ToLower(bb.Task)`, Closing an Inconsistent Case-Sensitivity Gap the File's Own Existing Conditions Already Disagreed On (NotebookLM Research)
 
 **Context (2026-07-30):** `internal/engine/conditions_domain.go` registers roughly fifty keyword-matching `Condition`s, nearly all shaped as `util.ContainsAnyStr(bb.Task, "keyword", ...)`. A handful — `IsStudioTask`, `IsResearchTask`, `IsKanbanTask`, `IsSecurityCheck`, `IsRestartRequest`, and `IsResearchQuery` — already lowercased `bb.Task` first (`util.ContainsAnyStr(strings.ToLower(bb.Task), ...)`), but the rest matched `bb.Task` raw, so a task phrased in upper case or mixed case (e.g. a caller that title-cases or shouts a task string) silently failed to route through most of the file's own conditions while still matching the few that already lowercased. The inconsistency was invisible in existing tests because every prior `TestConditionsDomain_TaskKeywordConditions` case happened to use already-lower-case task text.
@@ -4338,6 +4871,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - No alternatives considered beyond the uniform lowercase-once rewrite: the six existing conditions already fixed on this exact pattern, so the only real choice was applying it everywhere versus leaving the inconsistency in place.
 
 ---
+
+<a id="adr-242"></a>
 
 ## ADR-242: `BuildCircuitBreaker` Stops Clearing Its Failure Streak and Open State on a Merely-Running Child Tick, Matching `circuitBreakerCmd`'s Already-Correct Semantics (Q1 Correctness)
 
@@ -4354,6 +4889,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 
 ---
 
+<a id="adr-243"></a>
+
 ## ADR-243: `ExpectedDomainIDs` Gains a Guaranteed Sort, Closing a Non-Reproducible-Output Gap Its First Direct Test Coverage Surfaced (Q1 Correctness)
 
 **Context (2026-07-30):** `domains.ExpectedDomainIDs` (`internal/domains/trees.go`) builds its `[]string` result with a plain `for name := range registry` loop over a `map[string]*evolution.SerializableNode` — Go randomizes map iteration order per process, so the returned slice was a different permutation on every run. `cmd/bt-dashboard/main_test.go`'s existing caller happened to sort the result before comparing, masking the gap, and `ExpectedDomainIDs` itself had zero direct test coverage before this change. This slice ultimately feeds `knowledge.KnowledgeGraph.ExpectedDomains`, the seam driving the `bt_kg_coverage_gaps` gauge and `CoverageGaps` reporting (→ §8.4) — any future consumer that logs, diffs, or exposes it directly (rather than re-sorting defensively like the one existing caller) would see non-reproducible output across runs.
@@ -4368,6 +4905,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - Rejected: leaving the non-deterministic order in place on the grounds that the one existing caller already compensates — rejected because that compensation is caller-side discipline, not a guarantee, and the coverage-gap reporting seam this function feeds (→ §8.4) is exactly the kind of surface where silent non-determinism is worth closing at the source.
 
 ---
+
+<a id="adr-244"></a>
 
 ## ADR-244: `IsCritical`/`IsHealthAlert` Gain Realistic Keyword Coverage and `IsTAPath`'s Ambiguous Short Keywords Become Word-Bounded, Closing Two More StrategyRouter Branch-Reachability Gaps `AlertRouterSuite`/`TradingSignalSuite` Already Declared (NotebookLM Research)
 
@@ -4390,6 +4929,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - Cross-reference: → ADR-230 (the same PreGate/branch-condition keyword-coverage gap shape, in `DevOpsCITree`/`TradingSignalTree`'s `IsCIBuildTask`/`IsTradingTask`); → ADR-014 (mandatory per-node descriptions, the sibling coverage guard this complements from the condition-reachability angle).
 
 ---
+
+<a id="adr-245"></a>
 
 ## ADR-245: A Package-Level Injectable Random Source (`SetEvolutionRand`) Replaces the No-Op `rand.Seed` Across `internal/evolution`'s Shared Breeding Path (Q1 Correctness / Q2 Evolvability)
 
@@ -4414,6 +4955,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - Cross-reference: → §8.5 (Evolution Pipeline, the shared breeding path this seam sits under); → ADR-027 (`Factory.SetSeed`, the same seedable-draw idea applied earlier to knowledge-graph parent selection); → ADR-009 (the "deterministic, LLM-free" tool family whose determinism claim this narrows to what is actually replayable); → §11 (the residual unseeded call sites above belong to the technical-debt register, not here).
 
 ---
+
+<a id="adr-246"></a>
 
 ## ADR-246: The Gardener's Live Cycle Drives Three More Evolution Algorithms — Island-Model Exploration, MAP-Elites Reseeding, and Local-Search Refinement — Each Adopted Only After Re-Scoring Against the Target Tree's Own Records (Q2 Evolvability)
 
@@ -4448,6 +4991,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - Cross-reference: → ADR-005 (the Stockfish-adapted evaluator this complements rather than replaces); → ADR-121 (the memetic/local-search and shared-envelope groundwork this reuses); → ADR-043, ADR-110 (the durable MAP-Elites archive whose elites this finally consumes); → ADR-015, ADR-033, ADR-040 (island model and its bounded durable archive); → ADR-031, ADR-102 (crisis detection and the emergency mutation budget this branches off); → ADR-093, ADR-115 (the quality gate and multi-revision rollback the reseed keeps authoritative); → ADR-245 (the injectable random source that would make the island pass replayable if the gardener installed one); → §8.5 (Evolution Pipeline).
 
 ---
+
+<a id="adr-247"></a>
 
 ## ADR-247: `MCTSMutator` Becomes a Second Structural-Mutation Generator Merged Into One Scored Competition With `evaluator.OrderMutations`, Chosen Per Tree by a Combined Specialist/Selector Affinity (Q2 Evolvability, Milestone 4/5)
 
@@ -4485,6 +5030,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 
 ---
 
+<a id="adr-248"></a>
+
 ## ADR-248: The Gardener's `ValidationGate` Accepts on Pareto Non-Domination Against the Threshold Reference Point Instead of Per-Threshold Scalar Checks, Bounded by a `MaxObjectiveRegression` Trade-Off Band, and NSGA-II's Duplicated Sort/Crowding Implementations Collapse Into One Canonical Pair (Q2 Evolvability, Milestone 5/5)
 
 **Context (2026-08-01):** `ValidationGate` (`internal/gardener/validation_gate.go`) is the last thing standing between an evolved tree and disk, and it decided with two independent scalar comparisons: reject if `evidence.SuccessRate() < MinSuccessRate`, then reject if `FailedCalls > 0 && evidence.RecoveryRate() < MinRecoveryRate`. Testing each objective against its own floor in isolation makes *every* objective a hard constraint, so the gate could not express the one judgement multi-objective evolution exists to make: a tree that gives up 0.05 of success rate and buys 0.70 of recovery rate is strictly better on balance, and the old gate refused it on the success-rate axis alone before ever looking at the second. This is doubly odd in a codebase whose evolution layer has carried Pareto dominance (`MultiFitness.Dominates`, `pareto.go` → ADR-038) and a full NSGA-II implementation (`multi_objective.go` → ADR-051, ADR-091) since early on — the machinery to rank a candidate against a reference point existed, it just had no consumer outside a GA population, because its only entry points assumed you were evolving one. Separately, that NSGA-II machinery existed *twice*: `NSGAIIPopulation.fastNonDominatedSort`/`assignCrowdingDistance` (read by `Evaluate`) and `NSGAIISorter.fastNonDominatedSort`/`assignCrowdingDistance` (read by `Evolve`'s offspring-replacement step) carried byte-for-byte copies of the same O(MN²) loop and the same crowding arithmetic, differing only in whether results landed in a slice or a map — so a correctness fix could land on one caller's path and silently miss the other's, leaving `Evaluate`'s fronts and `Evolve`'s replacement fronts able to disagree about the same population.
@@ -4519,6 +5066,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 
 ---
 
+<a id="adr-249"></a>
+
 ## ADR-249: `refineTreeParameters` Moves Above `evolveTreeV2`'s `ValidationGate` Block So Local-Search Deltas Are Gate-Covered, Amending ADR-246's Flagged Ungated-Adoption Path (Q1 Correctness, NotebookLM Research)
 
 **Context (2026-08-01):** ADR-246 added the local-search parameter-tuning pass and recorded, in its own Consequences, that the pass "runs after the pipeline's `ValidationGate` block, gated by `QualityGate.Probe` only" — filed for the §11 technical-debt register. The consequence of that ordering was sharper than "not gated": `refineTreeParameters` mutates the live `tree` in place *and* a positive `localSearchDelta` independently forces the `Registry.SaveTree` at the bottom of `evolveTreeV2`. So on a cycle the gate **rejected** — tree restored from the pre-mutation snapshot, `applied` reset to 0, `eliteReseed` cleared, everything else reverted — the refinement still ran afterwards on the restored tree, still tuned its parameters, and still forced the save. A change the gate had just refused reached disk, and the cycle's own rollback was the thing that made room for it.
@@ -4548,6 +5097,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - Cross-reference: → ADR-246 (the pass this reorders and the debt entry this amends); → ADR-248 (the gate's own acceptance rule, replaced in the same milestone program); → ADR-093, ADR-115 (the pre-mutation snapshot and multi-revision rollback the restore path uses); → ADR-121 (the memetic/local-search groundwork); → §5.1 (`internal/gardener`), §8.5 (Evolution Pipeline), §11 (the residual `adoptIslandWinner` gap).
 
 ---
+
+<a id="adr-250"></a>
 
 ## ADR-250: Every `cond()`-Built Condition Node Carries a Machine-Readable `EdgeGuard` Typed Edge, Extending ADR-014's Prose-Only Condition Coverage to the Field Production Code Actually Evaluates
 
@@ -4580,6 +5131,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - Cross-reference: → ADR-014 (mandatory descriptions, whose prose-only coverage this completes); → ADR-133 (the GOAP planner whose converted trees `goapNodeGuards` covers); → ADR-238 (the Kanban/Hermes non-registry trees the second subtest now walks); → §5.2 (Behavior Tree Engine — `typed_edges.go`, `utility_selector.go`, `verifier.go`, the three readers of this field); → §5.6 (`internal/domains`, the curated tree corpus).
 
 ---
+
+<a id="adr-251"></a>
 
 ## ADR-251: `SmokeTestableDomainTrees()` Becomes the Single Enumeration of Coverable Domain Trees, and `NonRegistryDescriptions`/`DescriptionFor` plus `SuiteForTreeNamed` Turn Three Hand-Maintained Lists Into Derived, Build-Enforced Invariants
 
@@ -4617,6 +5170,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 
 ---
 
+<a id="adr-252"></a>
+
 ## ADR-252: `BuildMemSelector` Clamps a Negative Persisted Cursor to a Fresh Pass Instead of Indexing `children[-1]`, Adopting the Range Check `BuildBanditSelector` Already Applies to Its Own Resume Cursor (Q1 Correctness)
 
 **Context (2026-08-01):** `BuildMemSelector` (`internal/engine/mem_selector.go`) is a Selector with memory: while a child is RUNNING — or earlier children have already FAILED this pass — a re-tick resumes at a remembered index rather than re-running retired children. That index lives in `Blackboard.ChainState` under `"memsel/" + node.Name` precisely so it survives blackboard persistence, and it is read back through `chainStateInt` (`internal/engine/chain_state_util.go`), whose `int`/`int64`/`float64` switch exists because ADR-003 persists the blackboard as JSON and a round-tripped integer comes back as a `float64` (ADR-132). A value read back out of that map is therefore untrusted input on two counts: it has been through a file, and `ChainState` is a schemaless `map[string]any` that dozens of nodes and out-of-tree callers also write — `cmd/bt-docgen/main.go` copies an entire GOAP world-state map into it key by key (`main.go:240`) on top of its own `setChainState` helper, and `cmd/bt-agent/persona_tools.go`'s `injectPersonaContextLocked` resets and repopulates it. The node nonetheless indexed straight from the stored value: `start, _ := chainStateInt(...)` followed by `for i := start; i < len(children); i++ { children[i].Run(ctx) }`, so a negative cursor evaluated `children[-1]` and panicked mid-tick. The sibling node in the same package had never had this hole — `BuildBanditSelector` gates its own resume on `ok && idx >= 0 && idx < len(children)` (`bandit_selector.go:318`) and falls through to normal selection when the guard fails — and neither had the one non-builder reader, `currentSuperpowersForEachTask` (`actions_superpowers_prod.go:39`), which returns "no current task" on `idx < 0 || idx >= len(run.Tasks)`. The range check existed in the package; it had simply not been applied to every reader.
@@ -4646,6 +5201,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - Cross-reference: → ADR-003, ADR-132 (the JSON persistence and scoped-blackboard decisions that make a `ChainState` cursor untrusted input and force `chainStateInt`'s `float64` tolerance); → ADR-155 (the ChainState nil-map-panic program, the precedent for hardening this map against panics and the reason a choke-point guard was weighed first); → [§8.1](08-crosscutting-concepts.md) (cross-tick cursors as untrusted input — the crosscutting statement of the rule and its four cursor keys); → [§10](10-quality.md) QS26 (the quality scenario); → [§11](11-risks-debt.md) R22 (the two unfixed builders and the `chainStateInt` consolidation).
 
 ---
+
+<a id="adr-253"></a>
 
 ## ADR-253: `adoptIslandWinner` Clears the Quality, Evidence and Validation Gates Before It Overwrites a Live Tree, Closing the Second Half of ADR-246's Ungated-Adoption Debt That ADR-249 Left Open (Q1 Correctness)
 
@@ -4681,6 +5238,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 
 ---
 
+<a id="adr-254"></a>
+
 ## ADR-254: The Plan-Resume Path Sets and Persists `run.Phase = implementation` Before Handing the Next ~90 Minutes to the Task Batch, Mirroring the `ExecuteSuperpowersTaskBatch` BT Action (NotebookLM Research)
 
 **Context (2026-08-02):** A superpowers run's phase is tracked on `SuperpowersRun.Phase` and durably surfaced only through `writeSuperpowersRunJSON`, which writes `<ArtifactDir>/run.json` (`internal/engine/superpowers_artifacts.go:70`). Every BT action on the scripted path keeps that bookkeeping: `GenerateDesignArtifact` sets `design` and persists, the plan action sets `plan`, `ExecuteSuperpowersTaskBatch` sets `SuperpowersPhaseImplementation` before calling `ExecuteSuperpowersTaskBatchRuntime` (`actions_superpowers_prod.go:417`), and `WriteSuperpowersFinishReport` sets `finish` and persists. The goap-fusion loop, however, does not run that action sequence when it resumes a carried-over plan: `runSuperpowersRuntimeFromExistingPlanAction` (`actions_superpowers_prod.go:1064`) reads the durable plan path, builds or reuses a run, creates a worktree, sweeps stale worktrees and orphaned branches, and calls `ExecuteSuperpowersTaskBatchRuntime` directly under a `superpowersRuntimeRunBudget` (90-minute) context. It set no phase and wrote no `run.json` first. Two things followed. The run advertised its *pre-batch* phase for the entire implementation window — and on a resumed cron tick that phase is `design`, not `plan`, because the run pointer lives in the in-process `ChainState` (`chainKeySuperpowersRun`, a `*SuperpowersRun`) and does not survive the process, so `currentSuperpowersRun` mints a fresh run whose initial `Phase` is `SuperpowersPhaseDesign`. And that freshly minted run had *no* `run.json` on disk at all: nothing in this function writes an artifact before the batch (`createSuperpowersWorktree` writes none), and the batch itself only persists after each task returns (`executeSuperpowersTaskBatch`, `superpowers_task_executor.go:274`), so the first write lands after task 1's full RED→GREEN Claude execution — tens of minutes in. The readers that consume those artifacts scan a directory of runs, not live process state: `recoverGoapFusionPendingPatchesInDir` (`actions_superpowers_prod.go:910`) and `superpowersBranchRunAbandoned` (`superpowers_worktree.go:322`) both open `<runsDir>/<id>/run.json`. A SIGKILL at the run budget — the event `superpowersRuntimeRunBudget` was raised from 45 to 90 minutes to reduce (ADR-179's mid-flight-kill program) — therefore left behind either no run record at all or one claiming a phase the run had long left.
@@ -4710,6 +5269,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - Cross-reference: → ADR-179 (the cycle-budget program that raised this batch's window to 90 minutes and gates each task's RED phase on the remaining budget — the SIGKILL scenario this makes diagnosable); → ADR-177 (the orphan-branch reaper that runs immediately above this write and reads the same run directory); → ADR-185 (`VerifyGoapFusionEvidence`, which stats `run.json` as landing evidence); → ADR-129 (`clearSuperpowersPlanState` and the durable plan carryover that makes a resumed run a fresh run); → [§6.4](06-runtime-view.md) (the goap-fusion loop's plan-resume path and its rate-limit backoff).
 
 ---
+
+<a id="adr-255"></a>
 
 ## ADR-255: A Third Description Map, `ResolverReachableDescriptions`, Gives `ResolveTreeID`-Only Trees a Describable Home Without Weakening the Orphan Guards on the Other Two, Extending ADR-014's Coverage to `superpowers_pipeline`
 
@@ -4743,6 +5304,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 
 ---
 
+<a id="adr-256"></a>
+
 ## ADR-256: `QualityGate.Probe`'s Composite Floor Becomes Absolute, Making `RefineGated`'s Gate Check Reachable Instead of an Unconditional Accept (Q1 Correctness)
 
 **Context (2026-08-02):** ADR-246 put `LocalSearcher.RefineGated` into the gardener's live cycle as the pass that recovers a tree whose remaining slack is purely numeric, and ADR-249 moved `refineTreeParameters` (`internal/gardener/evolve_v2.go:738`) above `evolveTreeV2`'s `ValidationGate` block so a refinement's delta is covered by the same deployment gate a structural mutation's is. `RefineGated`'s own contract is narrower and is stated on the function: keep the tuned tree only when it strictly beats `baseFitness` **and** the quality gate accepts the `baseFitness → tuned` pair — consulted through `QualityGate.Probe` rather than `Validate`/`ValidateFor`, so a speculative tuning the caller discards cannot burn the tree's consecutive-failure streak toward fail-closed. That AND was vacuous. `RefineGated` (`internal/evolution/local_search.go:115`) returns early when `ls.Search` reports `delta <= 0` and again when `tunedFitness <= baseFitness`, so every pair reaching `Probe` satisfies post > pre — and both of `Probe`'s refusal paths required post < pre: `GateRollback` needs `postComposite < preComposite*(1-MaxRegressionRate)`, and the floor branch read `postComposite < q.MinComposite && postComposite < preComposite`, having inherited `Validate`'s "improvements below the floor pass: weak trees must be allowed to climb out" escape hatch. Every gate consultation on this path therefore returned `GateAccepted`, and `refineTreeParameters` committed the tuned tree into the live tree (`*tree = *res.Tree`) with the quality gate contributing exactly nothing. What still stood above it is a different instrument reading different evidence: `gardener.ValidationGate` (`internal/gardener/validation_gate.go:47`, → ADR-248) scores *runtime SLO evidence*, is a no-op when `ValidationGateConfig.Enabled` is false, and passes unverified when `AllowUnverified` is set and no evidence exists — it never sees the composite structural fitness `MinComposite` is a floor on. So the one check that could have refused a tuning on health grounds was the one that could not fire.
@@ -4774,6 +5337,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - Cross-reference: → ADR-246 (the local-search refinement pass this gates); → ADR-249 (which moved that pass above `ValidationGate` and pinned its non-recording gate consultation); → ADR-253 (the sibling ungated-adoption fix on the island path, and the same "every writer of a live tree" rule); → ADR-093, ADR-115 (the quality gate, its per-tree streaks, and the fail-closed rollback the streak feeds); → ADR-248 (the `ValidationGate` this deliberately is not); → [§5.3](05-building-blocks.md) (`local_search.go` and `quality_gate.go` rows); → [§8.5](08-crosscutting-concepts.md) (the acceptance gauntlet and its writers).
 
 ---
+
+<a id="adr-257"></a>
 
 ## ADR-257: `AgentCircuitBreakerStore` Becomes the Single Implementation of `circuit_breakers.json` Persistence — `internal/a2a`'s Hand-Rolled Winner-Breaker Load/Save Is Deleted and the Read-Merge-Write Runs Under ADR-024's Sidecar flock (NotebookLM Research)
 
@@ -4809,6 +5374,8 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 
 ---
 
+<a id="adr-258"></a>
+
 ## ADR-258: `ResolverReachableDomainTrees()` Ships ADR-255's Work List as a Production Registry, and an AST Sweep of `tree_resolver.go` Makes Resolver-Reachable Coverage Fail Closed Instead of Fail Open
 
 **Context (2026-08-02):** ADR-251 made every coverage guard derive its work list from a production enumeration — `SmokeTestableDomainTrees()`, the union of `AllDomainTrees()` and `KanbanAndHermesDomainTrees()` — so that *registering* a tree is itself what subjects it to the smoke, condition-description and description checks. The third class of domain tree never got that property. Trees reachable only through `ResolveTreeID` (`resolveTreeIDWithResolver`, `internal/domains/tree_resolver.go:179`) were enumerated by `resolverReachableExtraDomainTrees()`, a hand-copied literal in the *test* file, and ADR-255 booked both halves of the resulting debt as open consequences: the production map `ResolverReachableDescriptions` had its contract defined by test code, and nothing enforced that the enumeration was exhaustive over the resolver's bare-ID branches. The second is the one that bites. `resolveTreeIDWithResolver` compares `id` against 19 string literals; adding a twentieth — one `if id == "x" { return XTree() }` line — hands operators a `switch_tree`-selectable tree with no smoke test, no Condition walk and no description, and no registry notices the omission, because "nobody registered it" is precisely the failure. An AST helper already read that file (`resolverReachableDomainsTreeIDs`, behind `TestEveryResolverReachableDomainTreeIsCovered` and `TestResolverIDAliasesHaveNoOrphans`), but it infers "is this a domains-package tree?" from the shape of the return statement, keeping only branches that return an *unqualified* constructor call. A branch returning a helper call, a variable or a qualified call drops out of the work list with no signal — fail-open by construction, and silent in exactly the case a newly added branch is most likely to hit.
@@ -4843,6 +5410,1079 @@ Milestone 2/3 adds the explicit release side: `ProgramStore.ReleaseClaim(program
 - ⚠️ "Resolver-reachable" now names two different sets depending on the guard: the registry (trees no other registry covers — the description-home question) and the 11-ID sweep (every tree an operator can select — the node-coverage question). The split is documented on `resolverReachableTreesByID`, but it is a second meaning for one adjective, and picking the wrong one silently over- or under-covers.
 - ⚠️ The registry has one entry, so disjointness, the orphan guard and the description floor are all being exercised at n=1. The invariants are stated and enforced, but their first real test is the second resolver-only tree.
 - Cross-reference: → ADR-255 (the third description map and the test-file work list this promotes to production, and the two consequences it closes); → ADR-251 (the derive-every-work-list-from-a-production-registry principle, now extended to the third class); → ADR-013 (the resolver branch that made `superpowers_pipeline` operator-selectable); → ADR-014 (the node-description mandate the new walk extends past the curated registry); → ADR-250 (the `cond()` helper and the `EdgeGuard` typed edges the new edge-metadata leg requires); → ADR-238 (the boundary that keeps non-registry trees out of `Descriptions`); → [§5.1](05-building-blocks.md) (the tree catalog, now four registries); → [§8.14](08-crosscutting-concepts.md) (fleet-wide node description coverage).
+
+---
+
+<a id="adr-259"></a>
+
+## ADR-259: Provider-Selectable Coding Delegation and Bounded Quota Failover
+
+**Status:** Accepted implementation, documented 2026-09-16 against source baseline `012612e1`.
+
+**Context:** Coding workflows need the installed account's usable provider
+and model. Coding CLI availability is independent of the LLM adapters used
+inside ordinary tree nodes. A long provider quota cooldown should not imply
+that a second provider is unavailable.
+
+**Decision:** Route coding/review requests through one provider seam.
+Select Claude or Codex explicitly; keep Claude as the source default.
+Codex's source-default model remains pinned, with `auto`/`default`/`none`
+omitting the model flag so the CLI's configuration applies. Preserve
+read-only versus isolated-workspace write policy across both adapters.
+With opt-in rate-limit failover, try at most one alternate provider for a
+recognized quota failure and persist independent cooldowns. Authentication,
+unsupported-model and cancellation errors do not activate quota failover.
+
+**Alternatives and rationale:** A fixed provider couples all work to one
+account's quota. Unbounded alternation can loop and consume quota without
+progress. Falling back on every error hides configuration/security failures.
+A single selector with bounded quota-only failover keeps error ownership
+and execution permissions explicit.
+
+**Consequences:** Operators must validate account/model compatibility and
+install both CLIs when enabling failover. A configured model pin is not
+proof of entitlement. A deferred/degraded result does not establish that
+implementation or landing succeeded. The current host's observed model
+selection is documented separately in [§7](07-deployment.md).
+
+**Evidence:** [Provider selector](../../internal/engine/superpowers_provider.go),
+[Codex model tests](../../internal/engine/superpowers_codex_runner_test.go),
+[failover contracts](../../internal/engine/superpowers_failover_contract_test.go),
+[operator runbook](../coding-delegation.md). See QS29–QS30 and R27.
+
+---
+
+<a id="adr-260"></a>
+
+## ADR-260: Fail-Closed Dashboard Access with Explicit Browser Sessions
+
+**Status:** Accepted implementation, documented 2026-09-16 against source baseline `012612e1`.
+
+**Context:** Protected APIs must reject unauthenticated requests, while the
+browser needs a usable login/logout flow and predictable handling of expiry.
+An empty configured key must not accidentally grant access. Shared in-memory
+session state must not be mutated outside its synchronization boundary.
+
+**Decision:** Protect operator routes using a configured API key or a valid
+server-side session. Browser login validates that key and sets an HttpOnly
+session cookie; logout/expiry removes authenticated state from the UI.
+Mutating cookie-authenticated requests follow the configured CSRF policy.
+Session validation returns a detached snapshot; expired entries are
+reclaimed before capacity checks. Bound rate-limit state and admit new
+clients by evicting a cold bucket at capacity. Public diagnostic routes
+remain explicitly distinct in the route wiring.
+
+**Alternatives and rationale:** Requiring manual browser header injection
+does not provide an operable browser flow. Storing the API key in browser
+persistent storage increases exposure. Treating an empty key as open access
+violates the protected-route contract. A full identity service would solve a
+broader problem than this operator-console model.
+
+**Consequences:** Sessions are process-local and disappear on restart.
+Cookie transport security depends on TLS configuration/termination; the
+shared key/session is not a per-person authorization model. Persona IDs
+remain caller-attributed namespaces. Public routes and non-loopback
+listeners require explicit deployment review (R25/R29).
+
+**Evidence:** [Route/session wiring](../../cmd/bt-dashboard/main.go),
+[HTTP security tests](../../cmd/bt-dashboard/security_test.go),
+[session regression tests](../../internal/security/session_review_test.go),
+[browser test](../../tests/e2e/auth.test.js).
+Current protocol details and configured limits live in
+[§8.18](08-crosscutting-concepts.md#818-security-and-trust-boundaries), QS27–QS28.
+
+---
+
+<a id="adr-261"></a>
+
+## ADR-261: Codex-Only Coding Delegation by Default
+
+**Status:** Accepted 2026-10-01; supersedes ADR-259's provider default for the
+current platform/deployment.
+
+**Context:** The operator requires BT coding agents and processes to use only
+Codex. Selecting Codex as primary is insufficient while quota failover can
+launch Claude, and older service EnvironmentFiles can override drop-in values.
+
+**Decision:** Default provider selection to Codex and enable a fail-closed
+Codex-only policy. Unset/malformed policy values keep that policy enabled.
+Reject Claude at selection and execution, including injected provider choices
+and direct legacy adapters. Disable cross-provider failover while the policy
+is enabled. Keep historical interfaces and fake-adapter regression coverage;
+legacy compatibility requires explicit `BT_SUPERPOWERS_CODEX_ONLY=false`.
+Set provider Codex, policy true, failover false and model auto in the final BT
+unit EnvironmentFile and shared Hermes launch environment.
+
+**Alternatives and rationale:** A primary-only environment setting leaves a
+quota escape to Claude. Removing historical interfaces would cause unrelated
+API churn without strengthening the execution guard. A policy guard covers
+all retained paths while preserving explicit compatibility tests.
+
+**Consequences:** Codex quota/model/auth failures remain visible; this
+deployment cannot recover by launching Claude. Service changes require a
+restart to affect running processes. Model availability and successful
+verified code delivery remain operational acceptance, not configuration proof.
+
+**Evidence:** [Provider policy](../../internal/engine/superpowers_provider.go),
+[execution and quota regressions](../../internal/engine/codex_only_test.go),
+[deployment template](../../deploy/systemd/codex-only.conf) and
+[operator runbook](../coding-delegation.md). QS29/QS36 and R27 retain the
+readiness distinction. Dated cleanup evidence is in the
+[plan](../plans/2026-09-30-arc42-cleanup.md).
+
+---
+
+<a id="adr-262"></a>
+
+## ADR-262: Publish Evolution State and Learning After Validated Commit
+
+**Status:** Accepted implementation, documented 2026-10-01.
+
+**Context:** Ordinary and deep-search adoption could leave an unsaved tree live
+and record successful experience before deployment validation or persistence.
+Deep search returned the first proposal of a combination while reporting the
+combination's fitness. Process-global random draws prevented MCTS proposal replay.
+
+**Decision:** Stage ordinary/optional/deep-search changes in detached trees.
+Validate whole-tree construction/expansion and bounded benchmark behavior,
+apply configured quality/meta/SLO gates and require configured predecessor
+snapshots. Publish live state and accepted experience only after tree persistence
+succeeds. Return and replay the complete ordered deep-search proposal, score the
+actual candidate, and key cached search scores by tree and reflection evidence.
+Use one shared scored proposal type across evaluator/evolution. Persist generator,
+score, reason and MCTS seed/budget/exploration/depth/warm-start settings with accepted
+experience. Seeded proposal generation owns its random stream; retrieval returns
+owned payload copies and experience lock waits are bounded to 30 seconds.
+
+**Alternatives and rationale:** In-memory restoration after a failed commit
+still exposes speculative state and cannot repair learning recorded too early.
+A first-proposal shortcut cannot justify multi-proposal fitness. A global RNG
+seam cannot isolate concurrent searches. Detached commit and explicit evidence
+address those boundaries without a new persistence backend.
+
+**Consequences:** Quick benchmarking remains bounded smoke evidence. Tree and
+experience files are separate commits; failed experience persistence is logged
+and does not undo a committed tree. Replay requires matching input tree, fitness
+evidence and evaluator; the complete production cycle also has optional passes
+and dependencies (R20/R24). Snapshots are optional when not configured and do not
+establish a consistent host backup (R26).
+
+**Evidence:** [Commit failure tests](../../internal/gardener/adoption_persistence_regression_test.go),
+[deep-search replay/cache tests](../../internal/evaluator/deep_search_replay_test.go),
+[seeded concurrent search and experience ownership tests](../../internal/evolution/proposal_replay_test.go),
+[whole-tree definition tests](../../internal/benchmark/candidate_validation_test.go).
+QS7/QS24 and the adoption matrix in §8.5 state the practical limits.
+
+---
+
+<a id="adr-263"></a>
+
+## ADR-263: Commit and Reconcile Approval Decisions Before Admission
+
+**Status:** Accepted implementation, documented 2026-10-01.
+
+**Context:** Failed task writes could remain visible in memory or resolve HITL
+before task persistence. Approval waits blocked inside legacy locks, and a
+shared blackboard request ID allowed one nested gate to consume another's
+approval. Cross-store audit failures could be acknowledged without recovery.
+
+**Decision:** Stage task changes and publish them only after bounded locked
+atomic replacement. HITL transactions reload authoritative records, apply
+changes to detached state and publish status/retention only after successful
+private-file replacement. Context-aware APIs bound in-process and sidecar lock
+waits by the caller's budget or a 30-second default. HTTP/MCP distinguish store
+failure from absence; the gate fails closed on unavailable approval storage.
+Structural sandbox runs simulate approval without reading/writing the operational
+store, consistently with simulated action effects. This does not prove real
+approval or side effects. Bind cached gate requests to node type/name/phase, task and agent; retain
+separate gate request/post-child state while nested work is pending.
+
+Task decisions commit a durable `approval_audit_pending` marker before audit
+synchronization. Report a `TaskDecisionPersistenceError` if synchronization or
+marker removal fails. `Approved`/`ClaimApproved` exclude marked tasks; a retry
+finishes reconciliation after restart without dispatching completed work twice.
+By-task audit decisions select the newest request, preserve matching terminal
+retries and reject conflicting or expired decisions. In-memory workflow
+variants report audit failures; HTTP reports failed durable mirrors as 503.
+
+**Alternatives and rationale:** Rolling back only memory loses the durable
+partial-commit evidence. Ignoring audit failure leaves a task dispatchable with
+an unresolved request. A database is outside the accepted file-based deployment;
+a recoverable marker makes this boundary explicit without claiming ACID.
+
+**Consequences:** Task snapshots remain single-owner complete replacements,
+not cross-process stale-snapshot merges. Workflow, task and HITL files remain
+separate commits. Legacy unmarked approved tasks are not automatically repaired.
+Gate identity uses configured node names/types/phases; callers must retain
+stable identities. Arbitrary filesystem I/O and unrelated legacy cancellation
+paths remain outside the lock-wait bound (R30). Provider auto-approval policy
+remains an explicit operator choice, not a universal human-click guarantee.
+
+**Evidence:** [Task persistence/reconciliation tests](../../internal/dashboard/task_persistence_regression_test.go),
+[HITL transaction/cancellation tests](../../internal/hitl/transaction_regression_test.go),
+[gate isolation/failure tests](../../internal/engine/hitl_persistence_regression_test.go),
+[HTTP partial-commit recovery](../../cmd/bt-dashboard/task_decision_outcome_test.go).
+QS7/QS20/QS35 and the cross-store limits in §8.4 remain qualified.
+
+---
+
+<a id="adr-264"></a>
+
+## ADR-264: Serialize Snapshot Revision Commit and Preserve Orphan Evidence
+
+**Status:** Accepted implementation, documented 2026-10-01.
+
+**Context:** Independent snapshot writers could read the same last revision and
+replace each other's rollback evidence. A tree-file commit followed by a failed
+index commit could leave an unindexed revision that the next writer overwrote.
+TreeStore metadata still used direct truncating writes rather than ADR-003's
+atomic replacement owner.
+
+**Decision:** Hold a per-tree index sidecar lock through authoritative index
+reload, unused revision allocation, private tree-file commit and private index
+commit. Bound allocation/lock waiting to 30 seconds or a shorter caller context.
+Require one filename component for tree identities, strictly increasing positive
+index revisions and finite supplied fitness; reject exhausted revision counters.
+Skip existing revision paths so interrupted/unindexed evidence is preserved.
+Read snapshot/tree/metadata files through configured-root helpers. TreeStore
+metadata uses the canonical private atomic JSON writer; snapshot parents retain
+0700 permissions through the shared parent helper.
+
+**Alternatives and rationale:** Atomic replacement alone protects file integrity
+but cannot reserve a shared revision number. Deleting or reusing an unindexed
+file destroys possible recovery evidence. Committing the index before the tree
+can leave a recorded revision without its payload. A sidecar transaction and
+preserved orphans respect the existing file-based deployment without a database.
+
+**Consequences:** Tree and index remain separate filesystem commits; cancellation
+or interruption after tree write may leave an orphan. List/restore-latest follows
+committed index entries; operators can inspect an unindexed revision separately.
+No power-loss durability or automatic orphan repair is claimed. Revisions continue
+to accumulate; retention policy and consistent production recovery remain R12/R26.
+Arbitrary filesystem I/O is outside the lock-wait bound (R30).
+
+**Evidence:** [Process contention, deadline, orphan and root regressions](../../internal/evolution/snapshot_transaction_regression_test.go),
+[metadata atomic/private/root tests](../../internal/evolution/tree_metadata_regression_test.go),
+and existing [snapshot recovery tests](../../internal/evolution/quality_gate_test.go).
+
+---
+
+<a id="adr-265"></a>
+
+## ADR-265: Configure State Owners Before Runtime Initialization
+
+**Status:** Accepted implementation, documented 2026-10-01.
+
+**Context:** Config.ResolvePaths understood loaded definition/history/log settings,
+but process state helpers and logging only saw the environment. Dashboard task
+state opened during package initialization, before JSON/.env configuration was
+loaded. Shared daemon/MCP reflection owners also retained hardcoded paths, and
+the gardener could read SLO evidence from a different root than the scheduler.
+
+**Decision:** Validate loaded configuration before opening runtime owners in
+bt-agent, bt-dashboard, bt-gardener, bt-evaluator and bt-langagent, and before
+bt-agent-cli/bt-assistant open their registries. Publish an
+immutable value copy of configured definition/history/log paths through lower-
+layer util helpers; explicit environment overrides retain precedence. Keep
+configuration resolution pure: loading or resolving another Config does not
+redirect active stores. Initialize dashboard task state after path publication.
+Definition directories are explicit independent paths, not reconstructed by
+assuming their basename is `agents`. Shared reflection/tree/block owners use
+loaded reflection configuration with the legacy independent default. Gardener
+SLO evidence uses the shared platform helper. Pin generated-tree lookup to the
+startup reflection root; configuration-file edits/removal cannot redirect it.
+Skill factories share that same explicit reflection owner. Later runner
+construction uses installed definition/history/reflection owners even if the
+configuration file has changed or disappeared. Validate default-home prerequisites
+before publishing paths; an absent user home cannot create cwd-relative state.
+The standalone runner enforces the same prerequisite before opening stores.
+Required agent
+history initialization fails startup explicitly rather than disabling recording.
+Agent/dashboard/gardener version
+fast paths precede configuration, logging and state initialization.
+
+**Alternatives and rationale:** Reloading configuration inside every path helper
+adds I/O and can redirect individual owners inconsistently. Publishing settings
+into process environment changes ambient configuration for unrelated consumers.
+A lower-layer immutable startup value supplies the existing helpers without
+introducing an engine dependency on higher-level configuration/agent packages.
+
+**Consequences:** Invalid configuration now stops these entrypoints before state
+initialization. Paths are startup configuration; hot reload does not migrate or
+reopen live stores. Separate history/log/definition/reflection overrides remain
+independent of BT_AGENT_HOME. The in-process NewRunDeps builder resolves its own
+loaded definition/history paths; its retained missing-config fallback is a
+separate compatibility behavior when no startup snapshot is installed.
+This does not establish universal path coverage
+for all optional tools, automatically relocate legacy data or qualify production
+recovery. New directories/files retain their owning store's permission contract.
+
+**Evidence:** [Loaded JSON/.env/environment owner tests](../../internal/config/runtime_paths_test.go),
+[value/override isolation tests](../../internal/util/paths_test.go),
+[runner state-owner/root-pinning tests](../../internal/agentexec/deps_test.go),
+[standalone missing-root test](../../internal/agentexec/missing_home_regression_test.go),
+[CLI startup tests](../../cmd/bt-agent-cli/runtime_paths_regression_test.go),
+[assistant owner tests](../../cmd/bt-assistant/runtime_paths_regression_test.go),
+[required-history failure test](../../cmd/bt-agent/history_path_regression_test.go),
+[language-agent reflection tests](../../cmd/bt-langagent/main_test.go),
+and [dashboard version isolation](../../cmd/bt-dashboard/version_state_regression_test.go).
+
+---
+
+<a id="adr-266"></a>
+
+## ADR-266: Context-Aware Dashboard Admission and Execution Ownership
+
+**Status:** Accepted implementation, documented 2026-10-01.
+
+**Context:** Both dashboard agent execution endpoints ignored worker rejection
+and waited unconditionally for a result while holding a limiter slot. Full-queue
+submission held a read lock needed by shutdown. The executor rooted its timeout
+in Background rather than the HTTP caller, and its Hermes fallback discarded
+command exit errors.
+
+**Decision:** Share a context-aware admission/result handoff across both routes.
+Include limiter/queue waiting in the executor budget; propagate the caller's
+context into tree/CLI execution. Report closed-pool rejection as 503 and canceled
+or expired waits as 408. Transfer reservation ownership to accepted work and
+release after cleanup, with a buffered result handoff and terminal panic recovery.
+Skip canceled queued work before execution. Wake blocked submitters before
+shutdown acquires the admission writer lock; drain all accepted callbacks.
+Keep legacy background wrappers for existing callers. Reuse the engine's process-
+group cancellation behavior through a lower-layer reliability helper for the
+Hermes fallback; preserve partial output and actual exit/context errors. Resolve
+Hermes through PATH before the installed fallback path.
+
+**Alternatives and rationale:** Releasing a slot when HTTP disconnects permits
+more executions than the configured bound if a node ignores cancellation.
+Waiting unconditionally traps rejected work forever. Closing the queue before
+excluding submitters risks send-on-close panics; closing the wakeup signal first
+unblocks backpressure while retaining safe admission accounting.
+
+**Consequences:** Cancellation remains cooperative for in-process actions. A
+canceled waiter can return before accepted work finishes; clients must inspect
+history before replaying side effects. A terminal healthy result retains its
+history even if cancellation arrived during synchronous work. Process-group
+cleanup does not cover descendants that detach into new sessions. No remote
+idempotency, universal shutdown deadline or production latency SLO is claimed
+(R30). The shared five-minute default is a budget, not a termination guarantee.
+
+**Evidence:** [Pool/limiter contention regressions](../../internal/reliability/admission_context_test.go),
+[caller deadline and fake CLI exit/child cancellation tests](../../internal/dashboard/executor_context_test.go),
+and [both-route rejection, cancellation, ownership, panic and enforced response tests](../../cmd/bt-dashboard/execution_admission_test.go).
+
+---
+
+<a id="adr-267"></a>
+
+## ADR-267: Terminal Distributed Execution Diagnostics
+
+**Status:** Accepted implementation, documented 2026-10-01.
+
+**Context:** AgentRouter tried another peer/local executor after completed work
+returned a history-write diagnostic. Remote 408/timeouts, lost responses and
+malformed results also caused failover, though the first peer might have already
+performed the side effect. The wire result lost typed persistence errors, and
+local fallback formatting could erase terminal error identity before scheduler
+retry. Workflow deadline handling could overwrite healthy completed outcomes.
+
+**Decision:** Preserve completed-operation persistence diagnostics and introduce
+ExecutionUncertainError for dispatched remote calls whose result cannot be
+established. Both are terminal to router, legacy retry, RetryPolicy and workflow
+retry/skip/parallel control. Return terminal local fallback errors directly.
+Carry `error_kind` with raw outcome/output/quality on HTTP results and reconstruct
+the diagnostic at the remote consumer. Joined uncertainty takes precedence over
+completed-branch persistence for disposition and health classification. Healthy
+canonical terminal results retain their outcome when a step deadline races.
+
+Do not follow execution POST redirects. Treat transport/response read errors,
+unacknowledged non-200 responses, malformed/missing required fields, wrong agent,
+wrong explicit task and invalid error-kind/detail as uncertain. An empty requested
+task keeps the dashboard's configured-default semantics. Only a trusted peer's
+`X-BT-Execution-Admitted: false` rejection permits failover; closed-pool and
+breaker rejection emit this marker before work admission. A 503 alone is not
+proof of rejection. Health-check failures remain pre-execution fallback evidence.
+
+**Alternatives and rationale:** Guessing retry safety from timeout/status/error
+text can duplicate completed side effects. Treating all rejection as uncertain
+would also disable safe fallback after known non-admission. Explicit disposition
+and admission evidence preserve file-based architecture and existing routing
+without inventing a distributed transaction or database.
+
+**Consequences:** Availability may be lower when an older peer/proxy cannot
+establish non-admission, including failures that happened before bytes reached
+that peer. Successful legacy result shapes remain readable; older peers without
+error_kind cannot reconstruct typed record diagnostics. Task-default lookup and
+full request provenance still lack a durable correlation/idempotency ledger.
+Unknown outcomes require operator reconciliation of run evidence before replay;
+this does not implement exactly-once execution, automatic reconciliation or
+bounded termination of uncooperative work. Operator trust of peer/proxy responses
+remains the deployment boundary (R29/R30). Uncertain call failures may be recorded
+for availability diagnostics; they do not prove the underlying side effect failed.
+
+**Evidence:** [Router/remote/retry/redirect and malformed-result regressions](../../internal/reliability/execution_terminal_regression_test.go),
+[workflow retry/parallel/deadline regressions](../../internal/dashboard/execution_terminal_workflow_test.go),
+and [actual HTTP handler history-failure round trip](../../cmd/bt-dashboard/execution_terminal_http_test.go).
+
+<a id="adr-268"></a>
+
+## ADR-268: A2A Execution Ownership and Tree Replay Stops
+
+**Status:** Accepted implementation, documented 2026-10-01.
+
+**Context:** A local SDK endpoint performed a fixture operation then returned
+503. SendTask executed the operation three times. Message IDs do not deduplicate
+new SDK tasks. Server history errors were ignored, active task responses could
+be treated as new execution failures, and the auction wrapper discarded its
+caller context. Integer BT statuses erased typed terminal diagnostics before
+Retry/Selector and scheduler policy could prevent replay.
+
+**Decision:** Bound card lookup, SendMessage and GetTask by one caller-derived
+budget. Retry SendMessage only after explicit same-origin rejection before
+admission. Ambiguous transport or malformed response becomes terminal
+ExecutionUncertainError. Poll submitted/working tasks by their existing ID,
+checking task/context binding. A polling deadline stops the client, not the
+SDK owner. Keep SDK asynchronous ownership independent of HTTP completion;
+explicit CancelTask cancels cooperative actions.
+
+Preserve actual task state and received evidence with optional server-owned
+`bt_execution` status metadata. Completed history failures retain artifact text
+and typed persistence diagnostics. Known failed/canceled history errors remain
+visible without implying healthy completion. Auction keeps award/output/error;
+terminal uncertainty/persistence never permits retry or fallback. A failed task
+aborted by a completed child's persistence failure is still a failed winner.
+Install the context-aware auction hook through agentexec; keep the legacy hook.
+
+Share a synchronized execution stop across branch blackboards. Built node
+wrappers block subsequent node admission, including retries/selector fallback;
+RunTask stops reticks and RunOnce returns the typed diagnostic. A stopped
+surrounding tree is aborted/uncertain, preserving child evidence. History joins
+quality reasons instead of overwriting execution diagnostics.
+
+**Alternatives and rationale:** Retrying transient HTTP status blindly can
+repeat side effects. Making the SDK task context follow each HTTP request would
+break supported asynchronous tasks. Treating a child persistence failure as
+whole-workflow success hides skipped steps. Explicit ownership/disposition
+preserves the current SDK and file-based design without inventing a database.
+
+**Consequences:** Missing admission evidence sacrifices availability for replay
+safety. Already admitted parallel work and uncooperative actions may continue.
+SDK task storage is process-local; restart can lose task/status evidence. Known
+ordinary failure policies remain distinct from completed/unknown stops; this
+change does not establish durable idempotency, exactly-once execution, tenant
+identity or automatic reconciliation. R29/R30 remain open.
+
+**Evidence:** [A2A SDK/transport/history/poll/cancel regressions](../../internal/a2a/execution_terminal_test.go),
+[tree retry/selector/context/branch-stop tests](../../internal/engine/execution_stop_test.go),
+and [RunOnce outer-retry/history/quality tests](../../internal/agent/execution_terminal_delegation_test.go).
+
+<a id="adr-269"></a>
+
+## ADR-269: Known Execution Stops and Parallel Disposition Evidence
+
+**Status:** Accepted implementation, documented 2026-10-01.
+
+**Context:** A real local SDK fixture returned input-required with “network
+timeout” in its status message. The integer tree interface flattened the known
+state into a generic failure; RunOnce and an outer retry dispatched it three
+times. Completed/unknown diagnostics already stopped replay (ADR-268), but
+known failed/paused tasks needed equally explicit ownership evidence. In
+parallel execution, a wait could hide an admitted sibling's ordinary failure
+or panic. Naive correction also misclassified nested success and normal skips.
+
+**Decision:** Add `ExecutionStoppedError` with canonical known non-completed
+outcome in the lower reliability owner. Preserve it through A2A status metadata,
+auction, engine shared stop, RunOnce, router, remote transport, workflow and
+scheduler policy. Validate wire outcome/state consistency, including empty
+error-kind extensions; contradictions become terminal uncertainty. Retain
+older-peer state-enum compatibility and completed-child persistence evidence.
+
+Known waits are deferred and keep availability breakers healthy without
+claiming completed delivery. Preserve their diagnostic in history/completion
+events and stop automatic replay. Failed/aborted admitted siblings outrank
+waits, and uncertainty wins all known dispositions. Parallel trees retain
+branch admission and actual return evidence before shared-stop conversion;
+workflow groups include ordinary failed/panicked siblings when any typed
+terminal branch exists. Blocked nodes, successful nested branches and skipped
+conditions do not become invented failures. Ordinary-only failure policies
+remain unchanged. The agent healthy-outcome facade delegates to the lower
+helper, preserving the engine injection/import boundary.
+
+**Alternatives:** Parsing human-readable status text loses task ownership and
+can retry a settled task. Treating every wait as success claims delivery that
+has not happened. Treating every integer -1/nonhealthy outcome as a fault
+misclassifies blocked nodes and conditional skips. Making every ordinary error
+terminal would silently remove unrelated retry behavior without proof.
+
+**Consequences:** Known stop evidence sacrifices automatic re-execution for
+explicit owner/operator decisions. Completed-child persistence does not make
+an aborted surrounding workflow healthy. No durable task identity, restart-safe
+resumption, exactly-once execution, hard cancellation or new database is added.
+Untyped local approval/workflow paths and fleet reconciliation remain R30 work.
+Actual providers and production services are not exercised by fixture evidence.
+
+**Evidence:** [Real SDK-to-RunOnce stopped-state tests](../../internal/agent/a2a_stopped_runner_test.go),
+[A2A metadata/transport tests](../../internal/a2a/execution_terminal_test.go),
+[admitted/blocked/composite parallel tests](../../internal/engine/execution_stop_test.go),
+[workflow failure/panic/skip tests](../../internal/dashboard/execution_stopped_workflow_test.go),
+[remote/router/retry tests](../../internal/reliability/execution_terminal_regression_test.go),
+[SLO scheduler policy tests](../../cmd/bt-agent/scheduler_retry_test.go), and
+[completion-event diagnostics](../../internal/agent/scheduler_stopped_test.go), and
+[actual dashboard/remote handler round trips](../../cmd/bt-dashboard/execution_terminal_http_test.go).
+
+<a id="adr-270"></a>
+
+## ADR-270: Shared Workflow Consent and Completed-Prefix Stops
+
+**Status:** Accepted implementation, documented 2026-10-01.
+
+**Context:** An intentional fixture showed an unconfigured approval returning
+pending while its following agent ran and the pipeline reported success.
+Rejected decisions could be skipped or requested again. Loops ran only their
+first declared body step, the declared subworkflow kind was unimplemented,
+and container results lost child approval IDs. Ordinary parallel failure could
+be reported as whole-workflow success. Retrying a partially completed container
+or whole workflow can also replay already completed child effects.
+
+**Decision:** Use one sequential control owner for top-level, complete loop and
+subworkflow bodies. Normalize known raw agent waits and every non-approved
+approval result to typed stops. Preserve request/task IDs and stronger terminal
+diagnostics from approval hooks. Approval creation, polling and nested children
+inherit the shorter caller/container/policy deadline. An on_failure skip/retry
+cannot bypass a gate or request a fresh decision.
+
+Retain nested child results in every container. Completed healthy child work
+followed by an ordinary unsuccessful outcome creates a typed partial stop,
+preventing automatic container/outer replay. Eligible fresh single-step retries,
+explicit ordinary skips and normal condition skips retain their meanings.
+Eligible retries use the original input/prior-state snapshot rather than the
+failed attempt output, preserving the logical task. Already admitted parallel work may still finish; its failure/uncertainty keeps
+precedence over waiting (ADR-269).
+
+The HTTP adapter exposes running/waiting/complete/failed and optional diagnostic
+kind. A nil callback error does not make a failed result complete. The browser
+renders nested approval IDs and diagnostics as escaped text, and stops polling
+a settled waiting invocation. OpenAPI documents the status and nested evidence.
+
+**Alternatives:** Returning nil for approval pauses permits downstream work.
+Independent container implementations drift on failure, consent and deadline
+policy. Dropping child evidence makes approval ownership inaccessible. Retrying
+a whole partially completed group sacrifices the completed-work contract.
+Reporting every typed wait as failed loses its required-input meaning.
+
+**Consequences:** Rejection/escalation and completed-prefix stops now require an
+explicit new continuation decision. No rollback, saved execution cursor, durable
+pipeline status, restart-safe resumption or cross-store transaction is added.
+An unconfigured waiter reports intent/task ID without claiming a persisted HITL
+request. Auto-approval remains the configured HITL policy. Unproven side effects
+inside ordinary failing actions, metadata persistence, durable request identity
+and operator reconciliation remain audit/operational work (R30).
+
+**Evidence:** [Workflow consent/container/prefix tests](../../internal/dashboard/workflow_control_regression_test.go),
+[HITL creation contention](../../internal/dashboard/approval_test.go),
+[actual pipeline HTTP schema/status round trips](../../cmd/bt-dashboard/pipeline_control_http_test.go),
+and [browser waiting/nested-ID/escaping tests](../../tests/unit/workflows.test.js).
+
+<a id="adr-271"></a>
+
+## ADR-271: Commit Blackboard State Before Workflow Acknowledgement
+
+**Status:** Accepted implementation, documented 2026-10-01.
+
+**Context:** A filesystem failure fixture proved workflow input and output
+blackboard writes were discarded while the workflow reported success. Manager
+mutations changed live entries and eviction/byte accounting before persistence
+succeeded, and in-process scope contention could outlive caller budgets.
+An actual HTTP fixture also exposed null step evidence violating the schema
+when input persistence failed before admission.
+
+**Decision:** Stage blackboard Set/Append/Delete mutations, including accounting
+and eviction, under one scope transaction. Persist the staged snapshot with
+atomic replacement before publishing its cache. Add SetWithContext and bound
+scope/sidecar lock admission by the shorter caller deadline or ten-second
+default; compatibility methods retain their signatures and use the default.
+Check cancellation before mutation/commit.
+
+Workflow input-write failure returns failure before invoking any agent. Agent
+output mirrors report failures while retaining the original output/outcome.
+Healthy completed work carries ExecutionPersistenceError; failed work retains
+its original error joined into a typed failure stop. Both prevent retry/skip
+and following work. Step-output and previous-output mirrors remain separate
+commits; do not roll back acknowledged first-mirror evidence. Empty step
+evidence serializes as an array, including pre-admission failure.
+
+**Alternatives:** Ignoring optional metadata failure gives a false durable
+acknowledgement. Retrying the agent can repeat completed effects. Publishing
+cache before replacement makes failed writes appear committed and can corrupt
+limit/eviction state. One coarse manager lock stalls unrelated scopes. A database
+or whole-workflow transaction would change the deployment and recovery model.
+
+**Consequences:** Every failed workflow write remains visible, and persistence
+repair is separate from execution replay. Staging copies one bounded scope per
+mutation. Caller budgets bound lock admission, not arbitrary filesystem I/O or
+power-loss durability. No all-mirror/cross-store transaction, durable workflow
+resume or provider execution qualification is added. Remaining fleet paths and
+operational recovery/cancellation remain explicit risks.
+
+**Evidence:** [Blackboard failed-write/cache/limit/contention tests](../../internal/blackboard/transaction_ack_test.go),
+[workflow metadata and deadline tests](../../internal/dashboard/workflow_metadata_regression_test.go),
+and [actual pipeline HTTP schema/failure tests](../../cmd/bt-dashboard/pipeline_control_http_test.go).
+
+<a id="adr-272"></a>
+
+## ADR-272: Rooted Pipeline Selection and Status-Specific Validation
+
+**Status:** Accepted implementation, documented 2026-10-01.
+
+**Context:** A local HTTP probe selected ../outside-evidence.yaml outside the
+configured workflows directory and executed it. Inventory reads followed
+escaping file symlinks. Enforced authentication tests also showed an
+undocumented 401 being validated against a success-array schema and replaced
+with 500; protected route definitions lacked consistent auth-error schemas.
+
+**Decision:** Accept catalog basenames with optional .yaml suffix; reject
+directories, absolute/traversal, backslash and NUL names before selection/run
+admission. Reuse the existing util.ReadPersistenceFile rooted reader in listing
+and execution. Relative file symlinks may resolve within the configured root;
+escaping/absolute file symlinks are unavailable. Operator directory relocation
+via configured-root symlinks remains supported. Omit invalid/unreadable inventory
+entries, distinguish missing-root empty lists from other directory failures
+(503), and return unavailable selected files as 404 without filesystem details.
+
+WithAuth adds standard 401/403 JSON error schemas unless already declared.
+Response validation uses exact status or an explicit default schema, never
+implicitly the first/success response. Preserve explicit auth contracts and
+make repeated WithAuth calls idempotent. Unknown statuses without a default
+remain unvalidated rather than receiving invented success-shape constraints. The
+OpenAPI discovery endpoint itself declares a JSON object with version, info and
+paths, so enforced validation can serve the generated specification. The
+summary category map does not require a second nested categories field; its
+actual map remains valid even with no registered category entries.
+
+**Alternatives:** Cleaning a joined path preserves traversal. Basename checks
+alone cannot stop symlink escapes. Duplicated path readers diverge from existing
+rooted persistence policy. Adding one inventory auth schema leaves the shared
+fallback bug in other routes. Validating every unknown error as a success can
+change the authenticated interface's actual status.
+
+**Consequences:** Rooted selection prevents executing/listing out-of-directory
+YAML through these endpoints. It does not authenticate persona namespaces or
+provide a sandbox against trusted operator mounts. Missing status schemas still
+need audit; no universal schema, retention, hard filesystem cancellation or
+durable pipeline-resume guarantee is added. No coding provider ran in fixtures.
+
+**Evidence:** [Actual authenticated pipeline path/inventory/schema tests](../../cmd/bt-dashboard/pipeline_path_regression_test.go),
+[shared auth/exact/default regressions](../../internal/api/auth_response_regression_test.go),
+[real OpenAPI discovery handler test](../../cmd/bt-dashboard/openapi_schema_regression_test.go),
+and [status matching tests](../../internal/api/response_validator_test.go).
+
+<a id="adr-273"></a>
+
+## ADR-273: Exact Tree Inspection and Safe Presentation
+
+**Status:** Accepted implementation, documented 2026-10-01.
+
+**Context:** Dashboard inspection duplicated constructor catalogs, stripped
+qualified IDs such as domain:arc42:section1, and invented empty sequences from
+metadata-only entries. Its schema expected an id/structure wrapper although the
+browser consumed bare IR. Name-based browser actions confused repeated branches,
+and source IDs/labels were interpolated into HTML/inline handlers.
+
+**Decision:** Add LookupTreeID alongside execution resolution. Reuse the shared
+construction branches with legacy substitutions disabled. Preserve qualified
+names and historical bare catalog alias priority; resolve explicit default from
+its compiled constructor. Reject path-shaped identifiers before the injected
+unscoped generated resolver, which is consulted once on a static miss. Return
+404 for unavailable definitions, including metadata-only entries. Align HTTP
+success with bare SerializableNode and preserve nested children/metadata.
+Root/immediate child shape is enforced; recursive IR verification is not claimed.
+
+Browser actions use structural paths and event listeners. Escape source labels,
+details and failures; use a fixed palette for unknown types. Collisions move the
+actual branch's descendants, and sibling badges reflect parent execution order.
+
+**Alternatives:** Using the execution resolver directly silently substitutes
+unknown trees. A second inspection constructor map drifts. Metadata placeholders
+suggest executable definitions without evidence. Last-segment lookup loses
+namespaces. Escaping a JavaScript quote alone does not protect an HTML attribute.
+
+**Consequences:** Inspection and execution share construction while retaining
+separate miss policies. Bare aliases retain historical wrappers, so callers
+seeking execution-qualified definitions should use qualified IDs. Generated-tree
+inspection remains an operator/unscoped surface, not tenant authorization (R29).
+Live dependency, whole-tree validation and fleet-wide HTTP coverage remain open.
+No provider execution is necessary to inspect definitions.
+
+**Evidence:** [Catalog/lookup regressions](../../internal/domains/tree_lookup_test.go),
+[actual authenticated/enforced HTTP tests](../../cmd/bt-dashboard/tree_structure_regression_test.go),
+and [mind-map text/duplicate-branch/order tests](../../tests/unit/mindmap.test.js).
+
+<a id="adr-274"></a>
+
+## ADR-274: Blackboard Owner Admission and Atomic Run Promotion
+
+**Status:** Accepted implementation, documented 2026-10-01.
+
+**Context:** RunDeps ignored EnablePersistence failure and returned a manager
+that acknowledged persistent-scope writes only in memory. Concurrent lazy
+initialization could publish different managers. Pipeline/HTTP/MCP adapters
+could not observe initialization errors. Healthy-run promotion independently
+ignored each write, allowing lost or mixed output/attribution without diagnosis.
+
+**Decision:** Add NewPersistentManager and make BoardManager return manager/error.
+Synchronize one owner or initialization error per runner; never publish a
+memory substitute after default persistence failure. NewRunDeps initializes
+from loaded/configured paths before returning, and bt-agent checks its owner
+before scheduler/A2A/MCP startup. Update every agent/pipeline/HTTP/MCP caller to
+handle errors. Pipeline admission returns 503 before reservation; capture its
+runner/manager for the run's lifetime. Injected managers remain trusted startup
+dependencies with an explicitly chosen persistence policy.
+
+Promote successful-run output and attribution through one SetEntriesWithContext
+transaction. Reject invalid/self-evicting groups; commit before publishing
+staged cache. Detach metadata maps at storage/read boundaries. Return typed
+ExecutionPersistenceError after healthy completion when promotion fails, retain
+actual output/outcome and record the diagnostic in history. Automatic retry
+must not execute that completed action again.
+
+**Alternatives:** Logging initialization failure still falsely acknowledges
+writes. A nil manager passed through NewHandle silently becomes a memory manager.
+Independent promotion writes permit mixed attribution. Retrying a healthy action
+to repair metadata repeats its side effects. Late environment lookup can move
+unrelated owner state during a runner's lifetime.
+
+**Consequences:** Default owners either initialize or fail admission explicitly.
+Repair of a failed default setup requires a new runner. Group commit is scoped
+metadata atomicity, not whole-run/telemetry atomicity or tenant authentication.
+Startup filesystem I/O remains synchronous; arbitrary I/O/uncooperative actions,
+other ignored artifact writes and deployment qualification remain R30/C09/C12.
+No coding provider is needed for these regressions.
+
+**Evidence:** [Runner ownership/completion/replay tests](../../internal/agent/blackboard_owner_regression_test.go),
+[related transaction/metadata tests](../../internal/blackboard/group_transaction_test.go),
+[loaded-owner/pipeline tests](../../internal/agentexec/blackboard_owner_regression_test.go),
+[actual authenticated/enforced HTTP rejection](../../cmd/bt-dashboard/blackboard_owner_regression_test.go),
+and [MCP adapter errors](../../cmd/bt-agent/blackboard_tools_test.go).
+
+<a id="adr-275"></a>
+
+## ADR-275: Sprint Result Commit and Metadata Reconciliation
+
+**Status:** Accepted implementation, documented 2026-10-01.
+
+**Context:** Sprint dispatch durably claimed tasks, but ignored separate status
+and output commit errors. It reported done even when a healthy task result was
+not recorded or a batch panicked. Independent workflow mirrors could advance
+without durable task completion. Typed healthy-run persistence errors were
+classified as healthy work but lost at the sprint interface.
+
+**Decision:** Introduce TaskStore.CommitExecution to atomically record related
+execution metadata for an in-progress claim. Capture that owner and executor for
+the batch. Retain failed task commits and execution diagnostics in asynchronous
+status with output/outcome/task-agent-tree-run attribution. Mirror workflow state
+only after the task commit. Continue independent already-claimed work once each;
+never execute completed work again to repair its record. Treat unexpected errors
+as failed batch observations and panic/unknown work as uncertainty.
+
+Before new sprint admission, an authenticated request repairs retained metadata
+against the original owner/claim without calling an executor. Failed repair,
+changed operator decisions and uncertainty stop new admission with 503. Matching
+old idempotency keys preserve their existing observation contract. Browser
+polling uses the shared auth/error helper and distinguishes failed observations,
+finished batches and idle state; task-store counts are not sprint percentages.
+
+**Alternatives:** Logging ignored writes hides the failure from polling clients.
+Two separately acknowledged commits can leave status/output contradictory.
+Requeueing a completed task duplicates side effects. Writing a durable resume
+queue would introduce new recovery/retention policy without qualification; this
+increment retains explicit process-local evidence instead.
+
+**Consequences:** Healthy execution and record failure remain independently
+observable. Metadata repair may admit genuinely new approved work afterward,
+but cannot replay a repaired completion. Deferred results can become eligible
+for a later ordinary sprint once their metadata commits. Restart/new-batch
+history, stale multi-process task snapshots, workflow-mirror atomicity, unresolved
+operator conflict/uncertainty recovery and whole-sprint admission budgets remain
+explicit gaps (R30). No new database or coding-provider execution is introduced.
+
+**Evidence:** [Atomic task-result tests](../../internal/dashboard/task_execution_commit_test.go),
+[actual authenticated/enforced sprint commit/repair tests](../../cmd/bt-dashboard/sprint_persistence_regression_test.go)
+and [browser polling tests](../../tests/unit/tasks.test.js). The local fixture
+runs each of two healthy actions once, blocks task persistence, preserves both
+results, rejects repair until storage is restored, and commits original results
+without executing either action again. Separate fixtures retain healthy-run
+promotion errors, reject changed owners/decisions and auth, and report batch
+panic without requeueing claims.
+
+<a id="adr-276"></a>
+
+## ADR-276: Sprint Capacity Reservation and Owned Batch Budgets
+
+**Status:** Accepted implementation, documented 2026-10-01.
+
+**Context:** Sprint dispatch bypassed the shared worker pool and concurrency
+limiter, admitting a real local fixture even after pool closure. Each task had
+an executor timeout, but a batch had no aggregate context budget. Admission
+mutex/file-lock waits could outlive the HTTP caller; eagerly claimed tasks could
+remain stranded if queue admission were added only after those claims.
+
+**Decision:** Serialize admission under a request-bounded gate, cap its default
+at 30 seconds, and reserve shared limiter/queue capacity before durable task
+claim. The callback waits for a claim decision and drains as a no-op after
+rejected/empty claims, releasing capacity once. Status remains readable during
+capacity waiting. Report 503 for unavailable admission and 408 for canceled or
+expired admission, preserving explicit evidence that no task was dispatched.
+
+Accepted work gets a detached five-minute batch context, including queue time;
+each task inherits its remaining budget. Keep capacity until actual execution
+and cleanup return. After expiry, return only proven never-dispatched claims
+as an atomic approved/not_started result group under an independent 30-second
+record-cleanup budget. Failed cleanup retains metadata for ADR-275 repair;
+started results are preserved without deadline-based execution replay. TaskStore
+claim/commit variants propagate caller budgets through mutex and sidecar waits.
+
+**Alternatives:** Claiming before queue admission strands tasks after rejection.
+Using the HTTP context throughout an asynchronous batch cancels healthy accepted
+work when the response ends. Releasing capacity at timeout admits overlapping
+work while an old action still runs. Per-task reservations improve fairness but
+complicate batch claim/cleanup ownership; this increment chooses one reservation
+per sequential batch and documents that tradeoff.
+
+**Consequences:** Shared dashboard capacity now covers sprint batches. Caller
+cancellation limits admission, not already accepted asynchronous ownership.
+Cooperative cleanup can exceed the execution deadline; generic I/O and actions
+ignoring cancellation cannot be forcibly preempted. Failed/unconfirmed started
+work remains non-replayable by ordinary sprint admission. Nil pool/limiter seams
+retain standalone fallback behavior; no durable resume queue, fleet SLO or new
+coding provider is introduced. Operational timeout configurability, restart-safe
+ownership and the remaining fleet cancellation/resource audit stay explicit R30
+follow-up work.
+
+**Evidence:** [Actual admission/budget regressions](../../cmd/bt-dashboard/sprint_admission_regression_test.go)
+cover closed pool, full queue, exhausted limiter, serialization wait, readable
+status, HTTP detachment, retained capacity after expiration and single execution
+with unstarted cleanup. [Task-store context/group tests](../../internal/dashboard/task_execution_context_test.go)
+cover mutex/sidecar deadlines, unchanged committed state and all-or-nothing
+related results. Only local/fake actions run; no coding/model provider executes.
+
+---
+
+<a id="adr-277"></a>
+## ADR-277: Conservative Process Restart Recovery Holds
+
+**Status:** Accepted implementation, 2026-10-01. Production recovery acceptance
+remains open under R26/R30 and QS7/QS32.
+
+**Context:** An action can succeed while its result save fails. The scheduler
+previously interpreted a durable in-flight claim as a crashed job and scheduled
+it immediately after restart. A process crash cannot distinguish completed,
+partially executed and never-started actions. In-process metadata repair tests
+do not establish safety across that boundary.
+
+**Decision:** Persistent scheduled and manual scheduler dispatch commit admission
+first; failed admission executes nothing. Retain the claim through history and
+final recording. Restart holds interrupted claims inactive with a persisted
+`recovery_required` reason. Failed recording and typed terminal/uncertain results
+also hold the agent. Registry synchronization, scheduling, ordinary removal,
+clean duplicates and manual dispatch cannot release a hold. Unreadable state
+closes admission instead of being overwritten with a fresh schedule.
+
+`Scheduler.ResolveRecovery` records a trusted operator and completed/abandoned
+disposition, commits before releasing the hold and advances to a future slot
+without dispatching interrupted work. It is not currently an authenticated
+transport endpoint. Existing sprint `in_progress` claims similarly remain
+unapproved after failed recording or process exit; no output recovery is inferred
+from that safety marker. Read-only scheduler stores cannot admit manual work.
+
+**Alternatives:** Automatic retry from an in-flight flag risks duplicate side
+effects. Assuming success risks lost work. A new transactional database would
+violate the current storage constraint and still cannot atomically commit an
+external action. Preserve uncertainty and require evidence for reconciliation.
+
+**Consequences:** Availability yields to conservative side-effect ownership;
+operators must diagnose held work. Uncommitted output may be lost. This is
+single-owner process-restart safety with state present, not power-loss durability,
+fleet consensus, multi-store ACID or recovery after a state-volume loss.
+In-memory-only scheduler configuration cannot offer durable admission.
+
+**Evidence:** [Scheduler process restart tests](../../internal/agent/scheduler_restart_safety_test.go)
+execute real local side effects, inject result/history failures or exit directly,
+then start two separate recovery processes and retain exactly one action.
+They also cover failed admission, unreadable state, duplicate holds and
+commit-before-release operator reconciliation.
+[Sprint HTTP process restart tests](../../cmd/bt-dashboard/sprint_restart_safety_test.go)
+lose all transient diagnostics after completed-action/result failure or immediate
+exit, repair storage availability and reject automatic dispatch/reapproval.
+No coding/model provider is invoked by these fixtures.
+
+---
+
+<a id="adr-278"></a>
+## ADR-278: Atomic Dashboard Restart Admission and Detached Ownership
+
+**Status:** Accepted implementation, 2026-10-01. Fleet automatic adoption and
+production restart qualification remain open under R13/R30 and QS31.
+
+**Context:** HTTP completion can precede actual sprint/pipeline execution or
+cleanup of canceled agent execution. The dashboard's old HTTP-only drift check
+reported idle while an accepted action was running. Even a correct snapshot
+check permits admission between the check and `systemctl --no-block restart`.
+
+**Decision:** One process-local dashboard gate owns requests, capacity waits and
+detached execution through final evidence, cancellation cleanup and panic
+handling. Restart handoff seals that gate atomically only when idle. Rejected
+handoff reopens admission; accepted handoff stays sealed until process exit.
+All sealed HTTP requests return documented JSON 503 with Retry-After and an
+explicit non-admission header. Existing pool/limiter/running-record diagnostics
+supplement leases; persisted queues and non-live waiting records do not.
+Start the watcher only after execution owners initialize.
+
+The optional `DriftWatchConfig.RestartGuardFn` supplies that handshake without
+changing legacy daemon behavior. `SafeGoWithCleanup` preserves existing
+SafeGo compatibility and releases pipeline ownership after panic handling,
+even if the handler itself panics. No engine dependency or new hook is added.
+
+**Alternatives:** Counting HTTP requests loses detached ownership. Sampling
+pool/limiter counts leaves check-to-handoff admission races and misses fallback
+execution. Releasing after HTTP cancellation assumes an action stopped.
+Cross-process lease coordination is needed for fleet ownership but exceeds this
+local correction; do not infer it from this gate.
+
+**Consequences:** Long-lived requests and uncooperative callbacks defer adoption.
+Accepted but ineffective supervision can leave admission closed until an
+operator restarts the process. Failed panic metadata finalization may leave a
+conservative running diagnostic; retention/reconciliation remain backlog work.
+`bt-agent` sibling restarts still bypass the dashboard gate; other daemons retain
+snapshot checks. Automatic restart remains unqualified across the fleet.
+
+**Evidence:** [Dashboard ownership tests](../../cmd/bt-dashboard/deploy_activity_regression_test.go)
+run actual local actions through sprint, canceled fallback agent and authenticated
+pipeline handlers after HTTP completion; admission/seal races admit exactly one
+owner and all route schemas accept the sealed response.
+[Drift handoff tests](../../internal/agent/deploy_drift_restart_test.go) exercise
+busy deferral, failed handoff reopening and accepted handoff sealing with fake
+systemd. [Panic cleanup ordering](../../internal/reliability/panic_handler_test.go)
+holds ownership while panic handling blocks. No provider or actual restart is
+invoked; the prior independent process-recovery evidence remains ADR-277.
+
+---
+
+<a id="adr-279"></a>
+## ADR-279: Target-Owned Sibling Restart and Uncertain Handoff Seals
+
+**Status:** Accepted implementation, 2026-10-01. Daemon-wide bt-agent self
+ownership and production handoff qualification remain C09/C12 and R13/R30.
+
+**Context:** The bt-agent fleet sweep invoked systemd for sibling units after
+checking only its own scheduler. This bypassed the dashboard's local gate.
+A command failure after dispatch also does not prove systemd rejected restart.
+Cycle-only gardener snapshots miss analysis/tools and final iteration metadata.
+
+**Decision:** Both bt-agent sibling paths request the target process's ownership
+through a Linux abstract Unix socket scoped by configured home, UID and unit.
+Both ends check kernel peer credentials. Production owner/default restart
+also require the configured systemd unit MainPID to equal this process; a
+query failure/inactive/wrong unit rejects before dispatch. Bounded JSON framing accepts only a
+full lowercase Git revision; only known units are addressed. Dashboard/gardener
+listeners respect their own auto-restart flag, atomically seal admission when
+idle, verify their configured artifact's exact unit/revision/clean identity,
+then request their own bounded systemd restart. Missing/busy/disabled/wrong
+owners never authorize direct fallback. An already-current live owner avoids
+another restart. Client/framing, artifact and command budgets are 5/20/15 seconds.
+
+The shared reliability gate owns all leases through cleanup. Gardener cycles
+and complete periodic rescan/analysis/tool/metadata iterations use it, with
+nested ownership retained. Both target watchers start after initialization.
+Proven rejection reopens admission. Lost replies, unexpected owner failure and
+post-start command errors/timeouts retain uncertainty and the seal until exit.
+No operator repair is inferred from a timeout. Non-Linux control defers safely.
+
+**Alternatives:** Sibling systemd calls cannot observe the target's atomic gate.
+HTTP liveness/counter snapshots do not own detached work. Shared file locks
+alone release on controller death while a target restart may remain pending.
+An owner-mediated request keeps admission exclusion in the target process.
+This adds no database and no engine dependency/injection hook.
+
+**Consequences:** Same UID is trusted operator authority, not multi-tenant
+identity. Production MainPID attestation prevents another/manual process
+from approving or restarting a canonical unit. Abstract sockets leave no stale
+files and avoid path-length limits. A lost reply may conceal an accepted restart;
+controllers must not bypass or infer rejection. Adopted stamps remain advisory.
+Mixed old/new controllers are unsafe; upgrade with flags disabled first.
+The bt-agent self path still samples scheduler state and needs daemon-wide
+scheduler/A2A/DLQ leases. Power/volume loss and deployed stateful handoff are not
+established by these fixtures.
+
+**Evidence:** [No-owner bypass regression](../../internal/agent/restart_control_regression_test.go)
+was red with direct sibling calls. [Control/identity tests](../../internal/agent/restart_control_linux_test.go)
+cover disabled/busy/current/accepted/rejected/uncertain dispositions, framing,
+peer UID, wrong/inactive unit PID, missing owners, clean artifact identity, lost reply and panic seals.
+[Actual dashboard process fixture](../../cmd/bt-dashboard/restart_control_process_test.go)
+holds a real local authenticated sprint action in a separate owner process,
+defers restart, then accepts its own fake-systemd handoff and rejects new HTTP/
+execution admission. A second process with the current revision does not repeat
+handoff. [Actual gardener cycle and iteration](../../internal/gardener/restart_admission_test.go)
+retain ownership through blocked cycle dependencies and post-cycle analysis.
+Private version/systemctl scripts are controlled fixtures; no model provider
+or deployed service restart is invoked.
+
+<a id="adr-280"></a>
+## ADR-280: Durable DLQ Replay Claims and Current-Disk Transactions
+
+**Status:** Accepted (2026-10-01). Process-restart/sibling fixtures; production
+rollout, authenticated operator reconciliation and power/volume loss are open.
+
+**Context:** A real DLQ action could succeed, fail to save removal and run again
+in a fresh process. Uncertainty and immediate exit had the same failure. Failed
+admission storage also dispatched work. Whole-snapshot cache merges could erase
+another owner's replay marker or resurrect entries it had removed. Quarantining
+malformed state as empty loses the only possible evidence of interrupted work.
+
+**Decision:** Extract one lower-layer transaction owner. Read current membership
+under a bounded three-second sidecar lock; apply a delta, atomically replace,
+then publish cache. Failure reports an error and never falls back to an unlocked
+write. Replay persists a random exact claim and recovery marker before dispatch;
+healthy completion commits removal. Ordinary proven failure records/releases;
+typed terminal/uncertain outcomes and failed final records retain the claim.
+Panic is uncertain. Initial scheduler/engine terminal diagnostics also enter
+with a durable hold; DLQ replay cannot bypass their original execution stop.
+Known completion remains a persistence diagnostic if both executor and DLQ
+recording fail. Restart/scanner/requeue, purge and capacity cannot release a
+claim. Invalid/unreadable bytes remain in place and close admission. Scheduler,
+engine escalation, MCP and dashboard ACK paths use error-returning APIs. HTTP
+returns 409 for held/exhausted entries and 503 for unavailable storage; purge
+reports committed removed/pending counts. Void wrappers remain compatibility
+fire-and-report seams, not persistence acknowledgements.
+
+`ResolveReplayRecovery` accepts an exact claim and a completed or provably
+unstarted decision. The caller independently establishes owner quiescence and
+evidence. Completion removes metadata; unstarted resolution clears admission
+without requeue or dispatch. Active local owners and stale claims are rejected.
+No authenticated operator endpoint or automatic timeout resolution is added.
+
+**Alternatives:** In-process result repair disappears on exit. Expiring leases,
+quarantine-to-empty and purge cannot establish that an action did not occur.
+Whole-snapshot merge preserves neither deletion nor ownership. A new database
+would not make external actions atomic and violates the repository constraint.
+
+**Consequences:** Conservative holds sacrifice availability when evidence is
+missing. Output not recorded before exit can be lost. The guarantee requires
+persisted state and cooperating new writers: stop/drain old consumers before
+rollout; old writers or rollback can erase unfamiliar markers. Lock deadlines
+do not preempt arbitrary filesystem I/O. In-memory queues, state-volume/power
+loss, full distributed journals and deployed recovery remain outside these
+fixtures. No higher-layer engine import or new hook is introduced.
+
+**Evidence:** [Separate-process red/green fixture](../../internal/reliability/dlq_restart_safety_test.go)
+uses a synced real local action counter and two fresh recovery processes;
+successful/uncertain recording failure and immediate exit retain exactly one
+action, failed admission executes zero. [Sibling/transaction/recovery tests](../../internal/reliability/dead_letter_transaction_test.go)
+cover stale claim preservation/deletion, exact resolution, lock/write failure,
+panic and capacity. [Actual authenticated HTTP/schema tests](../../cmd/bt-dashboard/dlq_recovery_http_test.go)
+cover hold rejection, storage failure and retained purge counts.
+[Engine escalation failure](../../internal/engine/ops_actions_test.go) stops
+without falsely reporting durable insertion. Durable snapshot/gate evidence is
+recorded in [the durable DLQ report](../verification/2026-10-01-dlq-recovery/README.md).
 
 ---
 

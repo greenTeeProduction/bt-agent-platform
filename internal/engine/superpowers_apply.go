@@ -2,11 +2,15 @@ package engine
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/nico/go-bt-evolve/internal/reliability"
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 func applySuperpowersRunToMainRepo(ctx context.Context, runner CommandRunner, run *SuperpowersRun) error {
@@ -38,13 +42,23 @@ func applySuperpowersRunToMainRepo(ctx context.Context, runner CommandRunner, ru
 	}
 
 	patchPath := filepath.Join(run.ArtifactDir, "verification", "worktree.patch")
-	if err := os.MkdirAll(filepath.Dir(patchPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(patchPath), 0o750); err != nil {
 		return err
 	}
-	if err := os.WriteFile(patchPath, []byte(patchText), 0o644); err != nil {
+	if err := util.SavePersistenceFile(patchPath, []byte(patchText)); err != nil {
 		return err
 	}
 	run.PatchPath = patchPath
+	// A second runner must not pass the clean-checkout check while the first
+	// is applying, verifying or committing. The shared artifact store gives
+	// daemon and MCP processes the same context-cancellable repository lock.
+	release, err := acquireSuperpowersApplyLock(ctx, run.RepoDir)
+	if err != nil {
+		run.ApplyStatus = "pending_patch"
+		_ = writeSuperpowersRunJSON(run)
+		return fmt.Errorf("pending_patch: waiting for repository landing lock: %w\npatch: %s", err, patchPath)
+	}
+	defer release()
 
 	// A bare main repo has no working tree to dirty-check, patch, verify, or
 	// commit in — land the run through its own worktree instead.
@@ -86,6 +100,21 @@ func applySuperpowersRunToMainRepo(ctx context.Context, runner CommandRunner, ru
 		return err
 	}
 	return writeSuperpowersRunJSON(run)
+}
+
+func acquireSuperpowersApplyLock(ctx context.Context, repoDir string) (func(), error) {
+	canonical, err := filepath.Abs(repoDir)
+	if err != nil {
+		return nil, err
+	}
+	if resolved, err := filepath.EvalSymlinks(canonical); err == nil {
+		canonical = resolved
+	}
+	if err := os.MkdirAll(superpowersRunsDir, 0o750); err != nil {
+		return nil, err
+	}
+	key := sha256.Sum256([]byte(canonical))
+	return reliability.AcquireFileLockWithContext(ctx, filepath.Join(superpowersRunsDir, fmt.Sprintf(".apply-%x", key)))
 }
 
 // ffRebaseMaxAttempts bounds the apply-time rebase-then-retry so a fast-moving
@@ -367,7 +396,7 @@ func verifySuperpowersRuntimeInDir(ctx context.Context, runner CommandRunner, ru
 		res := runShellCommand(ctx, runner, dir, check.cmd)
 		vc := VerificationCheck{Name: check.name, Command: check.cmd, Passed: res.Err == nil, Output: res.Output, Duration: res.Duration.String()}
 		run.Verification = append(run.Verification, vc)
-		_ = os.WriteFile(filepath.Join(run.ArtifactDir, "verification", check.name+".txt"), []byte(formatCommandResult(res)), 0o644)
+		_ = util.SavePersistenceFile(filepath.Join(run.ArtifactDir, "verification", check.name+".txt"), []byte(formatCommandResult(res)))
 		if res.Err != nil {
 			run.ApplyStatus = "pending_patch"
 			return fmt.Errorf("main repo verification %s failed after applying patch: %v\n%s", check.name, res.Err, res.Output)
@@ -512,8 +541,8 @@ func writeApplyCommitEvidence(run *SuperpowersRun, label string, res CommandResu
 		return
 	}
 	path := filepath.Join(run.ArtifactDir, "verification", "apply-commit.txt")
-	_ = os.MkdirAll(filepath.Dir(path), 0o755)
-	_ = os.WriteFile(path, []byte(label+"\n\n"+formatCommandResult(res)), 0o644)
+	_ = os.MkdirAll(filepath.Dir(path), 0o750)
+	_ = util.SavePersistenceFile(path, []byte(label+"\n\n"+formatCommandResult(res)))
 }
 
 // writeApplyRebaseEvidence persists a failed apply-time re-apply (the rebase of
@@ -524,9 +553,9 @@ func writeApplyRebaseEvidence(run *SuperpowersRun, rebase, abort CommandResult) 
 		return
 	}
 	path := filepath.Join(run.ArtifactDir, "verification", "apply-rebase.txt")
-	_ = os.MkdirAll(filepath.Dir(path), 0o755)
+	_ = os.MkdirAll(filepath.Dir(path), 0o750)
 	body := "rebase onto master failed:\n\n" + formatCommandResult(rebase) + "\n\nrebase --abort:\n\n" + formatCommandResult(abort)
-	_ = os.WriteFile(path, []byte(body), 0o644)
+	_ = util.SavePersistenceFile(path, []byte(body))
 }
 
 // runVerificationPassed reports whether a named verification check ran and

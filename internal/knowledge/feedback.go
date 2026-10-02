@@ -20,6 +20,8 @@ func (kg *KnowledgeGraph) RecordRun(rec RunRecord) {
 	if !ok {
 		return
 	}
+	kg.rememberFeedbackBaselineLocked(rec.TreeID, tree)
+	kg.recordFeedbackDeltaLocked(rec)
 
 	tree.LastOutcome = rec.Outcome
 	tree.LastDuration = rec.Duration

@@ -17,7 +17,7 @@ func gateDisabledTestTree() *evolution.SerializableNode {
 		Type: "Sequence", Name: "Root",
 		Children: []evolution.SerializableNode{
 			{Type: "Sequence", Name: "PreGate"},
-			{Type: "ChainAction", Name: "ResearchAgent", Metadata: map[string]any{"max_iterations": float64(3)}},
+			{Type: "ChainAction", Name: "agent:ResearchAgent", Metadata: map[string]any{"max_iterations": float64(3)}},
 		},
 	}
 }

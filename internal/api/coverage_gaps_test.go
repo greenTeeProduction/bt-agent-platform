@@ -497,9 +497,9 @@ func TestRouteBuilder_Build(t *testing.T) {
 	if len(route.Parameters) != 1 {
 		t.Errorf("expected 1 parameter, got %d", len(route.Parameters))
 	}
-	// Default 200 response + the 400 error response
-	if len(route.Responses) != 2 {
-		t.Errorf("expected 2 responses, got %d", len(route.Responses))
+	// Explicit 200/400 responses plus shared 401/403 authentication defaults
+	if len(route.Responses) != 4 {
+		t.Errorf("expected success/error plus 401/403 responses, got %d", len(route.Responses))
 	}
 }
 

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 var (
@@ -20,7 +22,8 @@ var (
 	isSlogDefault bool // engine logger installed as slog default; guarded by mu
 )
 
-// Init initializes the logger with output to ~/.go-bt-evolve/logs/bt.log
+// Init initializes the logger under the configured platform root (default
+// ~/.go-bt-evolve/logs/bt.log)
 // with automatic log rotation (10MB max per file, 5 backups kept).
 // Falls back to stderr if the log directory cannot be created.
 func Init() {
@@ -59,13 +62,8 @@ func buildBaseHandler() slog.Handler {
 		return slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: envLogLevel()})
 	}
 
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})
-	}
-
-	logDir := filepath.Join(home, ".go-bt-evolve", "logs")
-	if err := os.MkdirAll(logDir, 0755); err != nil {
+	logDir := util.PlatformLogDir()
+	if err := os.MkdirAll(logDir, 0750); err != nil {
 		return slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo})
 	}
 

@@ -1,0 +1,8 @@
+{
+  "actual_final_head_qualification": "Final GitHub/clean artifact identity is retained in private github-final.json / clean-final-artifact.json and PR #83 after observed completion.",
+  "difference_from_qualified_implementation_26935480": "Only internal/agent/scheduler.go: ApplySchedule new jobs-directory mode 0755 -> 0750. No other Go/dependency difference.",
+  "file_count": 1055,
+  "full_manifest_location": "Private retained permission-go-files.json",
+  "go_manifest_sha256": "7a74b50d36a757047d6e1cde6c00479847460229c4f8ab98c63d47447759c2ce",
+  "scope": "All Go files plus go.mod/go.sum"
+}

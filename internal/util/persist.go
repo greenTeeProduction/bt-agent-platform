@@ -69,7 +69,12 @@ func persistenceParent(path string, create bool, perm os.FileMode) (*os.Root, st
 // EnsurePersistenceParent creates a private parent before a caller acquires
 // its existing sidecar lock. It applies the same validation as the write.
 func EnsurePersistenceParent(path string) error {
-	root, _, err := persistenceParent(path, true, 0o750)
+	return EnsurePersistenceParentMode(path, 0o750)
+}
+
+// EnsurePersistenceParentMode preserves a store's stricter directory policy.
+func EnsurePersistenceParentMode(path string, dirPerm os.FileMode) error {
+	root, _, err := persistenceParent(path, true, dirPerm)
 	if err != nil {
 		return err
 	}
@@ -85,6 +90,23 @@ func SaveJSONAtomicMode(path string, v any, filePerm, dirPerm os.FileMode) error
 	if err != nil {
 		return fmt.Errorf("marshal %s: %w", path, err)
 	}
+	return SavePersistenceFileMode(path, data, filePerm, dirPerm)
+}
+
+// SavePersistenceFile atomically replaces private text or binary state.
+// Shared read/update/write transactions still require their sidecar lock.
+func SavePersistenceFile(path string, data []byte) error {
+	return SavePersistenceFileMode(path, data, 0o600, 0o750)
+}
+
+// OpenPersistenceRoot opens the configured parent and validates the filename.
+// Callers own the handle and must constrain request-derived names beforehand.
+func OpenPersistenceRoot(path string) (*os.Root, string, error) {
+	return persistenceParent(path, false, 0)
+}
+
+// SavePersistenceFileMode preserves a store's stricter permission policy.
+func SavePersistenceFileMode(path string, data []byte, filePerm, dirPerm os.FileMode) error {
 	root, name, err := persistenceParent(path, true, dirPerm)
 	if err != nil {
 		return fmt.Errorf("create dir for %s: %w", path, err)

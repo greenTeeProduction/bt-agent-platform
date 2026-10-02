@@ -1085,7 +1085,9 @@ func TestRunSuperpowersRuntime_ActiveBackoffShortCircuits(t *testing.T) {
 // proceeds into normal execution and the stale timestamp is cleared from the
 // durable store so it cannot confuse later ticks.
 func TestRunSuperpowersRuntime_ExpiredBackoffExecutes(t *testing.T) {
-	isolateClaudeBackoffStore(t)
+	t.Setenv("BT_SUPERPOWERS_RATE_LIMIT_FAILOVER", "true")
+	t.Setenv("BT_SUPERPOWERS_PROVIDER", "claude")
+	isolateBackoffStores(t)
 	t.Chdir(t.TempDir())
 
 	prevRunner, prevClaude := defaultSuperpowersCommandRunner, defaultSuperpowersClaudeRunner
@@ -1148,6 +1150,74 @@ func TestRunSuperpowersRuntime_ExpiredBackoffExecutes(t *testing.T) {
 	fresh := &Blackboard{BB: blackboard.NewHandle(mgr, "run-next", "", "goap-loop")}
 	if until, ok := loadClaudeBackoffState(fresh); ok {
 		t.Fatalf("stale backoff deadline %v still present after an expired-backoff run: the entry guard must clear expired state (half-open), not leave it to be re-parsed forever", until)
+	}
+}
+
+func TestDelegationPreflightBackoff_ClearsExpiredState(t *testing.T) {
+	t.Setenv("BT_SUPERPOWERS_RATE_LIMIT_FAILOVER", "true")
+	now := time.Now().UTC().Truncate(time.Second)
+	past, future := now.Add(-time.Hour), now.Add(time.Hour)
+	for _, primary := range []DelegationProvider{DelegationProviderClaude, DelegationProviderCodex} {
+		for _, tc := range []struct {
+			name           string
+			primaryUntil   time.Time
+			alternateUntil time.Time
+		}{
+			{"expired primary", past, future},
+			{"expired alternate", future, past},
+			{"both expired", past, past},
+			{"missing primary with expired alternate", time.Time{}, past},
+			{"primary at deadline", now, future},
+			{"alternate at deadline", future, now},
+		} {
+			t.Run(string(primary)+"/"+tc.name, func(t *testing.T) {
+				isolateBackoffStores(t)
+				mgr := blackboard.NewManager(nil)
+				bb := &Blackboard{BB: blackboard.NewHandle(mgr, "run-expired", "", "goap-loop")}
+				scope := blackboard.Scope{Kind: blackboard.ScopeAgent, ID: "goap-loop"}
+				deadlines := map[DelegationProvider]time.Time{
+					primary:                              tc.primaryUntil,
+					alternateDelegationProvider(primary): tc.alternateUntil,
+				}
+				for provider, deadline := range deadlines {
+					if deadline.IsZero() {
+						continue
+					}
+					saveDelegationBackoffState(bb, provider, deadline)
+					if err := mgr.Set(scope, backoffChainKey(provider), deadline.Format(time.RFC3339), "legacy per-agent stamp", "text"); err != nil {
+						t.Fatal(err)
+					}
+				}
+
+				if until, active := delegationPreflightBackoff(bb, primary, now); active || !until.IsZero() {
+					t.Fatalf("preflight = (%v, %v), want (zero, false) with an available provider", until, active)
+				}
+				for provider, deadline := range deadlines {
+					key := backoffChainKey(provider)
+					if deadline.After(now) {
+						if got, ok := readSharedBackoff(backoffPathFor(provider)); !ok || !got.Equal(deadline) {
+							t.Errorf("%s active shared deadline = (%v, %v), want %v", provider, got, ok, deadline)
+						}
+						if entry, err := mgr.Get(scope, key); err != nil || entry.Value != deadline.Format(time.RFC3339) {
+							t.Errorf("%s active agent deadline changed: entry=%+v, err=%v", provider, entry, err)
+						}
+						if got := bb.ChainState[key]; got != deadline.Format(time.RFC3339) {
+							t.Errorf("%s active chain deadline = %v, want %v", provider, got, deadline)
+						}
+						continue
+					}
+					if _, err := os.Stat(backoffPathFor(provider)); !errors.Is(err, os.ErrNotExist) {
+						t.Errorf("%s expired shared file still present: %v", provider, err)
+					}
+					if _, err := mgr.Get(scope, key); err == nil {
+						t.Errorf("%s expired agent deadline still present", provider)
+					}
+					if _, ok := bb.ChainState[key]; ok {
+						t.Errorf("%s expired chain deadline still present", provider)
+					}
+				}
+			})
+		}
 	}
 }
 

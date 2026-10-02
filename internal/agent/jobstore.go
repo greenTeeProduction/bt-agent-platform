@@ -4,11 +4,15 @@
 package agent
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"os"
-	"path/filepath"
 	"sync"
+	"time"
+
+	"github.com/nico/go-bt-evolve/internal/reliability"
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 // JobStore persists scheduled jobs across process restarts.
@@ -66,6 +70,16 @@ func (fs *FileJobStore) Save(jobs []ScheduledJob) error {
 	}
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
+	if err := util.EnsurePersistenceParent(fs.path); err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	release, err := reliability.AcquireFileLockWithContext(ctx, fs.path)
+	if err != nil {
+		return err
+	}
+	defer release()
 
 	if len(jobs) == 0 {
 		if fi, err := os.Stat(fs.path); err == nil && fi.Size() > 4 {
@@ -78,20 +92,13 @@ func (fs *FileJobStore) Save(jobs []ScheduledJob) error {
 				"path", fs.path, "existing_size", fi.Size(), "pid", os.Getpid())
 		}
 	}
+	if err := util.SaveJSONAtomic(fs.path, jobs); err != nil {
+		return err
+	}
 	if len(jobs) > 0 {
 		fs.sawNonEmpty = true
 	}
-
-	_ = os.MkdirAll(filepath.Dir(fs.path), 0755)
-	tmp := fs.path + ".tmp"
-	data, err := json.MarshalIndent(jobs, "", "  ")
-	if err != nil {
-		return err
-	}
-	if err := os.WriteFile(tmp, data, 0644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, fs.path)
+	return nil
 }
 
 // Load reads jobs from the JSON file. Returns empty slice if file doesn't exist.

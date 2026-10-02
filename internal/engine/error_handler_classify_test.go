@@ -29,6 +29,10 @@ func TestGoapFailureCategory(t *testing.T) {
 			"working_tree_drift"},
 		{"quality gate", "", "output quality failed at evidence gate", "quality_gate"},
 		{"default", "", "zzq unrecognized goap failure zzq", "goap_fusion_failure"},
+		{"test fixtures cannot set a failure category", "",
+			"## GOAP Superpowers Execution Failed\n\ntask GREEN verification failed: go test ./internal/engine\nerror: exit status 1\n" +
+				"fixture: rate limit; pending_patch: probe; quality; Superpowers Worktree Failed",
+			"goap_fusion_failure"},
 	}
 	for _, tc := range cases {
 		bb := &Blackboard{Outcome: tc.outcome, Result: tc.result}

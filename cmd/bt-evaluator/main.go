@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"time"
 
+	"github.com/nico/go-bt-evolve/internal/config"
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evaluator"
 	"github.com/nico/go-bt-evolve/internal/evolution"
@@ -127,6 +127,7 @@ func (s *evaluatorServer) handleDeepen(args json.RawMessage) *engine.ToolResult 
 		"tt_probes":        result.TTProbes,
 		"tt_hits":          result.TTProbeHits,
 	}
+	out["best_mutations"] = result.BestMutations
 	if result.BestMutation != nil {
 		out["best_op"] = result.BestMutation.Op.Operation
 		out["best_target"] = result.BestMutation.Op.Target
@@ -164,12 +165,20 @@ func (s *evaluatorServer) handleTTSave(args json.RawMessage) *engine.ToolResult 
 }
 
 func main() {
+	platformConfig, configErr := config.LoadRuntime()
+	if configErr != nil {
+		fmt.Fprintf(os.Stderr, "fatal: configuration: %v\n", configErr)
+		os.Exit(1)
+	}
 	engine.Init()
 	engine.SetAsDefault()
 	engine.Info("bt-evaluator starting", "version", "1.0.0", "binary", "go-bt-evaluator")
 
-	home, _ := os.UserHomeDir()
-	refDir := filepath.Join(home, ".go-bt-reflections")
+	refDir, refErr := platformConfig.SharedReflectionsDir()
+	if refErr != nil {
+		fmt.Fprintf(os.Stderr, "fatal: reflection root: %v\n", refErr)
+		os.Exit(1)
+	}
 
 	s, err := newEvaluatorServer(refDir)
 	if err != nil {

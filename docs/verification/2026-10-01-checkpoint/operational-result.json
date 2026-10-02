@@ -1,0 +1,72 @@
+{
+  "identity": {
+    "code_commit": "f60dcf420baafe5a65bf91f2a9e8661808d977f2",
+    "binary_sha256": "9ac15f02aeb3e7c5f83b9b59b176f28d0a801c4f97c10f12d1b535e90734cbd5",
+    "version": "bt-dashboard revision=f60dcf420baafe5a65bf91f2a9e8661808d977f2 vcs_time=unknown dirty=false"
+  },
+  "restored_service": {
+    "/api/health": {
+      "status": 200,
+      "valid_json": true
+    },
+    "/api/summary": {
+      "status": 200,
+      "valid_json": true
+    },
+    "/api/tasks": {
+      "status": 200,
+      "valid_json": true,
+      "matches_persisted_tasks": true
+    },
+    "/api/agents": {
+      "status": 200,
+      "valid_json": true,
+      "matches_persisted_definition_names": true
+    },
+    "/api/trees": {
+      "status": 200,
+      "valid_json": true
+    },
+    "unauthenticated_tasks_status": 401,
+    "build_info": "bt_build_info{dirty=\"false\",revision=\"f60dcf420baafe5a65bf91f2a9e8661808d977f2\"} 1",
+    "proc_exe_matches_binary": true
+  },
+  "production_service": {
+    "/api/health": {
+      "status": 200,
+      "valid_json": true
+    },
+    "/api/summary": {
+      "status": 200,
+      "valid_json": true
+    },
+    "/api/tasks": {
+      "status": 200,
+      "valid_json": true,
+      "matches_persisted_tasks": true
+    },
+    "/api/agents": {
+      "status": 200,
+      "valid_json": true,
+      "matches_persisted_definition_names": true
+    },
+    "/api/trees": {
+      "status": 200,
+      "valid_json": true
+    },
+    "unauthenticated_tasks_status": 401,
+    "build_info": "bt_build_info{dirty=\"false\",revision=\"f60dcf420baafe5a65bf91f2a9e8661808d977f2\"} 1",
+    "proc_exe_matches_binary": true,
+    "canonical_user_unit": "bt-dashboard.service",
+    "temporary_generic_llm_provider_override": "ollama",
+    "coding_provider": "codex",
+    "actual_provider_execution_during_service_probe": false
+  },
+  "scope": "Dashboard GET/read acceptance only; no existing task dispatched; agent and gardener stay inactive.",
+  "as_is_production_startup": {
+    "outcome": "failed",
+    "reason": "Host BT_LLM_PROVIDER=codex is unsupported by this checkpoint.",
+    "global_settings_changed": false
+  },
+  "services_returned_to_initial_inactive_state": true
+}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -297,15 +298,18 @@ func attemptOutcomeError(outcome, output string) error {
 //   - anything else: RecordFailure, retryable (returns runErr, or the wrapped
 //     outcome error when RunOnce reported a non-success outcome with no runErr).
 func recordSchedulerAttempt(slo *engine.SLOMetrics, outcome string, runErr error, output string, attempts int, latency time.Duration) error {
-	if runErr == nil && outcome == "success" {
+	if (runErr == nil || reliability.IsExecutionPersistenceError(runErr)) && outcome == "success" {
 		slo.RecordSuccess(latency)
 		if attempts > 1 {
 			slo.RecordRecovery(0)
 		}
 		return nil
 	}
-	if agent.IsRateLimitCarryover(outcome) {
+	if reliability.IsExecutionPause(outcome, runErr) {
 		slo.RecordDeferred()
+		if reliability.IsExecutionStoppedError(runErr) {
+			return runErr // retain typed owner evidence while stopping retry
+		}
 		return nil
 	}
 	// Healthy no-code outcomes (no_change: analysis-only; degraded:
@@ -313,7 +317,7 @@ func recordSchedulerAttempt(slo *engine.SLOMetrics, outcome string, runErr error
 	// with a nil error. Retrying them burned a full Claude cycle per attempt
 	// and dead-lettered honest runs (2026-07-15). Like the rate-limit
 	// carryover they are deferred: neither success nor failure in SLO stats.
-	if runErr == nil && agent.IsHealthyOutcome(outcome) && outcome != "success" {
+	if (runErr == nil || reliability.IsExecutionPersistenceError(runErr)) && agent.IsHealthyOutcome(outcome) && outcome != "success" {
 		slo.RecordDeferred()
 		return nil
 	}
@@ -396,8 +400,6 @@ func validateDomainRegistry(registry map[string]*evolution.SerializableNode) []s
 }
 
 func main() {
-	engine.Init()
-	engine.SetAsDefault()
 
 	// `bt-agent --version` prints the build identity and exits 0 without
 	// starting the daemon. Used by the deploy-drift restart handoff to
@@ -407,6 +409,19 @@ func main() {
 		fmt.Printf("bt-agent revision=%s vcs_time=%s dirty=%v\n", id.Revision, id.CommitTime, id.Dirty)
 		return
 	}
+
+	cfg, err := config.LoadRuntime()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "fatal: configuration: %v\n", err)
+		os.Exit(1)
+	}
+	agentHist, err := agent.NewHistory(agent.HistoryDir())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "fatal: history store: %v\n", err)
+		os.Exit(1)
+	}
+	engine.Init()
+	engine.SetAsDefault()
 
 	engine.Info("bt-agent starting", "version", "1.0.0", "binary", "go-bt-agent")
 
@@ -418,17 +433,6 @@ func main() {
 		"vcs_revision", buildID.Revision,
 		"vcs_time", buildID.CommitTime,
 		"vcs_dirty", buildID.Dirty)
-
-	// ── Configuration ─────────────────────────────────────────────────────
-	cfg, err := config.Load()
-	if err != nil {
-		engine.Warn("config validation warning, using defaults", "error", err)
-		cfg, _ = config.Load()
-		if cfg == nil {
-			fmt.Fprintf(os.Stderr, "fatal: config load failed\n")
-			os.Exit(1)
-		}
-	}
 
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -474,15 +478,21 @@ func main() {
 	audit.Init(platformHome)
 	sloEvidencePath := filepath.Join(platformHome, "slo", "slo-metrics.json")
 
+	refDir, err := cfg.SharedReflectionsDir()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "fatal: reflection root: %v\n", err)
+		os.Exit(1)
+	}
+
 	// ── Persistence ────────────────────────────────────────────────────────
-	refStore, err := evolution.NewStore(filepath.Join(home, ".go-bt-reflections"))
+	refStore, err := evolution.NewStore(refDir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
 		os.Exit(1)
 	}
-	blocks.InitRegistry(filepath.Join(home, ".go-bt-reflections"))
+	blocks.InitRegistry(refDir)
 
-	treeStore, err := evolution.NewTreeStore(filepath.Join(home, ".go-bt-reflections"))
+	treeStore, err := evolution.NewTreeStore(refDir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
 		os.Exit(1)
@@ -501,7 +511,7 @@ func main() {
 	llmHealth.Start()
 
 	// ── Agent Factory ──────────────────────────────────────────────────────
-	agentFactory, err := factory.NewAgentFactory(llmClient, home)
+	agentFactory, err := factory.NewAgentFactoryWithReflections(llmClient, refDir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "fatal: factory: %v\n", err)
 		os.Exit(1)
@@ -557,7 +567,6 @@ func main() {
 		// keep going (the daemon can still serve MCP/A2A) but say so loudly.
 		engine.Error("agent registry construction failed — scheduling and agent runs will be degraded", "dir", agent.RegistryDir(), "error", regErr)
 	}
-	agentHist, _ := agent.NewHistory(agent.HistoryDir())
 	agentLocalMem := agent.MemoryDir()
 	dlq := reliability.NewDeadLetterQueue(agent.DLQFile())
 	engine.TaskDLQ = dlq
@@ -591,9 +600,12 @@ func main() {
 				// path skipped siblings, rebuilt sibling units would keep
 				// running their old binaries (live case 2026-07-16 23:46).
 				RestartSiblings: true,
-				Targets:         agent.DefaultRebuildTargets(repoDir),
-				Binary:          "bt-agent",
-				Backoff:         agent.NewRebuildBackoff(),
+				SiblingRestartFn: func(unit, revision string) error {
+					return agent.RequestOwnedRestart(agent.HomeDir(), unit, revision)
+				},
+				Targets: agent.DefaultRebuildTargets(repoDir),
+				Binary:  "bt-agent",
+				Backoff: agent.NewRebuildBackoff(),
 				// Post-rebuild restart re-check; nil-safe: no scheduler yet
 				// means "assume busy" and defer the restart.
 				InFlightFn: func() bool { return globalSched == nil || globalSched.AnyInFlight() },
@@ -611,6 +623,10 @@ func main() {
 		TreeStore:          treeStore,
 		ResolveTree:        resolveTree,
 		ResolveTreeForUser: resolveTreeForUser,
+	}
+	if _, err := agentRunner.BoardManager(); err != nil {
+		engine.Error("Agent blackboard initialization failed", "error", err)
+		os.Exit(1)
 	}
 
 	engine.PersistMutatedTreeFn = func(info engine.LiveRunInfo, tree *evolution.SerializableNode) error {
@@ -662,6 +678,7 @@ func main() {
 				// validation gate has real execution data to judge deployments by.
 				slo := engine.GetSLOMetrics(ctx.AgentName, treeName)
 				attempts := 0
+				var persistenceDiagnostic error
 				err = policy.ExecuteContext(ctx.Context, func() error {
 					attempts++
 					attemptStart := time.Now()
@@ -678,14 +695,22 @@ func main() {
 						output = attemptRes.Output
 						res = attemptRes
 					}
+					if agent.IsHealthyOutcome(outcome) && reliability.IsExecutionPersistenceError(runErr) {
+						persistenceDiagnostic = runErr
+						engine.Error("completed execution history was not persisted", "agent", ctx.AgentName, "error", runErr)
+					}
 					return recordSchedulerAttempt(slo, outcome, runErr, output, attempts, time.Since(attemptStart))
 				})
+
+				if err == nil {
+					err = persistenceDiagnostic
+				}
 
 				if saveErr := engine.SaveSLOMetrics(sloEvidencePath); saveErr != nil {
 					engine.Error("failed to persist SLO evidence", "error", saveErr)
 				}
 
-				if err != nil {
+				if err != nil && !reliability.IsExecutionPersistenceError(err) && !reliability.IsExecutionPause(outcome, err) {
 					dlqParent := ctx.Context
 					if res != nil && res.TraceID != "" {
 						dlqParent = tracing.ContextWithTraceParentHeader(ctx.Context, "00-"+res.TraceID+"-"+res.SpanID+"-01")
@@ -693,7 +718,10 @@ func main() {
 					_, dlqSpan := tracing.StartSpan(dlqParent, "agent.dlq_push")
 					dlqSpan.SetAttribute("agent", ctx.AgentName)
 					dlqSpan.RecordError(err)
-					dlq.Push(schedulerDeadLetter(ctx.AgentName, task, err, attempts, buildID.Revision))
+					if pushErr := dlq.PushExecutionFailureWithError(schedulerDeadLetter(ctx.AgentName, task, err, attempts, buildID.Revision), err); pushErr != nil {
+						err = errors.Join(err, &reliability.ExecutionUncertainError{Err: fmt.Errorf("persist dead letter: %w", pushErr)})
+						engine.Error("failed to persist dead letter; execution requires reconciliation", "error", pushErr)
+					}
 					dlqSpan.End()
 				}
 
@@ -716,10 +744,13 @@ func main() {
 				// Fleet owner: only THIS watcher restarts sibling units after
 				// a sweep (bt-dashboard's watcher rebuilds its own binary only).
 				RestartSiblings: true,
-				Targets:         agent.DefaultRebuildTargets(repoDir),
-				Binary:          "bt-agent",
-				Backoff:         agent.NewRebuildBackoff(),
-				InFlightFn:      globalSched.AnyInFlight,
+				SiblingRestartFn: func(unit, revision string) error {
+					return agent.RequestOwnedRestart(agent.HomeDir(), unit, revision)
+				},
+				Targets:    agent.DefaultRebuildTargets(repoDir),
+				Binary:     "bt-agent",
+				Backoff:    agent.NewRebuildBackoff(),
+				InFlightFn: globalSched.AnyInFlight,
 			}, agent.DefaultDriftCheckInterval)
 		}
 	}
@@ -955,11 +986,17 @@ func main() {
 // would silently end all future scan ticks.
 func runDLQReplayScanOnce(dlq *reliability.DeadLetterQueue) {
 	_ = reliability.Recover("dlq-replay-scan-tick", func() {
-		dlq.Reload()
+		if err := dlq.ReloadWithError(); err != nil {
+			engine.Error("dlq: replay scan storage unavailable", "error", err)
+			return
+		}
 		for _, id := range dlq.RequeuedReady() {
-			if entry, ok := dlq.Replay(id); ok {
-				engine.Info("dlq: replayed requeued entry", "id", entry.ID, "agent", entry.Agent)
+			entry, err := dlq.ReplayWithError(id)
+			if err != nil {
+				engine.Error("dlq: replay not acknowledged", "id", id, "error_kind", reliability.ExecutionErrorKind(err), "error", err)
+				continue
 			}
+			engine.Info("dlq: replayed requeued entry", "id", entry.ID, "agent", entry.Agent)
 		}
 	})
 }
@@ -1006,6 +1043,7 @@ func localAgentResult(agentName, task string, res *agent.RunResult, err error) (
 	}
 	if err != nil {
 		ar.Error = err.Error()
+		ar.ErrorKind = reliability.ExecutionErrorKind(err)
 	}
 	return ar, err
 }

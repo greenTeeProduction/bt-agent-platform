@@ -29,7 +29,7 @@ var PersonaStore *persona.Store
 // GET /api/hitl/pending
 func HandleHITLPending(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		encodeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 		return
 	}
 	store := hitl.DefaultStore
@@ -37,7 +37,12 @@ func HandleHITLPending(w http.ResponseWriter, r *http.Request) {
 		encodeJSON(w, 0, []any{})
 		return
 	}
-	encodeJSON(w, 0, store.ListPending())
+	list, err := store.ListPendingWithContext(r.Context())
+	if err != nil {
+		writeHITLResult(w, nil, err)
+		return
+	}
+	encodeJSON(w, 0, list)
 }
 
 // HandleHITL routes HITL REST endpoints under /api/hitl/.
@@ -49,14 +54,14 @@ func HandleHITL(w http.ResponseWriter, r *http.Request) {
 			HandleHITLPending(w, r)
 			return
 		}
-		http.NotFound(w, r)
+		encodeJSON(w, http.StatusNotFound, map[string]string{"error": "HITL request not found"})
 		return
 	}
 
 	parts := strings.Split(path, "/")
 	id := parts[0]
 	if id == "" {
-		http.NotFound(w, r)
+		encodeJSON(w, http.StatusNotFound, map[string]string{"error": "HITL request not found"})
 		return
 	}
 
@@ -67,9 +72,13 @@ func HandleHITL(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(parts) == 1 && r.Method == http.MethodGet {
-		req, ok := store.Get(id)
+		req, ok, err := store.GetWithContext(r.Context(), id)
+		if err != nil {
+			writeHITLResult(w, nil, err)
+			return
+		}
 		if !ok {
-			http.NotFound(w, r)
+			encodeJSON(w, http.StatusNotFound, map[string]string{"error": "HITL request not found"})
 			return
 		}
 		encodeJSON(w, 0, req)
@@ -94,10 +103,10 @@ func HandleHITL(w http.ResponseWriter, r *http.Request) {
 		switch parts[1] {
 		case "approve":
 			if r.Method != http.MethodPost {
-				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				encodeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 				return
 			}
-			req, err := store.Approve(id, body.Reviewer, body.Comment)
+			req, err := store.ApproveWithContext(r.Context(), id, body.Reviewer, body.Comment)
 			if err == nil {
 				finalizeHITLResolution(req, true)
 			}
@@ -105,14 +114,14 @@ func HandleHITL(w http.ResponseWriter, r *http.Request) {
 			return
 		case "reject":
 			if r.Method != http.MethodPost {
-				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				encodeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 				return
 			}
 			reason := body.Reason
 			if reason == "" {
 				reason = body.Comment
 			}
-			req, err := store.Reject(id, body.Reviewer, reason)
+			req, err := store.RejectWithContext(r.Context(), id, body.Reviewer, reason)
 			if err == nil {
 				finalizeHITLResolution(req, false)
 			}
@@ -120,20 +129,20 @@ func HandleHITL(w http.ResponseWriter, r *http.Request) {
 			return
 		case "escalate":
 			if r.Method != http.MethodPost {
-				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				encodeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "method not allowed"})
 				return
 			}
 			reason := body.Reason
 			if reason == "" {
 				reason = body.Comment
 			}
-			req, err := store.Escalate(id, body.Reviewer, reason)
+			req, err := store.EscalateWithContext(r.Context(), id, body.Reviewer, reason)
 			writeHITLResult(w, req, err)
 			return
 		}
 	}
 
-	http.NotFound(w, r)
+	encodeJSON(w, http.StatusNotFound, map[string]string{"error": "HITL request not found"})
 }
 
 // finalizeHITLResolution mirrors the MCP bt_hitl_approve/bt_hitl_reject path
@@ -168,7 +177,11 @@ func encodeJSON(w http.ResponseWriter, status int, v any) {
 
 func writeHITLResult(w http.ResponseWriter, req *hitl.Request, err error) {
 	if err != nil {
-		encodeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		status := http.StatusServiceUnavailable
+		if errors.Is(err, hitl.ErrRequestNotFound) || errors.Is(err, hitl.ErrInvalidStatus) {
+			status = http.StatusBadRequest
+		}
+		encodeJSON(w, status, map[string]string{"error": err.Error()})
 		return
 	}
 	encodeJSON(w, 0, req)

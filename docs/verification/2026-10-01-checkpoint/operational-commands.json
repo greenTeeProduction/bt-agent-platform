@@ -1,0 +1,12 @@
+{
+  "private_script_sha256": {
+    "backup.py": "88c95b3384f2012f44edc6b6af27001ac74b52dc6c1222a670450b49cfde7f1f",
+    "qualify_operations.py": "1acd49dfc7cdcef98b108647ef958838137f9d59f13f769f1e3ba3a14f97c341"
+  },
+  "commands": [
+    "python3 <private>/backup.py",
+    "python3 <private>/qualify_operations.py --restore-only",
+    "python3 <private>/qualify_operations.py"
+  ],
+  "backed_up_configuration": "Private copies of platform.env, codex.env, codex-only.env and BT user units/drop-ins; account authentication was not restored."
+}

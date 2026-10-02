@@ -1,0 +1,98 @@
+[
+  {
+    "path": "internal/agent/deploy_drift.go",
+    "blob_href": "https://github.com/greenTeeProduction/bt-agent-platform/blob/fb87abef1efaee5355bdc8827787e4fac00a2c7b/internal/agent/deploy_drift.go",
+    "start_line": 107,
+    "start_column": 15,
+    "end_line": 107,
+    "end_column": 15,
+    "annotation_level": "failure",
+    "title": "Potential file inclusion via variable",
+    "message": "Potential file inclusion via variable",
+    "raw_details": null
+  },
+  {
+    "path": "internal/agent/deploy_drift.go",
+    "blob_href": "https://github.com/greenTeeProduction/bt-agent-platform/blob/fb87abef1efaee5355bdc8827787e4fac00a2c7b/internal/agent/deploy_drift.go",
+    "start_line": 111,
+    "start_column": 9,
+    "end_line": 111,
+    "end_column": 9,
+    "annotation_level": "failure",
+    "title": "Expect WriteFile permissions to be 0600 or less",
+    "message": "Expect WriteFile permissions to be 0600 or less",
+    "raw_details": null
+  },
+  {
+    "path": "internal/agent/deploy_drift.go",
+    "blob_href": "https://github.com/greenTeeProduction/bt-agent-platform/blob/fb87abef1efaee5355bdc8827787e4fac00a2c7b/internal/agent/deploy_drift.go",
+    "start_line": 111,
+    "start_column": 21,
+    "end_line": 111,
+    "end_column": 21,
+    "annotation_level": "failure",
+    "title": "Path traversal via taint analysis",
+    "message": "Path traversal via taint analysis",
+    "raw_details": null
+  },
+  {
+    "path": "internal/agent/deploy_drift.go",
+    "blob_href": "https://github.com/greenTeeProduction/bt-agent-platform/blob/fb87abef1efaee5355bdc8827787e4fac00a2c7b/internal/agent/deploy_drift.go",
+    "start_line": 129,
+    "start_column": 9,
+    "end_line": 129,
+    "end_column": 9,
+    "annotation_level": "failure",
+    "title": "Subprocess launched with variable",
+    "message": "Subprocess launched with variable",
+    "raw_details": null
+  },
+  {
+    "path": "internal/agent/history.go",
+    "blob_href": "https://github.com/greenTeeProduction/bt-agent-platform/blob/fb87abef1efaee5355bdc8827787e4fac00a2c7b/internal/agent/history.go",
+    "start_line": 36,
+    "start_column": 12,
+    "end_line": 36,
+    "end_column": 12,
+    "annotation_level": "failure",
+    "title": "Expect directory permissions to be 0750 or less",
+    "message": "Expect directory permissions to be 0750 or less",
+    "raw_details": null
+  },
+  {
+    "path": "internal/agent/history.go",
+    "blob_href": "https://github.com/greenTeeProduction/bt-agent-platform/blob/fb87abef1efaee5355bdc8827787e4fac00a2c7b/internal/agent/history.go",
+    "start_line": 63,
+    "start_column": 12,
+    "end_line": 63,
+    "end_column": 12,
+    "annotation_level": "failure",
+    "title": "Potential file inclusion via variable",
+    "message": "Potential file inclusion via variable",
+    "raw_details": null
+  },
+  {
+    "path": "internal/agent/history.go",
+    "blob_href": "https://github.com/greenTeeProduction/bt-agent-platform/blob/fb87abef1efaee5355bdc8827787e4fac00a2c7b/internal/agent/history.go",
+    "start_line": 63,
+    "start_column": 12,
+    "end_line": 63,
+    "end_column": 12,
+    "annotation_level": "failure",
+    "title": "Expect file permissions to be 0600 or less",
+    "message": "Expect file permissions to be 0600 or less",
+    "raw_details": null
+  },
+  {
+    "path": "internal/agent/history.go",
+    "blob_href": "https://github.com/greenTeeProduction/bt-agent-platform/blob/fb87abef1efaee5355bdc8827787e4fac00a2c7b/internal/agent/history.go",
+    "start_line": 208,
+    "start_column": 16,
+    "end_line": 208,
+    "end_column": 16,
+    "annotation_level": "failure",
+    "title": "Potential file inclusion via variable",
+    "message": "Potential file inclusion via variable",
+    "raw_details": null
+  }
+]

@@ -1,7 +1,7 @@
 {
   "name": "bt-agent-platform-master",
   "version": "1.0.0",
-  "description": "**Behavior-tree-driven AI agent framework** — 41 trees, 7 categories, 3 MCP servers, continuous self-evolution.",
+  "description": "Go behavior-tree agent platform with MCP servers, a dashboard, scheduled agents and validated evolution.",
   "main": "playwright.config.js",
   "directories": {
     "doc": "docs",

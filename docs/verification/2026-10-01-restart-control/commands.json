@@ -1,0 +1,128 @@
+{
+  "commands": [
+    {
+      "command": "go test -short -count=1 ./internal/agent -run TestDriftSiblingRestartRequiresTargetOwnership",
+      "evidence": "red.log",
+      "exit_code": 1,
+      "stage": "pre-fix red ownership fixture"
+    },
+    {
+      "command": "GOFLAGS=-p=2 go test -short -count=1 -race -coverprofile=<private>/coverage.out -covermode=atomic ./...",
+      "evidence": "full-race.log",
+      "exit_code": 0,
+      "snapshot_variant": "See qualified-code.json: three-line scanner explanation only.",
+      "total_statement_coverage": "77.8%"
+    },
+    {
+      "command": "GOFLAGS=-p=2 go test -short -count=1 -race ./internal/agent ./internal/reliability ./internal/gardener ./cmd/bt-dashboard ./cmd/bt-agent ./cmd/bt-gardener",
+      "evidence": "race-final.log",
+      "exit_code": 0,
+      "stage": "Final annotated Go source"
+    },
+    {
+      "command": "GOFLAGS=-p=2 make build BIN_DIR=<private>/bin",
+      "evidence": "build.log",
+      "exit_code": 0,
+      "stage": "Final annotated Go source; all build gates, 13 binaries and AST graph"
+    },
+    {
+      "command": "python3 scripts/test_check_arc42.py then bash scripts/check-doc-drift.sh (only on success)",
+      "evidence": "docs.log",
+      "exit_code": 0,
+      "fixtures": 11
+    },
+    {
+      "command": "GOFLAGS=-p=2 gosec -no-fail -fmt sarif -out <private>/medium.sarif -severity medium ./...",
+      "evidence": "scanner-summary.json",
+      "exit_code": 0,
+      "qualification": "Not a clean security scan.",
+      "remaining_findings": 256
+    },
+    {
+      "command": "go build -ldflags '-X github.com/nico/go-bt-evolve/internal/dashboard.stampedRevision=f7fa8dc65756a6be0cc91a2f88d2d156f99620ec' -o <private>/clean-bin/bt-dashboard ./cmd/bt-dashboard then <private>/clean-bin/bt-dashboard --version (only on successful build)",
+      "evidence": "clean-artifact.json",
+      "exit_code": 0,
+      "stage": "Clean committed source; version only, not deployed."
+    }
+  ],
+  "evidence_only_checks": [
+    {
+      "command": "python3 scripts/test_check_arc42.py then bash scripts/check-doc-drift.sh (only on success)",
+      "evidence": "evidence-docs.log",
+      "exit_code": 0,
+      "fixtures": 11
+    },
+    {
+      "command": "git diff 2693548055f9f710701305e0b0a75d11a2690198 -- '*.go' go.mod go.sum and complete Go manifest SHA-256 comparison",
+      "exit_code": 0,
+      "qualification": "No Go/dependency differences; exact corrected code identity preserved."
+    }
+  ],
+  "final_permission_commands": [
+    {
+      "command": "GOFLAGS=-p=2 go test -short -count=1 -race ./internal/agent",
+      "evidence": "permission-race.log",
+      "exit_code": 0,
+      "qualification": "Includes scheduler independent-process restart regressions."
+    },
+    {
+      "command": "GOFLAGS=-p=2 make build BIN_DIR=<private>/permission-bin",
+      "evidence": "permission-build.log",
+      "exit_code": 0,
+      "qualification": "Vet/fmt/tidy/zero-issue lint/local high-security/13 binaries/AST graph; hashes in permission-binaries.json."
+    },
+    {
+      "command": "python3 scripts/test_check_arc42.py then bash scripts/check-doc-drift.sh (only on success)",
+      "evidence": "permission-docs.log",
+      "exit_code": 0,
+      "fixtures": 11
+    },
+    {
+      "command": "GOFLAGS=-p=2 gosec -no-fail -fmt sarif -out <private>/permission-medium.sarif -severity medium ./...",
+      "evidence": "permission-summary.json",
+      "exit_code": 0,
+      "qualification": "252 baseline findings; not a clean scan."
+    }
+  ],
+  "fixture_environment": {
+    "BT_AGENT_HOME": "<private-fixture>",
+    "BT_SKIP_LLM_TESTS": "1",
+    "GOCACHE": "<separate-cache>",
+    "GOTMPDIR": "/tmp",
+    "PATH": "Go toolchain and local Go tool binaries prepended"
+  },
+  "initial_implementation_commit": "f7fa8dc65756a6be0cc91a2f88d2d156f99620ec",
+  "scanner_correction_commands": [
+    {
+      "command": "GOFLAGS=-p=2 go test -short -count=1 -race ./internal/agentexec ./internal/agent",
+      "evidence": "scanner-fix-race.log",
+      "exit_code": 0
+    },
+    {
+      "command": "GOFLAGS=-p=2 make build BIN_DIR=<private>/scanner-fix-bin",
+      "evidence": "scanner-fix-build.log",
+      "exit_code": 0,
+      "qualification": "Final corrective source; all build gates/13 binaries/AST graph."
+    },
+    {
+      "command": "python3 scripts/test_check_arc42.py then bash scripts/check-doc-drift.sh (only on success)",
+      "evidence": "scanner-fix-docs.log",
+      "exit_code": 0,
+      "fixtures": 11,
+      "initial_failed_check": "Misplaced generated footers failed drift; corrected and failed log retained privately."
+    },
+    {
+      "command": "GOFLAGS=-p=2 gosec -no-fail -fmt sarif -out <private>/scanner-fix-medium.sarif -severity medium ./...",
+      "evidence": "scanner-fix-summary.json",
+      "exit_code": 0,
+      "qualification": "253 remaining findings; not a clean scan."
+    },
+    {
+      "command": "GOFLAGS=-p=2 go build -ldflags '-X github.com/nico/go-bt-evolve/internal/dashboard.stampedRevision=2693548055f9f710701305e0b0a75d11a2690198' -o <private>/clean-bin/bt-dashboard-corrected ./cmd/bt-dashboard then <private>/clean-bin/bt-dashboard-corrected --version (only on successful build)",
+      "evidence": "clean-corrected-artifact.json",
+      "exit_code": 0,
+      "stage": "Clean corrected committed source; version only, not deployed."
+    }
+  ],
+  "toolchain": "go1.26.5 linux/arm64"
+}

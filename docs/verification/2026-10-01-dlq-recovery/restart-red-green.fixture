@@ -1,0 +1,131 @@
+package reliability
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+)
+
+func TestDLQReplaySurvivesIndependentRestarts(t *testing.T) {
+	if phase := os.Getenv("BT_DLQ_PROCESS_PHASE"); phase != "" {
+		dlqRestartChild(t, phase)
+		return
+	}
+	for _, fault := range []string{"successful-record-failure", "uncertain-record-failure", "exit-after-action", "admission-failure"} {
+		t.Run(fault, func(t *testing.T) {
+			if os.Geteuid() == 0 && fault != "exit-after-action" {
+				t.Skip("permission fault requires an unprivileged process")
+			}
+			root := t.TempDir()
+			queueDir := filepath.Join(root, "queue")
+			if err := os.Mkdir(queueDir, 0o750); err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = os.Chmod(queueDir, 0o750) })
+			q := NewDeadLetterQueue(filepath.Join(queueDir, "dlq.json"))
+			q.Push(DeadLetterEntry{ID: "owned", Agent: "local", Task: "durable-action"})
+			if _, ok := q.Requeue("owned"); !ok {
+				t.Fatal("seed requeue failed")
+			}
+			run := func(phase string) {
+				t.Helper()
+				bin, err := os.Executable()
+				if err != nil {
+					t.Fatal(err)
+				}
+				ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+				defer cancel()
+				cmd := exec.CommandContext(ctx, bin, "-test.run=^TestDLQReplaySurvivesIndependentRestarts$")
+				cmd.Env = append(os.Environ(), "BT_DLQ_PROCESS_PHASE="+phase, "BT_DLQ_PROCESS_ROOT="+root, "BT_DLQ_PROCESS_FAULT="+fault)
+				if output, err := cmd.CombinedOutput(); err != nil {
+					t.Fatalf("%s child: %v\n%s", phase, err, output)
+				}
+			}
+			run("execute")
+			// Repair storage access without changing the actual queue bytes.
+			if err := os.Chmod(queueDir, 0o750); err != nil {
+				t.Fatal(err)
+			}
+			before, err := os.ReadFile(filepath.Join(queueDir, "dlq.json"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if fault == "admission-failure" {
+				if data, _ := os.ReadFile(filepath.Join(root, "actions")); len(data) != 0 {
+					t.Fatalf("failed admission dispatched action: %s", data)
+				}
+				return
+			}
+			run("recover-one")
+			run("recover-two")
+			data, err := os.ReadFile(filepath.Join(root, "actions"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := len(strings.Fields(string(data))); got != 1 {
+				t.Fatalf("action count after two independent restarts = %d, want 1; evidence=%s", got, data)
+			}
+			after, err := os.ReadFile(filepath.Join(queueDir, "dlq.json"))
+			if err != nil || string(before) != string(after) {
+				t.Fatalf("ordinary recovery changed held queue bytes: err=%v", err)
+			}
+		})
+	}
+}
+
+func dlqRestartChild(t *testing.T, phase string) {
+	t.Helper()
+	root, fault := os.Getenv("BT_DLQ_PROCESS_ROOT"), os.Getenv("BT_DLQ_PROCESS_FAULT")
+	queueDir := filepath.Join(root, "queue")
+	q := NewDeadLetterQueue(filepath.Join(queueDir, "dlq.json"))
+	if phase == "execute" && fault == "admission-failure" {
+		if err := os.Chmod(queueDir, 0o500); err != nil {
+			t.Fatal(err)
+		}
+	}
+	q.SetReplayExecutor(func(DeadLetterEntry) error {
+		file, err := os.OpenFile(filepath.Join(root, "actions"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := fmt.Fprintln(file, os.Getpid()); err != nil {
+			t.Fatal(err)
+		}
+		if err := file.Sync(); err != nil {
+			t.Fatal(err)
+		}
+		if err := file.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if phase == "execute" {
+			if fault == "exit-after-action" {
+				os.Exit(0)
+			}
+			if fault != "admission-failure" {
+				if err := os.Chmod(queueDir, 0o500); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if fault == "uncertain-record-failure" {
+				return &ExecutionUncertainError{Err: fmt.Errorf("controlled uncertain action")}
+			}
+		}
+		return nil
+	})
+	if phase != "execute" {
+		// Exercise a fresh load, scanner selection, ordinary reapproval and
+		// direct replay; none may release uncertain/completed work.
+		q.Reload()
+		for _, id := range q.RequeuedReady() {
+			_, _ = q.Replay(id)
+		}
+		_, _ = q.Requeue("owned")
+	}
+	_, _ = q.Replay("owned")
+	os.Exit(0) // no in-process repair or retained transient owner survives
+}

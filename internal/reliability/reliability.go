@@ -5,6 +5,7 @@ package reliability
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -213,282 +214,15 @@ func RetryWithBackoff(maxRetries int, base, maxDelay time.Duration, fn func() er
 		if err == nil {
 			return nil
 		}
+		if IsExecutionTerminalError(err) {
+			return err
+		}
 		lastErr = err
 		if attempt < maxRetries {
 			time.Sleep(Backoff(attempt, base, maxDelay))
 		}
 	}
 	return fmt.Errorf("retry exhausted after %d attempts: %w", maxRetries, lastErr)
-}
-
-// ─── Dead Letter Queue ──────────────────────────────────────────────────────
-
-// Graceful-degradation bounds for the dead letter queue. Under a sustained
-// failure storm an unbounded DLQ would grow without limit (memory + disk), and
-// a "poison pill" task that fails every replay would drive an infinite
-// auto-requeue loop. These constants cap both.
-const (
-	// MaxDeadLetterEntries caps how many entries the DLQ retains. When Push
-	// overflows this bound, the OLDEST entries are evicted first.
-	MaxDeadLetterEntries = 1000
-	// MaxReplayAttempts is the number of auto-requeues an entry may accrue
-	// before it is terminally flagged Abandoned and excluded from further
-	// requeue, breaking infinite replay loops on a poison pill.
-	MaxReplayAttempts = 5
-)
-
-// DeadLetterEntry represents a failed task stored for inspection.
-type DeadLetterEntry struct {
-	ID       string    `json:"id"`
-	Task     string    `json:"task"`
-	Agent    string    `json:"agent"`
-	Error    string    `json:"error"`
-	Attempts int       `json:"attempts"`
-	FailedAt time.Time `json:"failed_at"`
-	Circuit  string    `json:"circuit,omitempty"`
-	Category string    `json:"category,omitempty"` // ErrorCategory string, auto-classified on push
-	// BuildRevision records the VCS revision of the process that produced this
-	// dead letter (dashboard.ReadBuildIdentity().Revision, stamped at the push
-	// site). Deploy-drift diagnosis (program 94b0b31) uses it to distinguish a
-	// failure on a stale binary from one on current code. Optional: unstamped
-	// builds and old entries omit it.
-	BuildRevision string `json:"build_revision,omitempty"`
-	// RequeuedAt is stamped by Requeue when a process without a tree runner (the
-	// dashboard) flags this entry for retry. A non-zero value signals bt-agent's
-	// executor to pick the task up on its next scan instead of leaving it dead.
-	RequeuedAt time.Time `json:"requeued_at,omitzero"`
-	// Abandoned is set once an entry's replay Attempts exceed MaxReplayAttempts.
-	// An abandoned entry is retained for inspection but excluded from further
-	// auto-requeue so a poison pill cannot drive an infinite replay loop.
-	Abandoned bool `json:"abandoned,omitzero"`
-	// LastReplayAt and LastReplayError record the most recent failed replay so
-	// the outcome survives on disk for sibling processes; a successful replay
-	// removes the entry, so a set value always describes a failure.
-	LastReplayAt    time.Time `json:"last_replay_at,omitzero"`
-	LastReplayError string    `json:"last_replay_error,omitempty"`
-}
-
-// DeadLetterQueue stores failed tasks for manual inspection and replay.
-type DeadLetterQueue struct {
-	mu      sync.Mutex
-	entries []DeadLetterEntry
-	path    string // persistence file
-
-	executor    ReplayExecutor  // re-executes replayed tasks (SetReplayExecutor)
-	replaying   map[string]bool // ids currently being replayed (guards doubled replays)
-	pushCounter uint64          // disambiguates entries pushed within the same nanosecond
-}
-
-// ReplayExecutor re-executes one dead-lettered task. A nil error means the
-// task succeeded and the entry may be removed; any error retains the entry.
-type ReplayExecutor func(entry DeadLetterEntry) error
-
-// SetReplayExecutor installs the function Replay uses to re-execute tasks.
-func (dlq *DeadLetterQueue) SetReplayExecutor(fn ReplayExecutor) {
-	dlq.mu.Lock()
-	defer dlq.mu.Unlock()
-	dlq.executor = fn
-}
-
-// RequeuedReady returns the ids of entries flagged for retry (RequeuedAt set)
-// that are not abandoned — the background scan's work list.
-func (dlq *DeadLetterQueue) RequeuedReady() []string {
-	dlq.mu.Lock()
-	defer dlq.mu.Unlock()
-	var ids []string
-	for _, e := range dlq.entries {
-		if !e.RequeuedAt.IsZero() && !e.Abandoned {
-			ids = append(ids, e.ID)
-		}
-	}
-	return ids
-}
-
-// NewDeadLetterQueue creates a dead letter queue with optional persistence.
-func NewDeadLetterQueue(persistencePath string) *DeadLetterQueue {
-	dlq := &DeadLetterQueue{path: persistencePath}
-	if persistencePath != "" {
-		dlq.load()
-	}
-	return dlq
-}
-
-// Push adds a failed task to the dead letter queue.
-func (dlq *DeadLetterQueue) Push(entry DeadLetterEntry) {
-	dlq.mu.Lock()
-	defer dlq.mu.Unlock()
-	entry.FailedAt = time.Now()
-	// Callers such as pushToDLQAction never set ID, and mergeFromDisk's byID map
-	// collapses entries that share an ID — so an empty ID must get a default
-	// that cannot collide with another entry pushed in the same nanosecond.
-	if entry.ID == "" {
-		dlq.pushCounter++
-		entry.ID = fmt.Sprintf("%s-%d-%d", entry.Agent, time.Now().UnixNano(), dlq.pushCounter)
-	}
-	// Auto-classify error if category not already set.
-	if entry.Category == "" && entry.Error != "" {
-		entry.Category = ClassifyError(fmt.Errorf("%s", entry.Error)).String()
-	}
-	dlq.entries = append(dlq.entries, entry)
-	// Graceful degradation: cap retained entries, evicting oldest-first so the
-	// DLQ never grows without bound under a failure storm.
-	if len(dlq.entries) > MaxDeadLetterEntries {
-		trimmed := make([]DeadLetterEntry, MaxDeadLetterEntries)
-		copy(trimmed, dlq.entries[len(dlq.entries)-MaxDeadLetterEntries:])
-		dlq.entries = trimmed
-	}
-	dlq.save()
-}
-
-// CategoryCounts returns the count of dead letter entries per error category.
-func (dlq *DeadLetterQueue) CategoryCounts() map[string]int {
-	dlq.mu.Lock()
-	defer dlq.mu.Unlock()
-	counts := make(map[string]int)
-	for _, e := range dlq.entries {
-		cat := e.Category
-		if cat == "" {
-			cat = "unknown"
-		}
-		counts[cat]++
-	}
-	return counts
-}
-
-// List returns all dead letter entries.
-func (dlq *DeadLetterQueue) List() []DeadLetterEntry {
-	dlq.mu.Lock()
-	defer dlq.mu.Unlock()
-	result := make([]DeadLetterEntry, len(dlq.entries))
-	copy(result, dlq.entries)
-	return result
-}
-
-// Replay re-executes the entry with the given id through the configured
-// executor and removes it ONLY on success — drop-safe (c8094002 ms1). The old
-// Replay removed the entry and returned it for the caller to run: any caller
-// without a tree runner, or one that crashed mid-replay, silently dropped the
-// task. Without an executor, on an abandoned entry, or when the executor
-// fails, the entry is retained. A failed replay clears RequeuedAt so the
-// background scan does not hot-loop the same failure (Requeue counts the
-// attempts that gate abandonment), and abandons the entry once its attempts
-// are exhausted. Concurrent replays of the same id are refused while one is in
-// flight; the executor runs without holding the queue lock (a replay is a full
-// agent run and may take minutes).
-func (dlq *DeadLetterQueue) Replay(id string) (*DeadLetterEntry, bool) {
-	dlq.mu.Lock()
-	if dlq.executor == nil || dlq.replaying[id] {
-		dlq.mu.Unlock()
-		return nil, false
-	}
-	var entry DeadLetterEntry
-	found := false
-	for _, e := range dlq.entries {
-		if e.ID == id {
-			entry, found = e, true
-			break
-		}
-	}
-	if !found || entry.Abandoned {
-		dlq.mu.Unlock()
-		return nil, false
-	}
-	if dlq.replaying == nil {
-		dlq.replaying = make(map[string]bool)
-	}
-	dlq.replaying[id] = true
-	executor := dlq.executor
-	dlq.mu.Unlock()
-
-	err := executor(entry)
-
-	dlq.mu.Lock()
-	defer dlq.mu.Unlock()
-	delete(dlq.replaying, id)
-	for i := range dlq.entries {
-		if dlq.entries[i].ID != id {
-			continue
-		}
-		if err == nil {
-			replayed := dlq.entries[i]
-			dlq.entries = append(dlq.entries[:i], dlq.entries[i+1:]...)
-			dlq.save()
-			return &replayed, true
-		}
-		dlq.entries[i].RequeuedAt = time.Time{}
-		dlq.entries[i].LastReplayAt = time.Now()
-		dlq.entries[i].LastReplayError = err.Error()
-		if dlq.entries[i].Attempts >= MaxReplayAttempts {
-			dlq.entries[i].Abandoned = true
-		}
-		dlq.save()
-		return nil, false
-	}
-	return nil, false
-}
-
-// Reload discards the in-memory view and re-reads the queue from its
-// persistence file. The dashboard runs in a separate process from bt-agent's
-// executor, so it must reload before mutating shared on-disk state — otherwise
-// a stale in-memory copy would clobber entries the executor added or updated
-// since the dashboard last read the file. No-op when persistence is disabled.
-func (dlq *DeadLetterQueue) Reload() {
-	dlq.mu.Lock()
-	defer dlq.mu.Unlock()
-	if dlq.path == "" {
-		return
-	}
-	dlq.entries = nil
-	dlq.load()
-}
-
-// Requeue flags the entry with the given id for retry by stamping RequeuedAt and
-// persisting, WITHOUT removing it from the queue. Unlike Replay (which removes
-// and returns an entry for an in-process runner), Requeue lets a process with no
-// tree runner — the dashboard — mark a dead-lettered task so bt-agent's executor
-// picks it up on its next scan, instead of silently dropping it cross-process.
-func (dlq *DeadLetterQueue) Requeue(id string) (*DeadLetterEntry, bool) {
-	dlq.mu.Lock()
-	defer dlq.mu.Unlock()
-
-	for i := range dlq.entries {
-		if dlq.entries[i].ID == id {
-			// Poison-pill guard: an entry already abandoned, or one that has
-			// exhausted its replay budget, must never be auto-requeued again.
-			// Exhausting the budget terminally flags the entry Abandoned so it
-			// is retained for inspection but excluded from further requeue,
-			// breaking infinite replay loops.
-			if dlq.entries[i].Abandoned {
-				return nil, false
-			}
-			if dlq.entries[i].Attempts >= MaxReplayAttempts {
-				dlq.entries[i].Abandoned = true
-				dlq.save()
-				return nil, false
-			}
-			dlq.entries[i].Attempts++
-			dlq.entries[i].RequeuedAt = time.Now()
-			dlq.save()
-			e := dlq.entries[i]
-			return &e, true
-		}
-	}
-	return nil, false
-}
-
-// Purge removes all entries from the dead letter queue.
-func (dlq *DeadLetterQueue) Purge() {
-	dlq.mu.Lock()
-	defer dlq.mu.Unlock()
-	dlq.entries = nil
-	dlq.save()
-}
-
-// Len returns the number of entries in the dead letter queue.
-func (dlq *DeadLetterQueue) Len() int {
-	dlq.mu.Lock()
-	defer dlq.mu.Unlock()
-	return len(dlq.entries)
 }
 
 // AcquireFileLock takes an exclusive advisory flock on the sidecar
@@ -518,7 +252,17 @@ func AcquireFileLock(path string) (func(), error) {
 // AcquireFileLockWithContext acquires `<path>.lock` with context cancellation
 // and deadline support.
 func AcquireFileLockWithContext(ctx context.Context, path string) (func(), error) {
-	lockPath := path + ".lock"
+	root, name, err := util.OpenPersistenceRoot(path)
+	if err != nil {
+		return nil, fmt.Errorf("open lock parent: %w", err)
+	}
+	transferred := false
+	defer func() {
+		if !transferred {
+			_ = root.Close()
+		}
+	}()
+	lockPath := name + ".lock"
 	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
 
@@ -529,7 +273,7 @@ func AcquireFileLockWithContext(ctx context.Context, path string) (func(), error
 		default:
 		}
 
-		f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0644)
+		f, err := root.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0600)
 		if err != nil {
 			return nil, fmt.Errorf("open lock %s: %w", lockPath, err)
 		}
@@ -550,111 +294,19 @@ func AcquireFileLockWithContext(ctx context.Context, path string) (func(), error
 			_ = f.Close()
 			return nil, fmt.Errorf("stat lock %s: %w", lockPath, err)
 		}
-		if current, err := os.Stat(lockPath); err != nil || !os.SameFile(held, current) {
+		if current, err := root.Stat(lockPath); err != nil || !os.SameFile(held, current) {
 			_ = f.Close() // locked an orphaned inode; retry on the live path
 			continue
 		}
 		release := sync.OnceFunc(func() {
 			// Unlink before close so no waiter still blocked on this
 			// inode can mistake it for the lock guarding the path.
-			_ = os.Remove(lockPath)
+			_ = root.Remove(lockPath)
 			_ = f.Close() // closing the descriptor releases the flock
+			_ = root.Close()
 		})
+		transferred = true
 		return release, nil
-	}
-}
-
-// mergeFromDisk folds sibling-process state from the shared persistence file
-// into the in-memory entries before a save. The daemon, the dashboard, and MCP
-// siblings each hold an independent DeadLetterQueue over the same file, so a
-// whole-file rewrite from a view that predates a sibling's Requeue would erase
-// its RequeuedAt stamp and the executor's next scan would never see the
-// flagged task — replay stays dead cross-process. Membership stays
-// memory-authoritative (Replay removes entries on success and Purge clears
-// wholesale; resurrecting disk-only entries would undo both), while per-entry
-// replay state merges monotonically:
-//
-//   - Requeue bumps Attempts every time it stamps RequeuedAt, so a strictly
-//     higher on-disk Attempts marks the disk entry as the newer write — adopt
-//     its Attempts and RequeuedAt together. At equal Attempts memory is at
-//     least as recent, which preserves Replay's deliberate clear of RequeuedAt
-//     after a failed replay (the scan hot-loop guard).
-//   - Abandoned is terminal (nothing ever clears it), so it merges as OR: a
-//     sibling's abandoned poison pill must not be resurrected into the
-//     auto-requeue pool by a stale save.
-//
-// Callers must hold dlq.mu and the cross-process file lock.
-func (dlq *DeadLetterQueue) mergeFromDisk() {
-	data, err := os.ReadFile(dlq.path)
-	if err != nil {
-		return // no sibling state yet (first save)
-	}
-	var disk []DeadLetterEntry
-	if err := json.Unmarshal(data, &disk); err != nil {
-		return // corrupt on-disk state; the load path quarantines it
-	}
-	byID := make(map[string]DeadLetterEntry, len(disk))
-	for _, e := range disk {
-		byID[e.ID] = e
-	}
-	for i := range dlq.entries {
-		d, ok := byID[dlq.entries[i].ID]
-		if !ok {
-			continue
-		}
-		if d.Attempts > dlq.entries[i].Attempts {
-			dlq.entries[i].Attempts = d.Attempts
-			dlq.entries[i].RequeuedAt = d.RequeuedAt
-		}
-		if d.Abandoned {
-			dlq.entries[i].Abandoned = true
-		}
-	}
-}
-
-// save persists the queue per ADR-003 via the canonical util.SaveJSONAtomic
-// helper: it writes a complete temp file in the same directory, then renames
-// it over the destination. An in-place rewrite would let a crash mid-write
-// leave a truncated queue at dlq.path; rename swaps a fully written file in
-// one atomic step.
-func (dlq *DeadLetterQueue) save() {
-	if dlq.path == "" {
-		return
-	}
-	// Serialize the read-merge-write against sibling processes sharing this
-	// file, then fold their newer per-entry state into memory before writing
-	// (see mergeFromDisk). A lock failure degrades to the merged-but-
-	// unserialized write rather than dropping the save: an unserialized write
-	// can still lose a concurrent sibling stamp, but an unsaved queue loses
-	// this process's own entries for certain.
-	if release, err := AcquireFileLock(dlq.path); err == nil {
-		defer release()
-	} else {
-		slog.Error("dlq: lock for merged save (writing unserialized)", "path", dlq.path, "error", err)
-	}
-	dlq.mergeFromDisk()
-	if err := util.SaveJSONAtomic(dlq.path, dlq.entries); err != nil {
-		slog.Error("dlq: atomic save failed", "path", dlq.path, "error", err)
-	}
-}
-
-func (dlq *DeadLetterQueue) load() {
-	data, err := os.ReadFile(dlq.path)
-	if err != nil {
-		return
-	}
-	if err := json.Unmarshal(data, &dlq.entries); err != nil {
-		// A corrupt persistence file must not silently become an empty queue:
-		// the next save would persist the wipe over the only copy of the
-		// dead-lettered tasks. Quarantine the payload beside the queue so the
-		// queue restarts empty while the evidence survives subsequent saves.
-		dlq.entries = nil
-		quarantine := dlq.path + ".corrupt"
-		if renameErr := os.Rename(dlq.path, quarantine); renameErr != nil {
-			slog.Error("dlq: quarantine corrupt queue file", "path", dlq.path, "error", renameErr)
-			return
-		}
-		slog.Error("dlq: corrupt queue file quarantined", "path", dlq.path, "quarantine", quarantine, "error", err)
 	}
 }
 
@@ -714,16 +366,50 @@ func (wp *WorkerPool) worker() {
 
 // Submit queues a task for execution. Returns false if the pool is closed.
 func (wp *WorkerPool) Submit(task func()) bool {
+	return wp.SubmitWithContext(context.Background(), task) == nil
+}
+
+var (
+	ErrWorkerPoolClosed = errors.New("worker pool is closed")
+	ErrNilWorkerTask    = errors.New("worker task is nil")
+)
+
+// SubmitWithContext waits for queue capacity until cancellation or shutdown.
+// A nil error acknowledges admission; shutdown drains every admitted task.
+func (wp *WorkerPool) SubmitWithContext(ctx context.Context, task func()) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if task == nil {
+		return ErrNilWorkerTask
+	}
 	wp.admission.RLock()
 	defer wp.admission.RUnlock()
-	if wp.closed || task == nil {
-		return false
+	if wp.closed {
+		return ErrWorkerPoolClosed
 	}
-	wp.tasks <- task
+	select {
+	case <-wp.quit:
+		return ErrWorkerPoolClosed
+	default:
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	select {
+	case wp.tasks <- task:
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-wp.quit:
+		return ErrWorkerPoolClosed
+	}
 	wp.mu.Lock()
 	wp.total++
 	wp.mu.Unlock()
-	return true
+	return nil
 }
 
 // Stats returns worker pool statistics.
@@ -737,9 +423,11 @@ func (wp *WorkerPool) Stats() (active int, queued int, total uint64, completed u
 // work. Tasks must eventually return; this method can be called concurrently.
 func (wp *WorkerPool) Shutdown() {
 	wp.shutdown.Do(func() {
+		// Wake submissions holding the read lock while waiting for queue
+		// capacity before acquiring the exclusive close lock.
+		close(wp.quit)
 		wp.admission.Lock()
 		wp.closed = true
-		close(wp.quit)
 		close(wp.tasks)
 		wp.admission.Unlock()
 	})
@@ -1106,11 +794,13 @@ type AgentResult struct {
 	// directly — can still distinguish those dispositions instead of
 	// collapsing everything to the Success bool. Empty when the backend
 	// (e.g. a remote node that hasn't been updated to populate it) has none.
-	Outcome      string        `json:"outcome,omitempty"`
-	Duration     time.Duration `json:"duration"`
-	Success      bool          `json:"success"`
-	Error        string        `json:"error,omitempty"`
-	QualityScore float64       `json:"quality_score"`
+	Outcome  string        `json:"outcome,omitempty"`
+	Duration time.Duration `json:"duration"`
+	Success  bool          `json:"success"`
+	Error    string        `json:"error,omitempty"`
+	// ErrorKind preserves completed, stopped, or uncertain execution diagnostics.
+	ErrorKind    string  `json:"error_kind,omitempty"`
+	QualityScore float64 `json:"quality_score"`
 }
 
 // AgentExecutor defines the interface for executing agent tasks.
@@ -1309,7 +999,8 @@ func (r *AgentRouter) SetLocal(e AgentExecutor) {
 // Execute routes a task to a healthy executor using the configured strategy.
 // Round-robin (default): distributes evenly across executors.
 // Least-connections: picks the executor with fewest in-flight requests.
-// If an executor's Execute() call fails, the router tries the next healthy executor.
+// Retryable execution failures may try the next healthy executor; completed
+// persistence diagnostics and uncertain remote outcomes are terminal.
 // Falls back to local executor if all remote executors are exhausted.
 // MaxFailover caps how many executors to try (0 = try all).
 //
@@ -1412,8 +1103,24 @@ func (r *AgentRouter) Execute(ctx context.Context, agent, task string) (*AgentRe
 			r.pingHeartbeatAfterSuccess(idx)
 			return result, nil
 		}
+		if IsExecutionPersistenceError(err) {
+			// Execution completed; another backend would repeat its effects.
+			r.recordSuccess(idx)
+			r.pingHeartbeatAfterSuccess(idx)
+			return result, err
+		}
+		if IsExecutionStoppedError(err) && IsExecutionPause(ExecutionStopOutcome(err), err) {
+			r.recordSuccess(idx)
+			r.pingHeartbeatAfterSuccess(idx)
+			return result, err // owner is waiting; another peer would start new work
+		}
 		// Record failure for zombie detection.
 		r.recordFailure(idx)
+		if IsExecutionTerminalError(err) {
+			// The peer may still be working. Preserve uncertainty through the
+			// outer retry policy instead of trying another peer or local copy.
+			return result, err
+		}
 		lastErr = err
 		if result != nil {
 			lastResult = result
@@ -1437,6 +1144,9 @@ func (r *AgentRouter) Execute(ctx context.Context, agent, task string) (*AgentRe
 			result, localErr := r.local.Execute(ctx, agent, task)
 			if localErr == nil {
 				return result, nil
+			}
+			if IsExecutionTerminalError(localErr) {
+				return result, localErr
 			}
 			if result != nil {
 				lastResult = result
@@ -1644,24 +1354,43 @@ type ConcurrencyLimiter struct {
 // NewConcurrencyLimiter creates a concurrency limiter with max slots.
 func NewConcurrencyLimiter(maxConcurrent int) *ConcurrencyLimiter {
 	return &ConcurrencyLimiter{
-		sem: make(chan struct{}, maxConcurrent),
+		sem: make(chan struct{}, max(1, maxConcurrent)),
 	}
 }
 
 // Acquire blocks until a concurrency slot is available.
-// Returns false if the context-like stop is signaled.
 func (cl *ConcurrencyLimiter) Acquire() {
+	_ = cl.AcquireWithContext(context.Background())
+}
+
+// AcquireWithContext reserves a slot or returns the caller's cancellation.
+// A successful reservation must be released exactly once by its owner.
+func (cl *ConcurrencyLimiter) AcquireWithContext(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	cl.mu.Lock()
 	cl.waiting++
 	cl.mu.Unlock()
 
-	cl.sem <- struct{}{}
+	select {
+	case cl.sem <- struct{}{}:
+	case <-ctx.Done():
+		cl.mu.Lock()
+		cl.waiting--
+		cl.mu.Unlock()
+		return ctx.Err()
+	}
 
 	cl.mu.Lock()
 	cl.waiting--
 	cl.active++
 	cl.total++
 	cl.mu.Unlock()
+	return nil
 }
 
 // TryAcquire attempts to acquire a slot without blocking.
@@ -1683,10 +1412,11 @@ func (cl *ConcurrencyLimiter) TryAcquire() bool {
 // Release frees a concurrency slot.
 func (cl *ConcurrencyLimiter) Release() {
 	cl.mu.Lock()
-	if cl.active > 0 {
-		cl.active--
+	defer cl.mu.Unlock()
+	if cl.active == 0 {
+		return
 	}
-	cl.mu.Unlock()
+	cl.active--
 
 	select {
 	case <-cl.sem:

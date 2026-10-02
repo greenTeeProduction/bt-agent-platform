@@ -2069,7 +2069,11 @@ func TestConfig_ResolvePaths(t *testing.T) {
 	if want := filepath.Join("/tmp/test-bt-home", "agents.db"); c.Paths.DBFile != want {
 		t.Errorf("DBFile = %q, want %q", c.Paths.DBFile, want)
 	}
-	if want := filepath.Join("/tmp/test-bt-home", "reflections"); c.Paths.ReflectionsDir != want {
+	userHome, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(userHome, ".go-bt-reflections"); c.Paths.ReflectionsDir != want {
 		t.Errorf("ReflectionsDir = %q, want %q", c.Paths.ReflectionsDir, want)
 	}
 	if want := filepath.Join("/tmp/test-bt-home", "history"); c.Paths.HistoryDir != want {
@@ -2949,5 +2953,37 @@ func TestApplyDotEnvFiles_CwdDotEnvAndExplicitFile(t *testing.T) {
 	// cwd .env applied AFTER explicit file, so it wins
 	if c.DashboardPort != 7777 {
 		t.Errorf("expected DashboardPort=7777 (cwd .env overrides explicit 6666), got %d", c.DashboardPort)
+	}
+}
+
+func TestSaveFile_PrivateAtomicCredentials(t *testing.T) {
+	dir := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "outside.json")
+	if err := os.WriteFile(outside, []byte("untouched"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "config.json")
+	if err := os.Symlink(outside, path); err != nil {
+		t.Fatal(err)
+	}
+	c := newDefaultConfig()
+	c.APIKey = "fixture-private-key"
+	if err := c.SaveFile(path); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(outside)
+	if err != nil || string(data) != "untouched" {
+		t.Fatalf("outside changed: %q %v", data, err)
+	}
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 {
+		t.Fatalf("configuration is not private regular file: %v %v", info, err)
+	}
+	var restored Config
+	if err := loadFile(path, &restored); err != nil {
+		t.Fatal(err)
+	}
+	if restored.APIKey != c.APIKey {
+		t.Fatal("private credential did not round trip")
 	}
 }

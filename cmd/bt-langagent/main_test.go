@@ -87,6 +87,20 @@ func TestNewLangAgentServer_InitializesStoresAndDefaultTree(t *testing.T) {
 	}
 }
 
+func TestLangAgentConfiguredReflectionRoot(t *testing.T) {
+	home, reflections := t.TempDir(), t.TempDir()
+	s, err := newLangAgentServerWithReflections(home, reflections, engine.NewMockLLM(), &mockLangLLM{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.refStore.Dir() != reflections || s.treeStore.Path() != filepath.Join(reflections, "tree.json") {
+		t.Fatal("reflection owners ignored configured root")
+	}
+	if _, err := os.Stat(filepath.Join(home, ".go-bt-reflections")); !os.IsNotExist(err) {
+		t.Fatal("legacy reflection store was initialized alongside configured root")
+	}
+}
+
 func TestNewLangAgentServer_LoadsExistingTreeInsteadOfOverwriting(t *testing.T) {
 	dir := t.TempDir()
 	refDir := filepath.Join(dir, ".go-bt-reflections")

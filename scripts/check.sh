@@ -48,7 +48,7 @@ export GOTOOLCHAIN
 TEST_TIMEOUT="${TEST_TIMEOUT:-300s}"
 
 BIN_DIR="${BIN_DIR:-bin}"
-BINARIES="${BINARIES:-bt-agent bt-notebooklm-auth bt-evaluator bt-langagent bt-dashboard bt-gardener bt-agent-cli bt-security-probe bt-ci-doctor bt-tree-integration benchcmp bt-scalability-probe}"
+BINARIES="${BINARIES:-bt-agent bt-notebooklm-auth bt-evaluator bt-langagent bt-dashboard bt-gardener bt-agent-cli bt-assistant bt-security-probe bt-ci-doctor bt-tree-integration benchcmp bt-scalability-probe}"
 
 step() { echo ""; echo "→ $*"; }
 ok() { echo "  ✓ $*"; }

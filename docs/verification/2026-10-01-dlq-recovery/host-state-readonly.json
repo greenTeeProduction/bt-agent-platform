@@ -1,0 +1,40 @@
+{
+  "existing_artifact": {
+    "execution": "Not invoked; differs from the prior qualified artifact. No serving revision inferred.",
+    "exists": true,
+    "matches_prior_f60_dashboard": false,
+    "path": "<existing-deployment>/bin/bt-dashboard",
+    "sha256": "5dbc67a375c2891b4761131f79c5068044637b3ca34f1890a46cb17aba0dffb4"
+  },
+  "observed_utc": "2026-10-01T13:12:54.310543+00:00",
+  "scope": "Read-only current host state/artifact identity. No service/configuration/binary/state mutations or provider calls. Earlier f60 serving/Codex/restore qualification is historical; this observation does not requalify serving, current code deployment or full production readiness.",
+  "units": [
+    {
+      "properties": {
+        "ActiveState": "inactive",
+        "MainPID": "0",
+        "SubState": "dead"
+      },
+      "query_exit": 0,
+      "unit": "bt-agent.service"
+    },
+    {
+      "properties": {
+        "ActiveState": "inactive",
+        "MainPID": "0",
+        "SubState": "dead"
+      },
+      "query_exit": 0,
+      "unit": "bt-dashboard.service"
+    },
+    {
+      "properties": {
+        "ActiveState": "inactive",
+        "MainPID": "0",
+        "SubState": "dead"
+      },
+      "query_exit": 0,
+      "unit": "bt-gardener.service"
+    }
+  ]
+}

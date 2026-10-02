@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/agent"
+	"github.com/nico/go-bt-evolve/internal/config"
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/factory"
@@ -36,16 +37,23 @@ type langAgentServer struct {
 // existing tree if one is persisted, otherwise seeds and persists the
 // default tree.
 func newLangAgentServer(home string, llmClient llm.LLM, langLLM llms.Model) (*langAgentServer, error) {
-	refStore, err := evolution.NewStore(filepath.Join(home, ".go-bt-reflections"))
+	return newLangAgentServerWithReflections(home, filepath.Join(home, ".go-bt-reflections"), llmClient, langLLM)
+}
+
+func newLangAgentServerWithReflections(home, refDir string, llmClient llm.LLM, langLLM llms.Model) (*langAgentServer, error) {
+	refStore, err := evolution.NewStore(refDir)
 	if err != nil {
 		return nil, err
 	}
-	treeStore, err := evolution.NewTreeStore(filepath.Join(home, ".go-bt-reflections"))
+	treeStore, err := evolution.NewTreeStore(refDir)
 	if err != nil {
 		return nil, err
 	}
 
-	agentFactory, _ := factory.NewAgentFactory(llmClient, home)
+	agentFactory, err := factory.NewAgentFactoryWithReflections(llmClient, refDir)
+	if err != nil {
+		return nil, fmt.Errorf("agent factory: %w", err)
+	}
 
 	tree, err := treeStore.Load()
 	if err != nil || tree == nil {
@@ -183,6 +191,11 @@ func (s *langAgentServer) handleEvolve(args json.RawMessage) *engine.ToolResult 
 }
 
 func main() {
+	platformConfig, configErr := config.LoadRuntime()
+	if configErr != nil {
+		fmt.Fprintf(os.Stderr, "fatal: configuration: %v\n", configErr)
+		os.Exit(1)
+	}
 	engine.Init()
 	engine.SetAsDefault()
 	engine.Info("bt-langagent starting", "version", "1.0.0", "binary", "go-bt-langagent")
@@ -210,7 +223,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	s, err := newLangAgentServer(home, llmClient, langLLM)
+	refDir, refErr := platformConfig.SharedReflectionsDir()
+	if refErr != nil {
+		fmt.Fprintf(os.Stderr, "fatal: reflection root: %v\n", refErr)
+		os.Exit(1)
+	}
+	s, err := newLangAgentServerWithReflections(home, refDir, llmClient, langLLM)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "fatal: %v\n", err)
 		engine.Error("bt-langagent: failed to initialize", "error", err)

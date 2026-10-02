@@ -1,0 +1,144 @@
+{
+  "base_commit": "7da5b8a7f20846d3ca9806fcb85f4c433600dcf8",
+  "checks": [
+    {
+      "command": "go test -short -count=1 -overlay=<private>/red-overlay.json ./internal/reliability -run ^TestDLQReplaySurvivesIndependentRestarts$",
+      "evidence": "dlq-red-reproduced.log",
+      "exit_code": 1,
+      "qualification": "Actual pre-fix runtime owner from baseline, identical four-case fixture; expected red."
+    },
+    {
+      "command": "go test -short -count=1 -race -overlay=<private>/green-overlay.json ./internal/reliability -run ^TestDLQReplaySurvivesIndependentRestarts$",
+      "evidence": "dlq-green-identical.log",
+      "exit_code": 0,
+      "qualification": "Identical retained fixture against final owner; no in-process repair."
+    },
+    {
+      "command": "go test -short -count=1 -race ./internal/reliability ./cmd/bt-agent ./cmd/bt-dashboard ./internal/engine ./internal/api -run 'TestDLQ|TestDeadLetter|TestReplay|TestPushToDLQ|TestSchedulerTerminalDeadLetter'",
+      "evidence": "dlq-race-final.log",
+      "exit_code": 0,
+      "qualification": "Final replay/origin semantics; subsequent MCP completion precedence and consumer test updates separately qualified."
+    },
+    {
+      "command": "go test -short -count=1 -race ./cmd/bt-agent ./cmd/bt-dashboard -run 'TestDLQ|TestSchedulerTerminalDeadLetter'",
+      "evidence": "dlq-consumer-final.log",
+      "exit_code": 0,
+      "qualification": "Final MCP completion precedence, original terminal holds, actual HTTP/MCP errors and independently restarted scheduler-origin fixture."
+    },
+    {
+      "command": "go test -short -count=1 -race -covermode=atomic -coverprofile=<private>/coverage.out ./...",
+      "evidence": "full-race.log",
+      "exit_code": 0,
+      "qualification": "77.8% total statements. Began before final MCP boolean precedence and consumer/test-lint edits; final focused tests qualify those. Hosted head full race must be observed separately."
+    },
+    {
+      "command": "make build BIN_DIR=<private>/bin",
+      "evidence": "build-final.log",
+      "exit_code": 0,
+      "qualification": "Final vet/fmt/tidy/zero-issue lint/local high-security/13 binaries/AST graph; initial lint failed two test style findings, corrected. Original failed log private."
+    },
+    {
+      "command": "python3 -B scripts/test_check_arc42.py then bash scripts/check-doc-drift.sh",
+      "evidence": "docs.log",
+      "exit_code": 0,
+      "qualification": "11 checker fixtures and drift; does not establish runtime behavior."
+    },
+    {
+      "command": "go test -short -count=1 ./internal/engine -run Arc42",
+      "evidence": "arc42-engine.log",
+      "exit_code": 0,
+      "qualification": "Canonical architecture goal-loading contract."
+    },
+    {
+      "command": "gosec -no-fail -fmt sarif -out <private>/medium-parity.sarif -severity medium ./...",
+      "evidence": "scanner-summary.json",
+      "exit_code": 0,
+      "qualification": "252 retained baseline findings, no new DLQ-owner finding; -no-fail zero is not clean or hosted acceptance."
+    },
+    {
+      "command": "python3 -B scripts/test_check_arc42.py then bash scripts/check-doc-drift.sh",
+      "evidence": "docs-settled.log",
+      "exit_code": 0,
+      "qualification": "Settled architecture/plan/evidence additions; eleven checker fixtures and drift."
+    },
+    {
+      "command": "go test -short -count=1 -race -covermode=atomic -coverprofile=<private>/coverage-final.out ./...",
+      "evidence": "full-race-final.log",
+      "exit_code": 0,
+      "qualification": "Settled final Go/source/test snapshot; 77.9% total statements. Complete Go/dependency identity verified unchanged before/after the run."
+    },
+    {
+      "command": "python3 -B scripts/test_check_arc42.py then bash scripts/check-doc-drift.sh",
+      "evidence": "evidence-docs.log",
+      "exit_code": 0,
+      "qualification": "Settled evidence additions; eleven checker fixtures and drift pass."
+    }
+  ],
+  "conventions_review": "Required Codex review found three semantic issues; all corrected and re-reviewed with no actionable findings. Read-only, no model provider or production action.",
+  "environment": {
+    "BT_AGENT_HOME": "<private-fixture>",
+    "BT_SKIP_LLM_TESTS": "1",
+    "GOCACHE": "<separate-cache>",
+    "GOFLAGS": "-p=2",
+    "GOTMPDIR": "/tmp",
+    "PATH": "Go toolchain/local Go tools prepended"
+  },
+  "implementation_commit": "0017825211f90d6bc8a2d24715b58496474c9fd2",
+  "scanner_correction_checks": [
+    {
+      "command": "go test -short -count=1 -race ./internal/agent ./internal/api ./internal/a2a",
+      "evidence": "scanner-transport-final.log",
+      "exit_code": 0,
+      "qualification": "Final rooted history/rollback/logger and SDK cancellation fault propagation."
+    },
+    {
+      "command": "go test -short -race -count=5 ./internal/dashboard -run ^TestWorkflowMetadataLockUsesCallerDeadline$",
+      "evidence": "workflow-deadline-final.log",
+      "exit_code": 0,
+      "qualification": "Output-phase setup budget corrected; actual caller deadline and <1s bound remain."
+    },
+    {
+      "command": "go test -short -count=1 -race -covermode=atomic -coverprofile=<private>/scanner-corrective-coverage.out ./...",
+      "evidence": "scanner-corrective-full-race.log",
+      "exit_code": 0,
+      "qualification": "Exact corrective Go identity verified unchanged; 77.8% statements."
+    },
+    {
+      "command": "make build BIN_DIR=<private>/scanner-settled-bin",
+      "evidence": "scanner-settled-build.log",
+      "exit_code": 0,
+      "qualification": "Final runtime code; all quality gates and 13 binaries pass. Two subsequent test-only expectation/budget changes have final full-race and separate graph evidence."
+    },
+    {
+      "command": "graphify update .",
+      "evidence": "scanner-graph-final.log",
+      "exit_code": 0,
+      "qualification": "After final test edits: AST-only 1171 files /14637 nodes /29077 edges /729 communities, no provider calls."
+    },
+    {
+      "command": "python3 -B scripts/test_check_arc42.py then bash scripts/check-doc-drift.sh",
+      "evidence": "scanner-docs.log",
+      "exit_code": 0,
+      "qualification": "Eleven fixtures/drift; all twelve sections reviewed, affected history/rollback/logging/scenario views updated."
+    },
+    {
+      "command": "gosec -no-fail -fmt sarif -out <private>/scanner-corrected-medium.sarif -severity medium ./...",
+      "evidence": "scanner-corrected-summary.json",
+      "exit_code": 0,
+      "qualification": "244 baseline findings; all eight actual gosec locations removed locally. Separate hosted results pending."
+    },
+    {
+      "command": "systemctl --user show <each canonical BT unit> --property=ActiveState,SubState,MainPID; SHA256 existing dashboard artifact",
+      "evidence": "host-state-readonly.json",
+      "exit_code": 0,
+      "qualification": "All three units inactive/MainPID 0; on-disk artifact differs from prior f60 qualified dashboard and was not invoked. No current serving revision inferred."
+    },
+    {
+      "command": "python3 -B scripts/test_check_arc42.py then bash scripts/check-doc-drift.sh",
+      "evidence": "scanner-evidence-docs.log",
+      "exit_code": 0,
+      "qualification": "Settled corrective documentation/evidence additions; eleven fixtures and drift."
+    }
+  ],
+  "toolchain": "go1.26.5 linux/arm64"
+}

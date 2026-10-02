@@ -2,12 +2,15 @@
 package hitl
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -64,7 +67,7 @@ var DefaultStore *Store
 // InitStore creates or loads the default store under dir/hitl/.
 func InitStore(baseDir string) (*Store, error) {
 	dir := filepath.Join(baseDir, "hitl")
-	if err := os.MkdirAll(dir, 0750); err != nil {
+	if err := util.EnsurePersistenceParent(filepath.Join(dir, "requests.json")); err != nil {
 		return nil, err
 	}
 	s := &Store{
@@ -78,237 +81,318 @@ func InitStore(baseDir string) (*Store, error) {
 	return s, nil
 }
 
-func (s *Store) load() error {
-	data, err := os.ReadFile(s.path)
+// ErrRequestNotFound and ErrInvalidStatus distinguish rejected decisions from
+// storage failures at HTTP/MCP boundaries.
+var (
+	ErrRequestNotFound = errors.New("hitl: request not found")
+	ErrInvalidStatus   = errors.New("hitl: request is not pending or escalated")
+)
+
+func (s *Store) readRecords() (map[string]*Request, error) {
+	data, err := util.ReadPersistenceFile(s.path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil
+			return make(map[string]*Request), nil
 		}
-		return err
+		return nil, err
 	}
 	var list []*Request
 	if err := json.Unmarshal(data, &list); err != nil {
-		return err
+		return nil, err
 	}
-	s.records = make(map[string]*Request, len(list))
+	records := make(map[string]*Request, len(list))
 	for _, r := range list {
 		if r != nil && r.ID != "" {
-			s.records[r.ID] = r
+			records[r.ID] = r
 		}
 	}
-	return nil
+	return records, nil
 }
 
-// hitlMaxStoredTerminal caps how many TERMINAL requests (skipped, expired,
-// approved, rejected) save() retains — newest by UpdatedAt win, and pending
-// requests are never dropped. The store previously kept every request forever
-// (1,514 requests / 9.4 MB on the production box by 2026-07-09, 99% of them
-// auto-skipped).
+func (s *Store) load() error {
+	records, err := s.readRecords()
+	if err == nil {
+		s.records = records
+	}
+	return err
+}
+
+// hitlMaxStoredTerminal caps terminal requests, newest by UpdatedAt first.
+// Pending and escalated requests are never dropped.
 const hitlMaxStoredTerminal = 1000
 
-func (s *Store) save() error {
-	list := make([]*Request, 0, len(s.records))
+// persistRecords builds retention state separately so a failed write cannot
+// prune the live cache. Caller holds the in-process and sidecar locks.
+func (s *Store) persistRecords(records map[string]*Request) (map[string]*Request, error) {
+	list := make([]*Request, 0, len(records))
 	var terminal []*Request
-	for _, r := range s.records {
+	for _, r := range records {
 		if r.Status == StatusPending || r.Status == StatusEscalated {
 			list = append(list, r)
-			continue
+		} else {
+			terminal = append(terminal, r)
 		}
-		terminal = append(terminal, r)
 	}
-	if len(terminal) > hitlMaxStoredTerminal {
-		slices.SortFunc(terminal, func(a, b *Request) int {
-			return b.UpdatedAt.Compare(a.UpdatedAt)
-		})
-		for _, dropped := range terminal[hitlMaxStoredTerminal:] {
-			delete(s.records, dropped.ID)
+	slices.SortFunc(terminal, func(a, b *Request) int {
+		if order := b.UpdatedAt.Compare(a.UpdatedAt); order != 0 {
+			return order
 		}
+		return strings.Compare(a.ID, b.ID)
+	})
+	if len(terminal) > hitlMaxStoredTerminal {
 		terminal = terminal[:hitlMaxStoredTerminal]
 	}
 	list = append(list, terminal...)
 	if err := util.SaveJSONAtomic(s.path, list); err != nil {
-		return err
+		return nil, err
 	}
-	// Requests can carry sensitive review context; tighten from
-	// SaveJSONAtomic's 0644 default to the store's original 0600.
-	return os.Chmod(s.path, 0600)
+	retained := make(map[string]*Request, len(list))
+	for _, r := range list {
+		retained[r.ID] = r
+	}
+	return retained, nil
 }
 
-// Create adds a new pending request.
-func (s *Store) Create(req *Request) error {
+// save is an internal snapshot writer; runtime callers use transaction.
+func (s *Store) save() error {
+	records, err := s.persistRecords(s.records)
+	if err == nil {
+		s.records = records
+	}
+	return err
+}
+
+// transaction reloads authoritative state under a bounded sidecar lock. Both
+// mutex contention and file-lock contention obey the caller's shorter budget.
+// The callback receives detached records; changes publish only after commit.
+func (s *Store) transaction(ctx context.Context, update func(map[string]*Request) (bool, error)) error {
+	if s == nil {
+		return fmt.Errorf("hitl: store not initialized")
+	}
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if s.mu.TryLock() {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+		}
+	}
+	defer s.mu.Unlock()
+	if err := util.EnsurePersistenceParent(s.path); err != nil {
+		return err
+	}
+	release, err := reliability.AcquireFileLockWithContext(ctx, s.path)
+	if err != nil {
+		return err
+	}
+	defer release()
+	records, err := s.readRecords()
+	if err != nil {
+		return err
+	}
+	changed, err := update(records)
+	if err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if changed {
+		records, err = s.persistRecords(records)
+		if err != nil {
+			return err
+		}
+	}
+	s.records = records
+	return nil
+}
+
+// Create adds a request, preserving a pre-existing approval on ID collision.
+func (s *Store) Create(req *Request) error { return s.CreateWithContext(context.Background(), req) }
+func (s *Store) CreateWithContext(ctx context.Context, req *Request) error {
 	if req == nil || req.ID == "" {
 		return fmt.Errorf("hitl: invalid request")
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	release, err := s.reloadLocked()
-	if err != nil {
-		return err
+	candidate := cloneRequest(req)
+	candidate.UpdatedAt = time.Now()
+	if candidate.CreatedAt.IsZero() {
+		candidate.CreatedAt = candidate.UpdatedAt
 	}
-	defer release()
-	req.UpdatedAt = time.Now()
-	if req.CreatedAt.IsZero() {
-		req.CreatedAt = req.UpdatedAt
+	err := s.transaction(ctx, func(records map[string]*Request) (bool, error) {
+		if _, exists := records[candidate.ID]; exists {
+			return false, fmt.Errorf("hitl: request %q already exists", candidate.ID)
+		}
+		records[candidate.ID] = candidate
+		return true, nil
+	})
+	if err == nil {
+		req.CreatedAt, req.UpdatedAt = candidate.CreatedAt, candidate.UpdatedAt
 	}
-	s.records[req.ID] = cloneRequest(req)
-	return s.save()
+	return err
 }
 
-// Get returns a request by ID.
+// Get returns a detached request. The compatibility wrapper omits read errors;
+// external boundaries and approval waits use GetWithContext.
 func (s *Store) Get(id string) (*Request, bool) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	release, err := s.reloadLocked()
+	req, ok, _ := s.GetWithContext(context.Background(), id)
+	return req, ok
+}
+func (s *Store) GetWithContext(ctx context.Context, id string) (*Request, bool, error) {
+	var req *Request
+	err := s.transaction(ctx, func(records map[string]*Request) (bool, error) {
+		if r := records[id]; r != nil {
+			req = cloneRequest(r)
+		}
+		return false, nil
+	})
 	if err != nil {
-		return nil, false
+		return nil, false, err
 	}
-	defer release()
-	r, ok := s.records[id]
-	if !ok {
-		return nil, false
-	}
-	cp := *cloneRequest(r)
-	return &cp, true
+	return req, req != nil, nil
 }
 
-// ListPending returns all pending (non-expired) requests.
+func expireRequests(records map[string]*Request) bool {
+	now := time.Now()
+	changed := false
+	for _, r := range records {
+		if (r.Status == StatusPending || r.Status == StatusEscalated) && !r.ExpiresAt.IsZero() && now.After(r.ExpiresAt) {
+			r.Status, r.UpdatedAt = StatusExpired, now
+			changed = true
+		}
+	}
+	return changed
+}
+
 func (s *Store) ListPending() []*Request {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	release, err := s.reloadLocked()
-	if err != nil {
-		return nil
-	}
-	defer release()
-	now := time.Now()
-	out := make([]*Request, 0, len(s.records))
-	for _, r := range s.records {
-		if r.Status != StatusPending {
-			continue
-		}
-		if !r.ExpiresAt.IsZero() && now.After(r.ExpiresAt) {
-			r.Status = StatusExpired
-			r.UpdatedAt = now
-			continue
-		}
-		cp := *cloneRequest(r)
-		out = append(out, &cp)
-	}
-	_ = s.save()
-	return out
+	list, _ := s.ListPendingWithContext(context.Background())
+	return list
 }
-
-// ListAll returns all requests newest first.
+func (s *Store) ListPendingWithContext(ctx context.Context) ([]*Request, error) {
+	return s.listWithContext(ctx, StatusPending, true)
+}
 func (s *Store) ListAll() []*Request {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	release, err := s.reloadLocked()
+	list, _ := s.ListAllWithContext(context.Background())
+	return list
+}
+func (s *Store) ListAllWithContext(ctx context.Context) ([]*Request, error) {
+	return s.listWithContext(ctx, "", false)
+}
+func (s *Store) listWithContext(ctx context.Context, status Status, expire bool) ([]*Request, error) {
+	out := make([]*Request, 0)
+	err := s.transaction(ctx, func(records map[string]*Request) (bool, error) {
+		changed := expire && expireRequests(records)
+		for _, r := range records {
+			if status == "" || r.Status == status {
+				out = append(out, cloneRequest(r))
+			}
+		}
+		return changed, nil
+	})
 	if err != nil {
-		return nil
+		return nil, err
 	}
-	defer release()
-	out := make([]*Request, 0, len(s.records))
-	for _, r := range s.records {
-		cp := *cloneRequest(r)
-		out = append(out, &cp)
-	}
-	return out
+	slices.SortFunc(out, func(a, b *Request) int {
+		if order := b.CreatedAt.Compare(a.CreatedAt); order != 0 {
+			return order
+		}
+		return strings.Compare(a.ID, b.ID)
+	})
+	return out, nil
 }
 
-// Approve marks a request approved.
 func (s *Store) Approve(id, reviewer, comment string) (*Request, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	release, err := s.reloadLocked()
-	if err != nil {
-		return nil, err
-	}
-	defer release()
-	r, ok := s.records[id]
-	if !ok {
-		return nil, fmt.Errorf("hitl: request %q not found", id)
-	}
-	if r.Status != StatusPending && r.Status != StatusEscalated {
-		return nil, fmt.Errorf("hitl: request %q is %s, not pending or escalated", id, r.Status)
-	}
-	now := time.Now()
-	r.Status = StatusApproved
-	r.Reviewer = reviewer
-	r.Reason = comment
-	r.ApprovedAt = &now
-	r.UpdatedAt = now
-	if err := s.save(); err != nil {
-		return nil, err
-	}
-	cp := *cloneRequest(r)
-	return &cp, nil
+	return s.ApproveWithContext(context.Background(), id, reviewer, comment)
 }
-
-// Reject marks a request rejected.
+func (s *Store) ApproveWithContext(ctx context.Context, id, reviewer, comment string) (*Request, error) {
+	return s.decideWithContext(ctx, id, "", reviewer, comment, StatusApproved)
+}
 func (s *Store) Reject(id, reviewer, reason string) (*Request, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	release, err := s.reloadLocked()
+	return s.RejectWithContext(context.Background(), id, reviewer, reason)
+}
+func (s *Store) RejectWithContext(ctx context.Context, id, reviewer, reason string) (*Request, error) {
+	return s.decideWithContext(ctx, id, "", reviewer, reason, StatusRejected)
+}
+
+// decideWithContext selects task requests and commits under the same lock,
+// avoiding a lookup/decision gap across independent stores.
+func (s *Store) decideWithContext(ctx context.Context, id, taskID, reviewer, reason string, status Status) (*Request, error) {
+	var result *Request
+	err := s.transaction(ctx, func(records map[string]*Request) (bool, error) {
+		r := records[id]
+		if taskID != "" {
+			r = latestTaskRequest(records, taskID, time.Now(), false)
+			if r != nil && r.Status == status {
+				result = cloneRequest(r)
+				return false, nil
+			}
+
+		}
+		if r == nil {
+			return false, fmt.Errorf("%w: %q", ErrRequestNotFound, id+taskID)
+		}
+		if r.Status != StatusPending && r.Status != StatusEscalated {
+			return false, fmt.Errorf("%w: %q is %s", ErrInvalidStatus, r.ID, r.Status)
+		}
+		now := time.Now()
+		if !r.ExpiresAt.IsZero() && now.After(r.ExpiresAt) {
+			return false, fmt.Errorf("%w: %q has expired", ErrInvalidStatus, r.ID)
+		}
+		r.Status, r.Reviewer, r.Reason, r.UpdatedAt = status, reviewer, reason, now
+		if status == StatusApproved {
+			r.ApprovedAt = &now
+		}
+		if status == StatusRejected {
+			r.RejectedAt = &now
+		}
+		result = cloneRequest(r)
+		return true, nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	defer release()
-	r, ok := s.records[id]
-	if !ok {
-		return nil, fmt.Errorf("hitl: request %q not found", id)
-	}
-	if r.Status != StatusPending && r.Status != StatusEscalated {
-		return nil, fmt.Errorf("hitl: request %q is %s, not pending or escalated", id, r.Status)
-	}
-	now := time.Now()
-	r.Status = StatusRejected
-	r.Reviewer = reviewer
-	r.Reason = reason
-	r.RejectedAt = &now
-	r.UpdatedAt = now
-	if err := s.save(); err != nil {
-		return nil, err
-	}
-	cp := *cloneRequest(r)
-	return &cp, nil
+	return result, nil
 }
 
-// RefreshStatus applies expiry to a single request and returns current status.
 func (s *Store) RefreshStatus(id string) (Status, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	release, err := s.reloadLocked()
+	req, err := s.RefreshRequestWithContext(context.Background(), id)
 	if err != nil {
 		return "", err
 	}
-	defer release()
-	r, ok := s.records[id]
-	if !ok {
-		return "", fmt.Errorf("hitl: request %q not found", id)
-	}
-	if r.Status == StatusPending && !r.ExpiresAt.IsZero() && time.Now().After(r.ExpiresAt) {
-		r.Status = StatusExpired
-		r.UpdatedAt = time.Now()
-		if err := s.save(); err != nil {
-			return "", err
-		}
-	}
-	return r.Status, nil
+	return req.Status, nil
 }
 
-// Caller holds mu. The file lock covers the authoritative reload and every
-// subsequent read/modify/save, so independently opened daemon stores agree.
-func (s *Store) reloadLocked() (func(), error) {
-	release, err := reliability.AcquireFileLock(s.path)
+// RefreshRequestWithContext returns status and payload from one transaction,
+// and never returns an expiry whose write failed.
+func (s *Store) RefreshRequestWithContext(ctx context.Context, id string) (*Request, error) {
+	var req *Request
+	err := s.transaction(ctx, func(records map[string]*Request) (bool, error) {
+		r := records[id]
+		if r == nil {
+			return false, fmt.Errorf("%w: %q", ErrRequestNotFound, id)
+		}
+		changed := false
+		if (r.Status == StatusPending || r.Status == StatusEscalated) && !r.ExpiresAt.IsZero() && time.Now().After(r.ExpiresAt) {
+			r.Status, r.UpdatedAt = StatusExpired, time.Now()
+			changed = true
+		}
+		req = cloneRequest(r)
+		return changed, nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	if err = s.load(); err != nil {
-		release()
-		return nil, err
-	}
-	return release, nil
+	return req, nil
 }
+
 func cloneRequest(r *Request) *Request {
 	cp := *r
 	cp.Context = maps.Clone(r.Context)

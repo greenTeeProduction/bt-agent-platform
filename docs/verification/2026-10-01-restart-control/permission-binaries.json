@@ -1,0 +1,57 @@
+{
+  "binaries": [
+    {
+      "name": "benchcmp",
+      "sha256": "d0291dc4c1d7d4e1d22f059a44e3375a23dfe8dd8493fd872f3b8e2f109f50e7"
+    },
+    {
+      "name": "bt-agent",
+      "sha256": "af409d957748913e5d5b2bd51a105df952b9792679ce6a33df45811b4c951094"
+    },
+    {
+      "name": "bt-agent-cli",
+      "sha256": "cf6e66db6f283e8760b1b4bdf9d58c624cbf58ada47022d2c33f0dba3ef509d8"
+    },
+    {
+      "name": "bt-assistant",
+      "sha256": "79661bb70445649cde39783837928e60c5248eddc1cb408f6ab137c17dec1a68"
+    },
+    {
+      "name": "bt-ci-doctor",
+      "sha256": "b61fb229bd76305680fdd5988e274ebfd73eaa1b38f802e26c5b12d6132e7e6d"
+    },
+    {
+      "name": "bt-dashboard",
+      "sha256": "03725c680b316bbf10a318f954efa15ac4dccfaaa8a43d30a1a285521e6f242f"
+    },
+    {
+      "name": "bt-evaluator",
+      "sha256": "852e4633b892b8eddac6a0c0fe757b483cbd7e94e78d233c56d1f01f01ac4540"
+    },
+    {
+      "name": "bt-gardener",
+      "sha256": "cce49b94d808d4aa0c13a4b929a66fe2f9eefd5e92b038744ea3d6fb85a2784d"
+    },
+    {
+      "name": "bt-langagent",
+      "sha256": "74a278507ec150c3edc58141e8312e28570c00061495c4a168063210ce1343d0"
+    },
+    {
+      "name": "bt-notebooklm-auth",
+      "sha256": "59b400a0f706257ac540b359f57d8153fd70e2edd164086d8daba078d39a2a17"
+    },
+    {
+      "name": "bt-scalability-probe",
+      "sha256": "ce28dac3b117b307df6a618a62e39165440a9f9197cc744b3979ccb48056c880"
+    },
+    {
+      "name": "bt-security-probe",
+      "sha256": "6cbd9bc7507bc6f866fc312ea46292653928f5b403095452408d89103beaeefc"
+    },
+    {
+      "name": "bt-tree-integration",
+      "sha256": "1f0226d4b768bc32f61100f875a35601921cb716a7d88537a34a60621f825408"
+    }
+  ],
+  "qualification": "Final permission-fix dirty-worktree build gates; not deployed."
+}

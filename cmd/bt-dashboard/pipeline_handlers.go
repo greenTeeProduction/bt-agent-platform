@@ -17,9 +17,9 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/nico/go-bt-evolve/internal/agent"
-	"github.com/nico/go-bt-evolve/internal/blackboard"
 	"github.com/nico/go-bt-evolve/internal/dashboard"
 	"github.com/nico/go-bt-evolve/internal/reliability"
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 type pipelineRunRecord struct {
@@ -27,6 +27,7 @@ type pipelineRunRecord struct {
 	RunID     string                    `json:"run_id"`
 	Result    *dashboard.PipelineResult `json:"result,omitempty"`
 	Error     string                    `json:"error,omitempty"`
+	ErrorKind string                    `json:"error_kind,omitempty"`
 	StartedAt time.Time                 `json:"started_at"`
 }
 
@@ -59,10 +60,11 @@ func runPipelineAgentStep(ctx context.Context, runner *agent.RunDeps, agentName,
 	return outcome, output, err
 }
 
-func newPipelineRunner(runID string, logAttrs ...any) *dashboard.Runner {
-	var bbMgr *blackboard.Manager
-	if dashAgentRunner != nil {
-		bbMgr = dashAgentRunner.BoardManager()
+func newPipelineRunner(runID string, logAttrs ...any) (*dashboard.Runner, error) {
+	deps := dashAgentRunner
+	bbMgr, err := deps.BoardManager()
+	if err != nil {
+		return nil, err
 	}
 	return &dashboard.Runner{
 		RunID:       runID,
@@ -71,13 +73,13 @@ func newPipelineRunner(runID string, logAttrs ...any) *dashboard.Runner {
 			slog.Info("pipeline: running agent step", append([]any{
 				"run_id", runID, "agent", agentName, "task_len", len(task),
 			}, logAttrs...)...)
-			outcome, output, err = runPipelineAgentStep(stepCtx, dashAgentRunner, agentName, task, runID)
+			outcome, output, err = runPipelineAgentStep(stepCtx, deps, agentName, task, runID)
 			slog.Info("pipeline: agent step complete",
 				"run_id", runID, "agent", agentName, "outcome", outcome, "output_len", len(output))
 			return outcome, output, err
 		},
 		WaitApproval: dashboard.WorkflowApprovalWait,
-	}
+	}, nil
 }
 
 // handlePipelines lists all pipeline YAML files from agents/workflows/.
@@ -91,7 +93,13 @@ func handlePipelines(w http.ResponseWriter, r *http.Request) {
 	entries, err := os.ReadDir(workflowsDir)
 	if err != nil {
 		slog.Warn("pipelines: cannot read workflows dir", "path", workflowsDir, "error", err)
-		_ = encodeJSON(w, []map[string]string{})
+		w.Header().Set("Content-Type", "application/json")
+		if os.IsNotExist(err) {
+			_ = encodeJSON(w, []map[string]string{})
+		} else {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_ = encodeJSON(w, map[string]string{"error": "pipeline inventory unavailable"})
+		}
 		return
 	}
 
@@ -109,7 +117,7 @@ func handlePipelines(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		filePath := filepath.Join(workflowsDir, entry.Name())
-		data, err := os.ReadFile(filePath)
+		data, err := util.ReadPersistenceFile(filePath)
 		if err != nil {
 			slog.Warn("pipelines: cannot read file", "path", filePath, "error", err)
 			continue
@@ -153,17 +161,25 @@ func handlePipelineRun(w http.ResponseWriter, r *http.Request) {
 		_ = encodeJSON(w, map[string]string{"error": "missing required field: pipeline_name"})
 		return
 	}
+	// Validate the request before joining/cleaning: only catalog basenames are
+	// selectable. Rooted reads below also prevent symlink escapes at open time.
+	if !filepath.IsLocal(req.PipelineName) || filepath.Base(req.PipelineName) != req.PipelineName || strings.ContainsAny(req.PipelineName, "\\\x00") || req.PipelineName == "." || req.PipelineName == ".." {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_ = encodeJSON(w, map[string]string{"error": "pipeline_name must be a workflow filename without directories"})
+		return
+	}
 
 	filename := req.PipelineName
 	if !strings.HasSuffix(filename, ".yaml") {
 		filename += ".yaml"
 	}
-	data, err := os.ReadFile(filepath.Join(agent.WorkflowsDir(), filename))
+	data, err := util.ReadPersistenceFile(filepath.Join(agent.WorkflowsDir(), filename))
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
 		_ = encodeJSON(w, map[string]string{
-			"error": fmt.Sprintf("pipeline not found: %s (%v)", req.PipelineName, err),
+			"error": "pipeline not found or unavailable: " + req.PipelineName,
 		})
 		return
 	}
@@ -176,7 +192,26 @@ func handlePipelineRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	endActivity, admitErr := dashActivity.acquire()
+	if admitErr != nil {
+		writeDashboardRestarting(w)
+		return
+	}
+	transferred := false
+	defer func() {
+		if !transferred {
+			endActivity()
+		}
+	}()
 	runID := newRunID()
+	runner, initErr := newPipelineRunner(runID, "pipeline", pipeline.Name)
+	if initErr != nil {
+		slog.Warn("pipeline: blackboard owner unavailable", "error", initErr)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = encodeJSON(w, map[string]string{"error": "pipeline blackboard unavailable"})
+		return
+	}
 	rec := &pipelineRunRecord{Status: "running", RunID: runID, StartedAt: time.Now()}
 	pipelineRunsMu.Lock()
 	pipelineRuns[runID] = rec
@@ -190,22 +225,34 @@ func handlePipelineRun(w http.ResponseWriter, r *http.Request) {
 
 	slog.Info("pipeline: starting execution", "run_id", runID, "pipeline", pipeline.Name)
 
-	reliability.SafeGo(fmt.Sprintf("pipeline-run[%s]", runID), func() {
+	reliability.SafeGoWithCleanup(fmt.Sprintf("pipeline-run[%s]", runID), func() {
 		if dashTaskQueue != nil {
 			defer dashTaskQueue.Dequeue()
 		}
-		runner := newPipelineRunner(runID, "pipeline", pipeline.Name)
 		result, runErr := runner.Run(context.Background(), pipeline, req.Input)
 
 		pipelineRunsMu.Lock()
 		defer pipelineRunsMu.Unlock()
-		if runErr != nil {
+		rec.ErrorKind = reliability.ExecutionErrorKind(runErr)
+		if result != nil && reliability.IsExecutionPause(result.Outcome, runErr) {
+			rec.Status = "waiting"
+			if runErr != nil {
+				rec.Error = runErr.Error()
+			}
+			slog.Info("pipeline: waiting", "run_id", runID, "status", rec.Status)
+		} else if runErr != nil || result == nil || !agent.IsHealthyOutcome(result.Outcome) {
 			rec.Status = "failed"
-			rec.Error = runErr.Error()
-			slog.Warn("pipeline: execution completed with error", "run_id", runID, "error", runErr)
+			if runErr != nil {
+				rec.Error = runErr.Error()
+			} else if result != nil {
+				rec.Error = "pipeline outcome: " + result.Outcome
+			} else {
+				rec.Error = "pipeline returned no result"
+			}
+			slog.Warn("pipeline: execution stopped", "run_id", runID, "status", rec.Status)
 		} else {
 			rec.Status = "complete"
-			slog.Info("pipeline: execution complete", "run_id", runID, "outcome", result.Outcome)
+			slog.Info("pipeline: execution complete", "run_id", runID, "status", rec.Status)
 		}
 		rec.Result = result
 	}, func(panicVal any, panicCtx string) {
@@ -214,7 +261,8 @@ func handlePipelineRun(w http.ResponseWriter, r *http.Request) {
 		defer pipelineRunsMu.Unlock()
 		rec.Status = "failed"
 		rec.Error = fmt.Sprintf("panic: %v", panicVal)
-	})
+	}, endActivity)
+	transferred = true
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
@@ -257,6 +305,7 @@ func handlePipelineStatus(w http.ResponseWriter, r *http.Request) {
 	status := rec.Status
 	startedAt := rec.StartedAt
 	errMsg := rec.Error
+	errorKind := rec.ErrorKind
 	result := rec.Result
 	pipelineRunsMu.RUnlock()
 
@@ -267,6 +316,9 @@ func handlePipelineStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	if errMsg != "" {
 		resp["error"] = errMsg
+	}
+	if errorKind != "" {
+		resp["error_kind"] = errorKind
 	}
 	if result != nil {
 		resp["workflow"] = result.Workflow

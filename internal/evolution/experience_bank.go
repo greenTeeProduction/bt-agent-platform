@@ -13,6 +13,7 @@ package evolution
 
 import (
 	"cmp"
+	"context"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -72,6 +73,9 @@ type ExperienceEntry struct {
 	QualityScore float64   `json:"quality_score"` // LLM-as-judge, 0.0–1.0
 	CreatedAt    time.Time `json:"created_at"`
 	TimesReused  int       `json:"times_reused"`
+	// Proposal preserves the accepted generator, score, reason and replay data.
+	// Nil for legacy entries and callers that only supply a MutationOp.
+	Proposal *ScoredMutation `json:"proposal,omitempty"`
 }
 
 // NewExperienceBank creates a new experience bank with persistence at the
@@ -132,6 +136,25 @@ func (eb *ExperienceBank) AddFromMutation(
 	llmClient llm.LLM,
 	failureContext ...string,
 ) error {
+	return eb.addFromMutation(tree, op, nil, beforeFitness, afterFitness, llmClient, failureContext...)
+}
+
+// AddFromProposal records an accepted proposal after the caller commits its tree.
+func (eb *ExperienceBank) AddFromProposal(tree *SerializableNode, proposal ScoredMutation, beforeFitness, afterFitness float64, llmClient llm.LLM, failureContext ...string) error {
+	// Detach nested payloads/configuration from the caller and validate that
+	// the evidence can be persisted before adding it to the bank.
+	data, err := json.Marshal(proposal)
+	if err != nil {
+		return fmt.Errorf("marshal mutation proposal: %w", err)
+	}
+	var owned ScoredMutation
+	if err := json.Unmarshal(data, &owned); err != nil {
+		return fmt.Errorf("decode mutation proposal: %w", err)
+	}
+	return eb.addFromMutation(tree, owned.Op, &owned, beforeFitness, afterFitness, llmClient, failureContext...)
+}
+
+func (eb *ExperienceBank) addFromMutation(tree *SerializableNode, op MutationOp, proposal *ScoredMutation, beforeFitness, afterFitness float64, llmClient llm.LLM, failureContext ...string) error {
 	fitnessDelta := afterFitness - beforeFitness
 	if fitnessDelta <= 0 {
 		return nil // don't store regressions
@@ -144,6 +167,7 @@ func (eb *ExperienceBank) AddFromMutation(
 		TargetNode:   op.Target,
 		FitnessDelta: fitnessDelta,
 		CreatedAt:    time.Now(),
+		Proposal:     proposal,
 	}
 
 	// If LLM available, enrich with 5-dimension analysis
@@ -172,6 +196,9 @@ func (eb *ExperienceBank) AddFromMutation(
 //
 // The query is typically the tree type + mutation context (e.g., "GoDev add_before").
 func (eb *ExperienceBank) Retrieve(query string, topK int) []ExperienceEntry {
+	if topK <= 0 {
+		return nil
+	}
 	eb.mu.RLock()
 	defer eb.mu.RUnlock()
 
@@ -212,13 +239,16 @@ func (eb *ExperienceBank) Retrieve(query string, topK int) []ExperienceEntry {
 	}
 	result := make([]ExperienceEntry, topK)
 	for i := range topK {
-		result[i] = candidates[i].entry
+		result[i] = detachedExperience(candidates[i].entry)
 	}
 	return result
 }
 
 // RetrieveByTreeType returns entries filtered by tree type, sorted by quality score.
 func (eb *ExperienceBank) RetrieveByTreeType(treeType string, topK int) []ExperienceEntry {
+	if topK <= 0 {
+		return nil
+	}
 	eb.mu.RLock()
 	defer eb.mu.RUnlock()
 
@@ -236,7 +266,58 @@ func (eb *ExperienceBank) RetrieveByTreeType(treeType string, topK int) []Experi
 	if topK > len(matching) {
 		topK = len(matching)
 	}
-	return matching[:topK]
+	result := matching[:topK]
+	for i := range result {
+		result[i] = detachedExperience(result[i])
+	}
+	return result
+}
+
+// Proposal payloads are normalized JSON when stored. Keep retrieval copies
+// detached so consumer edits cannot mutate the bank outside its mutex.
+func detachedExperience(entry ExperienceEntry) ExperienceEntry {
+	if entry.Proposal == nil {
+		return entry
+	}
+	proposal := *entry.Proposal
+	if proposal.Search != nil {
+		search := *proposal.Search
+		search.WarmStartHints = slices.Clone(search.WarmStartHints)
+		proposal.Search = &search
+	}
+	if proposal.Op.Node != nil {
+		proposal.Op.Node = cloneTree(proposal.Op.Node)
+	}
+	if proposal.Op.Metadata != nil {
+		proposal.Op.Metadata = cloneProposalJSON(proposal.Op.Metadata).(map[string]any)
+	}
+	entry.Proposal = &proposal
+	return entry
+}
+
+func cloneProposalJSON(value any) any {
+	switch v := value.(type) {
+	case map[string]any:
+		detached := make(map[string]any, len(v))
+		for k, child := range v {
+			detached[k] = cloneProposalJSON(child)
+		}
+		return detached
+	case []any:
+		detached := make([]any, len(v))
+		for i, child := range v {
+			detached[i] = cloneProposalJSON(child)
+		}
+		return detached
+	default:
+		return value
+	}
+}
+
+func acquireExperienceFileLock(path string) (func(), error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	return reliability.AcquireFileLockWithContext(ctx, path)
 }
 
 // MarkReused increments TimesReused for the entries with the given IDs and
@@ -257,7 +338,7 @@ func (eb *ExperienceBank) MarkReused(ids []string) error {
 	if err := util.EnsurePersistenceParent(eb.PersistPath); err != nil {
 		return fmt.Errorf("create experience dir: %w", err)
 	}
-	release, lockErr := reliability.AcquireFileLock(eb.PersistPath)
+	release, lockErr := acquireExperienceFileLock(eb.PersistPath)
 	if lockErr != nil {
 		return lockErr
 	}
@@ -313,7 +394,7 @@ func (eb *ExperienceBank) Persist() error {
 	if err := util.EnsurePersistenceParent(eb.PersistPath); err != nil {
 		return fmt.Errorf("create experience dir: %w", err)
 	}
-	release, lockErr := reliability.AcquireFileLock(eb.PersistPath)
+	release, lockErr := acquireExperienceFileLock(eb.PersistPath)
 	if lockErr != nil {
 		return lockErr
 	}
@@ -389,7 +470,7 @@ func (eb *ExperienceBank) addEntry(entry ExperienceEntry) error {
 	if err := util.EnsurePersistenceParent(eb.PersistPath); err != nil {
 		return fmt.Errorf("create experience dir: %w", err)
 	}
-	release, lockErr := reliability.AcquireFileLock(eb.PersistPath)
+	release, lockErr := acquireExperienceFileLock(eb.PersistPath)
 	if lockErr != nil {
 		return lockErr
 	}

@@ -1,182 +1,496 @@
 # 6. Runtime View
 
-Architecturally significant runtime scenarios. Participants are the building
-blocks of [§5](05-building-blocks.md); the infrastructure they run on is in
-[§7](07-deployment.md); the system-wide concepts these scenarios instantiate
-are in [§8](08-crosscutting-concepts.md).
+Scenarios use the building blocks from [§5](05-building-blocks.md).
+Durations are budgets or targets where stated, not measured service-level
+guarantees. Code evidence and acceptance criteria are in [§10](10-quality.md).
 
 ## 6.1 Task Execution Scenario
 
-**Trigger:** Hermes Agent calls MCP tool `bt_run_task` with a task string.
+**Trigger:** MCP/CLI/A2A/dashboard submits a task or the scheduler selects a
+due agent.
 
+1. The entrypoint validates its request and applicable credentials, resolves
+   a registered or user-scoped tree, and constructs run dependencies.
+2. The engine expands references and validates/builds the definition.
+   `RunTask` initializes chain state and the run context.
+3. The tree executes actions/chains. Running nodes are reticked within the
+   tick budget; `pending_approval` stops that loop so an external decision
+   can arrive without busy waiting.
+4. The engine records result/outcome and applies output-quality rules.
+   The runner records history, reflections and feedback as configured. History
+   write failure returns the actual execution result plus an error; scheduled
+   execution logs that failure without claiming a persisted history record.
+5. The calling adapter translates the outcome into its API/transport
+   response. Scheduled execution additionally applies retry/breaker/DLQ policy.
+
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Entry as Entrypoint / agent runner
+    participant Engine
+    participant Tool as Tool or model
+    participant State as History / feedback stores
+    Client->>Entry: task + tree/user context
+    Entry->>Entry: authenticate, resolve, wire dependencies
+    Entry->>Engine: build and RunTask
+    Engine->>Tool: action / chain call
+    Tool-->>Engine: result or error
+    Engine-->>Entry: result + explicit outcome
+    Entry->>State: record run evidence
+    Entry-->>Client: response / approval / defer / failure
 ```
-Hermes Agent                    bt-agent (MCP)                 Engine                    Ollama
-    │                               │                            │                         │
-    │──bt_run_task("Review code")──▶│                            │                         │
-    │                               │──bb.Task = "Review code"──▶│                         │
-    │                               │                            │──BuildTree(serTree)────▶│
-    │                               │                            │──RunTask(bb, bt)        │
-    │                               │                            │   ┌─tick loop (1000 max)│
-    │                               │                            │   │ PreGate             │
-    │                               │                            │   │  ├─ValidateInput    │
-    │                               │                            │   │  └─SetupDevTools    │
-    │                               │                            │   │ StrategyRouter      │
-    │                               │                            │   │  ├─PrimaryPath      │
-    │                               │                            │   │  │  └─ChainAction───▶│──prompt──▶
-    │                               │                            │   │  │                  │◀─result───
-    │                               │                            │   │  └─FallbackPath     │
-    │                               │                            │   │ OutcomeSelector     │
-    │                               │                            │   │  ├─MarkSuccessful (quality-gated)│
-    │                               │                            │   │  ├─SelfCorrect (retry x3)│
-    │                               │                            │   │  └─EscalateToDeepSeek│
-    │                               │                            │   └─bb.Outcome=success  │
-    │                               │                            │──validateOutputQuality─▶│
-    │                               │◀────result, outcome────────│                         │
-    │◀────ToolResult───────────────│                            │                         │
-```
 
-**Duration:** Typical: 2-4 minutes (Ollama qwen3.6:35b). Fast path: 5-10 seconds (DeepSeek v4-flash). Timeout: 120s hard limit.
+**Bounds:** [`RunTask`](../../internal/engine/tree.go) defaults to a
+120-second context timeout, overrideable by `Blackboard.TreeTimeoutMs`,
+and at most 1,000 ticks. This is cooperative cancellation: an action must
+observe its context. Longer implementation actions have their own budgets
+(§6.4), so “every task returns within 120 seconds” is not a valid platform
+guarantee.
 
-**Error Path:** ChainAction panic → SafeGo recover → RecordFailure → CircuitBreaker check → RetryWithBackoff (1s/2s/4s) → DeadLetterQueue.
+For `POST /api/agents/execute` and `POST /api/agents/run`, one admission owner
+uses the request context and the executor's five-minute default timeout for
+limiter waiting, queue submission and execution. A closed pool returns 503;
+cancellation/expiry while waiting for admission or completion returns 408
+when the HTTP connection still permits a response. An admitted task retains
+its concurrency slot until executor cleanup finishes, even if its HTTP caller
+disconnects. Canceled queued tasks skip execution when drained. Pool shutdown
+wakes blocked submitters and drains accepted work; it cannot force a synchronous
+action that ignores cancellation to terminate.
 
-**A panicking node now reports a tick (2026-08-02):** on the error path above, the Engine's per-node metrics wrapper (`observedCommand.Run`) recorded nothing when a node panicked — the panic unwound past its `RecordNodeTickFn` call, so the loudest failure in the tick loop left `bt_node_ticks_total`/`bt_node_errors_total` unincremented and a crash-looping node read as idle on the dashboard. The wrapper now emits that node's tick as `status="failure"` with its elapsed duration from a deferred recorder, and the panic continues to unwind unchanged into `RunTask`'s tree-level recovery, which sets `bb.Outcome` to failure with a `TREE PANIC: …` result as before ([§8.11](08-crosscutting-concepts.md) Observability).
+A 408 or lost connection does not prove the task never started. Inspect run
+history before retrying side effects. The runner preserves a healthy completed
+result/history if cancellation races after the operation. The Hermes fallback
+inherits the caller's budget, preserves partial output and command errors,
+and terminates its owned process group on cancellation (ADR-266). Remote dispatch preserves typed record errors through `error_kind`. A lost,
+expired or malformed remote response is terminal uncertainty: router and retry
+policy stop instead of trying another execution owner. Known rejection can fall
+back only with explicit non-admission evidence. See ADR-267; remote-call
+idempotency and fleet-wide bounded termination remain open.
 
-**Terminal backstop (ADR-085):** Regardless of whether a tree routes through `OutcomeSelector` at all, `RunTask`'s final `validateOutputQuality` call now flips `bb.Outcome` to failure when the resolved result is low-quality, non-empty, and not a recognized structured/zero-LLM result or a `bb.Sandbox` run — covering trees (e.g. compiled GOAP fusion trees) whose terminal leaf never reaches `MarkSuccessful`/`SelfCorrect`/`EscalateToDeepSeek`.
+A2A card resolution, message dispatch and task polling share the caller budget.
+Only explicit same-origin non-admission allows SendMessage retry; lost responses
+are uncertain. Submitted/working tasks use GetTask with the existing ID, never a
+new message. Paused states return to the caller. The SDK owns asynchronous tasks
+independently of an HTTP request; explicit CancelTask cancels cooperative tree
+work. A polling timeout requires reconciliation and does not claim cancellation.
+
+BT status events preserve actual state/output and optional `bt_execution`
+metadata when history writes fail. Auction keeps the award, output and typed
+diagnostic, without replay or local fallback; only a genuinely completed winner
+is healthy. A nested completed-child persistence stop aborts its surrounding
+workflow. The engine shares a typed stop across parallel blackboards, blocks
+subsequent built-node admission/reticks and returns the diagnostic through
+RunOnce. The surrounding outcome is `aborted` or `uncertain`, not whole-task
+success. Already admitted parallel work may still finish. See ADR-268.
+
+Known non-completed A2A states also cross the integer BT interface as typed
+`ExecutionStoppedError`. They stop tree retries, selector fallback and outer
+retry without depending on words such as “timeout” in status text. Canonical
+waits are deferred in SLO accounting and do not open execution breakers; their
+diagnostic remains in history and completion events. Failed/canceled/rejected
+work remains unsuccessful. When a paused group contains an admitted failed or
+panicked sibling, that fault outranks the wait. Blocked admission, nested
+stop-converted success and normal conditional skips are not invented failures.
+These tests cover typed dispositions (ADR-269). Local workflow approval/control
+paths are covered by ADR-270; durable resumption remains separate R30 work.
 
 ## 6.2 Evolution Cycle
 
-**Trigger:** bt-gardener cron (or manual `bt_evolve` MCP call).
+**Trigger:** a gardener cycle or a supported evolution tool is invoked.
 
-```
-bt-gardener                    bt-evaluator (MCP)            Evolution Engine              git
-  │                               │                            │                            │
-  │──ev_evaluate()───────────────▶│                            │                            │
-  │                               │──MultiFitness eval────────▶│                            │
-  │                               │◀──scores───────────────────│                            │
-  │──ev_order_mutations()────────▶│                            │                            │
-  │                               │──TT lookup + ordering─────▶│                            │
-  │                               │◀──ranked mutations─────────│                            │
-  │                               │                            │                            │
-  │ Apply top mutation ──────────────────────────────────────▶│                            │
-  │                               │                            │──cloneTree (sole impl)────▶│
-  │                               │                            │──mutate (10 operators)────▶│
-  │──ev_evaluate()───────────────▶│                            │                            │
-  │                               │──compare fitness──────────▶│                            │
-  │                               │◀──delta────────────────────│                            │
-  │                               │                            │                            │
-  │ If delta > 0: ACCEPT ────────────────────────────────────▶│──git commit───────────────▶│
-  │ If delta ≤ 0: ROLLBACK ──────────────────────────────────▶│──git checkout─────────────▶│
-```
+1. Resolve tree ownership and load that tree's reflection/feedback evidence.
+2. Check eligibility, evidence and enabled feature gates.
+3. Generate candidates and score against the target tree's records.
+   MCTS candidates join the ordinary scored mutation competition when
+   affinity/configuration selects them.
+4. Apply the acceptance checks for that path. Ordinary mutations use
+   benchmark/quality/meta-validation checks; retain the pre-mutation
+   baseline and durable snapshots.
+5. Persist accepted trees and associated feedback/archives; reject or
+   restore after failed gates, and record cycle metrics.
 
-**Key:** 97.3% of mutations currently regress (no quality gates enforced — see [§11](11-risks-debt.md)). Per-tree fitness via `reflection.FilterByTreeName` + seed records.
+Ordinary and optional passes stage detached candidates; failed configured
+snapshots, validation or tree writes preserve the live predecessor and do not
+publish mutation experience. Deep search replays the entire ordered winner,
+re-scores it against current reflections and commits before live/learning
+publication (ADR-262). Cached search scoring is scoped to reflection evidence.
 
-**Experience integration (ADR-021):** In the v2 cycle (`RunCycleV2`), the ranked-mutation step is experience-biased — `biasCandidatesWithExperience` boosts `OrderMutations` candidates whose op/target matches high-quality past `ExperienceBank` entries — and every ACCEPT additionally records the mutation into the shared bank via `AddFromMutation` with its per-candidate fitness delta. A nil bank leaves both steps at the historical behavior. Since 2026-07-16 (ADR-125), both sides condition on a new `lastFailureTask(records)` helper — the `Task` text of the tree's most recent `evolution.Failure` reflection record: when non-empty, recorded entries' `Context` is tagged `failing_task=<text>` and retrieval routes through the tree-type-agnostic `bank.Retrieve(query, ...)` instead of the tree-type-only `RetrieveExperienceHints`; when empty (no failing record yet), both sides fall back to the tree-type-scoped behavior described above verbatim.
-
-**Two structural-mutation generators, one competition (2026-08-01):** the `ev_order_mutations()` step above is no longer the cycle's only source of candidates. After `biasCandidatesWithExperience` and before the per-candidate benchmark/gate loop, `evolveTreeV2` calls `augmentWithMCTSCandidates`, which (1) asks `evolution.SelectStructuralStrategy` whether *this* tree earns a speculative search — it averages the specialist registry's archetype affinity and the Selector optimizer's learned-ordering affinity (both read via the now-shared `seedSelectorOptimizer`) and augments at ≥ 0.5, so a preserved archetype whose Selectors are fully telemetered keeps the heuristic-only ordering; (2) on `StrategyMCTSAugmented`, runs `evolution.MCTSMutator.Candidates` for `MCTSIterations` iterations (default 12), each costing one `evaluator.EvaluateTree` call against the tree's own reflection records — no benchmark, no LLM; and (3) folds the search's root-level finds into `OrderMutations`' list with `evolution.MergeScoredMutations`, collapsing a duplicate op/target to the higher-scoring side. The merged list is one descending-score competition: MCTS output lands in the `(0.5, 1.0]` band, above the loop's own 0.45 cutoff but damped when the best observed gain was marginal, and every merged candidate — whichever generator proposed it — still clears the same benchmark, pre-score, quality gate and meta-validation before it is applied. On by default via `DefaultEvolveV2Config` and therefore in the production daemon; `MCTSStructuralSearch=false` restores the single-generator flow ([§5.1](05-building-blocks.md), [§5.3](05-building-blocks.md), [§8](08-crosscutting-concepts.md) Evolution Pipeline).
-
-**Durable pre-mutation snapshot and rollback (2026-07-15, ADR-093):** Before the mutation loop above begins, `evolveTreeV2` also calls `evolution.SnapshotTree(tree, entry.Name, g.cfg.SnapshotDir)`, writing the pre-cycle tree into `~/.go-bt-gardener/snapshots/` — durable state a process crash mid-cycle can't take with it, unlike the in-memory `originalTree` clone the ACCEPT/ROLLBACK comparison above already used. ~~The snapshot slot is overwritten on every cycle, so it always reflects the start of the *most recent* cycle, not full history.~~ — resolved 2026-07-15 (ADR-115): each call now writes a new sequentially-numbered `snapshot_<name>_<seq>.json` revision plus an index file instead of clobbering one slot, so history accumulates and `ListRevisions`/`RestoreTreeRevision` can recover any prior cycle's state. `Registry.RollbackTree(name, snapshotDir)` restores the newest revision and durably re-persists it, reachable on demand via the `gardener_rollback` langchain tool.
-
-**Automatic rollback on fail-closed (2026-07-15, ADR-115 milestone 2):** The quality-gate-disabled check `evolveTreeV2` makes at loop entry ([§8](08-crosscutting-concepts.md) Evolution Pipeline) now runs *before* the pre-mutation snapshot above rather than after — snapshotting the tree's current, already-regressed state first would make it the new "most recent" revision and defeat the rollback. When `g.cfg.Gate.IsDisabledFor(entry.Name)` is true, the cycle no longer just skips mutations and returns: it calls `g.cfg.Registry.RollbackTree(entry.Name, g.cfg.SnapshotDir)` to restore the tree's last-known-good revision immediately, records the outcome on `CycleMetrics.Rollbacks` (1 on success, 0 on a failed or unconfigured rollback), and returns without entering the mutation loop at all — the tree is actively repaired the same cycle the gate trips, not left frozen in its regressed state until a process restart or an operator-triggered `gardener_rollback` call.
-
-**Island adoption is a second persist path, gated like the first (2026-08-02):** the flow above is the per-tree pipeline, but on island-interval cycles `RunCycleV2` runs `runIslandExploration` *before* it ([§5](05-building-blocks.md) `internal/gardener`): each active domain's `IslandModel` subpopulation is evolved, and `adoptIslandWinner` migrates a champion that outscores the live tree into it and calls `Registry.SaveTree` — so a migrated winner is already on disk, and is that cycle's baseline, by the time `evolveTreeV2` reaches the tree. Nothing downstream can catch a gate this pass skips, and an island breeds by random mutation, so adoption now clears the same three gates `evolveTreeV2` clears before its own save rather than only the fitness-delta and 20× bloat checks: the fail-closed `Gate.IsDisabledFor` check — a tree whose gate is disabled is about to be rolled back by the paragraph above, so overwriting it here would clobber exactly the state that rollback restores — the reflection-evidence gate (with no records, "the winner beats the live tree" is scored over an empty corpus), and `ValidationGate`, run *before* the in-place `*entry.Tree = *winner` assignment so a rejection leaves the live tree untouched and needs no restore. Reached in production, where `cmd/bt-gardener/config.go` wires `Config.IslandModel` ([§8](08-crosscutting-concepts.md) Evolution Pipeline).
-
-**Gardener-embedded transposition table (2026-07-15, ADR-094):** `evolveTreeV2` now also calls `evaluator.TranspositionTable.Store` right after computing `baseFitness` — before the evidence gate can short-circuit the rest of the pipeline — so every processed tree contributes a cached `(tree, task)` evaluation, and `IterativeDeepening` probes ahead from the post-cycle tree once the mutation loop finishes. Since 2026-07-15 (ADR-107), when that probe's `BestMutation` beats the cycle's current fitness, `evolveTreeV2` applies it directly to the live tree instead of only recording it in `CycleMetrics` — the deep search can now improve a tree even when the greedy per-candidate loop's mutation budget found nothing better. Since 2026-07-15 (ADR-112), that apply is itself re-gated: `evolveTreeV2` re-runs `ValidationGate` against the mutated tree before this second `Registry.SaveTree` call, exactly mirroring the greedy loop's own gate above, and reverts the tree to its pre-deep-search state on rejection — closing the gap ADR-107 had flagged where the deep-search path bypassed the cycle's own quality-threshold check. `RunCycleV2` saves the table to disk right after `MetricsTracker.Save()`, on the same per-tree cadence. Both steps are no-ops when `Config.TranspositionTablePath` is unset ([§8](08-crosscutting-concepts.md) Evolution Pipeline).
+The island winner pass runs before the ordinary per-tree mutation loop.
+It validates the whole-tree candidate and snapshots the predecessor before
+committing it to disk, then updates the live tree. Failed snapshot/write
+leaves the live tree unchanged (R23 regression contracts);
+the diagram in §5.3 must not be interpreted as proof of identical gating.
+Per-user trees use per-user evidence and experience banks. See
+[`evolve_v2.go`](../../internal/gardener/evolve_v2.go) and
+[§8.5](08-crosscutting-concepts.md#85-evolution-pipeline).
 
 ## 6.3 Sprint Execution
 
-**Trigger:** Dashboard user POSTs to `/api/sprint` with company/quarter info.
+**Trigger:** an authenticated operator approves tasks and submits
+`POST /api/sprint/execute`.
 
-```
-Browser                         bt-dashboard (:9800)           Goroutine                   bt-agent (MCP)
-  │                               │                            │                            │
-  │──POST /api/sprint────────────▶│                            │                            │
-  │                               │──orch.RunSprint()─────────▶│                            │
-  │                               │                            │──Create tasks (5 roles)──▶│
-  │                               │                            │──for each task:           │
-  │                               │                            │   agent.RunAgent() in-process
-  │                               │                            │   "delegate to {tree}"───▶│──bt_run_task()──▶
-  │                               │                            │                            │◀──result────────
-  │                               │                            │──mark task done           │
-  │◀──{sprint_id}─────────────────│                            │                            │
-  │                               │                            │                            │
-  │──GET /api/sprint/status──────▶│                            │                            │
-  │◀──{progress, tasks}───────────│                            │                            │
-```
+1. Serialize sprint admission with the HTTP caller's context and a 30-second
+   default. Reserve the shared concurrency limiter and worker queue before
+   durably claiming tasks. Closed admission returns 503; canceled/expired
+   admission returns 408, with explicit non-dispatch evidence and unchanged
+   claims. Matching idempotency keys observe their existing job.
+2. Dispatch claimed tasks sequentially through a captured `AgentExecutor`,
+   task store and breaker owner. Accepted work has its own five-minute batch
+   deadline, including queue time, detached from HTTP disconnect. Per-task
+   contexts inherit the remaining batch budget. The shared reservation stays
+   owned until actual execution/metadata cleanup returns, even after expiry.
+3. Execution uses in-process dependencies; the executor has a Hermes CLI
+   fallback. It does not always send a `bt_run_task` MCP request.
+4. Commit each task's disposition, output, outcome, optional run ID and execution
+   diagnostic together. Only then advance its workflow mirror. A healthy run
+   with a record error stays completed work with a diagnostic. Genuine stops
+   stay failed; ordinary quota carryover and pre-execution breaker skips return
+   to approved. Approval/input waits do not establish completion.
+5. Retain task-commit errors and their observed results in sprint diagnostics;
+   continue other claimed tasks once each, without replaying completed work.
+   Expiry stops further dispatch. Proven unstarted claims return to approved
+   work together with outcome `not_started`, within a separate 30-second cleanup
+   record budget; failed cleanup retains their observed metadata for repair.
+   Started work preserves its actual result and is never automatically requeued
+   merely because a deadline elapsed. Terminal errors produce progress `failed`.
+   A batch panic reports uncertainty
+   and leaves interrupted/unattempted claims explicit for operator inspection.
+6. The browser polls `GET /api/sprint/status`, shows terminal diagnostics, and
+   stops on completion or authentication/authorization rejection.
 
-**Duration:** 5-15 minutes (5+ Ollama calls per sprint). Poll-based status via `/api/sprint/status`.
+Status exposes tracked progress (idle/dispatching/running/done/failed), latest job
+and task, elapsed seconds, initialized ISO 8601 start time and optional
+deadline_at for the owned batch budget. Before admission,
+progress is idle, elapsed is zero and started_at is absent. tasks_completed and
+tasks_total are task-store-wide observations, not current-sprint percentages.
+Optional error/error_kind and per-task diagnostics retain observed output/outcome,
+agent/tree/run attribution and task_committed/commit_error. `done` means batch
+processing ended without unexpected diagnostics; it does not claim code delivery
+or that every task completed (quota/breaker deferrals can remain).
 
-**`RunSprint` no longer blocks concurrent state reads for its full duration (2026-07-30):** `CompanyOrchestrator.RunSprint` (the `orch.RunSprint()` step above) runs its `EngineerTree`/`MarketingTree`/`SalesTree` calls — each with a 120s timeout, up to ~6 minutes worst case per sprint — with `CompanyState`'s lock (ADR-236, [§8](08-crosscutting-concepts.md)) held only for two short snapshot/apply windows immediately before and after them, not across them. Previously the lock was held for the whole method body, so any concurrent `state.Lock()` caller — `handleDefaultCompany`'s `GET /api/company/default` (fetched by the dashboard on every page load) or `Summary()` — blocked for the full sprint duration whenever a sprint was running synchronously in a request goroutine (e.g. via `handleWorkflowRunFullPipeline` → `RunFullPipeline` → `ExecuteSprint` → `RunSprint`). `RunSprint` now mirrors the unlock-around-`RunSprint()` pattern `ExecuteSprint` already used for the same reason.
+After repairing the task-store path, a new authenticated sprint request retries
+retained task metadata before claiming any new approved tasks. Matching old
+idempotency keys only return their old job. Repair never invokes the executor;
+changed owners/operator decisions and unresolved execution uncertainty return
+503 rather than overwriting evidence or inventing a replay decision. Diagnostics
+are process-local until a new batch or restart; copy them and inspect history
+before restarting. Restart-safe reconciliation remains R30. See
+[ADR-275](09-decisions.md#adr-275), [commit/repair HTTP regressions](../../cmd/bt-dashboard/sprint_persistence_regression_test.go)
+and [status snapshots](../../cmd/bt-dashboard/sprint_schema_regression_test.go).
+[Capacity/context regressions](../../cmd/bt-dashboard/sprint_admission_regression_test.go)
+cover actual rejected admission, readable status during waits, HTTP detachment,
+retained capacity after cooperative expiry and unstarted-task cleanup (ADR-276).
+These are cooperative budgets, not guaranteed wall-clock termination of arbitrary
+filesystem operations or synchronous actions ignoring cancellation.
 
-**Dispatch order (ADR-072):** the `/api/sprint/execute` handler (`handleSprintExecute`) dispatches whatever `TaskStore.Approved()` returns, in order. Since 2026-07-13, `Approved()` sorts its result by priority (critical → high → medium → low → backlog, the same ordinal `workflow_engine.go` declares as `WorkflowPriority`) and then by sprint number, so a critical-priority task approved after a low-priority one still dispatches first — previously the loop ran approved tasks in whatever order they appeared in the store.
+`POST /api/workflow/run-full-pipeline` and `POST /api/pipelines/run` are
+separate interfaces; `/api/sprint` and `/api/pipeline/*` are not aliases
+for these routes. [The mux](../../cmd/bt-dashboard/main.go) is authoritative.
 
-**Tree selection (ADR-073, ADR-100):** when a task has no `TreeID` set, the sprint loop and `handleAnalyze`/manual task creation all call `dashboard.PickTreeForTask` to pick `{tree}`. Since 2026-07-13, auction/delegation-shaped task text (mirroring the exported `engine.AuctionTaskKeywords`) routes to `auction_demo` ahead of the other keyword picks, so a live sprint task can reach the A2A announce→bid→award auction machinery ([§8](08-crosscutting-concepts.md) A2A Auction Task Allocation) through this path instead of only via an explicit `switch_tree`. Since 2026-07-15, a task that clears the auction check is next routed through the knowledge graph: `main.go` wires `dashboard.DiscoverTreeFn = kg.Discover`, and `PickTreeForTask` returns the graph's confident answer ahead of its remaining static bug/build/security/research/test/refactor keyword picks — the static switch now only decides tasks the knowledge graph itself has no confident match for.
+Company-state locks cover snapshot/apply windows around long-running tree
+calls. Holding that shared lock across model calls would block unrelated
+page loads (QS18/QS21, ADR-239).
 
-**Task derivation (ADR-080):** `handleAnalyze` now runs the thinktank orchestrator's full research→debate→synthesis sequence (previously it ran only the research round) and checks each phase's error, returning `{"error": ...}` on the first failure instead of silently falling through. On success it derives dashboard tasks via `internal/dashboard/workflow_engine.go`'s `Workflow.RecommendationsToTasks`/`Prioritize` — the engine's first production caller — instead of minting `dashboard.Task` values directly from raw research-finding insight text, so tasks entering the sprint-execution path above carry real `AssigneeRole`/`SprintTarget`/`Approval` state.
+YAML pipelines use a common sequential runner for top-level, loop and nested
+subworkflow bodies. Loops execute every declared body step. An unconfigured
+approval waiter returns a typed pending state; rejected/escalated/failed or
+expired approval decisions stop rather than being skipped or requested again.
+Raw agent waits are normalized to typed stops. Child contexts inherit container
+budgets; HITL creation and polling use the same shorter caller/policy deadline.
+Completed healthy child work followed by an ordinary failure produces a typed
+partial stop, preventing container or outer retries from repeating the prefix.
+Normal eligible single-step failure retry and explicit ordinary skip remain
+available. Already admitted parallel siblings may finish.
 
-**Workflow-level approval gate (ADR-081):** `handleAnalyze` also retains the `*dashboard.Workflow` it builds in a package-level `currentWorkflow` var, and three new endpoints — `GET /api/workflow/pending`, `POST /api/workflow/approve?id=`, `POST /api/workflow/reject?id=&reason=` — call `Workflow.PendingApprovals`/`ApproveTask`/`RejectTask` on it directly, alongside the pre-existing `/api/tasks/approve`/`/api/tasks/reject`. This is a second, independent approval surface: it mutates `currentWorkflow.Tasks[i]` (keyed on the bare `WorkflowTask.ID`, e.g. `rec-001`), not the `dashboard.Task` records in `taskStore` (keyed on `wf.ID + "-" + wt.ID`) that `handleSprintExecute`'s dispatch loop above actually reads via `TaskStore.Approved()`. Deciding a task through `/api/workflow/approve` does not approve its `taskStore` counterpart, and vice versa — the dispatch order described above is still governed exclusively by the `/api/tasks/approve`/`/api/tasks/reject` (ADR-072) path.
+Container results retain nested child evidence, including approval task/request
+IDs. HTTP pipeline status reports `waiting` for a proven wait, `failed` for an
+unsuccessful result even when the callback returned no error, and `complete` for
+healthy completion. Optional `error_kind` retains the terminal diagnostic.
+The browser renders nested IDs as escaped text and stops polling a settled
+waiting invocation. It does not automatically resume a paused run or claim its
+in-memory status survives restart (ADR-270).
 
-**Approval-surface reconciliation (ADR-086):** `handleWorkflowApprove`/`handleWorkflowReject` now also call `taskStore.Approve`/`taskStore.Reject` on the composed `wf.ID+"-"+taskID` record immediately after the `Workflow`-side call succeeds, so a decision made through `/api/workflow/approve`/`/api/workflow/reject` reaches the same `taskStore` record `handleSprintExecute` reads via `TaskStore.Approved()` above. The reverse direction (`/api/tasks/approve`/`/api/tasks/reject` updating `currentWorkflow.Tasks`) is unchanged, since that was never the direction gating sprint dispatch.
+A configured blackboard must accept the initial input before an agent starts.
+Step output and previous-output mirrors report every attempted write failure.
+Healthy completed output remains in the result with a persistence diagnostic;
+the workflow aborts before retry/skip/downstream work. A failed agent whose
+output mirror also fails retains its original error and a typed failure stop.
+An acknowledged first mirror is not rolled back when the second fails. Scope
+and sidecar lock waits inherit the shorter caller/default budget. Ordinary
+filesystem I/O remains cooperative (ADR-271).
 
-**Dispatch-time task-state sync (2026-07-14, ADR-089):** ADR-086 reconciled the *approval* decision in one direction (`/api/workflow/approve|reject` → `taskStore`); it left the *execution* outcome unreconciled in the other. `handleSprintExecute`'s per-task dispatch loop above updates `taskStore` (`UpdateStatus`/`SetOutput`) as each task starts, fails, times out, or completes, but never touched `currentWorkflow` at all — so once a sprint actually ran, every dashboard surface reading `currentWorkflow` (`GET /api/workflow/pending`, the sprint-goal UI, `Company.CurrentSprint`) stayed frozen at `"approved"` even after the task had finished. A new `syncWorkflowTaskStatus(taskID, status)` helper checks the dispatched `taskID` against `currentWorkflow.ID+"-"` (the same composed-ID convention `handleAnalyze`/`handleWorkflowApprove`/`handleWorkflowReject` already use) and, on a match, calls the new `Workflow.SetTaskStatus` ([§5.4](05-building-blocks.md)) with `StatusInProgress`/`StatusBlocked`/`StatusCompleted` at the same three points the loop already updates `taskStore` — advancing `Company.CurrentSprint` to the task's `SprintTarget` on completion, mirroring `ExecuteSprint`'s own convention. `currentWorkflow` and `taskStore` now converge from execution as well as from approval.
-
-**`RunFullPipeline` gets a caller (2026-07-15, ADR-116):** the paragraphs above all describe `handleAnalyze`, which stops after `RunSynthesis` and never calls `Workflow.ExecuteSprint`. A new `POST /api/workflow/run-full-pipeline?topic=` handler drives the fuller `Workflow.RunFullPipeline` instead — research→debate→synthesis→peer-review→report-generation, then `RecommendationsToTasks`/`Prioritize`, then one `ExecuteSprint` call per distinct `SprintTarget` found in the derived tasks — persisting the result into `currentWorkflow` and `taskStore` the same way `handleAnalyze` does. `RunFullPipeline` now also halts with `w.Status = "failed"` before any task is created if any thinktank phase errors, and iterates every sprint actually present instead of a hardcoded sprint 1/2 pair ([§5.4](05-building-blocks.md)). Because `RunFullPipeline` still never auto-approves (ADR-081) and each call builds a brand-new `Workflow`, every task it derives starts `StatusPending`; its `ExecuteSprint` calls still run `compOrch.RunSprint()` (the company-state simulation) but advance no task status on that first pass — real per-task bt-agent dispatch for these tasks still depends on an explicit `/api/workflow/approve` or `/api/tasks/approve` decision and `handleSprintExecute` picking them up from `taskStore`, exactly as for tasks derived via `handleAnalyze`.
+Pipeline loading accepts a basename with optional .yaml suffix. Directory,
+absolute, traversal, backslash and NUL names are rejected before file selection
+or run admission. Both listing and execution use rooted reads: relative symlinks
+inside the configured directory work; escaping/absolute file symlinks do not.
+Operators may relocate the configured directory through a symlink. Missing
+inventory directories return an empty list; other directory failures return
+503. Invalid/unreadable YAML entries are omitted from the inventory. A selected
+unavailable file returns 404 without internal filesystem error details.
+Protected-route 401/403 responses retain their error schemas even under
+enforced validation; only an explicit default can cover an otherwise
+undocumented response status (ADR-272).
 
 ## 6.4 Self-Improvement Cycle (goap-fusion loop)
 
-**Trigger:** scheduler fires `goap-fusion-loop-runner` (cron `0,30 * * * *`; cycles serialize; per-cycle ceiling 2h).
+**Triggers:** deployed `goap-fusion-loop-runner` uses `0,30 * * * *`;
+`goap-fusion-runner` uses `47 * * * *` (host observation, 2026-09-16).
+Persisted scheduler configuration is authoritative. A due time is not a
+promise to launch overlapping work while the same job remains in flight.
 
+```mermaid
+flowchart TD
+    Due["scheduled agent"] --> Preflight["repository / runtime / input preflight"]
+    Preflight -->|"failed"| Failure["failure with diagnostic"]
+    Preflight --> Research["optional NotebookLM / provider review; vault context"]
+    Research --> Select["claim program milestone / prioritize goals"]
+    Select --> Worktree["safe repo synchronization + isolated worktree"]
+    Worktree --> Implement["selected coding CLI: RED then GREEN"]
+    Implement --> Verify["persist per-task and verification evidence"]
+    Verify --> Apply["review / apply eligible verified changes"]
+    Apply --> Finish["report; update program and documentation state"]
+    Implement -->|"quota unavailable"| Defer["persist carryover and retry deadline"]
+    Worktree -->|"implementation unavailable"| Analysis["deterministic analysis fallback"]
+    Implement -->|"eligible fallback"| Analysis
+    Analysis --> Degraded["degraded: no code landed through that path"]
 ```
-Preflight ─▶ Research ─▶ Goals ─▶ Plan ─▶ Implement ─▶ Verify ─▶ Land
-   │            │           │        │         │           │        │
-   │ materialize│ grill     │ dedup  │ goal-   │ per task: │ tests, │ hook-gated
-   │ build tree │ (cached)  │ vs     │ driven  │ RED→ver→  │ build, │ commit in
-   │ CIRCUIT-   │ NotebookLM│ know-  │ multi-  │ GREEN→ver │ chgd-  │ worktree,
-   │ POLICY gate│ query ────│ ledge  │ task    │ snapshot  │ pkg    │ ff bare
-   │ resume     │  └quota?  │ store  │ (≤3     │ commits   │ suites │ master,
-   │ saved plan │  fallback:│ (impl. │ tasks,  │ (partial  │ + lint │ push;
-   │ (stale →   │  Claude   │ goals  │ files   │ landing)  │ parity │ record
-   │  clear)    │  review,  │ never  │ from    │ arc42 doc │        │ implemented
-   │            │  mode     │ re-    │ goals,  │ sync      │        │ goals +
-   │            │  rotation)│ done)  │ risk    │           │        │ program
-   │            │ +programs │        │ tiers)  │           │        │ milestone
-```
 
-**Partial landing:** a later task's failure discards only that task's edits (per-task snapshot commits in the run worktree); the completed, verified work still lands and the failed goal is carried forward to the next cycle. All-or-nothing is preserved for first-task failures and outside worktree-apply mode.
+The loop preflight refuses tracked files differing from HEAD. Safe
+synchronization also refuses divergent branches it cannot fast-forward;
+a clean checkout alone is insufficient. Runtime preflight validates the
+configured provider's executable, not its account's model entitlement.
+An unsupported model is an implementation error, not a rate limit.
 
-**Apply status is authoritative across trailing invocations (2026-07-23):** the plan-resume runtime (`runSuperpowersRuntimeFromExistingPlanAction`) can run more than once within the same cycle — a first invocation that lands a partial landing above calls `clearSuperpowersPlanState` on success, and a later, trailing invocation in the same cycle then hits the top-of-function "no plan path" guard with nothing left to resume. That guard now checks `goapFusionApplyAlreadyLanded` (the tracked run's `ApplyStatus` is `committed`/`committed_pr_opened`) before treating an empty plan path as failure: when true, the trailing invocation returns success and leaves `bb.Result` as the landing report the earlier invocation already wrote, instead of unconditionally calling `markGoapFusionImplDegraded` and the goals-unchanged fast path, which previously overwrote the evidence with a "no code landed" message (run `20260723T091452` landed `3d6a13b` yet the cycle logged `no_change`).
+The coding runner is selected through `BT_SUPERPOWERS_PROVIDER`.
+Read-only review and write-capable implementation retain different
+permission policies. The default and deployed Codex-only policy disables alternate-provider failover.
+Only explicit legacy compatibility with that policy disabled may try an alternate
+once for a rate limit; it does not switch on authentication/model errors.
+See [coding delegation](../coding-delegation.md) and
+[§8.19](08-crosscutting-concepts.md#819-coding-provider-policy).
 
-**A resumed run advertises `implementation` while the batch runs (2026-08-02):** on that same plan-resume path, `runSuperpowersRuntimeFromExistingPlanAction` now sets `run.Phase = SuperpowersPhaseImplementation` and writes `run.json` immediately before handing the next ~90 minutes to `ExecuteSuperpowersTaskBatchRuntime` — mirroring the `ExecuteSuperpowersTaskBatch` BT action's phase bookkeeping and persisting it the way the run's own finish transition already does. Previously the resumed run advertised its pre-batch phase for the whole implementation window, and since the function performs no earlier artifact write, a freshly minted run had no `run.json` on disk at all until the batch's first per-task write — so anything reading run artifacts mid-batch (the dashboard, or a scan after a SIGKILL at the run budget below) could not tell the run had entered implementation. Best-effort like the function's other persistence: an unwritable artifact dir surfaces as a real failure inside the batch, not here.
+**Implemented excerpt: resuming after a quota pause.**
 
-**Rate-limit backoff:** a Claude rate-limited outcome in any tick persists a backoff deadline (`goap_fusion_claude_backoff_until`, RFC3339 in the agent-scope blackboard with ChainState fallback — the same durable pattern as the saved plan) so the *next* ticks consume it instead of re-attempting against a quota known to be closed. Both Claude consumers honor it on entry: the plan-resume runtime (`runSuperpowersRuntimeFromExistingPlanAction`) degrades to ScheduledAnalysisPath instantly — before worktree creation and the 90-minute run-budget attempt (`superpowersRuntimeRunBudget`; 45 minutes until 2026-07-19, which SIGKILLed 3-milestone batches mid-implementation) — with the exact rate-limited Result/Outcome shape, so the plan carryover is preserved for the tick after the window expires; and the Claude review research fallback returns rate-limited in milliseconds without invoking Claude, letting the ResearchRouter fall through to its non-fatal skip. The window is env-configurable (`BT_GOAP_CLAUDE_BACKOFF`, default 6h) on the implementation path and a fixed 1h on the review path; an elapsed window self-clears (half-open, the ADR-010 lesson) and malformed state reads as inactive, so stale or corrupt backoff can never permanently block Claude attempts.
+1. On an existing-plan run, `internal/engine` calls
+   `delegationPreflightBackoff` before creating a worktree or starting the
+   coding-attempt budget. Only with Codex-only policy explicitly disabled and
+   `BT_SUPERPOWERS_RATE_LIMIT_FAILOVER=true` does preflight check both the
+   configured provider and its alternate; the deployed policy checks Codex.
+2. For each provider whose latest valid deadline is at or before now,
+   preflight clears its shared JSON file, legacy agent-scoped blackboard
+   key and run-local `ChainState` entry. It checks both providers before
+   returning inactive, preserving any still-active provider window.
+3. If either provider is eligible, execution proceeds to the coding runner,
+   which skips providers still in backoff and permits an eligible attempt
+   (half-open recovery). Cancellation or deadline expiry stops failover.
+   If both windows remain active, the engine returns
+   `goap_fusion_rate_limited`, preserves the plan and reports the earlier
+   deadline for a later cycle.
 
-**Research economy:** NotebookLM answers are cached per Pacific day by question hash; daily budgets (30 queries / 2 web-research starts) refuse further metered calls with an error the ResearchRouter routes to the Claude review fallback (commits → structure → failures mode rotation, persisted round counter). The router is itself non-fatal: in both fusion trees (`domain:goap_fusion` and `domain:goap_fusion_loop`) it ends in a terminal `AlwaysSucceed` "ResearchOptional" leaf, so a doubly-unavailable research stage — NotebookLM quota closed *and* the Claude review fallback rate-limited or barren — degrades to the vault-context read phase (ReadVaultResearch onward) instead of aborting the run.
+**Source evidence:** [runtime caller](../../internal/engine/actions_superpowers_prod.go),
+[failover preflight/runner](../../internal/engine/superpowers_failover.go),
+[backoff state cleanup](../../internal/engine/goap_claude_backoff.go).
+**Tested contract:** `TestRunSuperpowersRuntime_ExpiredBackoffExecutes` and
+`TestDelegationPreflightBackoff_ClearsExpiredState` in the
+[runtime tests](../../internal/engine/actions_superpowers_prod_test.go) cover
+resumed provider invocation and cleanup of all three state locations for
+both provider orders, including equality at the deadline and preservation
+of active windows.
 
-**Charge-stamp durability (2026-07-16, ADR-129):** `PrioritizeGoapGoals`'s four per-cycle charge stamps (`program_milestone_charged`, `program_milestone`, `research_goal_charged`, `research_goal_charged_text`) now write through a new `setGoapStateDurable` to both ChainState and the agent-scope blackboard — the same durable pattern the Claude backoff deadline above uses — instead of ChainState alone. `clearSuperpowersPlanState`, already called from every plan-retirement site (`actions_superpowers_prod.go:804,917,1066`), now also wipes all four durable keys alongside the two plan-resume keys it already cleared, so a completed or abandoned cycle can no longer leave a stale stamp for a later, unrelated cycle's failure handler to charge or refund against. The failure/refund readers (`chargeGoapResearchGoalFailure`, the refund path's `goapChargedMilestoneRef`) still read only `bb.ChainState`, so a tick that resumes straight into `Implement` off a saved plan — skipping `PrioritizeGoapGoals` — still cannot see the durable stamp on failure; read-back is not yet wired (open caveat, ADR-129).
+**Budget and evidence:** the existing-plan Superpowers runtime has a
+90-minute attempt budget; scheduled jobs have their own configured timeout.
+Phase actions have additional command budgets. Persisted `run.json`,
+per-task RED/GREEN output and verification artifacts live under
+`docs/superpowers/runs/<id>/`. Partial verified landings and plan carryover
+are explicit runtime states; do not infer implementation success from an
+analysis file or from an executable being present.
+
+| Outcome | Meaning | Operational interpretation |
+|---|---|---|
+| `success` | Successful terminal execution according to the selected tree/adapter | For a code-change objective, also inspect apply/commit evidence. |
+| `no_change` | Healthy completion without a new implementation | No new code should be claimed. |
+| `degraded` | Analysis/fallback completed after implementation could not proceed | Breaker health does not mean the requested code was implemented. |
+| `goap_fusion_rate_limited` | Expected quota pause with carryover | Preserve plan/deadline; avoid charging a normal failure budget. |
+| `failure` / `partial` | Failed or incomplete execution | Inspect phase evidence, error and scheduler retry/DLQ handling. |
+| `pending_approval` | An external approval is still needed | Do not report completion or spin the tick loop. |
+
+The scheduler's canonical classifications are in
+[`agent/runner.go`](../../internal/agent/runner.go) and
+[`agent/scheduler.go`](../../internal/agent/scheduler.go).
+A closed breaker is therefore a reliability signal, not an implementation
+success metric.
 
 ## 6.5 Error Recovery
 
-```
-Any goroutine                   SafeGo wrapper                 CircuitBreaker              DeadLetterQueue
-  │                               │                            │                            │
-  │──PANIC!──────────────────────▶│                            │                            │
-  │                               │──recover()─────────────────│                            │
-  │                               │──RecordFailure()──────────▶│                            │
-  │                               │                            │──State check──────────────│
-  │                               │                            │   CLOSED → allow retry    │
-  │                               │                            │   OPEN → skip + queue────▶│──Push(entry)
-  │                               │                            │   HALF_OPEN → test probe  │
-  │                               │                            │                            │
-  │                               │──RetryWithBackoff()───────▶│                            │
-  │                               │   1s → 2s → 4s → 8s       │                            │
-  │                               │   (full jitter)            │                            │
-  │                               │   Max 3 retries            │                            │
-  │                               │                            │                            │
-  │                               │   Exhausted ─────────────────────────────────────────▶│──Persist JSON
+1. A local wrapper may recover a panic into an error or log it.
+   `SafeGo` alone does not enqueue work, open a breaker or restart the
+   failed goroutine.
+2. For scheduled runs, the callback passed to `globalSched.Start` in
+   [`cmd/bt-agent/main.go`](../../cmd/bt-agent/main.go) wires
+   `schedulerRetryPolicy` through `ExecuteContext` and enqueues failures
+   in the DLQ when that policy terminates with an error. GOAP cycles get
+   one attempt per scheduled slot; other agents use configured retries.
+3. `internal/agent` records genuine failures in the per-agent breaker.
+   Quota carryovers and healthy no-code outcomes terminate the callback
+   without retry or DLQ insertion.
+4. An operator can request DLQ replay. The daemon reloads shared on-disk
+   replay state before scanning so dashboard/MCP requests are visible.
+5. The execution owner commits a unique durable claim before dispatch. Healthy
+   completion removes the entry only after recording succeeds. Ordinary proven
+   failure records its outcome and releases the claim; terminal/uncertain
+   execution retains recovery authority. Failed terminal recording or immediate
+   process exit leaves the claim held through restart (ADR-280).
+
+Independent-process [DLQ restart fixtures](../../internal/reliability/dlq_restart_safety_test.go)
+append and sync a real local action counter, fail result recording or exit
+immediately, then start two fresh consumers against unchanged queue bytes.
+Scanner selection, ordinary requeue and direct replay execute no second action.
+Admission write failure executes nothing. Sibling deltas, purge and capacity
+cannot erase the fence. Malformed state remains in place and closes admission;
+quarantining it as an empty queue could discard unknown work. Exact-claim
+`ResolveReplayRecovery` commits a trusted completed/provably-unstarted decision
+without dispatch. Its caller must establish quiescence and outcome independently;
+this is not a production-verified recovery workflow.
+
+Process restart is a separate recovery boundary (ADR-277). A scheduled or
+manual scheduler execution with a persistent JobStore must commit an in-flight
+claim before dispatch. Unreadable job state closes admission. Interrupted
+claims become inactive `recovery_required` jobs; registry synchronization,
+ordinary scheduling, deletion and manual execution do not release them.
+Failed history/result recording and typed uncertain/terminal execution also
+hold the agent. `Scheduler.ResolveRecovery` records a trusted operator's
+completed/abandoned disposition and advances to a future recurring slot without
+dispatching the interrupted work. It is a Go API, not an authenticated HTTP/MCP
+reconciliation endpoint. In-memory-only schedulers have no restart guarantee.
+
+Sprint task claims remain `in_progress` if their result commit fails or the
+process exits after the action. Separate-process HTTP fixtures prove that
+restarting loses transient diagnostics but cannot make these claims approved;
+ordinary approval is rejected. Operators must recover evidence and reconcile
+metadata explicitly. This does not promise recovery of output that never
+reached durable storage, cross-store ACID or safety after losing the state volume.
+
+**Evidence:** [reliability primitives](../../internal/reliability/reliability.go),
+[panic handling](../../internal/reliability/panic_handler.go),
+[scheduler](../../internal/agent/scheduler.go). Recovery from process/host
+loss also requires the deployment and backup procedures in §7.
+
+Dashboard self-adoption has a separate process-local ownership contract
+(ADR-278). HTTP requests, capacity waits and detached agent/sprint/pipeline
+callbacks own leases until actual evidence/cleanup and panic handling finish.
+An idle restart seals the same admission mutex before requesting systemd
+restart. Rejected handoff reopens admission; accepted asynchronous handoff
+keeps it sealed until process exit. Sealed requests return JSON 503,
+`Retry-After: 1` and `X-BT-Execution-Admitted: false`. Persisted waiting records
+are not live workers. Sibling restarts and other daemon admission remain outside
+this local contract; automatic fleet adoption is not qualified.
+
+Sibling drift adoption now requests the target owner instead of invoking
+systemd directly (ADR-279). Dashboard and gardener control listeners authenticate
+same-UID peers, attest the configured systemd MainPID, validate a bounded
+revision request, and respect the target's
+auto-restart policy. A live already-current owner avoids a second restart.
+Otherwise the owner seals admission while idle, verifies its configured
+artifact's exact unit/revision/clean version output and requests its own restart.
+Busy, disabled, missing or mismatched owners defer without direct fallback.
+Lost replies and post-start systemd acknowledgement failures remain uncertain;
+the target keeps its admission seal. Only proven rejection reopens admission.
+
+Gardener RunCycleV2 owns cycle admission through evidence and cleanup. Its
+periodic iteration additionally owns registry rescan, analysis/tools and final
+metadata, including nested cycles. The watcher starts after owner/analysis
+initialization. The bt-agent self path still has only scheduler snapshots;
+daemon-wide scheduler/A2A/DLQ admission remains separate C09 acceptance.
+
+## 6.6 Browser Authentication and Session Expiry
+
+```mermaid
+sequenceDiagram
+    participant Browser
+    participant Dashboard
+    participant Sessions as In-memory SessionStore
+    Browser->>Dashboard: GET /api/session
+    Dashboard-->>Browser: 401 if no valid session
+    Browser->>Browser: show sign-in form
+    Browser->>Dashboard: POST /api/login (key + CSRF token)
+    Dashboard->>Sessions: validate configured key; create bounded session
+    Dashboard-->>Browser: HttpOnly bt_session cookie
+    Browser->>Dashboard: protected API request with cookie
+    Dashboard->>Sessions: validate token and expiry
+    alt valid
+        Dashboard-->>Browser: requested data
+    else expired / service restarted
+        Dashboard-->>Browser: 401
+        Browser->>Browser: clear private view; show sign-in
+    end
 ```
 
-**Circuit breaker config:** Threshold from `cfg.CBThreshold`, cooldown from `cfg.CBCooldownSecs`. Per-agent circuit breakers via `AgentCircuitBreakerStore`.
+`POST /api/logout` destroys the session and clears its cookie. API clients
+can instead use `X-API-Key`; a valid key takes the key-authenticated CSRF
+exception. Invalid-key login is not automatically retried by the browser.
+Sessions are process-local, so dashboard restart requires sign-in again
+(QS27–QS28).
 
-**Cross-process replay pickup (2026-07-10, ADR-036):** a `Requeue` stamped by the dashboard or an MCP sibling lands only in the shared `dead_letter_queue.json`. The daemon's replay scan (every `dlqReplayScanInterval`, 5 min) therefore runs `Reload()` → `RequeuedReady()` → `Replay(id)` each tick: the reload adopts the sibling's on-disk stamp into the executor's in-memory view, and the executor — the one process with a tree runner — replays the entry. The queue's own saves re-merge on-disk state under a sidecar flock first, so no process's periodic save can clobber a stamp written between ticks ([§8](08-crosscutting-concepts.md) File-Based Persistence).
+## 6.7 Personal Automation and Feedback
+
+Intent or recurring-pattern evidence creates a goal. The canonical planner
+produces a plan, the compiler validates a tree and persists it in the user's
+workspace, and the automation flow creates a tracked approval request.
+Approval finalization activates/schedules the tracked automation; rejection
+keeps it unavailable. Negative feedback can flag and pause an approved
+automation until review finalization.
+
+Task approval first persists a reconciliation marker, then resolves the HITL
+audit and clears the marker. Failure is reported and the task remains excluded
+from dispatch until a retry completes synchronization. Nested tree gates bind
+requests to their own node/phase/task/agent identity and retain outer approval
+while inner review remains pending. Post-review begins only after child
+completion; completed child work is not replayed while approval is pending.
+Storage failure stops the gate before a pre-approval child runs (ADR-263).
+
+MCP and dashboard use shared persona finalization functions. User-scoped
+resolution and `AutomationBlocked` prevent falling through to a default
+tree for pending/rejected/flagged tracked automations. Trusted operator
+settings can permit auto-approval; the default HITL policy is not an
+unconditional guarantee that every installation requires a human click.
+See [automation finalization](../../internal/persona/automation_finalize.go),
+[autopilot tests](../../cmd/bt-agent/autopilot_test.go), and QS9–QS13.
+
+## 6.8 Inspect a Tree Definition
+
+An authenticated operator requests an exact tree ID. Lookup rejects path-shaped
+identifiers, checks existing catalog aliases and shared compiled construction,
+then consults the injected unscoped generated-tree resolver on a miss. The
+explicit default ID resolves its compiled definition; unknown IDs never receive
+execution's legacy fallback. Missing parameters return 400; unavailable actual
+definitions return 404. Catalog metadata alone does not establish availability.
+
+HTTP returns the bare SerializableNode, preserving nested children and metadata.
+The browser encodes the requested ID, escapes labels/details/errors and binds
+collapse/detail events to structural paths. Repeated names and IDs remain
+independent branches. This read does not execute a tree or coding provider.
+Enforced schema checks cover the root and immediate child shape; nested schema
+validation and tenant-bound inspection remain separate work (ADR-273).
+
+## 6.9 Admit a Blackboard Owner and Promote Completed Evidence
+
+A platform runner first initializes its persistent blackboard namespace. A
+failed default initialization returns no memory substitute: agent work stops
+before a run handle/tree tick, pipelines stop before step admission, HTTP startup
+returns 503 before publishing/enqueuing a run, and MCP returns an error. A runner
+keeps its initialized owner/error; after a failed setup the operator repairs the
+root and constructs a new runner. Successful initialization fixes the default
+owner despite subsequent environment/configuration removal. Injected managers
+are trusted dependencies configured before use.
+
+After healthy agent execution, promotion stages output, task, run/session IDs
+and timestamp under one scoped gate/file transaction. Invalid entries, a group
+that cannot fit without evicting itself, cancellation or commit failure publish
+none of that group. Entry metadata is detached from writer/read/list callers.
+Failure preserves the actual healthy result and records its diagnostic in
+history; typed persistence evidence stops automatic replay. Promotion write
+admission respects the shorter caller/default scope budget. Startup filesystem
+I/O and arbitrary synchronous I/O remain cooperative (ADR-274, R30).
 
 ---
 

@@ -267,21 +267,33 @@ func ScoreMutation(tree *evolution.SerializableNode, suite Suite, mock llm.LLM, 
 	return 0.0
 }
 
-// QuickValidate runs a lightweight version of the suite for fast gardener validation.
-// Uses max 3 tasks: first task + random edge-case task from the end.
-func QuickValidate(tree *evolution.SerializableNode, suite Suite, llm llm.LLM, ops []evolution.MutationOp) float64 {
+// quickSuite selects the same happy-path/edge evidence for mutations and
+// whole-tree candidates. This is bounded smoke evidence, not a full benchmark.
+func quickSuite(suite Suite) Suite {
 	if len(suite.Tasks) <= 3 {
-		return ScoreMutation(tree, suite, llm, ops)
+		return suite
 	}
-	// Take first task (basic routing) + last task (edge case) for balanced validation
-	lite := Suite{
-		Name: suite.Name + "_quick",
-		Tasks: []TaskCase{
-			suite.Tasks[0],                  // happy-path routing
-			suite.Tasks[len(suite.Tasks)-1], // edge-case task
-		},
+	return Suite{Name: suite.Name + "_quick", Tasks: []TaskCase{suite.Tasks[0], suite.Tasks[len(suite.Tasks)-1]}}
+}
+
+// QuickValidate scores a mutation on a bounded subset of the suite.
+func QuickValidate(tree *evolution.SerializableNode, suite Suite, model llm.LLM, ops []evolution.MutationOp) float64 {
+	return ScoreMutation(tree, quickSuite(suite), model, ops)
+}
+
+// QuickValidateCandidate rejects a whole-tree candidate that regresses task
+// success or routing on the same bounded evidence used by QuickValidate.
+func QuickValidateCandidate(baseline, candidate *evolution.SerializableNode, suite Suite, model llm.LLM) bool {
+	if baseline == nil || candidate == nil || len(suite.Tasks) == 0 {
+		return false
 	}
-	return ScoreMutation(tree, lite, llm, ops)
+	if _, err := engine.BuildAndValidate(candidate, &engine.Blackboard{Sandbox: true, ChainState: make(map[string]any)}); err != nil {
+		return false
+	}
+	lite := quickSuite(suite)
+	before := RunSuite(baseline, lite, model)
+	after := RunSuite(candidate, lite, model)
+	return after.SuccessRate >= before.SuccessRate && after.PathMatchRate >= before.PathMatchRate
 }
 
 // --- Statistical helpers ---

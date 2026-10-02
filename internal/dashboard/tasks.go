@@ -2,7 +2,9 @@ package dashboard
 
 import (
 	"cmp"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"slices"
@@ -10,6 +12,13 @@ import (
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/hitl"
+	"github.com/nico/go-bt-evolve/internal/reliability"
+	"github.com/nico/go-bt-evolve/internal/util"
+)
+
+var (
+	ErrTaskNotFound      = errors.New("task not found")
+	ErrTaskInvalidStatus = errors.New("invalid task status")
 )
 
 // Task represents a workflow task in the pipeline.
@@ -29,9 +38,14 @@ type Task struct {
 	CompletedAt string `json:"completed_at,omitempty"`
 	Output      string `json:"output,omitempty"`
 	Outcome     string `json:"outcome,omitempty"`
+	Error       string `json:"error,omitempty"`
+	ErrorKind   string `json:"error_kind,omitempty"`
+	RunID       string `json:"run_id,omitempty"`
 	// Approval is the audit trail for approve/reject decisions, mirroring
 	// the Approval struct on WorkflowTask in workflow_engine.go.
 	Approval Approval `json:"approval,omitzero"`
+	// AuditPending blocks admission until a committed decision reaches its HITL audit.
+	AuditPending bool `json:"approval_audit_pending,omitempty"`
 }
 
 // TaskStore persists tasks to a JSON file.
@@ -59,16 +73,20 @@ func NewTaskStore(path string) *TaskStore {
 func (s *TaskStore) Load() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	data, err := os.ReadFile(s.path)
+	data, err := util.ReadPersistenceFile(s.path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil // fresh store, no tasks yet
 		}
 		return fmt.Errorf("dashboard: read task store: %w", err)
 	}
-	if err := json.Unmarshal(data, s); err != nil {
+	var loaded struct {
+		Tasks []Task `json:"tasks"`
+	}
+	if err := json.Unmarshal(data, &loaded); err != nil {
 		return fmt.Errorf("dashboard: parse task store: %w", err)
 	}
+	s.Tasks = loaded.Tasks
 	return nil
 }
 
@@ -82,25 +100,67 @@ func (s *TaskStore) Save() error {
 // file and renames it into place, so a failure (or a crash mid-write)
 // leaves the existing tasks.json untouched rather than truncated.
 func (s *TaskStore) saveLocked() error {
-	data, err := json.MarshalIndent(s, "", "  ")
+	return s.commitTasksLocked(s.Tasks)
+}
+
+// commitTasksLocked persists a complete snapshot before publishing it in memory.
+// Like JobStore, this serializes replacement writes, not stale-snapshot merging.
+func (s *TaskStore) commitTasksLocked(tasks []Task) error {
+	return s.commitTasksLockedWithContext(context.Background(), tasks)
+}
+
+func (s *TaskStore) commitTasksLockedWithContext(ctx context.Context, tasks []Task) error {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := util.EnsurePersistenceParent(s.path); err != nil {
+		return fmt.Errorf("dashboard: create task directory: %w", err)
+	}
+	release, err := reliability.AcquireFileLockWithContext(ctx, s.path)
 	if err != nil {
 		return err
 	}
-	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0644); err != nil {
-		return fmt.Errorf("dashboard: write task store: %w", err)
+	defer release()
+	if err := ctx.Err(); err != nil {
+		return err
 	}
-	if err := os.Rename(tmp, s.path); err != nil {
-		return fmt.Errorf("dashboard: rename task store: %w", err)
+	if err := util.SaveJSONAtomic(s.path, struct {
+		Tasks []Task `json:"tasks"`
+	}{Tasks: tasks}); err != nil {
+		return fmt.Errorf("dashboard: save tasks: %w", err)
 	}
+	s.Tasks = tasks
 	return nil
+}
+
+// lockWithContext bounds contention with legacy mutations using the same mutex.
+func (s *TaskStore) lockWithContext(ctx context.Context) error {
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if s.mu.TryLock() {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+		}
+	}
 }
 
 func (s *TaskStore) List() []Task {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	out := make([]Task, len(s.Tasks))
-	copy(out, s.Tasks)
+	for i, task := range s.Tasks {
+		out[i] = cloneTask(task)
+	}
 	return out
 }
 
@@ -109,7 +169,7 @@ func (s *TaskStore) Get(id string) (Task, bool) {
 	defer s.mu.Unlock()
 	for _, t := range s.Tasks {
 		if t.ID == id {
-			return t, true
+			return cloneTask(t), true
 		}
 	}
 	return Task{}, false
@@ -130,12 +190,7 @@ func (s *TaskStore) Create(task Task) error {
 	if task.Sprint == 0 {
 		task.Sprint = 1
 	}
-	s.Tasks = append(s.Tasks, task)
-	if err := s.saveLocked(); err != nil {
-		s.Tasks = s.Tasks[:len(s.Tasks)-1]
-		return err
-	}
-	return nil
+	return s.commitTasksLocked(append(slices.Clone(s.Tasks), cloneTask(task)))
 }
 
 func (s *TaskStore) UpdateStatus(id, status string) error {
@@ -143,14 +198,15 @@ func (s *TaskStore) UpdateStatus(id, status string) error {
 	defer s.mu.Unlock()
 	for i := range s.Tasks {
 		if s.Tasks[i].ID == id {
-			s.Tasks[i].Status = status
+			tasks := slices.Clone(s.Tasks)
+			tasks[i].Status = status
 			if status == "completed" || status == "failed" {
-				s.Tasks[i].CompletedAt = time.Now().Format(time.RFC3339)
+				tasks[i].CompletedAt = time.Now().Format(time.RFC3339)
 			}
-			return s.saveLocked()
+			return s.commitTasksLocked(tasks)
 		}
 	}
-	return fmt.Errorf("task %s not found", id)
+	return fmt.Errorf("%w: %s", ErrTaskNotFound, id)
 }
 
 // Approve marks a task as approved and records who approved it and when.
@@ -161,22 +217,29 @@ func (s *TaskStore) Approve(id, approver string) error {
 		if s.Tasks[i].ID == id {
 			switch s.Tasks[i].Status {
 			case "approved":
+				if s.Tasks[i].AuditPending {
+					return s.finishDecisionAuditLocked(i)
+				}
 				return nil
 			case "in_progress", "completed":
-				return fmt.Errorf("task %s is already %s", id, s.Tasks[i].Status)
+				return fmt.Errorf("%w: task %s is already %s", ErrTaskInvalidStatus, id, s.Tasks[i].Status)
 			}
+			tasks := slices.Clone(s.Tasks)
 			now := time.Now()
-			s.Tasks[i].Status = "approved"
-			s.Tasks[i].Approval = Approval{
+			tasks[i].Status = "approved"
+			tasks[i].AuditPending = true
+			tasks[i].Approval = Approval{
 				ApprovedBy: approver,
 				ApprovedAt: &now,
 				IsApproved: true,
 			}
-			resolveHITLAudit(id, approver, "", true)
-			return s.saveLocked()
+			if err := s.commitTasksLocked(tasks); err != nil {
+				return err
+			}
+			return s.finishDecisionAuditLocked(i)
 		}
 	}
-	return fmt.Errorf("task %s not found", id)
+	return fmt.Errorf("%w: %s", ErrTaskNotFound, id)
 }
 
 // Reject marks a task as rejected and records who rejected it, when, and why.
@@ -185,37 +248,86 @@ func (s *TaskStore) Reject(id, rejector, reason string) error {
 	defer s.mu.Unlock()
 	for i := range s.Tasks {
 		if s.Tasks[i].ID == id {
+			if s.Tasks[i].Status == "rejected" {
+				if s.Tasks[i].AuditPending {
+					return s.finishDecisionAuditLocked(i)
+				}
+				return nil
+			}
+
+			tasks := slices.Clone(s.Tasks)
 			now := time.Now()
-			s.Tasks[i].Status = "rejected"
-			s.Tasks[i].Approval = Approval{
+			tasks[i].Status = "rejected"
+			tasks[i].AuditPending = true
+			tasks[i].Approval = Approval{
 				ApprovedBy: rejector,
 				RejectedAt: &now,
 				Reason:     reason,
 				IsApproved: false,
 			}
-			resolveHITLAudit(id, rejector, reason, false)
-			return s.saveLocked()
+			if err := s.commitTasksLocked(tasks); err != nil {
+				return err
+			}
+			return s.finishDecisionAuditLocked(i)
 		}
 	}
-	return fmt.Errorf("task %s not found", id)
+	return fmt.Errorf("%w: %s", ErrTaskNotFound, id)
 }
 
-// resolveHITLAudit resolves the pending (or escalated) hitl.Request recorded
-// for taskID, if any, so an approve/reject decision made through TaskStore or
-// Workflow always lands on the same audit-trail record a dashboard operator
-// or MCP tool would see via hitl.DefaultStore — instead of each model keeping
-// its own Approval field in sync with a separately-driven HITL resolution.
-// Most tasks are not HITL-gated, so a missing request is not an error.
-func resolveHITLAudit(taskID, reviewer, reason string, approved bool) {
+// TaskDecisionPersistenceError reports a committed task decision awaiting audit
+// reconciliation. Admission stays blocked; retry the decision to finish it.
+type TaskDecisionPersistenceError struct {
+	TaskID string
+	Err    error
+}
+
+func (e *TaskDecisionPersistenceError) Error() string {
+	return fmt.Sprintf("task %s decision committed; audit synchronization pending: %v", e.TaskID, e.Err)
+}
+func (e *TaskDecisionPersistenceError) Unwrap() error { return e.Err }
+
+func (s *TaskStore) finishDecisionAuditLocked(index int) error {
+	task := s.Tasks[index]
+	if err := resolveHITLAudit(task.ID, task.Approval.ApprovedBy, task.Approval.Reason, task.Approval.IsApproved); err != nil {
+		return &TaskDecisionPersistenceError{TaskID: task.ID, Err: err}
+	}
+	tasks := slices.Clone(s.Tasks)
+	tasks[index].AuditPending = false
+	if err := s.commitTasksLocked(tasks); err != nil {
+		return &TaskDecisionPersistenceError{TaskID: task.ID, Err: err}
+	}
+	return nil
+}
+
+// resolveHITLAudit synchronizes an existing audit; optional non-HITL tasks have
+// no request. Storage failure must not be confused with a missing request.
+func resolveHITLAudit(taskID, reviewer, reason string, approved bool) error {
 	store := hitl.DefaultStore
 	if store == nil {
-		return
+		return nil
 	}
+	var err error
 	if approved {
-		_, _ = store.ApproveByTaskID(taskID, reviewer, reason)
+		_, err = store.ApproveByTaskID(taskID, reviewer, reason)
 	} else {
-		_, _ = store.RejectByTaskID(taskID, reviewer, reason)
+		_, err = store.RejectByTaskID(taskID, reviewer, reason)
 	}
+	if errors.Is(err, hitl.ErrRequestNotFound) {
+		return nil
+	}
+	return err
+}
+
+func cloneTask(task Task) Task {
+	if task.Approval.ApprovedAt != nil {
+		value := *task.Approval.ApprovedAt
+		task.Approval.ApprovedAt = &value
+	}
+	if task.Approval.RejectedAt != nil {
+		value := *task.Approval.RejectedAt
+		task.Approval.RejectedAt = &value
+	}
+	return task
 }
 
 func (s *TaskStore) SetOutput(id, output, outcome string) error {
@@ -223,12 +335,83 @@ func (s *TaskStore) SetOutput(id, output, outcome string) error {
 	defer s.mu.Unlock()
 	for i := range s.Tasks {
 		if s.Tasks[i].ID == id {
-			s.Tasks[i].Output = output
-			s.Tasks[i].Outcome = outcome
-			return s.saveLocked()
+			tasks := slices.Clone(s.Tasks)
+			tasks[i].Output = output
+			tasks[i].Outcome = outcome
+			return s.commitTasksLocked(tasks)
 		}
 	}
-	return fmt.Errorf("task %s not found", id)
+	return fmt.Errorf("%w: %s", ErrTaskNotFound, id)
+}
+
+// TaskExecutionResult is an observed run's task metadata, separate from the
+// work itself. Retain it when CommitExecution fails; repairing that commit must
+// not execute the task again.
+type TaskExecutionResult struct {
+	Status    string
+	Output    string
+	Outcome   string
+	Error     string
+	ErrorKind string
+	RunID     string
+}
+
+// CommitExecution atomically records disposition, output and diagnostics for a
+// durably claimed task. A concurrent operator decision cannot be overwritten.
+func (s *TaskStore) CommitExecution(id string, result TaskExecutionResult) error {
+	return s.CommitExecutionWithContext(context.Background(), id, result)
+}
+
+func (s *TaskStore) CommitExecutionWithContext(ctx context.Context, id string, result TaskExecutionResult) error {
+	return s.CommitExecutionBatchWithContext(ctx, map[string]TaskExecutionResult{id: result})
+}
+
+// CommitExecutionBatchWithContext applies related results together. Sprint
+// cleanup uses this to return only proven unstarted claims within one budget.
+func (s *TaskStore) CommitExecutionBatchWithContext(ctx context.Context, results map[string]TaskExecutionResult) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	for _, result := range results {
+		if result.Status != "approved" && result.Status != "failed" && result.Status != "completed" {
+			return fmt.Errorf("%w: execution disposition %s", ErrTaskInvalidStatus, result.Status)
+		}
+		if result.Status == "completed" && !reliability.IsHealthyOutcome(result.Outcome) {
+			return fmt.Errorf("%w: completed execution outcome %s", ErrTaskInvalidStatus, result.Outcome)
+		}
+	}
+	if err := s.lockWithContext(ctx); err != nil {
+		return err
+	}
+	defer s.mu.Unlock()
+	tasks := slices.Clone(s.Tasks)
+	matched := 0
+	for i, task := range tasks {
+		result, ok := results[task.ID]
+		if !ok {
+			continue
+		}
+		if task.Status != "in_progress" {
+			return fmt.Errorf("%w: task %s is %s, not claimed", ErrTaskInvalidStatus, task.ID, task.Status)
+		}
+		matched++
+		tasks[i].Status = result.Status
+		tasks[i].Output, tasks[i].Outcome = result.Output, result.Outcome
+		tasks[i].Error, tasks[i].ErrorKind, tasks[i].RunID = result.Error, result.ErrorKind, result.RunID
+		tasks[i].CompletedAt = ""
+		if result.Status != "approved" {
+			tasks[i].CompletedAt = time.Now().UTC().Format(time.RFC3339Nano)
+		}
+	}
+	if matched != len(results) {
+		return fmt.Errorf("%w: execution batch contains missing tasks", ErrTaskNotFound)
+	}
+	if matched == 0 {
+		return ctx.Err()
+	}
+	return s.commitTasksLockedWithContext(ctx, tasks)
 }
 
 // priorityRank maps a Task's string Priority to the same ordinal used by
@@ -258,8 +441,8 @@ func (s *TaskStore) Approved() []Task {
 	defer s.mu.Unlock()
 	var out []Task
 	for _, t := range s.Tasks {
-		if t.Status == "approved" {
-			out = append(out, t)
+		if t.Status == "approved" && !t.AuditPending {
+			out = append(out, cloneTask(t))
 		}
 	}
 	slices.SortStableFunc(out, func(a, b Task) int {
@@ -274,19 +457,29 @@ func (s *TaskStore) Approved() []Task {
 // ClaimApproved atomically persists admission before any task can execute.
 // Failed persistence restores the prior state and returns no claimed tasks.
 func (s *TaskStore) ClaimApproved() ([]Task, error) {
-	s.mu.Lock()
+	return s.ClaimApprovedWithContext(context.Background())
+}
+
+func (s *TaskStore) ClaimApprovedWithContext(ctx context.Context) ([]Task, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	if err := s.lockWithContext(ctx); err != nil {
+		return nil, err
+	}
 	defer s.mu.Unlock()
-	before := slices.Clone(s.Tasks)
+	tasks := slices.Clone(s.Tasks)
 	var out []Task
 	for i := range s.Tasks {
-		if s.Tasks[i].Status == "approved" {
-			out = append(out, s.Tasks[i])
-			s.Tasks[i].Status = "in_progress"
+		if s.Tasks[i].Status == "approved" && !s.Tasks[i].AuditPending {
+			out = append(out, cloneTask(s.Tasks[i]))
+			tasks[i].Status = "in_progress"
 		}
 	}
 	if len(out) > 0 {
-		if err := s.saveLocked(); err != nil {
-			s.Tasks = before
+		if err := s.commitTasksLockedWithContext(ctx, tasks); err != nil {
 			return nil, err
 		}
 	}

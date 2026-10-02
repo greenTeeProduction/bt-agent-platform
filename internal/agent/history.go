@@ -3,9 +3,11 @@ package agent
 import (
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 )
@@ -33,7 +35,7 @@ type History struct {
 
 // NewHistory creates a new history store.
 func NewHistory(dir string) (*History, error) {
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0750); err != nil {
 		return nil, fmt.Errorf("create history dir: %w", err)
 	}
 	h := &History{
@@ -58,18 +60,33 @@ func (h *History) Record(r RunRecord) error {
 		r.EndedAt = time.Now()
 	}
 
-	h.byName[r.AgentName] = append(h.byName[r.AgentName], r)
-
-	// Persist
-	path := filepath.Join(h.dir, r.AgentName+".jsonl")
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	// Agent names are identifiers within this configured owner, never paths.
+	if r.AgentName == "" || !filepath.IsLocal(r.AgentName) || r.AgentName == "." || strings.ContainsAny(r.AgentName, "/\\\x00") {
+		return fmt.Errorf("invalid history agent identifier")
+	}
+	root, err := os.OpenRoot(h.dir)
+	if err != nil {
+		return fmt.Errorf("open history owner: %w", err)
+	}
+	defer root.Close()
+	f, err := root.OpenFile(r.AgentName+".jsonl", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
 	if err != nil {
 		return fmt.Errorf("open history file: %w", err)
 	}
-	defer f.Close()
-
-	data, _ := json.Marshal(r)
-	_, _ = f.Write(append(data, '\n'))
+	data, err := json.Marshal(r)
+	if err != nil {
+		_ = f.Close()
+		return fmt.Errorf("marshal history record: %w", err)
+	}
+	_, writeErr := f.Write(append(data, '\n'))
+	closeErr := f.Close()
+	if writeErr != nil {
+		return fmt.Errorf("write history record: %w", writeErr)
+	}
+	if closeErr != nil {
+		return fmt.Errorf("close history file: %w", closeErr)
+	}
+	h.byName[r.AgentName] = append(h.byName[r.AgentName], r)
 	return nil
 }
 
@@ -97,6 +114,11 @@ func (h *History) Stats(agentName string) RunStats {
 	defer h.mu.RUnlock()
 
 	runs := h.byName[agentName]
+	return historyStats(agentName, runs)
+}
+
+// historyStats expects its caller to hold the history read lock.
+func historyStats(agentName string, runs []RunRecord) RunStats {
 	if len(runs) == 0 {
 		return RunStats{AgentName: agentName}
 	}
@@ -137,8 +159,8 @@ func (h *History) AllStats() map[string]RunStats {
 	defer h.mu.RUnlock()
 
 	result := make(map[string]RunStats)
-	for name := range h.byName {
-		result[name] = h.Stats(name)
+	for name, runs := range h.byName {
+		result[name] = historyStats(name, runs)
 	}
 	return result
 }
@@ -179,7 +201,12 @@ func (h *History) Cleanup(olderThan time.Duration) (int, error) {
 }
 
 func (h *History) loadAll() error {
-	entries, err := os.ReadDir(h.dir)
+	root, err := os.OpenRoot(h.dir)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	entries, err := fs.ReadDir(root.FS(), ".")
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
@@ -191,8 +218,7 @@ func (h *History) loadAll() error {
 		if entry.IsDir() || filepath.Ext(entry.Name()) != ".jsonl" {
 			continue
 		}
-		path := filepath.Join(h.dir, entry.Name())
-		data, err := os.ReadFile(path)
+		data, err := root.ReadFile(entry.Name())
 		if err != nil {
 			continue
 		}

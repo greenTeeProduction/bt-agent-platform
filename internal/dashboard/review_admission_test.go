@@ -48,7 +48,7 @@ func TestReviewTaskClaimPersistenceFailure(t *testing.T) {
 	if err := s.Create(Task{ID: "task", Status: "approved"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Mkdir(s.path+".tmp", 0700); err != nil {
+	if err := os.Mkdir(s.path+".lock", 0700); err != nil {
 		t.Fatal(err)
 	}
 	if tasks, err := s.ClaimApproved(); err == nil || len(tasks) != 0 {

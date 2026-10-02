@@ -1,0 +1,14 @@
+[
+  {
+    "annotation_level": "failure",
+    "blob_href": "https://github.com/greenTeeProduction/bt-agent-platform/blob/1127c804e7c8cc90c9fa3012c518b8e9f2fcf042/internal/agent/scheduler.go",
+    "end_column": 12,
+    "end_line": 577,
+    "message": "Expect directory permissions to be 0750 or less",
+    "path": "internal/agent/scheduler.go",
+    "raw_details": null,
+    "start_column": 12,
+    "start_line": 577,
+    "title": "Expect directory permissions to be 0750 or less"
+  }
+]

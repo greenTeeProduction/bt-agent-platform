@@ -1,0 +1,9 @@
+{
+  "base_commit": "7e6c7584",
+  "changed_source": {
+    "path": "internal/engine/superpowers_apply.go",
+    "sha256": "a22c363af3457ade4bb0ee2a73091ca5ad9a91332c96628697c3ed27a697a0dd"
+  },
+  "change": "MkdirAll apply-lock parent mode 0755 -> 0750",
+  "derived_graph_and_evidence_excluded": true
+}

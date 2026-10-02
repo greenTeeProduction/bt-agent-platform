@@ -8,6 +8,7 @@ import (
 	"io"
 	"maps"
 	"net/http"
+	"runtime"
 	"runtime/debug"
 	"slices"
 	"strconv"
@@ -828,7 +829,7 @@ func HealthJSON(version string) []byte {
 		Status:    "ok",
 		Version:   version,
 		Uptime:    time.Since(startTime).String(),
-		GoVersion: "go1.26.3",
+		GoVersion: runtime.Version(),
 	}
 	b, _ := json.Marshal(resp)
 	return b

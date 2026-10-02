@@ -5,12 +5,37 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
 	"testing"
 	"time"
 )
+
+func TestFileLock_RejectsEscapingSidecar(t *testing.T) {
+	outside := filepath.Join(t.TempDir(), "outside")
+	if err := os.WriteFile(outside, []byte("untouched"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "state.json")
+	if err := os.Symlink(outside, path+".lock"); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if release, err := AcquireFileLockWithContext(ctx, path); err == nil {
+		release()
+		t.Fatal("escaping sidecar admitted")
+	}
+	data, err := os.ReadFile(outside)
+	if err != nil || string(data) != "untouched" {
+		t.Fatalf("outside state changed: %q, %v", data, err)
+	}
+	if _, err := os.Lstat(path + ".lock"); err != nil {
+		t.Fatalf("rejected sidecar removed: %v", err)
+	}
+}
 
 // ─── Circuit Breaker Tests ──────────────────────────────────────────────────
 
@@ -547,44 +572,43 @@ func TestDeadLetterQueue_SaveAtomicReplace(t *testing.T) {
 	}
 }
 
-// TestDeadLetterQueue_LoadQuarantinesCorruptFile asserts load() surfaces a
-// corrupt persistence file instead of discarding the json.Unmarshal error:
-// the unreadable payload must be quarantined to <path>.corrupt so the queue
-// can start empty WITHOUT its next save silently persisting the wipe over the
-// only copy of the dead-lettered tasks.
-func TestDeadLetterQueue_LoadQuarantinesCorruptFile(t *testing.T) {
-	tmpDir := t.TempDir()
-	path := tmpDir + "/dlq.json"
+// Unreadable state can contain interrupted replay admissions. Retain its bytes
+// and close mutation/admission instead of silently replacing it with empty state.
+func TestDeadLetterQueue_UnreadableStateClosesAdmission(t *testing.T) {
+	path := t.TempDir() + "/dlq.json"
 	garbage := "{this is not json"
-	if err := os.WriteFile(path, []byte(garbage), 0644); err != nil {
-		t.Fatalf("write corrupt file: %v", err)
+	if err := os.WriteFile(path, []byte(garbage), 0o600); err != nil {
+		t.Fatal(err)
 	}
-
-	dlq := NewDeadLetterQueue(path)
-	if dlq.Len() != 0 {
-		t.Fatalf("corrupt file must yield an empty queue, got %d entries", dlq.Len())
+	q := NewDeadLetterQueue(path)
+	if q.PersistenceError() == nil {
+		t.Fatal("unreadable queue did not report failure")
 	}
-
-	quarantined, err := os.ReadFile(path + ".corrupt")
-	if err != nil {
-		t.Fatalf("corrupt DLQ file must be quarantined to <path>.corrupt: %v", err)
+	if err := q.PushWithError(DeadLetterEntry{ID: "new", Task: "new work"}); err == nil {
+		t.Fatal("unreadable state admitted mutation")
 	}
-	if string(quarantined) != garbage {
-		t.Errorf("quarantined payload mismatch: got %q, want %q", quarantined, garbage)
+	q.SetReplayExecutor(func(DeadLetterEntry) error { t.Fatal("unreadable state dispatched action"); return nil })
+	if _, ok := q.Replay("new"); ok {
+		t.Fatal("unreadable state acknowledged replay")
 	}
-	if data, err := os.ReadFile(path); err == nil && string(data) == garbage {
-		t.Error("corrupt payload still sits at the primary path awaiting the next save to clobber it")
+	if _, err := q.PurgeWithError(); err == nil {
+		t.Fatal("unreadable state permitted purge")
 	}
-
-	// The queue keeps working after quarantine, and saving must not touch the
-	// preserved evidence.
-	dlq.Push(DeadLetterEntry{ID: "after-corruption", Task: "fresh entry"})
+	data, err := os.ReadFile(path)
+	if err != nil || string(data) != garbage {
+		t.Fatalf("unreadable bytes changed: err=%v data=%q", err, data)
+	}
+	if err := os.WriteFile(path, []byte("[]"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := q.ReloadWithError(); err != nil {
+		t.Fatal(err)
+	}
+	if err := q.PushWithError(DeadLetterEntry{ID: "after-explicit-repair"}); err != nil {
+		t.Fatal(err)
+	}
 	if got := NewDeadLetterQueue(path).Len(); got != 1 {
-		t.Errorf("expected 1 entry after post-quarantine save, got %d", got)
-	}
-	quarantined, err = os.ReadFile(path + ".corrupt")
-	if err != nil || string(quarantined) != garbage {
-		t.Errorf("quarantine file must survive subsequent saves: err=%v content=%q", err, quarantined)
+		t.Fatalf("explicit repair did not reopen queue: entries=%d", got)
 	}
 }
 

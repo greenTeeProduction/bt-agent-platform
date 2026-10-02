@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/knowledge"
+	"github.com/nico/go-bt-evolve/internal/reliability"
 	"github.com/nico/go-bt-evolve/internal/tracing"
 )
 
@@ -37,22 +39,26 @@ type Scheduler struct {
 	cbStore       *AgentCircuitBreakerStore // per-agent circuit breakers (nil = disabled)
 	buildRevision string                    // running binary's VCS revision (deploy-drift diagnosis)
 	onCycleIdle   func()                    // optional: fired after a cycle completes with no job in flight
+	recoveryErr   error                     // unreadable persisted state closes execution admission
 }
 
 // ScheduledJob represents a scheduled agent run.
 type ScheduledJob struct {
-	ID         string      `json:"id"`
-	AgentName  string      `json:"agent_name"`
-	Schedule   string      `json:"schedule"` // "every 1h", "0 9 * * *", "on_demand"
-	NextRun    time.Time   `json:"next_run"`
-	LastRun    time.Time   `json:"last_run"`
-	RunCount   int         `json:"run_count"`
-	MaxRetries int         `json:"max_retries"` // 0 = unlimited
-	RetryDelay string      `json:"retry_delay"` // "5m" between retries
-	Timeout    string      `json:"timeout"`     // "2h" max run duration
-	Active     bool        `json:"active"`
-	InFlight   bool        `json:"in_flight"`            // true when currently executing (crash recovery)
-	Checkpoint *Checkpoint `json:"checkpoint,omitempty"` // for long-running agents
+	ID               string      `json:"id"`
+	AgentName        string      `json:"agent_name"`
+	Schedule         string      `json:"schedule"` // "every 1h", "0 9 * * *", "on_demand"
+	NextRun          time.Time   `json:"next_run"`
+	LastRun          time.Time   `json:"last_run"`
+	RunCount         int         `json:"run_count"`
+	MaxRetries       int         `json:"max_retries"` // 0 = unlimited
+	RetryDelay       string      `json:"retry_delay"` // "5m" between retries
+	Timeout          string      `json:"timeout"`     // "2h" max run duration
+	Active           bool        `json:"active"`
+	InFlight         bool        `json:"in_flight"`            // true when currently executing (crash recovery)
+	Checkpoint       *Checkpoint `json:"checkpoint,omitempty"` // for long-running agents
+	RecoveryRequired bool        `json:"recovery_required,omitempty"`
+	RecoveryReason   string      `json:"recovery_reason,omitempty"`
+	Manual           bool        `json:"manual,omitempty"` // durable RunNow admission, never a recurring job
 }
 
 // Checkpoint saves agent state for resumable long-running execution.
@@ -180,6 +186,15 @@ func NewScheduler(cfg SchedulerConfig) *Scheduler {
 
 // Schedule adds a recurring job for an agent.
 func (s *Scheduler) Schedule(agentName, schedule string, timeout string, maxRetries int) (*ScheduledJob, error) {
+	s.mu.RLock()
+	recoveryErr := s.recoveryAdmissionErrorLocked(agentName)
+	if recoveryErr == nil && s.jobStore != nil && s.activeAgents[agentName] {
+		recoveryErr = fmt.Errorf("agent %q has admitted execution; scheduling is busy", agentName)
+	}
+	s.mu.RUnlock()
+	if recoveryErr != nil {
+		return nil, recoveryErr
+	}
 	// Verify agent exists
 	if _, err := s.reg.Get(agentName); err != nil {
 		return nil, fmt.Errorf("agent %q not registered: %w", agentName, err)
@@ -201,18 +216,24 @@ func (s *Scheduler) Schedule(agentName, schedule string, timeout string, maxRetr
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if err := s.recoveryAdmissionErrorLocked(agentName); err != nil {
+		return nil, err
+	}
+	if s.jobStore != nil && s.activeAgents[agentName] {
+		return nil, fmt.Errorf("agent %q has admitted execution; scheduling is busy", agentName)
+	}
 
 	// on_demand means explicitly paused: remove all jobs for this agent.
 	if schedule == "" || schedule == "on_demand" {
 		for id, existing := range s.jobs {
 			if existing.AgentName == agentName {
 				slog.Warn("scheduler: deleting job (agent set to on_demand via Schedule)",
-					"job_id", id, "agent", agentName, "run_count", existing.RunCount)
+					"run_count", existing.RunCount)
 				delete(s.jobs, id)
 			}
 		}
-		s.saveStateLocked()
-		return &ScheduledJob{ID: fmt.Sprintf("job_%s_on_demand", agentName), AgentName: agentName, Schedule: "on_demand", Active: false}, nil
+		persistErr := s.saveStateLocked()
+		return &ScheduledJob{ID: fmt.Sprintf("job_%s_on_demand", agentName), AgentName: agentName, Schedule: "on_demand", Active: false}, persistErr
 	}
 
 	// Dedup: if any job for this agent already exists, update the best one and
@@ -233,8 +254,8 @@ func (s *Scheduler) Schedule(agentName, schedule string, timeout string, maxRetr
 	}
 	if keep != nil {
 		// Catch-up preservation (2026-07-15): when the schedule string is
-		// unchanged, keep a zero NextRun (loadState's crash-recovery "run
-		// immediately" marker) and keep a past-due NextRun (a slot missed while
+		// unchanged, keep a zero NextRun (an explicitly due slot) and keep a
+		// past-due NextRun (a slot missed while
 		// the daemon was down or the queue was busy) so the first tick fires the
 		// missed run. Unconditionally overwriting NextRun here is how the
 		// startup auto-schedule loop silently dropped hermes-daily-updater's
@@ -246,7 +267,7 @@ func (s *Scheduler) Schedule(agentName, schedule string, timeout string, maxRetr
 			// preserve immediate-run marker
 		case sameSchedule && missedSlot:
 			slog.Info("scheduler: preserving missed slot for catch-up",
-				"agent", agentName, "missed_next_run", keep.NextRun)
+				"missed_next_run", keep.NextRun)
 		default:
 			keep.NextRun = nextRun
 		}
@@ -254,8 +275,7 @@ func (s *Scheduler) Schedule(agentName, schedule string, timeout string, maxRetr
 		keep.Timeout = timeout
 		keep.MaxRetries = maxRetries
 		keep.Active = true
-		s.saveStateLocked()
-		return keep, nil
+		return keep, s.saveStateLocked()
 	}
 
 	job := &ScheduledJob{
@@ -268,8 +288,7 @@ func (s *Scheduler) Schedule(agentName, schedule string, timeout string, maxRetr
 		Active:     true,
 	}
 	s.jobs[job.ID] = job
-	s.saveStateLocked()
-	return job, nil
+	return job, s.saveStateLocked()
 }
 
 // RunNow triggers an immediate run of an agent (bypasses schedule).
@@ -280,14 +299,56 @@ func (s *Scheduler) RunNow(agentName, task string, runner AgentRunner, timeout s
 	}
 
 	s.mu.Lock()
+	if err := s.recoveryAdmissionErrorLocked(agentName); err != nil {
+		s.mu.Unlock()
+		return "", "", err
+	}
 	if s.stopping || s.activeAgents[agentName] || len(s.activeAgents) >= s.maxConcurrent {
 		s.mu.Unlock()
 		return "", "", fmt.Errorf("scheduler stopped or execution capacity busy for agent %q", agentName)
+	}
+	var manualJob *ScheduledJob
+	if s.jobStore != nil {
+		if _, readOnly := s.jobStore.(*ReadOnlyJobStore); readOnly {
+			s.mu.Unlock()
+			return "", "", fmt.Errorf("read-only scheduler cannot persist execution admission")
+		}
+		manualJob = &ScheduledJob{ID: fmt.Sprintf("manual_%s_%d", agentName, time.Now().UnixNano()), AgentName: agentName, Schedule: "on_demand", InFlight: true, Manual: true}
+		s.jobs[manualJob.ID] = manualJob
+		if admissionErr := s.saveStateLocked(); admissionErr != nil {
+			delete(s.jobs, manualJob.ID)
+			s.mu.Unlock()
+			return "", "", fmt.Errorf("persist manual execution admission: %w", admissionErr)
+		}
 	}
 	s.activeAgents[agentName] = true
 	s.workers.Add(1)
 	s.mu.Unlock()
 	defer s.releaseAgent(agentName)
+	finished, recordFailed := false, false
+	if manualJob != nil {
+		defer func() {
+			s.mu.Lock()
+			defer s.mu.Unlock()
+			manualJob.InFlight = false
+			if !finished || recordFailed || reliability.IsExecutionTerminalError(err) {
+				manualJob.RecoveryRequired = true
+				manualJob.RecoveryReason = "manual execution or recording requires reconciliation"
+			} else {
+				delete(s.jobs, manualJob.ID)
+			}
+			if saveErr := s.saveStateLocked(); saveErr != nil {
+				manualJob.RecoveryRequired = true
+				manualJob.RecoveryReason = "manual result persistence failed; execution requires reconciliation"
+				s.jobs[manualJob.ID] = manualJob
+				if finished && IsHealthyOutcome(outcome) {
+					err = errors.Join(err, &reliability.ExecutionPersistenceError{Err: saveErr})
+				} else {
+					err = errors.Join(err, &reliability.ExecutionUncertainError{Err: saveErr})
+				}
+			}
+		}()
+	}
 
 	timeoutDur := parseTimeout(timeout)
 	ctx, cancel := context.WithTimeout(s.ctx, timeoutDur)
@@ -302,12 +363,13 @@ func (s *Scheduler) RunNow(agentName, task string, runner AgentRunner, timeout s
 	start := time.Now()
 	var res *RunResult
 	outcome, output, res, err = runner(runCtx)
+	finished = true
 	duration := time.Since(start)
 
 	// Record history
 	if s.history != nil {
 		quality := recordedQuality(inst, outcome, output, res)
-		_ = s.history.Record(RunRecord{
+		historyErr := s.history.Record(RunRecord{
 			AgentName: agentName,
 			Task:      task,
 			Outcome:   outcome,
@@ -317,6 +379,15 @@ func (s *Scheduler) RunNow(agentName, task string, runner AgentRunner, timeout s
 			StartedAt: start,
 			EndedAt:   time.Now(),
 		})
+		if historyErr != nil {
+			recordFailed = true
+			diagnostic := fmt.Errorf("record run history: %w", historyErr)
+			if err == nil && IsHealthyOutcome(outcome) {
+				err = &reliability.ExecutionPersistenceError{Err: diagnostic}
+			} else {
+				err = errors.Join(err, diagnostic)
+			}
+		}
 	}
 
 	// Feed back into knowledge graph
@@ -463,11 +534,13 @@ func (s *Scheduler) RemoveJob(jobID string) error {
 	if !ok {
 		return fmt.Errorf("job %q not found", jobID)
 	}
+	if job.RecoveryRequired || (s.jobStore != nil && job.InFlight) {
+		return fmt.Errorf("job %q execution requires reconciliation before removal", jobID)
+	}
 	slog.Warn("scheduler: deleting job (RemoveJob call)",
 		"job_id", jobID, "agent", job.AgentName, "run_count", job.RunCount)
 	delete(s.jobs, jobID)
-	s.saveStateLocked()
-	return nil
+	return s.saveStateLocked()
 }
 
 func betterScheduledJob(candidate, current *ScheduledJob) bool {
@@ -476,6 +549,9 @@ func betterScheduledJob(candidate, current *ScheduledJob) bool {
 	}
 	if current == nil {
 		return true
+	}
+	if candidate.RecoveryRequired != current.RecoveryRequired {
+		return candidate.RecoveryRequired
 	}
 	if candidate.Active != current.Active {
 		return candidate.Active
@@ -498,7 +574,7 @@ func ApplySchedule(reg *Registry, agentName, schedule, timeout string, maxRetrie
 	if maxRetries <= 0 {
 		maxRetries = 3
 	}
-	if err := os.MkdirAll(JobsDir(), 0755); err != nil {
+	if err := os.MkdirAll(JobsDir(), 0o750); err != nil {
 		return nil, fmt.Errorf("create jobs dir: %w", err)
 	}
 	store := NewFileJobStore(SchedulerJobsFile())
@@ -582,9 +658,34 @@ func (s *Scheduler) ReconcileWithRegistry() {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.recoveryErr != nil {
+		return // preserve unreadable state instead of replacing it with fresh jobs
+	}
 
 	bestByAgent := make(map[string]*ScheduledJob)
+	heldAgents := make(map[string]bool)
+	for _, job := range s.jobs {
+		if job.RecoveryRequired {
+			heldAgents[job.AgentName] = true
+		}
+	}
 	for id, job := range s.jobs {
+		if job.RecoveryRequired {
+			job.Active = false
+			bestByAgent[job.AgentName] = job
+			continue // registry changes cannot release or discard execution evidence
+		}
+		if heldAgents[job.AgentName] {
+			job.Active = false
+			continue // a clean duplicate cannot replace an unresolved owner
+		}
+		if job.Manual {
+			continue // manual admission must not become a registry-created recurring job
+		}
+		if s.jobStore != nil && job.InFlight {
+			bestByAgent[job.AgentName] = job
+			continue // keep the durable claim while the execution owner is live
+		}
 		def, ok := defs[job.AgentName]
 		if !ok {
 			// Loud drop: if the registry is unexpectedly empty or partial at
@@ -642,19 +743,19 @@ func (s *Scheduler) ReconcileWithRegistry() {
 		bestByAgent[name] = job
 	}
 
-	s.saveStateLocked()
+	_ = s.saveStateLocked()
 }
 
 func (s *Scheduler) tick(runner AgentRunner) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.stopping {
+	if s.stopping || s.recoveryErr != nil {
 		return
 	}
 	var due []*ScheduledJob
 	now := time.Now()
 	for _, j := range s.jobs {
-		if j.Active && !j.InFlight && (j.NextRun.IsZero() || !now.Before(j.NextRun)) {
+		if j.Active && !j.InFlight && s.recoveryAdmissionErrorLocked(j.AgentName) == nil && (j.NextRun.IsZero() || !now.Before(j.NextRun)) {
 			due = append(due, j)
 		}
 	}
@@ -686,10 +787,14 @@ func (s *Scheduler) tick(runner AgentRunner) {
 				if r := recover(); r != nil {
 					slog.Error("scheduler: worker panicked (recovered)", "agent", job.AgentName, "panic", r)
 					reportAgentOutcome(s.cbStore, job.AgentName, false)
+					s.mu.Lock()
+					job.RecoveryRequired, job.Active = true, false
+					job.RecoveryReason = "worker panic; execution requires reconciliation"
+					s.mu.Unlock()
 				}
 				s.mu.Lock()
 				job.InFlight = false
-				s.saveStateLocked()
+				_ = s.saveStateLocked()
 				s.mu.Unlock()
 			}()
 			s.runJob(job, runner)
@@ -760,9 +865,22 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 	// If bt-agent crashes after this point, loadState() will detect
 	// the in-flight job on restart and handle it gracefully.
 	s.mu.Lock()
+	if err := s.recoveryAdmissionErrorLocked(job.AgentName); err != nil {
+		job.InFlight = false
+		s.mu.Unlock()
+		slog.Error("scheduler: execution admission held", "agent", job.AgentName, "error", err)
+		return
+	}
 	job.InFlight = true
+	admissionErr := s.saveStateLocked()
+	if admissionErr != nil {
+		job.InFlight = false
+	}
 	s.mu.Unlock()
-	s.saveState()
+	if admissionErr != nil {
+		slog.Error("scheduler: execution admission persistence failed; no dispatch", "agent", job.AgentName, "error", admissionErr)
+		return
+	}
 
 	start := time.Now()
 
@@ -776,7 +894,7 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 			if r := recover(); r != nil {
 				slog.Error("scheduler: agent panicked in runJob (recovered)", "agent", job.AgentName, "panic", r)
 				outcome = "panic"
-				runErr = fmt.Errorf("agent panicked: %v", r)
+				runErr = &reliability.ExecutionUncertainError{Err: fmt.Errorf("agent panicked: %v", r)}
 			}
 		}()
 		outcome, output, runRes, runErr = runner(runCtx)
@@ -792,36 +910,15 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 		outcome = "failure"
 	}
 
-	// Clear in-flight flag now that execution has completed (or panicked).
-	// Update job state
-	s.mu.Lock()
-	job.InFlight = false
-	job.LastRun = time.Now()
-	job.RunCount++
-	runCount := job.RunCount
-
-	// Schedule next run
-	next, err := parseSchedule(job.Schedule)
-	if err == nil {
-		job.NextRun = next
-	}
-	// Program throughput: a successful cycle whose multi-cycle program still
-	// has pending milestones requeues after a short cooldown instead of
-	// idling until the next cron slot (the run output carries the marker).
-	job.NextRun = fastRequeueAfterSuccess(outcome, output, job.NextRun, time.Now())
-	s.mu.Unlock()
-
-	// Persist updated job state
-	s.saveState()
-
 	// Record history
 	quality := recordedQuality(inst, outcome, output, runRes)
 	errStr := ""
 	if runErr != nil {
 		errStr = runErr.Error()
 	}
+	var historyErr error
 	if s.history != nil {
-		_ = s.history.Record(RunRecord{
+		historyErr = s.history.Record(RunRecord{
 			AgentName: job.AgentName,
 			Task:      runCtx.Task,
 			Outcome:   outcome,
@@ -832,7 +929,31 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 			StartedAt: start,
 			EndedAt:   time.Now(),
 		})
+		if historyErr != nil {
+			slog.Error("scheduler: history persistence failed after execution", "agent", job.AgentName, "outcome", outcome, "error", historyErr)
+		}
 	}
+
+	// Retain admission until recording is complete. A failed final save leaves
+	// the durable in-flight marker, which restart recovery conservatively holds.
+	s.mu.Lock()
+	job.InFlight = false
+	job.LastRun = time.Now()
+	job.RunCount++
+	runCount := job.RunCount
+	if next, err := parseSchedule(job.Schedule); err == nil {
+		job.NextRun = fastRequeueAfterSuccess(outcome, output, next, time.Now())
+	}
+	if historyErr != nil || reliability.IsExecutionTerminalError(runErr) || outcome == "panic" {
+		job.RecoveryRequired, job.Active = true, false
+		job.RecoveryReason = "execution or recording requires reconciliation"
+	}
+	if err := s.saveStateLocked(); err != nil {
+		job.RecoveryRequired, job.Active = true, false
+		job.RecoveryReason = "result persistence failed; execution requires reconciliation"
+		slog.Error("scheduler: result persistence failed; execution held", "agent", job.AgentName, "error", err)
+	}
+	s.mu.Unlock()
 
 	// One structured INFO line per scheduled cycle — the operationally useful
 	// event that previously had to be reconstructed from run.json/history by
@@ -883,7 +1004,7 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 		// no_change, degraded, and the rate-limit carryover — so a healthy
 		// cycle is never labeled FAILED in the operator-facing summary.
 		failureReason := ""
-		if runErr != nil {
+		if runErr != nil && !reliability.IsExecutionPause(outcome, runErr) {
 			failureReason = runErr.Error()
 		} else if !IsBreakerSuccess(outcome, runErr) {
 			failureReason = fmt.Sprintf("agent outcome: %s", outcome)
@@ -906,13 +1027,14 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 			Source:  job.AgentName,
 			Message: fmt.Sprintf("%s: %s (%s)", job.AgentName, outcome, duration.Truncate(time.Second)),
 			Data: map[string]any{
-				"tree":           tree,
-				"task":           runCtx.Task,
-				"outcome":        outcome,
-				"duration":       duration.Truncate(time.Second).String(),
-				"failure_reason": failureReason,
-				"nodes":          nodesStr,
-				"build_revision": s.buildRevision,
+				"tree":                 tree,
+				"task":                 runCtx.Task,
+				"outcome":              outcome,
+				"duration":             duration.Truncate(time.Second).String(),
+				"failure_reason":       failureReason,
+				"execution_diagnostic": errorDetail(runErr),
+				"nodes":                nodesStr,
+				"build_revision":       s.buildRevision,
 				// Rendered verbatim by the bt-task-complete Telegram template
 				// as {data.summary} — the operator-facing "what did this run
 				// actually do" digest (headline, run/commit facts, step trail).
@@ -977,10 +1099,17 @@ func (s *Scheduler) runJob(job *ScheduledJob, runner AgentRunner) {
 // Genuine failures, errored runs, and healthy outcomes that still carried a
 // run error count against it.
 func IsBreakerSuccess(outcome string, runErr error) bool {
-	if IsRateLimitCarryover(outcome) {
+	if reliability.IsExecutionPause(outcome, runErr) {
 		return true
 	}
-	return runErr == nil && isHealthyOutcome(outcome)
+	return (runErr == nil || reliability.IsExecutionPersistenceError(runErr)) && isHealthyOutcome(outcome)
+}
+
+func errorDetail(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
 }
 
 // stepsFromChildTicks converts a run's terminal child ticks (engine.Blackboard.
@@ -1095,11 +1224,8 @@ func estimateQuality(output string) float64 {
 func applyJobSchedule(job *ScheduledJob, sched string) {
 	prev := job.Schedule
 	job.Schedule = sched
-	// A zero NextRun is loadState's crash-recovery "run immediately" marker. A
-	// schedule change (or format normalization) during ReconcileWithRegistry
-	// must not push a recovered-crashed job to its next cron slot — that would
-	// defeat the immediate re-run after restart. Only a job with a real future
-	// NextRun is rescheduled on a schedule change.
+	// Preserve explicitly due slots. Interrupted executions are separately held
+	// by RecoveryRequired, which ordinary schedule changes cannot release.
 	if sched != prev && !job.NextRun.IsZero() {
 		if next, err := parseSchedule(sched); err == nil {
 			job.NextRun = next
@@ -1125,8 +1251,8 @@ func parseSchedule(sched string) (time.Time, error) {
 		next, err := nextCronTime(sched, now)
 		if err != nil {
 			// Fall back to 1h if we can't parse — better than crashing
-			slog.Warn("scheduler: cron parse error, falling back to +1h", "schedule", sched, "error", err)
-			return now.Add(1 * time.Hour), nil
+			slog.Warn("scheduler: cron parse error, falling back to +1h", "field_count", len(strings.Fields(sched)))
+			return now.Add(1 * time.Hour), nil //nolint:nilerr // Deliberate historical fallback; raw parser text is not logged.
 		}
 		return next, nil
 	}
@@ -1278,11 +1404,11 @@ func (s *Scheduler) saveState() {
 		return
 	}
 	s.mu.RLock()
+	defer s.mu.RUnlock()
 	jobs := make([]ScheduledJob, 0, len(s.jobs))
 	for _, j := range s.jobs {
 		jobs = append(jobs, *j)
 	}
-	s.mu.RUnlock()
 
 	if err := s.jobStore.Save(jobs); err != nil {
 		slog.Warn("scheduler: failed to persist jobs", "error", err)
@@ -1291,9 +1417,9 @@ func (s *Scheduler) saveState() {
 
 // saveStateLocked persists all jobs to the configured JobStore.
 // Caller MUST hold s.mu (write lock). Performs synchronous I/O.
-func (s *Scheduler) saveStateLocked() {
+func (s *Scheduler) saveStateLocked() error {
 	if s.jobStore == nil {
-		return
+		return nil
 	}
 	jobs := make([]ScheduledJob, 0, len(s.jobs))
 	for _, j := range s.jobs {
@@ -1301,20 +1427,21 @@ func (s *Scheduler) saveStateLocked() {
 	}
 	if err := s.jobStore.Save(jobs); err != nil {
 		slog.Warn("scheduler: failed to persist jobs", "error", err)
+		return fmt.Errorf("persist scheduler jobs: %w", err)
 	}
+	return nil
 }
 
 // loadState restores jobs from the configured JobStore.
-// Called during NewScheduler. Errors are logged and ignored —
-// an empty job map is a safe fallback.
-// Detects jobs that were in-flight when bt-agent crashed and
-// marks them as "crashed" so they can be retried on startup.
+// Unreadable state closes admission. In-flight work is held for explicit
+// reconciliation: a process crash does not prove that side effects failed.
 func (s *Scheduler) loadState() {
 	if s.jobStore == nil {
 		return
 	}
 	jobs, err := s.jobStore.Load()
 	if err != nil {
+		s.recoveryErr = fmt.Errorf("scheduler state requires reconciliation: %w", err)
 		slog.Warn("scheduler: failed to load persisted jobs", "error", err)
 		return
 	}
@@ -1344,20 +1471,63 @@ func (s *Scheduler) loadState() {
 	for i := range jobs {
 		j := jobs[i] // copy
 		if j.InFlight {
-			// This job was running when bt-agent crashed.
-			// Clear in-flight flag, reset NextRun to "now" so it
-			// retries immediately on the next tick.
-			slog.Warn("scheduler: recovered crashed job",
+			slog.Warn("scheduler: holding interrupted execution for reconciliation",
 				"job_id", j.ID, "agent", j.AgentName, "run_count", j.RunCount)
 			j.InFlight = false
-			j.NextRun = time.Time{} // run immediately on next tick
+			j.RecoveryRequired = true
+			j.RecoveryReason = "process exited with admitted execution; completion is unknown"
 			crashedCount++
+		}
+		if j.RecoveryRequired {
+			j.Active = false
 		}
 		s.jobs[j.ID] = &j
 	}
 	if crashedCount > 0 {
 		slog.Warn("scheduler: recovered in-flight jobs from crash", "count", crashedCount)
 	}
+}
+
+// Caller holds mu. Neither scheduling nor manual dispatch is a recovery action.
+func (s *Scheduler) recoveryAdmissionErrorLocked(agentName string) error {
+	if s.recoveryErr != nil {
+		return s.recoveryErr
+	}
+	for _, job := range s.jobs {
+		if job.AgentName == agentName && job.RecoveryRequired {
+			return fmt.Errorf("agent %q execution requires reconciliation: %s", agentName, job.RecoveryReason)
+		}
+	}
+	return nil
+}
+
+// ResolveRecovery records an operator's disposition without dispatching work.
+// It advances the recurring schedule, rather than replaying the interrupted
+// slot. Callers must establish completed/abandoned evidence and reviewer trust;
+// this method is not currently exposed as an authenticated transport endpoint.
+func (s *Scheduler) ResolveRecovery(jobID, reviewer, disposition string) error {
+	if strings.TrimSpace(reviewer) == "" || (disposition != "completed" && disposition != "abandoned") {
+		return fmt.Errorf("reconciliation requires a reviewer and completed or abandoned disposition")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	job, ok := s.jobs[jobID]
+	if !ok || !job.RecoveryRequired || s.activeAgents[job.AgentName] || job.InFlight {
+		return fmt.Errorf("job %q is not an idle recovery hold", jobID)
+	}
+	next, err := parseSchedule(job.Schedule)
+	if err != nil {
+		return err
+	}
+	previous := *job
+	job.RecoveryRequired, job.Active = false, job.Schedule != "" && job.Schedule != "on_demand"
+	job.RecoveryReason = "resolved " + disposition + " by " + reviewer
+	job.NextRun = next
+	if err := s.saveStateLocked(); err != nil {
+		*job = previous
+		return err
+	}
+	return nil
 }
 
 // fastRequeueAfterSuccess returns an accelerated next-run time when a

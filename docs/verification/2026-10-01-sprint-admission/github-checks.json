@@ -1,0 +1,76 @@
+{
+  "observed_head": "db2c116f7cce1ab921eda65cc81c3fbdba53359f",
+  "checks": [
+    {
+      "name": "Release",
+      "status": "completed",
+      "conclusion": "skipped",
+      "id": 104962460569,
+      "url": "https://github.com/greenTeeProduction/bt-agent-platform/actions/runs/35145658570/job/104962460569",
+      "summary": null
+    },
+    {
+      "name": "gosec",
+      "status": "completed",
+      "conclusion": "failure",
+      "id": 104962025188,
+      "url": "https://github.com/greenTeeProduction/bt-agent-platform/runs/104962025188",
+      "summary": "### New alerts in code changed by this pull request\n\n * 1 error\n\n_Alerts not introduced by this pull request might have been detected because the code changes were too large._\n\nSee annotations below for details.\n\n[View all branch alerts](/greenTeeProduction/bt-agent-platform/security/code-scanning?query=pr%3A83+tool%3Agosec+is%3Aopen)."
+    },
+    {
+      "name": "CodeQL",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 104961473698,
+      "url": "https://github.com/greenTeeProduction/bt-agent-platform/runs/104961473698",
+      "summary": "[View all branch alerts](/greenTeeProduction/bt-agent-platform/security/code-scanning?query=pr%3A83+tool%3ACodeQL+is%3Aopen)."
+    },
+    {
+      "name": "Build",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 104960885982,
+      "url": "https://github.com/greenTeeProduction/bt-agent-platform/actions/runs/35145658570/job/104960885982",
+      "summary": null
+    },
+    {
+      "name": "Security Scan",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 104960885877,
+      "url": "https://github.com/greenTeeProduction/bt-agent-platform/actions/runs/35145658570/job/104960885877",
+      "summary": null
+    },
+    {
+      "name": "Lint",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 104960885863,
+      "url": "https://github.com/greenTeeProduction/bt-agent-platform/actions/runs/35145658570/job/104960885863",
+      "summary": null
+    },
+    {
+      "name": "Test (short)",
+      "status": "completed",
+      "conclusion": "failure",
+      "id": 104960885805,
+      "url": "https://github.com/greenTeeProduction/bt-agent-platform/actions/runs/35145658570/job/104960885805",
+      "summary": null
+    },
+    {
+      "name": "Analyze (go)",
+      "status": "completed",
+      "conclusion": "success",
+      "id": 104960885409,
+      "url": "https://github.com/greenTeeProduction/bt-agent-platform/actions/runs/35145658586/job/104960885409",
+      "summary": null
+    }
+  ],
+  "gosec_annotation": {
+    "path": "internal/engine/superpowers_apply.go",
+    "line": 112,
+    "message": "Expect directory permissions to be 0750 or less",
+    "url": "https://github.com/greenTeeProduction/bt-agent-platform/pull/83#discussion_r4030407708"
+  },
+  "test_failure": "TestWebhookPublisherLoop_PanicRecovered: subprocess exit 3, expected at least 3 successful posts, got 1."
+}

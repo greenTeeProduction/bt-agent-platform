@@ -121,14 +121,17 @@ func pushToDLQAction(ctx *btcore.BTContext[Blackboard]) int {
 	if errMsg == "" {
 		errMsg = "persistent failures — escalated to DLQ"
 	}
-	TaskDLQ.Push(reliability.DeadLetterEntry{
+	if err := TaskDLQ.PushExecutionFailureWithError(reliability.DeadLetterEntry{
 		Task:          bb.Task,
 		Agent:         agent,
 		Error:         errMsg,
 		Attempts:      bb.FailureCount,
 		Category:      "hitl_exhausted",
 		BuildRevision: BuildRevision,
-	})
+	}, bb.ExecutionError()); err != nil {
+		bb.stopExecution(bb.Result, &reliability.ExecutionStoppedError{Outcome: "failure", Err: err})
+		return -1
+	}
 	bb.Result += "\n\nTask escalated to dead letter queue."
 	return 1
 }

@@ -1,0 +1,61 @@
+{
+  "commands": [
+    {
+      "command": "go test -short -count=1 ./cmd/bt-dashboard -run TestDashboardDriftGuardRetainsDetachedSprint",
+      "evidence": "red.log",
+      "exit_code": 1,
+      "stage": "pre-fix red ownership fixture"
+    },
+    {
+      "command": "go test -short -count=1 -race ./cmd/bt-dashboard ./internal/agent ./internal/reliability ./internal/api",
+      "evidence": "race.log",
+      "exit_code": 0,
+      "stage": "post-implementation before cosmetic lint correction"
+    },
+    {
+      "command": "GOFLAGS=-p=2 go test -short -count=1 -race -coverprofile=<private>/coverage.out -covermode=atomic ./...",
+      "evidence": "full-race.log",
+      "exit_code": 0,
+      "snapshot_variant": "See qualified-code.json; final API constants retested after lint fix.",
+      "total_statement_coverage": "77.8%"
+    },
+    {
+      "command": "go test -short -count=1 -race ./internal/api",
+      "evidence": "api-final.log",
+      "exit_code": 0,
+      "stage": "final API source after lint-only constant correction"
+    },
+    {
+      "command": "GOFLAGS=-p=2 make build BIN_DIR=<private>/bin",
+      "evidence": "build-before.log",
+      "exit_code": 2,
+      "stage": "initial lint failure"
+    },
+    {
+      "command": "GOFLAGS=-p=2 make build BIN_DIR=<private>/bin",
+      "evidence": "build.log",
+      "exit_code": 0,
+      "stage": "settled final source; vet/fmt/tidy/lint/high-security/13 binaries/graph"
+    },
+    {
+      "command": "python3 scripts/test_check_arc42.py; bash scripts/check-doc-drift.sh",
+      "evidence": "docs.log",
+      "exit_code": 0,
+      "fixtures": 11
+    },
+    {
+      "command": "go build -ldflags '-X github.com/nico/go-bt-evolve/internal/dashboard.stampedRevision=1e2ef7fdef651012b6a8306c67ba92cf7433d496' -o <private>/clean-bin/bt-dashboard ./cmd/bt-dashboard; <private>/clean-bin/bt-dashboard --version",
+      "evidence": "clean-artifact.json",
+      "exit_code": 0,
+      "stage": "Clean committed implementation artifact; version invocation only, no deployment."
+    }
+  ],
+  "fixture_environment": {
+    "BT_AGENT_HOME": "<private-fixture>",
+    "BT_SKIP_LLM_TESTS": "1",
+    "GOCACHE": "<separate-cache>",
+    "GOTMPDIR": "/tmp",
+    "PATH": "Go toolchain and local Go tool binaries prepended"
+  },
+  "toolchain": "go1.26.5 linux/arm64"
+}

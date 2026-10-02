@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
 // The restart handoff: after a successful AutoRebuild, DriftWatchOnce adopts the
@@ -85,7 +87,7 @@ func TestDriftWatchOnceRestartHandoff(t *testing.T) {
 // binary until someone restarted it by hand (live case 2026-07-16 23:46:
 // bin/bt-gardener rebuilt to fd0746d while the running gardener process
 // stayed on ce20198). Every swapped target that owns a systemd unit must be
-// restarted through the same driftRestartFn seam, with the daemon's own unit
+// requested through the target owner seam, with the daemon's own unit
 // restarted last to preserve existing behavior; a unit-less target (e.g.
 // bt-agent-cli) must not trigger any restart call.
 func TestDriftWatchOnceRestartsSwappedSiblingUnits(t *testing.T) {
@@ -112,7 +114,7 @@ func TestDriftWatchOnceRestartsSwappedSiblingUnits(t *testing.T) {
 
 	cfg := DriftWatchConfig{
 		RepoDir: "/r", RunningRevision: "oldrev", AutoRebuild: true,
-		AutoRestart: true, RestartSiblings: true, Targets: targets, Binary: "bt-agent",
+		AutoRestart: true, RestartSiblings: true, SiblingRestartFn: func(unit, _ string) error { return driftRestartFn(unit) }, Targets: targets, Binary: "bt-agent",
 	}
 	res, err := DriftWatchOnce(cfg)
 	if err != nil || !res.Restarted {
@@ -212,7 +214,7 @@ func TestDriftWatchOnce_SiblingSmokeFailureRollsBackAndSkipsRestart(t *testing.T
 
 	cfg := DriftWatchConfig{
 		RepoDir: "/r", RunningRevision: "oldrev", AutoRebuild: true,
-		AutoRestart: true, RestartSiblings: true, Targets: targets, Binary: "bt-agent",
+		AutoRestart: true, RestartSiblings: true, SiblingRestartFn: func(unit, _ string) error { return driftRestartFn(unit) }, Targets: targets, Binary: "bt-agent",
 	}
 	res, err := DriftWatchOnce(cfg)
 	if err != nil || !res.Restarted {
@@ -283,5 +285,63 @@ func TestSelfBinaryPath(t *testing.T) {
 	cfg.Binary = "absent"
 	if got := cfg.selfBinaryPath(); got != "" {
 		t.Fatalf("selfBinaryPath for absent target = %q, want empty", got)
+	}
+}
+
+func TestDriftRestartGuardSealsThroughHandoffAndReopensOnlyOnFailure(t *testing.T) {
+	oldHead, oldTree, oldRebuild, oldSmoke, oldRestart := driftHeadFn, driftTreeFn, driftRebuildFn, driftSmokeTestFn, driftRestartFn
+	t.Cleanup(func() {
+		driftHeadFn, driftTreeFn, driftRebuildFn, driftSmokeTestFn, driftRestartFn = oldHead, oldTree, oldRebuild, oldSmoke, oldRestart
+	})
+	driftHeadFn = func(string) (string, error) { return "newhead", nil }
+	driftTreeFn = func(_, revision string) (string, error) { return revision, nil }
+	driftRebuildFn = func(string, []RebuildTarget) error { return nil }
+	driftSmokeTestFn = func(string) error { return nil }
+	ready, sealed, restarts := false, false, 0
+	cfg := DriftWatchConfig{RepoDir: "fixture", RunningRevision: "oldhead", Binary: "bt-dashboard", AutoRebuild: true, AutoRestart: true, Backoff: NewRebuildBackoff(), Targets: []RebuildTarget{{Name: "bt-dashboard", OutPath: "fixture-bin"}}, RestartGuardFn: func() (func(bool), bool) {
+		if !ready {
+			return nil, false
+		}
+		sealed = true
+		return func(restarted bool) {
+			if !restarted {
+				sealed = false
+			}
+		}, true
+	}}
+	driftRestartFn = func(string) error {
+		restarts++
+		if !sealed {
+			t.Fatal("handoff lacked seal")
+		}
+		return errors.New("fixture systemd rejected restart")
+	}
+	result, err := DriftWatchOnce(cfg)
+	if err != nil || result.Restarted || restarts != 0 {
+		t.Fatalf("busy admission did not defer handoff: %+v %v", result, err)
+	}
+	ready = true
+	result, err = DriftWatchOnce(cfg)
+	if err == nil || result.Restarted || sealed || restarts != 1 {
+		t.Fatalf("failed handoff did not reopen: %+v %v sealed=%v", result, err, sealed)
+	}
+	driftRestartFn = func(string) error {
+		restarts++
+		if !sealed {
+			t.Fatal("successful handoff lacked seal")
+		}
+		return nil
+	}
+	result, err = DriftWatchOnce(cfg)
+	if err != nil || !result.Restarted || !sealed || restarts != 2 {
+		t.Fatalf("accepted asynchronous handoff lost seal: %+v %v sealed=%v", result, err, sealed)
+	}
+	sealed = false
+	driftRestartFn = func(string) error {
+		return &reliability.ExecutionUncertainError{Err: errors.New("fixture lost systemd acknowledgement")}
+	}
+	result, err = DriftWatchOnce(cfg)
+	if !reliability.IsExecutionUncertainError(err) || result.Restarted || !sealed {
+		t.Fatalf("uncertain handoff reopened admission: %+v %v sealed=%v", result, err, sealed)
 	}
 }

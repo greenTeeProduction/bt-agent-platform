@@ -1,41 +1,40 @@
 # 2. Architecture Constraints
 
-Only externally imposed constraints and organization-level policies are listed
-here; self-chosen architecture cornerstones live in
-[§4 Solution Strategy](04-solution-strategy.md) and [§9 Architecture
-Decisions](09-decisions.md). Negotiability is noted per row in *Imposed by*.
+Distinguish compatibility requirements and operator policies from design
+choices. The latter belong in [§4](04-solution-strategy.md) and
+[§9](09-decisions.md). Host observations are dated in [§7](07-deployment.md);
+they are not requirements for every installation.
 
 ## Technical Constraints
 
-| Constraint | Imposed by | Consequence |
+| Constraint | Source / negotiability | Consequence |
 |---|---|---|
-| Go 1.26.5 | `go.mod` toolchain directive (non-negotiable for builds) | Every build and CI environment must provide this toolchain; language features are capped at 1.26 |
-| Platform: Linux ARM64 (Jetson) | Hardware — 12-core NVIDIA Jetson, 61GB RAM, 57GB eMMC + 1.8TB NVMe (non-negotiable) | No x86-specific optimizations allowed; local LLM sizing is bounded by the available RAM |
-| MCP transport: stdio only | Hermes gateway, which spawns MCP servers as child processes (recorded in ADR-002; non-negotiable while the gateway is the host) | All MCP servers speak JSON-RPC 2.0 over stdin/stdout; no HTTP/SSE transport |
-| LLM: Ollama qwen3.6:35b primary | Near-zero-cost budget plus Jetson-local inference; 2-3 min per call (negotiable via paid APIs) | Timeouts, scheduling, and caching must absorb minute-scale LLM calls; DeepSeek v4-flash (5-10s) is the escalation path |
-| Hermes gateway spawning | Hermes gateway deployment model (negotiable only by changing the deployment) | bt-evaluator and bt-langagent run only as gateway-spawned MCP child processes; the goap-fusion daemon is the independent systemd user service `bt-agent.service` running `bt-agent --no-mcp` against the bare main repo |
-| NotebookLM quota (~50 metered calls/day) | Google NotebookLM service limits (non-negotiable) | Metered research calls must be budgeted and cached; over budget, research falls back to Claude review — quota-economy mechanism in [§8](08-crosscutting-concepts.md) |
-| Claude Code CLI session rate limits | Anthropic subscription limits (non-negotiable) | The self-improvement loop depends on the `claude` CLI; rate-limited work must park and resume later, and Claude attempts are suppressed for a durable backoff window — mechanism in [§6](06-runtime-view.md)/[§8](08-crosscutting-concepts.md) |
+| Go version required by the module | [`go.mod`](../../go.mod): `go 1.26.5` minimum; change with a reviewed dependency/toolchain update | Builds need a compatible Go toolchain. This is a `go` directive, not a `toolchain` directive or a ban on newer Go versions. `scripts/check.sh` defaults `GOTOOLCHAIN=auto`; explicit operator overrides still apply. |
+| Current operational target is Linux ARM64 | Jetson deployment and Unix process/file-lock APIs; host choice is operator-controlled | Test native subprocesses, advisory locks and model capacity on that target. This does not prohibit CI or development on other supported Go architectures. |
+| MCP host owns child stdin/stdout | Hermes integration uses JSON-RPC over stdio (ADR-002) | Keep MCP children attached to their host. Daemon mode `bt-agent --no-mcp` has a separate systemd lifecycle. |
+| Persistent state and worktrees require writable local storage | Current file stores and Git worktree implementation | Atomic rename needs an appropriate local filesystem; sidecar locks coordinate cooperating processes. This is not a distributed-storage or network-filesystem guarantee. |
+| Model/NotebookLM availability, authentication and quotas | External providers and account entitlements | A binary existing on PATH does not prove a model is usable. Preserve rate-limit defer states; ordinary auth/model errors require configuration repair. Quota budgets in code are local policy, not a published provider entitlement. |
+| Git operations require a usable configured remote and credentials | Repository/hosting configuration | Scheduled implementation refuses dirty tracked build files and unsafe branch synchronization. Document changes must also leave the deployed checkout clean. |
 
 ## Organizational Constraints
 
-| Constraint | Imposed by | Consequence |
+| Constraint | Source / negotiability | Consequence |
 |---|---|---|
-| Single developer (Nico) | Team size — one person authors and reviews all code (non-negotiable) | Fast iteration, no merge conflicts, no PR approval gates — but no peer-review safety net |
-| Behavior-tree-first execution | Platform Architect (policy, revisable) | All cron jobs must use BT agents; shell scripts are stopgaps; new automation → build a tree |
-| Git-versioned trees with conventional commits | Platform Architect (auditability policy, revisable) | Every tree mutation creates a git commit; evolution is auditable and reversible |
-| Skill-based documentation | Platform Architect (policy, revisable) | Project knowledge lives in SKILL.md files, not traditional docs; skills drive both human and agent workflows |
-| Free-tier utilization (100%) | Project budget — near-zero cost (non-negotiable) | Minimize API costs; drives the local-first LLM split (see *LLM: Ollama qwen3.6:35b primary* under Technical Constraints) |
+| Small operator/maintainer team | Current ownership by Nico; revisable | Prefer automation with inspectable evidence and explicit recovery steps. Do not assume that one maintainer eliminates concurrent writers, merge conflicts or CI gates. |
+| Behavior-tree-first recurring automation | Platform owner policy; revisable | Recurring work is expressed through registered trees/agents where practical; operational scripts remain supporting tools. |
+| Controlled model expenditure | Owner's local-first/cost-conscious operating goal; no numeric budget accepted in this review | Use configurable providers, caching and budgets. Do not claim “100% free” while paid APIs or subscriptions are configured. |
+| Reviewable autonomous changes | Existing Superpowers verification/apply workflow | Worktree isolation, persisted evidence and repository checks constrain landing. Required hosted CI/review rules are repository settings, not assumptions inferred from team size. |
 
 ## Conventions
 
-| Convention | Imposed by | Consequence |
+| Convention | Source | Consequence |
 |---|---|---|
-| Conventional Commits | Project convention (revisable) | `feat(scope):`, `fix(scope):`, `test(scope):` format enforced on every commit |
-| Go code edits via `patch` tool | Project convention (revisable) | Never `sed -i`; Go files are edited only through the patch tool |
-| `go-bt` library conventions | Upstream `go-bt` API (non-negotiable while on this library) | `Run(ctx)` not `Execute`; `btleaf.NewAction` not `btcore.NewActionNode` |
-| Blackboard must include Reflections+TreeStore | bt-manager runtime requirement (non-negotiable) | `{Task, LLM, Reflections, TreeStore}` required on every Blackboard; without them bt-manager fails silently |
-| Gateway reload vs restart | Hermes gateway operations (non-negotiable) | `systemctl --user reload hermes-gateway` (SIGHUP) for config changes; full restart for MCP binary changes |
+| Conventional commit subjects | Repository practice | Use descriptive subjects. An optional local hook is not proof of universal server-side enforcement. |
+| Build/test commands | [AGENTS.md](../../AGENTS.md), [Makefile](../../Makefile), [CI](../../.github/workflows/ci.yml) | Keep documented commands aligned with the invoked worktree and toolchain. |
+| Tree API and IR | `go-bt` and `evolution.SerializableNode` | Runtime uses `Run(ctx)`; authors validate the serializable definition before execution. |
+| Blackboard collaborators | [`agentexec`](../../internal/agentexec/wiring.go) and [engine](../../internal/engine/tree.go) | Use the entrypoint's dependency wiring. Which collaborators are required depends on the selected tree; not every action requires an LLM or reflection store. |
+| Architecture as versioned Markdown | [GUIDELINES.md](GUIDELINES.md) and the twelve section files | Update affected views, scenario evidence and risks together. Skills supplement the architecture; they do not replace it. |
+| Secrets outside repository content | Operator-managed environment/configuration | Document key names and precedence, never credential values. Validate effective process settings after a controlled restart. |
 
 ---
 

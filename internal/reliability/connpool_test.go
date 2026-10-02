@@ -171,7 +171,7 @@ func TestRemoteExecutor_WithConnPool(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		requestCount++
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"agent":"test","task":"test","output":"ok","success":true}`))
+		_, _ = w.Write([]byte(`{"agent":"test-agent","task":"test task","output":"ok","duration":0,"success":true}`))
 	}))
 	defer server.Close()
 
@@ -207,7 +207,7 @@ func TestRemoteExecutor_SharedPoolAcrossExecutors(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"agent":"shared","task":"shared","output":"pooled","success":true}`))
+		_, _ = w.Write([]byte(`{"agent":"shared","task":"task","output":"pooled","duration":0,"success":true}`))
 	}))
 	defer server.Close()
 
@@ -243,7 +243,7 @@ func TestRemoteExecutor_SharedPoolAcrossExecutors(t *testing.T) {
 func TestRemoteExecutor_WithoutConnPool_UsesPrivateClient(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"agent":"p","task":"p","output":"private","success":true}`))
+		_, _ = w.Write([]byte(`{"agent":"agent","task":"task","output":"private","duration":0,"success":true}`))
 	}))
 	defer server.Close()
 
@@ -513,7 +513,7 @@ func TestAgentRouter_WithSharedPool(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 		case "/api/agents/execute":
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"agent":"pooled","task":"task","output":"router-pooled","success":true,"quality_score":0.95}`))
+			_, _ = w.Write([]byte(`{"agent":"pooled-agent","task":"shared task","output":"router-pooled","duration":0,"success":true,"quality_score":0.95}`))
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -557,7 +557,7 @@ func TestAgentRouter_PooledExecutors_LeastConnections(t *testing.T) {
 		case "/api/agents/execute":
 			time.Sleep(20 * time.Millisecond) // simulate work
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"agent":"lc","task":"lc","output":"ok","success":true,"quality_score":0.9}`))
+			_, _ = w.Write([]byte(`{"agent":"lc","task":"task","output":"ok","duration":0,"success":true,"quality_score":0.9}`))
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -596,7 +596,7 @@ func TestRemoteExecutor_BackwardCompat_NilPool(t *testing.T) {
 	// Existing code that doesn't set Pool should continue to work
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"agent":"bc","task":"bc","output":"backward","success":true}`))
+		_, _ = w.Write([]byte(`{"agent":"bc-agent","task":"bc task","output":"backward","duration":0,"success":true}`))
 	}))
 	defer server.Close()
 

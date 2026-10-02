@@ -14,6 +14,10 @@ import (
 // =============================================================================
 
 func TestDefaultConfig(t *testing.T) {
+	// Defaults are a fixture, independent of the daemon running the checks.
+	for _, key := range []string{"BT_CONFIG_FILE", "OLLAMA_HOST", "BT_OLLAMA_MODEL", "BT_LLM_TIMEOUT"} {
+		t.Setenv(key, "")
+	}
 	cfg := DefaultConfig()
 
 	if cfg.ServerURL != "http://localhost:11434" {
@@ -24,6 +28,18 @@ func TestDefaultConfig(t *testing.T) {
 	}
 	if cfg.Timeout != 300*time.Second {
 		t.Errorf("Timeout: expected %v, got %v", 300*time.Second, cfg.Timeout)
+	}
+}
+
+func TestDefaultConfig_EnvironmentOverrides(t *testing.T) {
+	t.Setenv("BT_CONFIG_FILE", "")
+	t.Setenv("BT_LLM_PROVIDER", "ollama")
+	t.Setenv("OLLAMA_HOST", "http://localhost:12345")
+	t.Setenv("BT_OLLAMA_MODEL", "fixture-model")
+	t.Setenv("BT_LLM_TIMEOUT", "42")
+	cfg := DefaultConfig()
+	if cfg.ServerURL != "http://localhost:12345" || cfg.Model != "fixture-model" || cfg.Timeout != 42*time.Second {
+		t.Fatalf("environment overrides not reflected in LLM configuration: %+v", cfg)
 	}
 }
 

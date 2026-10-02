@@ -1,0 +1,22 @@
+{
+  "command": "GOFLAGS=-p=2 gosec -no-fail -fmt sarif -out <private>/scanner-corrected-medium.sarif -severity medium ./...",
+  "exit_code": 0,
+  "previous_findings": 252,
+  "qualification": "All eight actual gosec locations removed locally; 244 baseline findings remain. -no-fail zero is not hosted gosec/CodeQL acceptance.",
+  "raw_private_sha256": "fa04da5bc1a50a68370a341db8040c0652cff2920fed33cec6dbd795f5b3d7cb",
+  "remaining_findings": 244,
+  "rules": {
+    "G115": 15,
+    "G124": 4,
+    "G204": 22,
+    "G301": 52,
+    "G302": 10,
+    "G304": 61,
+    "G306": 54,
+    "G401": 1,
+    "G404": 12,
+    "G505": 1,
+    "G703": 11,
+    "G704": 1
+  }
+}

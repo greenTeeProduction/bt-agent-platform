@@ -3,6 +3,7 @@ package blackboard
 import (
 	"cmp"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"sync"
@@ -23,12 +24,28 @@ func newScopedStore(limits Limits) *scopedStore {
 	}
 }
 
+// clone isolates limit accounting and evictions until the mutation commits.
+func (s *scopedStore) clone() *scopedStore {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	entries := make(map[string]Entry, len(s.entries))
+	for key, entry := range s.entries {
+		entries[key] = cloneEntry(entry)
+	}
+	return &scopedStore{entries: entries, limits: s.limits, totalBytes: s.totalBytes}
+}
+
+func cloneEntry(entry Entry) Entry {
+	entry.Metadata = maps.Clone(entry.Metadata)
+	return entry
+}
+
 func (s *scopedStore) get(key string) (Entry, bool) {
 	key = normalizeKey(key)
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	e, ok := s.entries[key]
-	return e, ok
+	return cloneEntry(e), ok
 }
 
 func (s *scopedStore) set(key string, entry Entry) error {
@@ -123,7 +140,7 @@ func (s *scopedStore) setLocked(key string, entry Entry) error {
 		entry.Summary = truncateSummary(entry.Value, 500)
 	}
 
-	s.entries[key] = entry
+	s.entries[key] = cloneEntry(entry)
 	s.totalBytes += size
 	return nil
 }
@@ -174,7 +191,7 @@ func (s *scopedStore) list(prefix string, limit int) []Entry {
 	out := make([]Entry, 0, 8)
 	for k, e := range s.entries {
 		if prefix == "" || strings.HasPrefix(k, prefix) {
-			out = append(out, e)
+			out = append(out, cloneEntry(e))
 		}
 	}
 	slices.SortFunc(out, func(a, b Entry) int {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -56,6 +57,9 @@ func NewRemoteExecutor(cfg RemoteExecutorConfig) *RemoteExecutor {
 // Execute sends the agent task to the remote dashboard's execution endpoint.
 // POST {baseURL}/api/agents/execute with JSON body {"agent":"...", "task":"..."}
 func (re *RemoteExecutor) Execute(ctx context.Context, agent, task string) (*AgentResult, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	body := map[string]string{
 		"agent": agent,
 		"task":  task,
@@ -79,26 +83,72 @@ func (re *RemoteExecutor) Execute(ctx context.Context, agent, task string) (*Age
 		req.Header.Set("X-API-Key", re.apiKey)
 	}
 
-	resp, err := re.client.Do(req)
+	// Execution POSTs must not be repeated by HTTP redirect handling. Copy
+	// the client so health checks/shared connection-pool users keep their policy.
+	client := *re.client
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("remote executor %q: %w", re.name, err)
+		return nil, &ExecutionUncertainError{Err: fmt.Errorf("remote executor %q: %w", re.name, err)}
 	}
 	defer resp.Body.Close()
 
 	respData, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("read response: %w", err)
+		return nil, &ExecutionUncertainError{Err: fmt.Errorf("read response: %w", err)}
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("remote executor %q: status %d: %s", re.name, resp.StatusCode, string(respData))
+		diagnostic := fmt.Errorf("remote executor %q: status %d: %s", re.name, resp.StatusCode, string(respData))
+		if resp.Header.Get(ExecutionAdmissionHeader) == "false" {
+			return nil, diagnostic
+		}
+		return nil, &ExecutionUncertainError{Err: diagnostic}
 	}
 
 	var result AgentResult
 	if err := json.Unmarshal(respData, &result); err != nil {
-		return nil, fmt.Errorf("unmarshal result: %w (body: %s)", err, string(respData))
+		return nil, &ExecutionUncertainError{Err: fmt.Errorf("unmarshal result: %w (body: %s)", err, string(respData))}
 	}
-	return &result, nil
+	var fields map[string]json.RawMessage
+	_ = json.Unmarshal(respData, &fields)
+	for _, name := range []string{"agent", "task", "output", "duration", "success"} {
+		value, exists := fields[name]
+		if !exists || bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+			return nil, &ExecutionUncertainError{Err: fmt.Errorf("remote executor %q: missing result field %s", re.name, name)}
+		}
+	}
+	if result.Agent != agent {
+		return nil, &ExecutionUncertainError{Err: fmt.Errorf("remote executor %q: result agent does not match request", re.name)}
+	}
+	// Empty task explicitly requests the dashboard's configured default; its
+	// computed task need not equal empty. Bind every supplied task exactly.
+	if task != "" && result.Task != task {
+		return nil, &ExecutionUncertainError{Err: fmt.Errorf("remote executor %q: result task does not match request", re.name)}
+	}
+	switch result.ErrorKind {
+	case ExecutionPersistenceKind:
+		if result.Error != "" {
+			diagnostic := &ExecutionPersistenceError{Err: errors.New(result.Error)}
+			if IsStoppedOutcome(result.Outcome) {
+				return &result, &ExecutionStoppedError{Outcome: result.Outcome, Err: diagnostic}
+			}
+			if IsHealthyOutcome(result.Outcome) || (result.Outcome == "" && result.Success) {
+				return &result, diagnostic
+			}
+		}
+	case ExecutionUncertainKind:
+		if result.Error != "" {
+			return &result, &ExecutionUncertainError{Err: errors.New(result.Error)}
+		}
+	case ExecutionStoppedKind:
+		if result.Error != "" && !result.Success && IsStoppedOutcome(result.Outcome) {
+			return &result, &ExecutionStoppedError{Outcome: result.Outcome, Err: errors.New(result.Error)}
+		}
+	case "":
+		return &result, nil // Older peers retain their raw outcome compatibility.
+	}
+	return &result, &ExecutionUncertainError{Err: fmt.Errorf("remote executor %q: invalid execution error kind/detail", re.name)}
 }
 
 // Health checks if the remote dashboard is reachable.

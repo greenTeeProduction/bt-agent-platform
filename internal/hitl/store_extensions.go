@@ -22,148 +22,114 @@ func (r *Request) SetTaskID(taskID string) {
 	r.TaskID = taskID
 }
 
-// FindPendingByTaskID returns the newest pending or escalated request for a
-// task id, so ApproveByTaskID/RejectByTaskID can resolve an escalation.
-func (s *Store) FindPendingByTaskID(taskID string) (*Request, bool) {
-	if s == nil || strings.TrimSpace(taskID) == "" {
-		return nil, false
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	release, err := s.reloadLocked()
-	if err != nil {
-		return nil, false
-	}
-	defer release()
-	now := time.Now()
+// newestTaskRequest selects an unexpired pending/escalated request.
+func newestTaskRequest(records map[string]*Request, taskID string, now time.Time) *Request {
+	return latestTaskRequest(records, taskID, now, true)
+}
+func latestTaskRequest(records map[string]*Request, taskID string, now time.Time, unresolvedOnly bool) *Request {
 	var best *Request
-	for _, r := range s.records {
-		if r.Status != StatusPending && r.Status != StatusEscalated {
-			continue
-		}
-		if !r.ExpiresAt.IsZero() && now.After(r.ExpiresAt) {
-			r.Status = StatusExpired
-			r.UpdatedAt = now
-			continue
+	for _, r := range records {
+		if unresolvedOnly {
+			if r.Status != StatusPending && r.Status != StatusEscalated {
+				continue
+			}
+			if !r.ExpiresAt.IsZero() && now.After(r.ExpiresAt) {
+				continue
+			}
 		}
 		tid := r.TaskID
-		if tid == "" && r.Context != nil {
+		if tid == "" {
 			tid = r.Context["task_id"]
 		}
 		if tid != taskID {
 			continue
 		}
-		if best == nil || r.CreatedAt.After(best.CreatedAt) {
+		if best == nil || r.CreatedAt.After(best.CreatedAt) || (r.CreatedAt.Equal(best.CreatedAt) && r.ID < best.ID) {
 			best = r
 		}
 	}
-	_ = s.save()
-	if best == nil {
-		return nil, false
-	}
-	cp := *cloneRequest(best)
-	return &cp, true
+	return best
 }
 
-// WaitForRequest polls until the request leaves pending state or ctx is cancelled.
-func (s *Store) WaitForRequest(ctx context.Context, id string, pollEvery time.Duration) (*Request, error) {
-	if s == nil {
-		return nil, fmt.Errorf("hitl: store not initialized")
+func (s *Store) FindPendingByTaskID(taskID string) (*Request, bool) {
+	req, ok, _ := s.FindPendingByTaskIDWithContext(context.Background(), taskID)
+	return req, ok
+}
+func (s *Store) FindPendingByTaskIDWithContext(ctx context.Context, taskID string) (*Request, bool, error) {
+	if strings.TrimSpace(taskID) == "" {
+		return nil, false, nil
 	}
+	var req *Request
+	err := s.transaction(ctx, func(records map[string]*Request) (bool, error) {
+		changed := expireRequests(records)
+		if r := newestTaskRequest(records, taskID, time.Now()); r != nil {
+			req = cloneRequest(r)
+		}
+		return changed, nil
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	return req, req != nil, nil
+}
+
+// WaitForRequest polls committed status; every lock wait shares ctx's budget.
+func (s *Store) WaitForRequest(ctx context.Context, id string, pollEvery time.Duration) (*Request, error) {
 	if pollEvery <= 0 {
 		pollEvery = 500 * time.Millisecond
 	}
+	ticker := time.NewTicker(pollEvery)
+	defer ticker.Stop()
 	for {
-		st, err := s.RefreshStatus(id)
+		req, err := s.RefreshRequestWithContext(ctx, id)
 		if err != nil {
 			return nil, err
 		}
-		switch st {
+		switch req.Status {
 		case StatusApproved, StatusSkipped, StatusEscalated:
-			req, ok := s.Get(id)
-			if !ok {
-				return nil, fmt.Errorf("hitl: request %q not found", id)
-			}
 			return req, nil
 		case StatusRejected, StatusExpired:
-			req, _ := s.Get(id)
-			return req, fmt.Errorf("hitl: request %s", st)
+			return req, fmt.Errorf("hitl: request %s", req.Status)
 		}
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
-		case <-time.After(pollEvery):
+		case <-ticker.C:
 		}
 	}
 }
 
-// WaitForTaskID polls the latest request for taskID until resolved.
 func (s *Store) WaitForTaskID(ctx context.Context, taskID string, pollEvery time.Duration) (*Request, error) {
-	req, ok := s.FindPendingByTaskID(taskID)
+	req, ok, err := s.FindPendingByTaskIDWithContext(ctx, taskID)
+	if err != nil {
+		return nil, err
+	}
 	if !ok {
-		return nil, fmt.Errorf("hitl: no pending request for task %q", taskID)
+		return nil, fmt.Errorf("%w for task %q", ErrRequestNotFound, taskID)
 	}
 	return s.WaitForRequest(ctx, req.ID, pollEvery)
 }
-
-// ApproveByTaskID approves the latest pending request for taskID.
 func (s *Store) ApproveByTaskID(taskID, reviewer, comment string) (*Request, error) {
-	req, ok := s.FindPendingByTaskID(taskID)
-	if !ok {
-		return nil, fmt.Errorf("hitl: no pending request for task %q", taskID)
+	if strings.TrimSpace(taskID) == "" {
+		return nil, ErrRequestNotFound
 	}
-	return s.Approve(req.ID, reviewer, comment)
+	return s.decideWithContext(context.Background(), "", taskID, reviewer, comment, StatusApproved)
 }
-
-// RejectByTaskID rejects the latest pending request for taskID.
 func (s *Store) RejectByTaskID(taskID, reviewer, reason string) (*Request, error) {
-	req, ok := s.FindPendingByTaskID(taskID)
-	if !ok {
-		return nil, fmt.Errorf("hitl: no pending request for task %q", taskID)
+	if strings.TrimSpace(taskID) == "" {
+		return nil, ErrRequestNotFound
 	}
-	return s.Reject(req.ID, reviewer, reason)
+	return s.decideWithContext(context.Background(), "", taskID, reviewer, reason, StatusRejected)
 }
 
-// Escalate marks a request escalated and returns a copy.
+// Escalate requires an unresolved request, so it cannot revive terminal state.
 func (s *Store) Escalate(id, reviewer, reason string) (*Request, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	release, err := s.reloadLocked()
-	if err != nil {
-		return nil, err
-	}
-	defer release()
-	r, ok := s.records[id]
-	if !ok {
-		return nil, fmt.Errorf("hitl: request %q not found", id)
-	}
-	now := time.Now()
-	r.Status = StatusEscalated
-	r.Reviewer = reviewer
-	r.Reason = reason
-	r.UpdatedAt = now
-	if err := s.save(); err != nil {
-		return nil, err
-	}
-	cp := *cloneRequest(r)
-	return &cp, nil
+	return s.EscalateWithContext(context.Background(), id, reviewer, reason)
 }
-
-// ListEscalated returns escalated requests.
+func (s *Store) EscalateWithContext(ctx context.Context, id, reviewer, reason string) (*Request, error) {
+	return s.decideWithContext(ctx, id, "", reviewer, reason, StatusEscalated)
+}
 func (s *Store) ListEscalated() []*Request {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	release, err := s.reloadLocked()
-	if err != nil {
-		return nil
-	}
-	defer release()
-	var out []*Request
-	for _, r := range s.records {
-		if r.Status == StatusEscalated {
-			cp := *cloneRequest(r)
-			out = append(out, &cp)
-		}
-	}
-	return out
+	list, _ := s.listWithContext(context.Background(), StatusEscalated, false)
+	return list
 }

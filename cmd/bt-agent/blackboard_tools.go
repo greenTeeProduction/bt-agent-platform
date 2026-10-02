@@ -151,7 +151,7 @@ func bbManager(deps *mcpDeps) (*blackboard.Manager, error) {
 	if deps == nil || deps.agentRunner == nil {
 		return nil, fmt.Errorf("agent runner not configured")
 	}
-	return deps.agentRunner.BoardManager(), nil
+	return deps.agentRunner.BoardManager()
 }
 
 func parseBBScope(kind, id string) (blackboard.Scope, error) {

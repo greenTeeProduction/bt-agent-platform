@@ -63,3 +63,28 @@ func TestFitnessScoreFromBB_DelegatesToReliabilityScoreOutcome(t *testing.T) {
 		t.Error("ops_actions.go still contains the duplicated inline scoring formula; delete it now that reliability.ScoreOutcome is canonical")
 	}
 }
+
+func TestPushToDLQAction_FailedStorageStopsEscalation(t *testing.T) {
+	path := t.TempDir() + "/dlq.json"
+	original := []byte("{unreadable fixture")
+	if err := os.WriteFile(path, original, 0600); err != nil {
+		t.Fatal(err)
+	}
+	previous := TaskDLQ
+	t.Cleanup(func() { TaskDLQ = previous })
+	TaskDLQ = reliability.NewDeadLetterQueue(path)
+	bb := &Blackboard{Task: "fixture", Result: "failure detail"}
+	if result := pushToDLQAction(&btcore.BTContext[Blackboard]{Blackboard: bb}); result != -1 {
+		t.Fatalf("acknowledged escalation: %v", result)
+	}
+	if !reliability.IsExecutionStoppedError(bb.ExecutionError()) {
+		t.Fatalf("missing stopped disposition: %v", bb.ExecutionError())
+	}
+	if strings.Contains(bb.Result, "Task escalated") || TaskDLQ.Len() != 0 {
+		t.Fatal("uncommitted escalation published")
+	}
+	actual, err := os.ReadFile(path)
+	if err != nil || string(actual) != string(original) {
+		t.Fatalf("malformed state overwritten: %v", err)
+	}
+}

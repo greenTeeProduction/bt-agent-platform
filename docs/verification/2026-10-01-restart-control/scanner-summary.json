@@ -1,0 +1,22 @@
+{
+  "command": "GOFLAGS=-p=2 gosec -no-fail -fmt sarif -out <private>/medium.sarif -severity medium ./...",
+  "exit_code": 0,
+  "new_control_or_gate_findings": 0,
+  "qualification": "Existing medium baseline; -no-fail exit 0 is not a clean scan and does not establish the separate GitHub gosec result.",
+  "raw_private_sha256": "c13a269a29c3a2a3dc8ab387d20c4f064dca1d9335cb6117ed124d30b42b4332",
+  "rules": {
+    "G115": 16,
+    "G124": 4,
+    "G204": 24,
+    "G301": 54,
+    "G302": 11,
+    "G304": 65,
+    "G306": 55,
+    "G401": 1,
+    "G404": 12,
+    "G505": 1,
+    "G703": 12,
+    "G704": 1
+  },
+  "total_findings": 256
+}

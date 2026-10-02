@@ -37,7 +37,13 @@ func handleBlackboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	mgr := dashAgentRunner.BoardManager()
+	mgr, err := dashAgentRunner.BoardManager()
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "agent blackboard unavailable"})
+		return
+	}
 	entries, err := mgr.List(scope, prefix, limit)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
@@ -83,7 +89,14 @@ func handleBlackboardScopes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ids, err := dashAgentRunner.BoardManager().ListPersistedScopeIDs(kind)
+	mgr, err := dashAgentRunner.BoardManager()
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(w).Encode(map[string]string{"error": "agent blackboard unavailable"})
+		return
+	}
+	ids, err := mgr.ListPersistedScopeIDs(kind)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)

@@ -28,7 +28,17 @@ func DefaultPanicHandler(panicVal any, context string) {
 //	    process(task)
 //	}, nil)
 func SafeGo(context string, fn func(), handler PanicHandler) {
+	SafeGoWithCleanup(context, fn, handler, nil)
+}
+
+// SafeGoWithCleanup retains ownership until both execution and panic handling
+// finish. Cleanup runs once, including when the handler panics; cleanup panics
+// are logged and contained through Recover.
+func SafeGoWithCleanup(context string, fn func(), handler PanicHandler, cleanup func()) {
 	go func() {
+		if cleanup != nil {
+			defer func() { _ = Recover(context+" cleanup", cleanup) }()
+		}
 		defer func() {
 			if r := recover(); r != nil {
 				if handler == nil {

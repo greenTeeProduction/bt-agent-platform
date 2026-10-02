@@ -1,12 +1,17 @@
 package evolution
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
+	"time"
 
+	"github.com/nico/go-bt-evolve/internal/reliability"
 	"github.com/nico/go-bt-evolve/internal/util"
 )
 
@@ -202,7 +207,10 @@ func snapshotRevisionPath(treeName, snapshotDir string, revision int) string {
 }
 
 func loadSnapshotIndex(treeName, snapshotDir string) (snapshotIndex, error) {
-	data, err := os.ReadFile(snapshotIndexPath(treeName, snapshotDir))
+	if err := validateSnapshotLocation(treeName, snapshotDir); err != nil {
+		return snapshotIndex{}, err
+	}
+	data, err := util.ReadPersistenceFile(snapshotIndexPath(treeName, snapshotDir))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return snapshotIndex{}, nil
@@ -214,12 +222,18 @@ func loadSnapshotIndex(treeName, snapshotDir string) (snapshotIndex, error) {
 	if err := json.Unmarshal(data, &idx); err != nil {
 		return snapshotIndex{}, fmt.Errorf("unmarshal snapshot index: %w", err)
 	}
+	previous := 0
+	for _, revision := range idx.Revisions {
+		if revision <= previous {
+			return snapshotIndex{}, fmt.Errorf("invalid snapshot revision order for %q", treeName)
+		}
+		previous = revision
+	}
 	return idx, nil
 }
 
 func saveSnapshotIndex(treeName, snapshotDir string, idx snapshotIndex) error {
-	// Snapshots stay deliberately tighter than the 0644/0755 default: the
-	// revision files and this index are restricted to the owner.
+	// Revision files and their index retain private 0600/0700 permissions.
 	return util.SaveJSONAtomicMode(snapshotIndexPath(treeName, snapshotDir), idx, 0o600, 0o700)
 }
 
@@ -229,36 +243,97 @@ func saveSnapshotIndex(treeName, snapshotDir string, idx snapshotIndex) error {
 // RestoreTreeRevision can recover any prior cycle's state, not just the one
 // immediately before the latest.
 func SnapshotTree(tree *SerializableNode, treeName, snapshotDir string) (string, error) {
-	return snapshotTree(tree, treeName, snapshotDir, nil)
+	return SnapshotTreeWithContext(context.Background(), tree, treeName, snapshotDir)
 }
 
 // SnapshotTreeWithFitness is SnapshotTree plus the revision's composite
 // fitness score, which RestoreTreeBeforeRegressionStreak needs to identify
 // where a regression streak began.
 func SnapshotTreeWithFitness(tree *SerializableNode, treeName, snapshotDir string, fitness float64) (string, error) {
-	return snapshotTree(tree, treeName, snapshotDir, &fitness)
+	return SnapshotTreeWithFitnessContext(context.Background(), tree, treeName, snapshotDir, fitness)
 }
 
-func snapshotTree(tree *SerializableNode, treeName, snapshotDir string, fitness *float64) (string, error) {
-	if err := os.MkdirAll(snapshotDir, 0700); err != nil {
-		return "", fmt.Errorf("create snapshot dir: %w", err)
-	}
+// SnapshotTreeWithContext uses the caller's shorter allocation/lock budget.
+func SnapshotTreeWithContext(ctx context.Context, tree *SerializableNode, treeName, snapshotDir string) (string, error) {
+	return snapshotTree(ctx, tree, treeName, snapshotDir, nil)
+}
+func SnapshotTreeWithFitnessContext(ctx context.Context, tree *SerializableNode, treeName, snapshotDir string, fitness float64) (string, error) {
+	return snapshotTree(ctx, tree, treeName, snapshotDir, &fitness)
+}
 
+func validateSnapshotLocation(treeName, snapshotDir string) error {
+	if snapshotDir == "" {
+		return fmt.Errorf("snapshot directory must not be empty")
+	}
+	if treeName == "" || treeName == "." || treeName == ".." || strings.ContainsAny(treeName, "/\\\x00") {
+		return fmt.Errorf("invalid snapshot tree name %q", treeName)
+	}
+	return nil
+}
+
+func snapshotTree(ctx context.Context, tree *SerializableNode, treeName, snapshotDir string, fitness *float64) (string, error) {
+	if err := validateSnapshotLocation(treeName, snapshotDir); err != nil {
+		return "", err
+	}
+	if tree == nil {
+		return "", fmt.Errorf("cannot snapshot a nil tree")
+	}
+	if fitness != nil && (math.IsNaN(*fitness) || math.IsInf(*fitness, 0)) {
+		return "", fmt.Errorf("snapshot fitness must be finite")
+	}
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	indexPath := snapshotIndexPath(treeName, snapshotDir)
+	if err := util.EnsurePersistenceParentMode(indexPath, 0700); err != nil {
+		return "", err
+	}
+	release, err := reliability.AcquireFileLockWithContext(ctx, indexPath)
+	if err != nil {
+		return "", err
+	}
+	defer release()
 	idx, err := loadSnapshotIndex(treeName, snapshotDir)
 	if err != nil {
 		return "", err
 	}
-
 	revision := 1
 	if n := len(idx.Revisions); n > 0 {
+		if idx.Revisions[n-1] == math.MaxInt {
+			return "", fmt.Errorf("snapshot revision exhausted")
+		}
 		revision = idx.Revisions[n-1] + 1
 	}
-
-	path := snapshotRevisionPath(treeName, snapshotDir, revision)
-	if err := util.SaveJSONAtomicMode(path, tree, 0o600, 0o700); err != nil {
+	root, err := os.OpenRoot(snapshotDir)
+	if err != nil {
 		return "", err
 	}
-
+	defer root.Close()
+	var path string
+	for {
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
+		path = snapshotRevisionPath(treeName, snapshotDir, revision)
+		_, err := root.Lstat(filepath.Base(path))
+		if os.IsNotExist(err) {
+			break
+		}
+		if err != nil {
+			return "", err
+		}
+		// A crash or failed index commit may leave an unindexed revision. Preserve
+		// that evidence instead of overwriting it when the next writer allocates.
+		if revision == math.MaxInt {
+			return "", fmt.Errorf("snapshot revision exhausted")
+		}
+		revision++
+	}
+	if err := util.SaveJSONAtomicMode(path, tree, 0600, 0700); err != nil {
+		return "", err
+	}
 	idx.Revisions = append(idx.Revisions, revision)
 	if fitness != nil {
 		if idx.Fitness == nil {
@@ -266,10 +341,12 @@ func snapshotTree(tree *SerializableNode, treeName, snapshotDir string, fitness 
 		}
 		idx.Fitness[revision] = *fitness
 	}
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	if err := saveSnapshotIndex(treeName, snapshotDir, idx); err != nil {
 		return "", err
 	}
-
 	return path, nil
 }
 
@@ -288,7 +365,13 @@ func ListRevisions(treeName, snapshotDir string) ([]int, error) {
 // returns the tree, letting callers roll back past just the
 // immediately-preceding cycle when a regression is discovered late.
 func RestoreTreeRevision(treeName, snapshotDir string, revision int) (*SerializableNode, error) {
-	data, err := os.ReadFile(snapshotRevisionPath(treeName, snapshotDir, revision))
+	if err := validateSnapshotLocation(treeName, snapshotDir); err != nil {
+		return nil, err
+	}
+	if revision <= 0 {
+		return nil, fmt.Errorf("snapshot revision must be positive")
+	}
+	data, err := util.ReadPersistenceFile(snapshotRevisionPath(treeName, snapshotDir, revision))
 	if err != nil {
 		return nil, fmt.Errorf("read snapshot revision: %w", err)
 	}

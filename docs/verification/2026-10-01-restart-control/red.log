@@ -1,0 +1,8 @@
+2026/10/01 11:30:48 WARN deploy drift: running binary is behind repo HEAD binary=bt-agent running_revision=oldhead head_revision=newhead auto_rebuild=true
+2026/10/01 11:30:48 WARN deploy drift: restarting swapped sibling unit binary=bt-agent unit=bt-dashboard head_revision=newhead
+2026/10/01 11:30:48 WARN deploy drift: restarting to adopt rebuilt binary binary=bt-agent head_revision=newhead
+--- FAIL: TestDriftSiblingRestartRequiresTargetOwnership (0.00s)
+    restart_control_regression_test.go:24: missing target ownership allowed sibling systemd bypass: direct=[bt-dashboard bt-agent] result={Head:newhead Stale:true Rebuilt:true Restarted:true} err=<nil>
+FAIL
+FAIL	github.com/nico/go-bt-evolve/internal/agent	0.018s
+FAIL

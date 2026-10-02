@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nico/go-bt-evolve/internal/reliability"
 	"github.com/nico/go-bt-evolve/internal/util"
 )
 
@@ -64,10 +65,23 @@ var (
 // returns immediately so this process is not killed synchronously by the restart
 // it requests; systemd then stops and starts the unit on the new binary.
 func defaultDriftRestart(binary string) error {
-	cmd := exec.Command("systemctl", "--user", "restart", "--no-block", binary+".service")
+	if err := verifyRestartUnitOwner(binary); err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	// #nosec G204 -- verifyRestartUnitOwner accepts only the three canonical
+	// daemon names and confirms this process is that unit's MainPID. Executable
+	// and flags are fixed; no shell or request-supplied revision is used.
+	cmd := exec.CommandContext(ctx, "systemctl", "--user", "restart", "--no-block", binary+".service")
 	cmd.Env = os.Environ()
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("systemctl --user restart --no-block %s.service: %w\n%s", binary, err, strings.TrimSpace(string(out)))
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("start systemd restart request: %w", err)
+	}
+	if err := cmd.Wait(); err != nil {
+		// Once the command starts, its failure/timeout cannot establish that
+		// systemd did not accept the request. Keep admission sealed.
+		return &reliability.ExecutionUncertainError{Err: fmt.Errorf("systemd restart acknowledgement failed: %w", err)}
 	}
 	return nil
 }
@@ -89,12 +103,18 @@ func defaultDriftSmokeTest(binPath string) error {
 // rollback for a rebuilt binary that failed its smoke test, so a later restart
 // cannot adopt the broken build.
 func restorePreviousBinary(binPath string) error {
-	prev := binPath + ".previous"
-	data, err := os.ReadFile(prev)
+	root, name, err := util.OpenPersistenceRoot(binPath)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(binPath, data, 0o755)
+	defer root.Close()
+	data, err := root.ReadFile(name + ".previous")
+	if err != nil {
+		return err
+	}
+	// Replace a complete executable sibling; never truncate the live image or
+	// follow an outward backup symlink. New mode retains owner/group execution.
+	return util.SavePersistenceFileMode(binPath, data, 0o750, 0o750)
 }
 
 // AutoRestartEnabled reports whether BT_AUTO_RESTART_ON_DRIFT opts into adopting
@@ -112,6 +132,8 @@ func AutoRestartEnabled() bool {
 // context cannot redirect rev-parse at the wrong repository — the same class of
 // leak that mis-authored a shared bare repo on 2026-07-10.
 func defaultDriftHead(repoDir string) (string, error) {
+	// #nosec G204 -- repoDir is operator-selected deploy configuration. Git,
+	// -C and rev-parse HEAD are fixed argv; no shell or request options run.
 	cmd := exec.Command("git", "-C", repoDir, "rev-parse", "HEAD")
 	cmd.Env = scrubGitEnv()
 	out, err := cmd.Output()
@@ -171,6 +193,11 @@ type DriftWatchConfig struct {
 	// swaps the daemon's own binary out from under a mid-execution job. Nil
 	// disables the guard (every stale tick may rebuild).
 	InFlightFn func() bool
+	// RestartGuardFn atomically seals local execution admission when idle.
+	// Ready requires a non-nil finish callback: finish(false) reopens admission
+	// after failure, finish(true) keeps it closed until the process exits. Nil
+	// preserves legacy snapshot-only guards; it does not prove atomic exclusion.
+	RestartGuardFn func() (finish func(restarted bool), ready bool)
 	// RestartSiblings opts this watcher into restarting OTHER swapped
 	// unit-owning targets after a rebuild. Exactly one watcher per fleet — the
 	// bt-agent daemon — sets this; without single ownership the bt-agent and
@@ -178,6 +205,9 @@ type DriftWatchConfig struct {
 	// cross-daemon in-flight coordination (InFlightFn only guards the local
 	// process), so one daemon could kill the other's mid-execution cycle.
 	RestartSiblings bool
+	// SiblingRestartFn asks the target process to seal its own admission and
+	// restart itself. Nil defers siblings; there is no direct-systemd fallback.
+	SiblingRestartFn func(unit, revision string) error
 	// AutoRestart gates adopting the rebuilt binary by restarting the daemon.
 	// It only applies AFTER a successful AutoRebuild (a rebuild without a
 	// restart leaves the running process on the old code). Opt-in via
@@ -363,6 +393,17 @@ func DriftWatchOnce(cfg DriftWatchConfig) (DriftResult, error) {
 			"binary", cfg.Binary, "head_revision", head)
 		return res, nil
 	}
+	handoffUncertain := false
+	if cfg.RestartGuardFn != nil {
+		finish, ready := cfg.RestartGuardFn()
+		if !ready {
+			return res, nil
+		}
+		if finish == nil {
+			return res, fmt.Errorf("deploy-drift restart guard returned no finish callback")
+		}
+		defer func() { finish(res.Restarted || handoffUncertain) }()
+	}
 	// A rebuild can swap multiple sibling binaries (e.g. bt-agent's
 	// DefaultRebuildTargets also rebuilds bin/bt-gardener); each swapped
 	// unit-owning sibling must be restarted too, or it keeps running its old
@@ -383,6 +424,10 @@ func DriftWatchOnce(cfg DriftWatchConfig) (DriftResult, error) {
 			if adoptionStampHead(t.Unit) == head {
 				continue
 			}
+			if cfg.SiblingRestartFn == nil {
+				slog.Warn("deploy drift: sibling restart deferred — target ownership is unavailable", "unit", t.Unit)
+				continue
+			}
 			if err := driftSmokeTestFn(t.OutPath); err != nil {
 				restoreErr := restorePreviousBinaryFn(t.OutPath)
 				slog.Error("deploy drift: sibling binary failed smoke test — rolled back, NOT restarting",
@@ -391,7 +436,7 @@ func DriftWatchOnce(cfg DriftWatchConfig) (DriftResult, error) {
 			}
 			slog.Warn("deploy drift: restarting swapped sibling unit",
 				"binary", cfg.Binary, "unit", t.Unit, "head_revision", head)
-			if err := driftRestartFn(t.Unit); err != nil {
+			if err := cfg.SiblingRestartFn(t.Unit, head); err != nil {
 				slog.Error("deploy drift: sibling unit restart failed",
 					"binary", cfg.Binary, "unit", t.Unit, "err", err)
 				continue
@@ -402,10 +447,11 @@ func DriftWatchOnce(cfg DriftWatchConfig) (DriftResult, error) {
 	slog.Warn("deploy drift: restarting to adopt rebuilt binary",
 		"binary", cfg.Binary, "head_revision", head)
 	if err := driftRestartFn(cfg.Binary); err != nil {
+		handoffUncertain = reliability.IsExecutionUncertainError(err)
 		return res, fmt.Errorf("deploy-drift restart: %w", err)
 	}
-	writeAdoptionStamp(cfg.Binary, head)
 	res.Restarted = true
+	writeAdoptionStamp(cfg.Binary, head)
 	return res, nil
 }
 

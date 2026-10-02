@@ -38,6 +38,7 @@ func newProbeNodeServer(t *testing.T, nodeName string) *httptest.Server {
 			"agent":         req.Agent,
 			"task":          req.Task,
 			"output":        nodeName,
+			"duration":      0,
 			"success":       true,
 			"quality_score": 1,
 		}

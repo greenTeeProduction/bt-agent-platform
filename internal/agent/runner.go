@@ -2,14 +2,17 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/blackboard"
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/llm"
+	"github.com/nico/go-bt-evolve/internal/reliability"
 	"github.com/nico/go-bt-evolve/internal/tracing"
 )
 
@@ -52,6 +55,11 @@ type RunDeps struct {
 	// ResolveTree is used regardless of ownership.
 	ResolveTreeForUser UserTreeResolver
 	Blackboards        *blackboard.Manager
+	// Dependencies, including an injected Blackboards manager, are configured
+	// before use. The initialized owner/error is fixed for this runner's life.
+	boardOnce sync.Once
+	board     *blackboard.Manager
+	boardErr  error
 }
 
 // RunOptions configures a single agent run.
@@ -129,11 +137,11 @@ func (d *RunDeps) RunOnce(ctx context.Context, agentName, task string, opts RunO
 			}
 			slo := engine.GetSLOMetrics(agentName, treeName)
 			switch {
-			case err == nil && result.Outcome == "success":
+			case (err == nil || reliability.IsExecutionPersistenceError(err)) && result.Outcome == "success":
 				slo.RecordSuccess(time.Since(start))
-			case IsRateLimitCarryover(result.Outcome):
+			case reliability.IsExecutionPause(result.Outcome, err):
 				slo.RecordDeferred()
-			case err == nil && isHealthyOutcome(result.Outcome) && result.Outcome != "success":
+			case (err == nil || reliability.IsExecutionPersistenceError(err)) && isHealthyOutcome(result.Outcome) && result.Outcome != "success":
 				slo.RecordDeferred()
 			default:
 				slo.RecordFailure(time.Since(start))
@@ -229,10 +237,18 @@ func (d *RunDeps) RunOnce(ctx context.Context, agentName, task string, opts RunO
 		})
 	}
 	if !opts.DisableBlackboard {
+		mgr, initErr := d.BoardManager()
+		if initErr != nil {
+			result.Outcome = "failure"
+			result.Output = initErr.Error()
+			result.EndedAt = time.Now()
+			result.Duration = result.EndedAt.Sub(start)
+			return result, initErr
+		}
 		runID := blackboard.NewRunID()
 		bb.RunID = runID
-		bb.Logger = engine.L().With("run_id", runID, "agent", agentName, "tree", result.TreeID)
-		bb.BB = blackboard.NewHandle(d.boardManager(), runID, opts.SessionID, agentName)
+		bb.Logger = engine.L().With("run_id", runID)
+		bb.BB = blackboard.NewHandle(mgr, runID, opts.SessionID, agentName)
 		defer bb.BB.Mgr.ReleaseRun(runID)
 		result.RunID = runID
 		result.SessionID = opts.SessionID
@@ -266,7 +282,7 @@ func (d *RunDeps) RunOnce(ctx context.Context, agentName, task string, opts RunO
 		return result, err
 	}
 	runSpan.SetAttribute("outcome", bb.Outcome)
-	if bb.Outcome != "success" && bb.Outcome != "" {
+	if bb.Outcome != "success" && bb.Outcome != "" && !reliability.IsExecutionPause(bb.Outcome, bb.ExecutionError()) {
 		runSpan.RecordError(fmt.Errorf("agent outcome: %s", bb.Outcome))
 	}
 	runSpan.End()
@@ -315,10 +331,32 @@ func (d *RunDeps) RunOnce(ctx context.Context, agentName, task string, opts RunO
 	// outcomes into the tree's stats file (learned Selector ordering's writer).
 	d.flushSelectorTelemetry(tree, result.TreeID, bb)
 
+	var promoteErr error
+	if result.Outcome == "success" && !opts.DisableBlackboard && !opts.DisableAgentPromote && bb.BB != nil {
+		promoteErr = d.promoteRunToAgentScope(ctx, agentName, bb, task, result.Output)
+		if promoteErr != nil {
+			defer func() {
+				err = errors.Join(err, &reliability.ExecutionPersistenceError{Err: promoteErr})
+			}()
+		}
+	}
+
 	if opts.RecordHistory && d.History != nil {
 		errStr := ""
+		if diagnostic := bb.ExecutionError(); diagnostic != nil {
+			errStr = diagnostic.Error()
+		}
+		if promoteErr != nil {
+			if errStr != "" {
+				errStr += "; "
+			}
+			errStr += promoteErr.Error()
+		}
 		if !passed && opts.EnforceQuality && spec != nil {
-			errStr = strings.Join(reasons, "; ")
+			if errStr != "" {
+				errStr += "; "
+			}
+			errStr += strings.Join(reasons, "; ")
 		}
 		if !outputPassed && opts.EnforceQuality && len(outputReasons) > 0 {
 			if errStr != "" {
@@ -335,7 +373,7 @@ func (d *RunDeps) RunOnce(ctx context.Context, agentName, task string, opts RunO
 				historyName = winner
 			}
 		}
-		_ = d.History.Record(RunRecord{
+		historyErr := d.History.Record(RunRecord{
 			AgentName: historyName,
 			Task:      task,
 			Outcome:   result.Outcome,
@@ -346,21 +384,36 @@ func (d *RunDeps) RunOnce(ctx context.Context, agentName, task string, opts RunO
 			StartedAt: start,
 			EndedAt:   result.EndedAt,
 		})
-	}
-
-	if result.Outcome == "success" && !opts.DisableBlackboard && !opts.DisableAgentPromote && bb.BB != nil {
-		d.promoteRunToAgentScope(agentName, bb, task, result.Output)
+		if historyErr != nil {
+			// Keep the actual execution result: persistence failure must not
+			// erase evidence or imply that successful side effects were undone.
+			defer func() {
+				diagnostic := fmt.Errorf("record run history: %w", historyErr)
+				if err == nil && IsHealthyOutcome(result.Outcome) {
+					err = &reliability.ExecutionPersistenceError{Err: diagnostic}
+				} else {
+					err = errors.Join(err, diagnostic)
+				}
+			}()
+		}
 	}
 
 	// no_change / degraded are healthy no-code terminal states (Item 1,
 	// 2026-07-13): recorded honestly in history above, but they are not errors —
 	// the scheduler must not retry or dead-letter them, and they are not
 	// exemplary enough to promote. Return before the error path below.
+	if diagnostic := bb.ExecutionError(); diagnostic != nil {
+		return result, diagnostic
+	}
 	if isHealthyOutcome(result.Outcome) && result.Outcome != "success" {
 		return result, nil
 	}
 
 	if result.Outcome != "success" {
+		if reliability.IsPausedOutcome(result.Outcome) {
+			return result, &reliability.ExecutionStoppedError{Outcome: result.Outcome,
+				Err: fmt.Errorf("agent outcome: %s: %s", result.Outcome, OutcomeErrorDetail(result.Output))}
+		}
 		if opts.EnforceQuality && !outputPassed && len(outputReasons) > 0 {
 			return result, fmt.Errorf("output contract failed: %s", strings.Join(outputReasons, "; "))
 		}
@@ -409,11 +462,7 @@ func IsHealthyOutcome(outcome string) bool { return isHealthyOutcome(outcome) }
 // scheduler-driven runs never produce it, so listing it here only affects the
 // dashboard paths that classify Hermes runs.
 func isHealthyOutcome(outcome string) bool {
-	switch outcome {
-	case "success", "no_change", "degraded", "completed":
-		return true
-	}
-	return false
+	return reliability.IsHealthyOutcome(outcome)
 }
 
 // OutcomeErrorDetail distills the run output's tail into the outcome error so
@@ -432,21 +481,24 @@ func OutcomeErrorDetail(output string) string {
 	return strings.ReplaceAll(out, "\n", " | ")
 }
 
-// BoardManager returns the shared blackboard manager (lazy default).
-func (d *RunDeps) BoardManager() *blackboard.Manager {
-	return d.boardManager()
-}
-
-func (d *RunDeps) boardManager() *blackboard.Manager {
+// BoardManager returns this runner's shared owner. A default owner must enable
+// persistence successfully; initialization is synchronized and never retried on
+// the same runner. Injected managers retain their explicitly configured policy.
+func (d *RunDeps) BoardManager() (*blackboard.Manager, error) {
 	if d == nil {
-		return blackboard.DefaultManager()
+		return nil, fmt.Errorf("agent runner not configured")
 	}
-	if d.Blackboards == nil {
-		mgr := blackboard.DefaultManager()
-		_ = mgr.EnablePersistence(BlackboardDir())
-		d.Blackboards = mgr
-	}
-	return d.Blackboards
+	d.boardOnce.Do(func() {
+		if d.Blackboards != nil {
+			d.board = d.Blackboards
+			return
+		}
+		d.board, d.boardErr = blackboard.NewPersistentManager(BlackboardDir())
+		if d.boardErr != nil {
+			d.boardErr = fmt.Errorf("initialize agent blackboard persistence: %w", d.boardErr)
+		}
+	})
+	return d.board, d.boardErr
 }
 
 func (d *RunDeps) injectMemoryContext(agentName, task string, prevLimit int) string {

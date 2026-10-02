@@ -5,9 +5,23 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"testing"
 	"time"
 )
+
+func TestHealthJSONReportsRunningGoVersion(t *testing.T) {
+	var response HealthResponse
+	if err := json.Unmarshal(HealthJSON("test-build"), &response); err != nil {
+		t.Fatalf("decode health response: %v", err)
+	}
+	if response.GoVersion != runtime.Version() {
+		t.Errorf("health reports Go %q, but the running binary uses %q", response.GoVersion, runtime.Version())
+	}
+	if response.Status != "ok" || response.Version != "test-build" {
+		t.Errorf("health response lost its status/build version: %+v", response)
+	}
+}
 
 // writeGardenerFixture points $HOME at a temp dir and writes the given
 // gardener-metrics.json document where loadGardenerMetrics looks for it.

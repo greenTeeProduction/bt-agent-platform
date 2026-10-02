@@ -1,4 +1,4 @@
-// Package workflow provides multi-agent workflow orchestration for the Go BT framework.
+// Workflow orchestration for the Go BT framework.
 // Supports sequential, parallel, conditional, loop, and human-in-loop patterns.
 package dashboard
 
@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/nico/go-bt-evolve/internal/agent"
 	"github.com/nico/go-bt-evolve/internal/blackboard"
 	"github.com/nico/go-bt-evolve/internal/reliability"
 	"github.com/nico/go-bt-evolve/internal/util"
@@ -59,6 +60,7 @@ type StepResult struct {
 	Error         string        `json:"error,omitempty"`
 	HitlTaskID    string        `json:"hitl_task_id,omitempty"`
 	HitlRequestID string        `json:"hitl_request_id,omitempty"`
+	Steps         []StepResult  `json:"steps,omitempty"` // retained container child evidence
 }
 
 // WorkflowResult is the complete result of a workflow execution.
@@ -94,7 +96,6 @@ func (r *Runner) Run(ctx context.Context, wf Pipeline, initialInput string) (*Pi
 	if runID == "" {
 		runID = fmt.Sprintf("%d", start.UnixNano())
 	}
-	result := &PipelineResult{Workflow: wf.Name, RunID: runID}
 
 	// Context carries state between steps
 	state := &wfState{
@@ -106,10 +107,27 @@ func (r *Runner) Run(ctx context.Context, wf Pipeline, initialInput string) (*Pi
 
 	if r.Blackboards != nil && runID != "" && strings.TrimSpace(initialInput) != "" {
 		scope := blackboard.Scope{Kind: blackboard.ScopeSession, ID: runID}
-		_ = r.Blackboards.Set(scope, "input", initialInput, "Initial workflow input", "text")
+		if err := r.Blackboards.SetWithContext(ctx, scope, "input", initialInput, "Initial workflow input", "text"); err != nil {
+			return &PipelineResult{Workflow: wf.Name, RunID: runID, Steps: []StepResult{}, Outcome: "failure", Duration: time.Since(start)}, fmt.Errorf("persist workflow input before admission: %w", err)
+		}
 	}
 
-	for _, step := range wf.Steps {
+	result, err := r.runSteps(ctx, wf.Steps, state)
+	result.Duration = time.Since(start)
+	return result, err
+}
+
+// runSteps owns sequential policy for top-level, loop and nested workflow bodies.
+// Containers must not bypass waits, replay terminal work or erase child evidence.
+func (r *Runner) runSteps(ctx context.Context, steps []Step, state *wfState) (result *PipelineResult, err error) {
+	start := time.Now()
+	defer func() {
+		if result != nil {
+			result.Outcome, err = completedWorkflowStop(result.Outcome, result.Steps, err)
+		}
+	}()
+	result = &PipelineResult{Workflow: state.workflow, RunID: state.runID, Steps: make([]StepResult, 0, len(steps))}
+	for _, step := range steps {
 		select {
 		case <-ctx.Done():
 			result.Outcome = "aborted"
@@ -118,6 +136,10 @@ func (r *Runner) Run(ctx context.Context, wf Pipeline, initialInput string) (*Pi
 		default:
 		}
 
+		var retryState *wfState
+		if step.OnFailure == "retry" {
+			retryState = state.cloneForParallel()
+		}
 		sr, err := r.executeStep(ctx, step, state)
 		if err != nil {
 			if sr.Error == "" {
@@ -133,31 +155,54 @@ func (r *Runner) Run(ctx context.Context, wf Pipeline, initialInput string) (*Pi
 		// Update state for next step
 		state.input = sr.Output
 
+		// Completed-record failures and uncertain execution are terminal,
+		// including when on_failure requests retry or skip.
+		if reliability.IsExecutionTerminalError(err) {
+			result.Outcome = "aborted"
+			if reliability.IsExecutionStoppedError(err) {
+				result.Outcome = reliability.ExecutionStopOutcome(err)
+			}
+			result.Duration = time.Since(start)
+			return result, err
+		}
+
 		// Handle failure (including timeout, rejected, and escalated approval)
-		if sr.Outcome == "failure" || sr.Outcome == "timeout" || sr.Outcome == "rejected" || sr.Outcome == "escalated" {
+		if !reliability.IsHealthyOutcome(sr.Outcome) && sr.Outcome != "skipped" {
 			switch step.OnFailure {
 			case "skip":
 				continue
-			case "abort", "":
-				result.Outcome = "failure"
-				result.Duration = time.Since(start)
-				return result, nil
+
 			case "retry":
 				// retry once — replace failed result with retry result
-				sr2, err2 := r.executeStep(ctx, step, state)
+				sr2, err2 := r.executeStep(ctx, step, retryState)
+				state.prev = retryState.prev
 				if err2 != nil {
 					sr2.Error = err2.Error()
-					sr2.Outcome = "failure"
+					if !reliability.IsExecutionTerminalError(err2) {
+						sr2.Outcome = "failure"
+					}
 				}
 				// Replace the failed step in results array
 				result.Steps[len(result.Steps)-1] = sr2
 				state.prev[step.ID] = sr2
 				state.input = sr2.Output
-				if sr2.Outcome == "failure" {
-					result.Outcome = "failure"
+				if reliability.IsExecutionTerminalError(err2) {
+					result.Outcome = "aborted"
+					if reliability.IsExecutionStoppedError(err2) {
+						result.Outcome = reliability.ExecutionStopOutcome(err2)
+					}
+					result.Duration = time.Since(start)
+					return result, err2
+				}
+				if !reliability.IsHealthyOutcome(sr2.Outcome) && sr2.Outcome != "skipped" {
+					result.Outcome = workflowFailureOutcome(sr2.Outcome)
 					result.Duration = time.Since(start)
 					return result, nil
 				}
+			default:
+				result.Outcome = workflowFailureOutcome(sr.Outcome)
+				result.Duration = time.Since(start)
+				return result, nil
 			}
 		}
 	}
@@ -191,17 +236,30 @@ func (s *wfState) cloneForParallel() *wfState {
 func (r *Runner) executeStep(ctx context.Context, step Step, state *wfState) (StepResult, error) {
 	sr := StepResult{StepID: step.ID, Agent: step.Agent}
 	start := time.Now()
+	stepCtx, cancel := stepContext(ctx, step.Timeout)
+	defer cancel()
+	ctx = stepCtx
 
 	switch step.Kind {
 	case StepAgent:
 		task := expandTemplate(step.Input, state)
-		stepCtx, cancel := stepContext(ctx, step.Timeout)
-		defer cancel()
 		outcome, output, err := r.RunAgent(stepCtx, step.Agent, "", task)
 		sr.Outcome = outcome
 		sr.Output = output
 		sr.Duration = time.Since(start)
-		if errors.Is(stepCtx.Err(), context.DeadlineExceeded) {
+		if err == nil && reliability.IsPausedOutcome(outcome) {
+			err = &reliability.ExecutionStoppedError{Outcome: outcome, Err: fmt.Errorf("agent %s is waiting: %s", step.Agent, output)}
+		}
+		if reliability.IsExecutionTerminalError(err) {
+			sr.Error = err.Error()
+			if reliability.IsExecutionUncertainError(err) {
+				sr.Outcome = "uncertain"
+			} else if reliability.IsExecutionStoppedError(err) {
+				sr.Outcome = reliability.ExecutionStopOutcome(err)
+			}
+			return sr, err
+		}
+		if errors.Is(stepCtx.Err(), context.DeadlineExceeded) && (err != nil || !agent.IsHealthyOutcome(outcome)) {
 			sr.Outcome = "timeout"
 			if sr.Error == "" {
 				sr.Error = "step timeout exceeded"
@@ -210,11 +268,19 @@ func (r *Runner) executeStep(ctx context.Context, step Step, state *wfState) (St
 		}
 		if err != nil {
 			sr.Error = err.Error()
-			if sr.Outcome == "" || sr.Outcome == "success" {
+			if sr.Outcome == "" || reliability.IsHealthyOutcome(sr.Outcome) || reliability.IsPausedOutcome(sr.Outcome) {
 				sr.Outcome = "failure"
 			}
 		}
-		r.promoteStepToSession(state, step.ID, output)
+		if persistErr := r.promoteStepToSession(ctx, state, step.ID, output); persistErr != nil {
+			persistErr = fmt.Errorf("persist workflow step %s output: %w", step.ID, persistErr)
+			if err == nil && reliability.IsHealthyOutcome(sr.Outcome) {
+				err = &reliability.ExecutionPersistenceError{Err: persistErr}
+			} else {
+				err = &reliability.ExecutionStoppedError{Outcome: "failure", Err: errors.Join(err, persistErr)}
+			}
+			sr.Error = err.Error()
+		}
 		return sr, err
 
 	case StepCondition:
@@ -235,36 +301,50 @@ func (r *Runner) executeStep(ctx context.Context, step Step, state *wfState) (St
 	case StepLoop:
 		return r.executeLoop(ctx, step, state)
 
+	case StepSubworkflow:
+		body, err := r.runSteps(ctx, step.Steps, state)
+		sr.Steps = body.Steps
+		sr.Outcome = body.Outcome
+		sr.Duration = time.Since(start)
+		if len(body.Steps) > 0 {
+			sr.Output = body.Steps[len(body.Steps)-1].Output
+		}
+		if err != nil {
+			sr.Error = err.Error()
+		}
+		return protectCompletedWorkflowContainer(sr, err)
+
 	case StepApproval:
 		taskID := WorkflowApprovalTaskID(state.workflow, step.ID, state.runID)
 		sr.HitlTaskID = taskID
 		if r.WaitApproval != nil {
 			res, err := r.WaitApproval(ctx, step, state)
-			sr.HitlTaskID = res.TaskID
+			if res.TaskID != "" {
+				sr.HitlTaskID = res.TaskID
+			}
 			sr.HitlRequestID = res.RequestID
 			sr.Duration = time.Since(start)
 			if res.Escalated {
 				sr.Outcome = "escalated"
 				sr.Output = "approval escalated"
 				sr.Error = "approval escalated for human review"
-				return sr, fmt.Errorf("approval escalated")
+				return stoppedWorkflowStep(sr, errors.Join(fmt.Errorf("approval escalated"), err))
 			}
 			if err != nil {
 				sr.Error = err.Error()
 				if errors.Is(err, context.DeadlineExceeded) {
 					sr.Outcome = "timeout"
-				} else if !res.Approved {
-					sr.Outcome = "rejected"
-					sr.Output = "approval rejected"
+				} else if errors.Is(err, context.Canceled) {
+					sr.Outcome = "cancelled"
 				} else {
 					sr.Outcome = "failure"
 				}
-				return sr, err
+				return stoppedWorkflowStep(sr, err)
 			}
 			if !res.Approved {
 				sr.Outcome = "rejected"
 				sr.Output = "approval rejected"
-				return sr, fmt.Errorf("approval rejected")
+				return stoppedWorkflowStep(sr, fmt.Errorf("approval rejected"))
 			}
 			sr.Outcome = "success"
 			sr.Output = "approved"
@@ -273,7 +353,7 @@ func (r *Runner) executeStep(ctx context.Context, step Step, state *wfState) (St
 		sr.Outcome = "pending_approval"
 		sr.Output = fmt.Sprintf("Waiting for approval (hitl_task_id=%s): %s", taskID, expandTemplate(step.Input, state))
 		sr.Duration = time.Since(start)
-		return sr, nil
+		return stoppedWorkflowStep(sr, fmt.Errorf("approval waiter not configured; explicit decision required"))
 
 	default:
 		return sr, fmt.Errorf("unknown step kind: %s", step.Kind)
@@ -284,6 +364,7 @@ func (r *Runner) executeParallel(ctx context.Context, step Step, state *wfState)
 	start := time.Now()
 	var wg sync.WaitGroup
 	results := make([]StepResult, len(step.Steps))
+	terminalErrors := make([]error, len(step.Steps))
 	mu := sync.Mutex{}
 
 	for i, sub := range step.Steps {
@@ -292,7 +373,6 @@ func (r *Runner) executeParallel(ctx context.Context, step Step, state *wfState)
 		reliability.SafeGo(
 			fmt.Sprintf("workflow-parallel-step[%s]", s.ID),
 			func() {
-				defer wg.Done()
 				childState := state.cloneForParallel()
 				sr, err := r.executeStep(ctx, s, childState)
 				mu.Lock()
@@ -305,7 +385,11 @@ func (r *Runner) executeParallel(ctx context.Context, step Step, state *wfState)
 					}
 				}
 				results[idx] = sr
+				if reliability.IsExecutionTerminalError(err) {
+					terminalErrors[idx] = err
+				}
 				mu.Unlock()
+				wg.Done()
 			},
 			func(panicVal any, _ string) {
 				mu.Lock()
@@ -316,16 +400,33 @@ func (r *Runner) executeParallel(ctx context.Context, step Step, state *wfState)
 					Error:   fmt.Sprintf("panic: %v", panicVal),
 				}
 				mu.Unlock()
+				wg.Done()
 			},
 		)
 	}
 	wg.Wait()
 
+	// Ordinary failures keep the historical parallel policy when no terminal
+	// branch exists. Once a branch stops execution, include every admitted
+	// sibling's failed disposition so a wait cannot hide failed or panicked work.
+	if errors.Join(terminalErrors...) != nil {
+		for i, child := range results {
+			if terminalErrors[i] != nil || (child.Error == "" && (reliability.IsHealthyOutcome(child.Outcome) || child.Outcome == "skipped")) {
+				continue
+			}
+			outcome := child.Outcome
+			if !reliability.IsStoppedOutcome(outcome) {
+				outcome = "failure"
+			}
+			terminalErrors[i] = &reliability.ExecutionStoppedError{Outcome: outcome, Err: fmt.Errorf("parallel step %s: %s", child.StepID, child.Error)}
+		}
+	}
+
 	// Aggregate: success if all succeeded
 	allSuccess := true
 	outputs := make([]string, 0, 8)
 	for _, sr := range results {
-		if sr.Outcome != "success" {
+		if !reliability.IsHealthyOutcome(sr.Outcome) && sr.Outcome != "skipped" {
 			allSuccess = false
 		}
 		outputs = append(outputs, sr.Output)
@@ -333,6 +434,7 @@ func (r *Runner) executeParallel(ctx context.Context, step Step, state *wfState)
 
 	sr := StepResult{
 		StepID:   step.ID,
+		Steps:    results,
 		Agent:    "parallel(" + fmt.Sprintf("%d", len(step.Steps)) + " agents)",
 		Duration: time.Since(start),
 		Output:   fmt.Sprintf("%v", outputs),
@@ -342,7 +444,7 @@ func (r *Runner) executeParallel(ctx context.Context, step Step, state *wfState)
 	} else {
 		sr.Outcome = "partial"
 	}
-	return sr, nil
+	return protectCompletedWorkflowContainer(sr, errors.Join(terminalErrors...))
 }
 
 func (r *Runner) executeLoop(ctx context.Context, step Step, state *wfState) (StepResult, error) {
@@ -351,54 +453,85 @@ func (r *Runner) executeLoop(ctx context.Context, step Step, state *wfState) (St
 	if maxIter <= 0 {
 		maxIter = 10
 	}
-
+	sr := StepResult{StepID: step.ID}
+	if len(step.Steps) == 0 {
+		sr.Outcome = "failure"
+		sr.Error = "loop has no body steps"
+		return sr, nil
+	}
 	for i := range maxIter {
-		select {
-		case <-ctx.Done():
-			return StepResult{StepID: step.ID, Outcome: "aborted", Duration: time.Since(start)}, ctx.Err()
-		default:
+		body, err := r.runSteps(ctx, step.Steps, state)
+		sr.Steps = append(sr.Steps, body.Steps...)
+		sr.Duration = time.Since(start)
+		if err != nil || body.Outcome != "success" {
+			sr.Outcome = body.Outcome
+			if len(body.Steps) > 0 {
+				sr.Output = body.Steps[len(body.Steps)-1].Output
+			}
+			if err != nil {
+				sr.Error = err.Error()
+			}
+			return protectCompletedWorkflowContainer(sr, err)
 		}
-
-		// Run the loop body (first sub-step)
-		if len(step.Steps) == 0 {
-			return StepResult{StepID: step.ID, Outcome: "failure", Error: "loop has no body steps", Duration: time.Since(start)}, nil
-		}
-
-		sr, err := r.executeStep(ctx, step.Steps[0], state)
-		if err != nil {
-			return sr, err
-		}
-		state.prev[step.Steps[0].ID] = sr
-		state.input = sr.Output
-
-		// Check exit condition
 		if step.Condition != "" && evaluateCondition(step.Condition, state) {
-			return StepResult{
-				StepID:   step.ID,
-				Outcome:  "success",
-				Output:   fmt.Sprintf("loop completed after %d iterations", i+1),
-				Duration: time.Since(start),
-			}, nil
-		}
-
-		// If step failed, break
-		if sr.Outcome == "failure" {
-			return StepResult{
-				StepID:   step.ID,
-				Outcome:  "failure",
-				Output:   fmt.Sprintf("loop failed at iteration %d", i+1),
-				Error:    sr.Error,
-				Duration: time.Since(start),
-			}, nil
+			sr.Outcome = "success"
+			sr.Output = fmt.Sprintf("loop completed after %d iterations", i+1)
+			return sr, nil
 		}
 	}
+	sr.Outcome = "success"
+	sr.Output = fmt.Sprintf("loop completed (max %d iterations)", maxIter)
+	return sr, nil
+}
 
-	return StepResult{
-		StepID:   step.ID,
-		Outcome:  "success",
-		Output:   fmt.Sprintf("loop completed (max %d iterations)", maxIter),
-		Duration: time.Since(start),
-	}, nil
+// A container with completed work cannot be replayed as an ordinary failure.
+// A skipped condition is not evidence of completed execution.
+func hasCompletedWorkflowStep(steps []StepResult) bool {
+	for _, step := range steps {
+		if reliability.IsHealthyOutcome(step.Outcome) || hasCompletedWorkflowStep(step.Steps) {
+			return true
+		}
+	}
+	return false
+}
+
+func completedWorkflowStop(outcome string, steps []StepResult, err error) (string, error) {
+	if !reliability.IsHealthyOutcome(outcome) && !reliability.IsExecutionTerminalError(err) && hasCompletedWorkflowStep(steps) {
+		return "partial", &reliability.ExecutionStoppedError{Outcome: "partial", Err: errors.Join(err, fmt.Errorf("workflow stopped after completed work; explicit continuation required"))}
+	}
+	return outcome, err
+}
+
+func protectCompletedWorkflowContainer(sr StepResult, err error) (StepResult, error) {
+	sr.Outcome, err = completedWorkflowStop(sr.Outcome, sr.Steps, err)
+	if err != nil {
+		sr.Error = err.Error()
+	}
+	return sr, err
+}
+
+func workflowFailureOutcome(outcome string) string {
+	if outcome == "partial" {
+		return outcome
+	}
+	return "failure"
+}
+
+// Approval errors cannot be skipped or used to request a fresh decision. Keep
+// known owner identifiers and preserve stronger terminal diagnostics from hooks.
+func stoppedWorkflowStep(sr StepResult, err error) (StepResult, error) {
+	if reliability.IsExecutionUncertainError(err) {
+		sr.Outcome = "uncertain"
+	} else if reliability.IsExecutionStoppedError(err) {
+		sr.Outcome = reliability.ExecutionStopOutcome(err)
+	} else {
+		if reliability.IsExecutionPersistenceError(err) {
+			sr.Outcome = "aborted"
+		}
+		err = &reliability.ExecutionStoppedError{Outcome: sr.Outcome, Err: err}
+	}
+	sr.Error = err.Error()
+	return sr, err
 }
 
 // expandTemplate replaces {{.prev.stepID.output}} and {{.input}} with actual values.
@@ -463,14 +596,16 @@ func trimQuotes(s string) string {
 	return s
 }
 
-func (r *Runner) promoteStepToSession(state *wfState, stepID, output string) {
+func (r *Runner) promoteStepToSession(ctx context.Context, state *wfState, stepID, output string) error {
 	if r == nil || r.Blackboards == nil || state == nil || state.runID == "" || output == "" {
-		return
+		return nil
 	}
 	scope := blackboard.Scope{Kind: blackboard.ScopeSession, ID: state.runID}
 	summary := util.Truncate(output, 200)
-	_ = r.Blackboards.Set(scope, "steps/"+stepID+"/output", output, summary, "text")
-	_ = r.Blackboards.Set(scope, "prev/output", output, summary, "text")
+	if err := r.Blackboards.SetWithContext(ctx, scope, "steps/"+stepID+"/output", output, summary, "text"); err != nil {
+		return err
+	}
+	return r.Blackboards.SetWithContext(ctx, scope, "prev/output", output, summary, "text")
 }
 
 // stepContext returns a child context with step timeout when timeoutStr is valid (e.g. "30s", "5m").

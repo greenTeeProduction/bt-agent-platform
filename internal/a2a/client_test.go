@@ -15,6 +15,7 @@ import (
 
 	"github.com/a2aproject/a2a-go/v2/a2a"
 	"github.com/nico/go-bt-evolve/internal/agent"
+	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
 // fakeTransport is an in-memory BidCollector: it records the announcement text
@@ -512,23 +513,8 @@ func TestAuctionDelegate_WinnerCircuitBreakerSurvivesAcrossCallsAndRestarts(t *t
 	}
 }
 
-// ---- resilience: SendTask must retry a transient client.SendMessage failure -
-//
-// BTAgentClient.SendTask (client.go) calls client.SendMessage exactly once
-// today: any transient failure — even a momentary 503 from the target agent,
-// no different in kind from the winner-dispatch failures RunAuction already
-// retries around its own client.SendTask call (auction.go:376-397) — fails
-// the whole delegation immediately. This test pins the mirrored contract for
-// the transport call one level down: a jittered reliability.RetryPolicy must
-// wrap client.SendMessage so a transient failure is retried before SendTask
-// gives up, exactly like the winner dispatch retry already does.
-
-// TestBTAgentClient_SendTask_RetriesTransientFailureThenSucceeds drives
-// SendTask against a real local A2A JSON-RPC endpoint (agent card resolution
-// plus the JSON-RPC transport a2aclient.NewFromCard builds) whose first
-// SendMessage call fails with a transient 503 and whose second call succeeds
-// — proving the retry happens around client.SendMessage itself, not around
-// card resolution or client construction (which only ever happen once).
+// Explicit pre-admission rejection permits a transient SendMessage retry.
+// The fixture asserts that no work ran on its first request.
 func TestBTAgentClient_SendTask_RetriesTransientFailureThenSucceeds(t *testing.T) {
 	var mu sync.Mutex
 	calls := 0
@@ -564,6 +550,7 @@ func TestBTAgentClient_SendTask_RetriesTransientFailureThenSucceeds(t *testing.T
 		// LLM-category error, the same bucket auction.go's winner dispatch
 		// retry already tolerates); every call after that succeeds.
 		if n == 1 {
+			w.Header().Set(reliability.ExecutionAdmissionHeader, "false")
 			http.Error(w, "temporarily unavailable", http.StatusServiceUnavailable)
 			return
 		}

@@ -41,23 +41,23 @@ async function loadWorkflows() {
       selectEl.innerHTML = '<option value="">Select workflow...</option>' +
         pipelines.map(function(p) {
           const name = p.filename ? p.filename.replace(/\.yaml$/, '') : p.name;
-          return '<option value="' + name + '">' + (p.name || name) + '</option>';
+          return '<option value="' + esc(name) + '">' + esc(p.name || name) + '</option>';
         }).join('');
       if (current) selectEl.value = current;
     }
 
     if (!pipelines.length) {
-      listEl.innerHTML = '<div class="empty"><div class="icon">📋</div>No workflows found in ~/.go-bt-evolve/agents/workflows/</div>';
+      listEl.innerHTML = '<div class="empty"><div class="icon">📋</div>No workflows found.</div>';
       return;
     }
 
     listEl.innerHTML = pipelines.map(function(p) {
       return ''
         + '<div class="task-card">'
-        + '  <div class="task-header"><span class="task-title">' + (p.name || p.filename) + '</span>'
-        + '    <span class="badge blue">' + p.step_count + ' steps</span></div>'
-        + '  <div style="font-size:12px;color:var(--text-tertiary);margin:8px 0">' + (p.description || '') + '</div>'
-        + '  <div class="task-meta"><span>📄 ' + (p.filename || '') + '</span><span>v' + (p.version || '1') + '</span></div>'
+        + '  <div class="task-header"><span class="task-title">' + esc(p.name || p.filename) + '</span>'
+        + '    <span class="badge blue">' + esc(p.step_count) + ' steps</span></div>'
+        + '  <div style="font-size:12px;color:var(--text-tertiary);margin:8px 0">' + esc(p.description || '') + '</div>'
+        + '  <div class="task-meta"><span>📄 ' + esc(p.filename || '') + '</span><span>v' + esc(p.version || '1') + '</span></div>'
         + '</div>';
     }).join('');
   } catch (e) {
@@ -91,12 +91,12 @@ async function runWorkflow() {
       body: JSON.stringify({ pipeline_name: pipelineName, input: input })
     });
     if (resp.error) {
-      statusEl.innerHTML = '<div class="empty">Error: ' + resp.error + '</div>';
+      statusEl.innerHTML = '<div class="empty">Error: ' + esc(resp.error) + '</div>';
       return;
     }
     pollWorkflowStatus(resp.run_id);
   } catch (e) {
-    statusEl.innerHTML = '<div class="empty">Run failed: ' + e.message + '</div>';
+    statusEl.innerHTML = '<div class="empty">Run failed: ' + esc(e.message) + '</div>';
   }
 }
 
@@ -115,29 +115,37 @@ function pollWorkflowStatus(runId) {
 
       let html = ''
         + '<div class="task-card">'
-        + '  <div class="task-header"><span class="task-title">Run ' + runId + '</span>'
-        + '    <span class="badge ' + (s.status === 'complete' ? 'green' : s.status === 'failed' ? 'red' : 'amber') + '">' + s.status + '</span></div>';
+        + '  <div class="task-header"><span class="task-title">Run ' + esc(runId) + '</span>'
+        + '    <span class="badge ' + (s.status === 'complete' ? 'green' : s.status === 'failed' ? 'red' : 'amber') + '">' + esc(s.status) + '</span></div>';
 
       if (s.status === 'running') {
         html += '<div style="font-size:12px;margin:8px 0;color:var(--text-tertiary)">Pipeline running… approve any HITL steps from the Tasks tab.</div>';
       }
+      if (s.status === 'waiting') {
+        html += '<div style="font-size:12px;margin:8px 0">Waiting for input or authentication. Review the task before starting another run.</div>';
+      }
       if (s.error) {
-        html += '<div style="font-size:12px;color:var(--danger);margin:8px 0">' + s.error + '</div>';
+        html += '<div style="font-size:12px;margin:8px 0">' + esc(s.error) + '</div>';
       }
       if (s.steps && s.steps.length) {
         html += '<div style="margin-top:8px;font-size:12px">';
-        s.steps.forEach(function(step) {
-          html += '<div style="padding:6px 0;border-bottom:1px solid var(--border)">'
-            + '<strong>' + step.step_id + '</strong> · ' + step.outcome
-            + (step.hitl_task_id ? ' · <code style="font-size:10px">' + step.hitl_task_id + '</code>' : '')
-            + '</div>';
-        });
+        function renderSteps(steps) {
+          return steps.map(function(step) {
+            return '<div style="padding:6px 0;border-bottom:1px solid var(--border)">'
+              + '<strong>' + esc(step.step_id) + '</strong> · ' + esc(step.outcome)
+              + (step.hitl_task_id ? ' · <code style="font-size:10px">' + esc(step.hitl_task_id) + '</code>' : '')
+              + (step.hitl_request_id ? ' · <code style="font-size:10px">' + esc(step.hitl_request_id) + '</code>' : '')
+              + (step.steps && step.steps.length ? '<div style="margin-left:12px">' + renderSteps(step.steps) + '</div>' : '')
+              + '</div>';
+          }).join('');
+        }
+        html += renderSteps(s.steps);
         html += '</div>';
       }
       html += '</div>';
       statusEl.innerHTML = html;
 
-      if (s.status === 'complete' || s.status === 'failed') {
+      if (s.status === 'complete' || s.status === 'failed' || s.status === 'waiting') {
         clearInterval(workflowPollTimer);
         workflowPollTimer = null;
         loadWorkflowBlackboard(runId);
@@ -162,8 +170,8 @@ async function loadWorkflowBlackboard(runId) {
     html += '<table style="width:100%;margin-top:6px;border-collapse:collapse">';
     bb.entries.forEach(function(e) {
       html += '<tr style="border-bottom:1px solid var(--border)">'
-        + '<td style="padding:4px 8px 4px 0;font-family:monospace;font-size:11px">' + e.key + '</td>'
-        + '<td style="padding:4px 0;color:var(--text-tertiary)">' + (e.summary || (e.value ? e.value.substring(0, 80) : '')) + '</td>'
+        + '<td style="padding:4px 8px 4px 0;font-family:monospace;font-size:11px">' + esc(e.key) + '</td>'
+        + '<td style="padding:4px 0;color:var(--text-tertiary)">' + esc(e.summary || (e.value ? String(e.value).substring(0, 80) : '')) + '</td>'
         + '</tr>';
     });
     html += '</table></div>';

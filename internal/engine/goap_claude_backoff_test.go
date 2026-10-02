@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -28,6 +29,29 @@ import (
 // isolateClaudeBackoffStore(t) / isolateCodexBackoffStore(t) /
 // isolateSuperpowersRunsDir(t) for a private, deterministic path.
 func TestMain(m *testing.M) {
+	// Scheduled verification inherits the daemon's provider, model, and failover
+	// settings. Tests own these inputs through t.Setenv; service settings must
+	// not change their fixtures or select a real coding-provider executable.
+	// Explicit provider smoke tests retain their opt-in switches and operator
+	// configuration (including the selected executable and supported model).
+	liveSmoke := os.Getenv("BT_SUPERPOWERS_CODEX_SMOKE") != "" || os.Getenv("BT_SUPERPOWERS_CODEX_WRITE_SMOKE") == "1"
+	if !liveSmoke {
+		for _, entry := range os.Environ() {
+			name, _, _ := strings.Cut(entry, "=")
+			if strings.HasPrefix(name, "BT_SUPERPOWERS_") {
+				if err := os.Unsetenv(name); err != nil {
+					fmt.Fprintln(os.Stderr, "isolate engine test environment:", err)
+					os.Exit(1)
+				}
+			}
+		}
+	}
+	// Historical adapter fixtures use fake runners/scripts. Keep their explicit
+	// transport coverage; policy regressions below exercise the production default.
+	if !liveSmoke {
+		os.Setenv("BT_SUPERPOWERS_CODEX_ONLY", "false")
+		os.Setenv("BT_SUPERPOWERS_PROVIDER", "claude")
+	}
 	dir, err := os.MkdirTemp("", "engine-claude-backoff-*")
 	if err == nil {
 		goapClaudeBackoffPath = filepath.Join(dir, "claude_backoff.json")

@@ -37,11 +37,17 @@ type app struct {
 	graph    *knowledge.KnowledgeGraph
 }
 
-func main() { os.Exit(newApp(os.Stdin, os.Stdout, os.Stderr).run(os.Args[1:])) }
+func main() {
+	_, err := config.LoadRuntime()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: configuration: %v\n", err)
+		os.Exit(1)
+	}
+	os.Exit(newApp(os.Stdin, os.Stdout, os.Stderr).run(os.Args[1:]))
+}
 
 func newApp(in io.Reader, out, errOut io.Writer) *app {
-	home, _ := os.UserHomeDir()
-	reg, regErr := agent.NewRegistry(filepath.Join(home, ".go-bt-evolve", "agents"))
+	reg, regErr := agent.NewRegistry(agent.RegistryDir())
 	if regErr != nil {
 		fmt.Fprintf(errOut, "Error initializing registry: %v\n", regErr)
 	}
@@ -267,7 +273,7 @@ func (a *app) cmdLogs(args []string) int {
 		fmt.Fprintf(a.err, "Error: %v\n", err)
 		return 1
 	}
-	logPath := filepath.Join(os.Getenv("HOME"), ".go-bt-evolve", "logs", "bt.log")
+	logPath := filepath.Join(agent.LogsDir(), "bt.log")
 	fmt.Fprintf(a.out, "Agent: %s\nState: %s\nRuns: %d\nSuccess: %.0f%%\nLogs: %s\n", inst.Definition.Name, inst.State, inst.RunCount, inst.SuccessRate*100, logPath)
 	return 0
 }

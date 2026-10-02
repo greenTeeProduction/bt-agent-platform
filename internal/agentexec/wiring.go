@@ -7,10 +7,12 @@ import (
 
 	"github.com/nico/go-bt-evolve/internal/a2a"
 	"github.com/nico/go-bt-evolve/internal/agent"
+	"github.com/nico/go-bt-evolve/internal/config"
 	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/persona"
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 // init installs the engine's production wiring for the scheduled
@@ -29,6 +31,7 @@ import (
 func init() {
 	domains.GoapFusionLoopWireFn = engine.WireGoapFusionLoopTree
 	engine.AuctionDelegateFn = a2a.AuctionDelegate
+	engine.AuctionDelegateWithContextFn = a2a.AuctionDelegateWithContext
 	// Auction-winner History attribution (mirrors internal/a2a/server.go's
 	// Execute check): RunOnce cannot import internal/a2a directly (import
 	// cycle), so it consults this cycle-safe seam instead.
@@ -86,13 +89,17 @@ var generatedTreeDir string
 var usersTreeRoot string
 
 // ReflectionsPath returns the shared persistence root used by the reflection
-// store, tree store, and blocks registry (~/.go-bt-reflections).
+// store, tree store, and blocks registry. Explicit reflection configuration
+// overrides the legacy default (~/.go-bt-reflections).
 func ReflectionsPath() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
+	if root := util.ConfiguredReflectionsDir(); root != "" {
+		return root, nil
 	}
-	return filepath.Join(home, ".go-bt-reflections"), nil
+	cfg, _ := config.Load()
+	if cfg == nil {
+		cfg = config.DefaultConfig()
+	}
+	return cfg.SharedReflectionsDir()
 }
 
 // ResolveGeneratedTree loads a runtime-generated tree by ID: first from the

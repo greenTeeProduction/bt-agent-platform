@@ -13,6 +13,7 @@ import (
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/llm"
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 // AgentFactory orchestrates skill → behavior tree → runnable agent.
@@ -26,11 +27,17 @@ type AgentFactory struct {
 
 // NewAgentFactory creates a new factory.
 func NewAgentFactory(llmClient llm.LLM, homeDir string) (*AgentFactory, error) {
-	ts, err := evolution.NewTreeStore(filepath.Join(homeDir, ".go-bt-reflections"))
+	return NewAgentFactoryWithReflections(llmClient, filepath.Join(homeDir, ".go-bt-reflections"))
+}
+
+// NewAgentFactoryWithReflections shares the caller's configured tree/reflection
+// owner instead of creating another store under an unrelated user-home path.
+func NewAgentFactoryWithReflections(llmClient llm.LLM, refDir string) (*AgentFactory, error) {
+	ts, err := evolution.NewTreeStore(refDir)
 	if err != nil {
 		return nil, fmt.Errorf("tree store: %w", err)
 	}
-	rs, err := evolution.NewStore(filepath.Join(homeDir, ".go-bt-reflections"))
+	rs, err := evolution.NewStore(refDir)
 	if err != nil {
 		return nil, fmt.Errorf("reflection store: %w", err)
 	}
@@ -45,7 +52,7 @@ func NewAgentFactory(llmClient llm.LLM, homeDir string) (*AgentFactory, error) {
 
 // CreateFromFile loads a SKILL.md file and produces a GeneratedAgent.
 func (f *AgentFactory) CreateFromFile(skillPath string) (*GeneratedAgent, error) {
-	content, err := os.ReadFile(skillPath)
+	content, err := util.ReadPersistenceFile(skillPath)
 	if err != nil {
 		return nil, fmt.Errorf("read skill file: %w", err)
 	}

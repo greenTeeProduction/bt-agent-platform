@@ -5,6 +5,10 @@ const nodeColors = {
   ChainAction: '#ec4899', Retry: '#ef4444', Default: '#62666d'
 };
 
+function nodeColor(type) {
+  return Object.hasOwn(nodeColors, type) ? nodeColors[type] : nodeColors.Default;
+}
+
 const NODE_W = 140, NODE_H = 32, LEVEL_DX = 220, MIN_GAP = 14;
 
 let mindMapData = null, mindMapZoom = 1;
@@ -44,7 +48,7 @@ async function loadMindMap() {
     renderTree();
   } catch (e) {
     document.getElementById('mindmap-svg').innerHTML =
-      '<text x="20" y="30" fill="var(--red)" font-size="14">Error loading tree: ' + e + '</text>';
+      '<text x="20" y="30" fill="var(--red)" font-size="14">Error loading tree: ' + esc(e) + '</text>';
   }
 }
 
@@ -58,14 +62,13 @@ function subtreeSpan(node) {
   return Math.max(1, total);
 }
 
-function computeLayout(node, x, y, availableSpan, layer, siblingIndex) {
+function computeLayout(node, x, y, availableSpan, layer, siblingIndex, path = '0') {
   const results = [];
-  const span = subtreeSpan(node);
   const nodeY = y + (availableSpan - (NODE_H + MIN_GAP)) / 2;
   const children = node._collapsed ? [] : (node.children || []);
 
   results.push({
-    id: node.id || node.name,
+    id: path,
     name: node.name,
     type: node.node_type || node.type,
     x, y: nodeY, layer,
@@ -77,17 +80,15 @@ function computeLayout(node, x, y, availableSpan, layer, siblingIndex) {
   });
 
   if (children.length > 0) {
-    // Fill siblingCount on the parent
-    results[0].siblingCount = children.length;
-
     const childSpans = children.map(ch => subtreeSpan(ch));
     const totalSpan = childSpans.reduce((a, b) => a + b, 0);
     let cy = y;
     for (let i = 0; i < children.length; i++) {
       const childBand = (childSpans[i] / totalSpan) * availableSpan;
-      const childResults = computeLayout(children[i], x + LEVEL_DX + NODE_W, cy, childBand, layer + 1, i);
+      const childResults = computeLayout(children[i], x + LEVEL_DX + NODE_W, cy, childBand, layer + 1, i, path + '.' + i);
+      childResults[0].siblingCount = children.length;
       for (const cr of childResults) {
-        if (cr.parentX === undefined) { cr.parentX = x + NODE_W; cr.parentY = nodeY + NODE_H / 2; }
+        if (cr.parentX === undefined) { cr.parentX = x + NODE_W; cr.parentY = nodeY + NODE_H / 2; cr.parentID = path; }
         results.push(cr);
       }
       cy += childBand;
@@ -102,7 +103,7 @@ function resolveCollisions(layers) {
     if (!byLayer[n.layer]) byLayer[n.layer] = [];
     byLayer[n.layer].push(n);
   }
-  for (const [layer, nodes] of Object.entries(byLayer)) {
+  for (const nodes of Object.values(byLayer)) {
     nodes.sort((a, b) => a.y - b.y);
     for (let i = 1; i < nodes.length; i++) {
       const prev = nodes[i - 1];
@@ -110,22 +111,20 @@ function resolveCollisions(layers) {
       const minDist = NODE_H + MIN_GAP;
       if (curr.y - prev.y < minDist) {
         const shift = minDist - (curr.y - prev.y);
-        for (let j = i; j < nodes.length; j++) { nodes[j].y += shift; }
-        pushDescendantsDown(curr, shift, layers);
+        for (let j = i; j < nodes.length; j++) {
+          nodes[j].y += shift;
+          pushDescendantsDown(nodes[j], shift, layers);
+        }
       }
     }
   }
 }
 
 function pushDescendantsDown(node, shift, allNodes) {
-  const children = node._collapsed ? [] : (node.children || []);
-  for (const ch of children) {
-    const childNode = allNodes.find(n => (n.id || n.name) === (ch.id || ch.name) && n.layer === node.layer + 1);
-    if (childNode) {
-      childNode.y += shift;
-      if (childNode.parentY !== undefined) childNode.parentY += shift;
-      pushDescendantsDown(childNode, shift, allNodes);
-    }
+  for (const childNode of allNodes.filter(n => n.parentID === node.id)) {
+    childNode.y += shift;
+    if (childNode.parentY !== undefined) childNode.parentY += shift;
+    pushDescendantsDown(childNode, shift, allNodes);
   }
 }
 
@@ -163,7 +162,7 @@ function renderTree() {
   // Edges with arrows
   for (const n of layers) {
     if (n.parentX !== undefined && n.parentY !== undefined) {
-      const color = nodeColors[n.type] || nodeColors.Default;
+      const color = nodeColor(n.type);
       const sx = n.parentX, sy = n.parentY;
       const ex = n.x + 4, ey = n.y + NODE_H / 2;
       const mx = (sx + ex) / 2;
@@ -174,10 +173,9 @@ function renderTree() {
 
   // Nodes with execution-order indices
   for (const n of layers) {
-    const color = nodeColors[n.type] || nodeColors.Default;
+    const color = nodeColor(n.type);
     const collapsed = n._collapsed && n.children && n.children.length > 0;
-    const id = (n.id || n.name).replace(/'/g, "\\'");
-    const isRoot = n.siblingCount === 0 && n.layer === 0;
+    const isRoot = n.layer === 0;
 
     // Execution order label: "[i/N]" for non-root, "" for root
     let orderLabel = '';
@@ -185,8 +183,7 @@ function renderTree() {
       orderLabel = `${n.siblingIndex + 1}/${n.siblingCount}`;
     }
 
-    html += `<g transform="translate(${n.x},${n.y})" class="mind-node" data-id="${id}"
-      onclick="toggleNode('${id}')" style="cursor:pointer">
+    html += `<g transform="translate(${n.x},${n.y})" class="mind-node" data-id="${n.id}" style="cursor:pointer">
       <rect x="0" y="0" width="${NODE_W}" height="${NODE_H}" rx="5"
         fill="${color}1a" stroke="${color}" stroke-width="1.2"
         ${n.type === 'Sequence' ? 'stroke-dasharray="4,2"' : ''}/>
@@ -194,7 +191,7 @@ function renderTree() {
       ${orderLabel ? `<rect x="2" y="2" width="20" height="${NODE_H-4}" rx="3" fill="${color}30"/>
       <text x="12" y="${NODE_H/2+4}" fill="${color}" font-size="9" font-weight="700" text-anchor="middle" font-family="sans-serif">${orderLabel}</text>` : ''}
       <!-- Node name -->
-      <text x="${orderLabel ? 28 : 8}" y="${NODE_H/2+4}" fill="${color}" font-size="11" font-weight="600" font-family="sans-serif">${shorten(n.name, orderLabel ? 14 : 18)}</text>
+      <text x="${orderLabel ? 28 : 8}" y="${NODE_H/2+4}" fill="${color}" font-size="11" font-weight="600" font-family="sans-serif">${esc(shorten(n.name, orderLabel ? 14 : 18))}</text>
       ${collapsed ? `<text x="${NODE_W-4}" y="${NODE_H/2+4}" fill="${color}" font-size="10" text-anchor="end">+${subtreeSpan(n)}</text>` : ''}
     </g>`;
   }
@@ -203,7 +200,8 @@ function renderTree() {
   svg.innerHTML = html;
 
   svg.querySelectorAll('.mind-node').forEach(el => {
-    el.addEventListener('mouseenter', e => showNodeDetail(el.dataset.id));
+    el.addEventListener('click', () => toggleNode(el.dataset.id));
+    el.addEventListener('mouseenter', () => showNodeDetail(el.dataset.id));
     el.addEventListener('mouseleave', () => hideNodeDetail());
   });
 }
@@ -217,34 +215,36 @@ function countNodes(n) {
 
 function shorten(s, n) { return s && s.length > n ? s.slice(0, n - 1) + '…' : (s || ''); }
 
-function toggleNode(id) {
-  function toggle(n) {
-    if ((n.id || n.name) === id) { n._collapsed = !n._collapsed; return true; }
-    if (n.children) for (const c of n.children) if (toggle(c)) return true;
-    return false;
+// Structural paths identify repeated names without placing source IDs in handlers.
+function nodeAtPath(id) {
+  if (!/^0(?:\.[0-9]+)*$/.test(id)) return null;
+  let node = mindMapData;
+  for (const index of id.split('.').slice(1)) {
+    node = node?.children?.[Number(index)];
   }
-  toggle(mindMapData);
+  return node || null;
+}
+
+function toggleNode(id) {
+  const node = nodeAtPath(id);
+  if (!node) return;
+  node._collapsed = !node._collapsed;
   renderTree();
 }
 
 function showNodeDetail(id) {
-  function find(n) {
-    if ((n.id || n.name) === id) return n;
-    if (n.children) for (const c of n.children) { const f = find(c); if (f) return f; }
-    return null;
-  }
-  const n = find(mindMapData);
+  const n = nodeAtPath(id);
   if (!n) return;
   const el = document.getElementById('node-detail');
-  const color = nodeColors[n.node_type || n.type] || nodeColors.Default;
+  const color = nodeColor(n.node_type || n.type);
   el.innerHTML = `<div style="background:var(--bg-surface);border:1px solid var(--border-standard);padding:12px;border-radius:var(--radius-md)">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <span style="font-weight:600;font-size:13px;color:var(--text-primary)">${n.name}</span>
-      <span class="badge" style="background:${color}22;color:${color}">${n.node_type || n.type}</span>
+      <span style="font-weight:600;font-size:13px;color:var(--text-primary)">${esc(n.name)}</span>
+      <span class="badge" style="background:${color}22;color:${color}">${esc(n.node_type || n.type)}</span>
     </div>
     <div style="font-size:11px;color:var(--text-tertiary)">
       <span>Children: ${(n.children || []).length}</span>
-      ${n.description ? `<span style="margin-left:8px">${n.description.slice(0,80)}</span>` : ''}
+      ${n.description ? `<span style="margin-left:8px">${esc(n.description.slice(0,80))}</span>` : ''}
     </div>
   </div>`;
   el.style.display = 'block';

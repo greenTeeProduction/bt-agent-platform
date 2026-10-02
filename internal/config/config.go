@@ -14,11 +14,13 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/hitl"
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 // Config holds all runtime configuration for the BT platform.
@@ -109,7 +111,7 @@ type HITLSettings struct {
 // PathConfig provides resolved file paths for all BT platform components.
 // Use cfg.ResolvePaths() to populate from env vars or defaults.
 type PathConfig struct {
-	HomeDir        string `json:"home_dir"`     // ~/.bt-agent/ or BT_HOME
+	HomeDir        string `json:"home_dir"`     // ~/.go-bt-evolve or configured platform root
 	ConfigFile     string `json:"config_file"`  // config.yaml
 	DBFile         string `json:"db_file"`      // agents.db
 	DLQFile        string `json:"dlq_file"`     // dead_letter_queue.json
@@ -122,21 +124,7 @@ type PathConfig struct {
 // ResolvePaths populates cfg.Paths from env vars (BT_HOME, BT_CONFIG_FILE, etc.)
 // with sensible defaults. Call after Load().
 func (c *Config) ResolvePaths() {
-	home := os.Getenv("BT_AGENT_HOME")
-	if home == "" {
-		home = os.Getenv("BT_HOME")
-	}
-	if home == "" {
-		if c.AgentDefsDir != "" {
-			home = filepath.Dir(c.AgentDefsDir)
-		} else {
-			userHome, err := os.UserHomeDir()
-			if err != nil || userHome == "" {
-				userHome = os.Getenv("HOME")
-			}
-			home = filepath.Join(userHome, ".go-bt-evolve")
-		}
-	}
+	home := util.PlatformHome(c.AgentDefsDir)
 	c.Paths.HomeDir = home
 
 	c.Paths.ConfigFile = c.ConfigFile
@@ -146,10 +134,7 @@ func (c *Config) ResolvePaths() {
 	c.Paths.DBFile = filepath.Join(home, "agents.db")
 	c.Paths.DLQFile = filepath.Join(home, "dead_letter_queue.json")
 	c.Paths.TemplateDir = filepath.Join(home, "agents", "templates")
-	c.Paths.ReflectionsDir = c.ReflectionsDir
-	if c.Paths.ReflectionsDir == "" {
-		c.Paths.ReflectionsDir = filepath.Join(home, "reflections")
-	}
+	c.Paths.ReflectionsDir, _ = c.SharedReflectionsDir()
 	c.Paths.HistoryDir = c.HistoryDir
 	if c.Paths.HistoryDir == "" {
 		c.Paths.HistoryDir = filepath.Join(home, "history")
@@ -314,7 +299,7 @@ func newDefaultConfig() *Config {
 // Zero values in the file are skipped — defaults take precedence.
 // Only file-specified fields override defaults; env vars are applied later.
 func loadFile(path string, c *Config) error {
-	data, err := os.ReadFile(path)
+	data, err := util.ReadPersistenceFile(path)
 	if err != nil {
 		return fmt.Errorf("read: %w", err)
 	}
@@ -447,22 +432,22 @@ func mergeFileConfig(c *Config, file *Config) {
 	}
 }
 
-// hasExplicitField checks whether a JSON file explicitly set a boolean field.
-// Since Go's json decoder treats missing bools as false, we re-parse into
-// a raw map to check field presence for booleans.
+// hasExplicitField preserves the legacy Config merge rule: these boolean
+// fields have non-omitempty JSON tags, including when false. Inspecting the
+// tags avoids serializing credentials just to check a field name. Tracking
+// original JSON presence is a separate compatibility change in the backlog.
 func hasExplicitField(cfg *Config, field string) bool {
-	// Re-marshal and check — this is only called for booleans
-	// where false is a valid explicit setting.
-	data, err := json.Marshal(cfg)
-	if err != nil {
+	if cfg == nil {
 		return false
 	}
-	var raw map[string]any
-	if err := json.Unmarshal(data, &raw); err != nil {
-		return false
+	typ := reflect.TypeFor[Config]()
+	for f := range typ.Fields() {
+		tag := strings.Split(f.Tag.Get("json"), ",")
+		if tag[0] == field && f.Type.Kind() == reflect.Bool {
+			return true
+		}
 	}
-	_, ok := raw[field]
-	return ok
+	return false
 }
 
 // applyEnvOverrides applies environment variable overrides on top of c.
@@ -713,7 +698,7 @@ func applyDotEnvFiles(c *Config) {
 //   - Export prefix: export KEY=value is normalized to KEY=value
 //   - Multiline values are NOT supported
 func LoadDotEnv(path string) (map[string]string, error) {
-	data, err := os.ReadFile(path)
+	data, err := util.ReadPersistenceFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read: %w", err)
 	}
@@ -1005,13 +990,10 @@ func (c *Config) FeatureFlags() map[string]bool {
 	}
 }
 
-// SaveFile writes the current configuration to a JSON file for sharing/review.
+// SaveFile atomically writes private configuration, including credentials.
+// Use Sanitized for configuration displayed or shared outside the owner path.
 func (c *Config) SaveFile(path string) error {
-	data, err := json.MarshalIndent(c, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal config: %w", err)
-	}
-	if err := os.WriteFile(path, data, 0644); err != nil {
+	if err := util.SaveJSONAtomic(path, c); err != nil {
 		return fmt.Errorf("write config: %w", err)
 	}
 	return nil

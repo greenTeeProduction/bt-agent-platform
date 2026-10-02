@@ -4,12 +4,13 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 )
 
 // DelegationProvider identifies which external coding CLI the platform
-// delegates to. Claude Code is the default and remains fully backwards
-// compatible; Codex is opt-in via BT_SUPERPOWERS_PROVIDER=codex.
+// delegates to. Codex is the default. Legacy Claude transport is available
+// only when an operator explicitly disables the Codex-only policy.
 //
 // (Named DelegationProvider, not Provider, to avoid colliding with the BT
 // action/condition registration interface `Provider` in registry.go.)
@@ -25,27 +26,27 @@ func (p DelegationProvider) Valid() bool {
 	return p == DelegationProviderClaude || p == DelegationProviderCodex
 }
 
-// resolvedSuperpowersProvider reads BT_SUPERPOWERS_PROVIDER and returns the
-// configured provider. Semantics: unset/empty → claude (backwards-compatible
-// default); "claude" → claude; "codex" → codex (case-insensitive); anything
-// else → an error that callers surface through the normal delegation-failure
-// path. It reads the env on every call (like the Claude model/effort
-// resolvers) so a single process can be flipped without restart.
-//
-// NOTE: "reads the env on every call" is a process-local property — it lets a
-// long-lived test or an in-process config swap reroute on the next call. It
-// does NOT mean the deployed daemon hot-reloads its environment: the systemd
-// unit's EnvironmentFile is fixed at process start, so changing
-// BT_SUPERPOWERS_PROVIDER there still requires `systemctl --user restart
-// bt-agent.service` (see docs/coding-delegation.md).
+// codexOnlyDelegation defaults closed: unset or malformed configuration cannot
+// enable another coding provider. The legacy transport opt-out is explicit.
+func codexOnlyDelegation() bool {
+	raw := strings.TrimSpace(os.Getenv("BT_SUPERPOWERS_CODEX_ONLY"))
+	enabled, err := strconv.ParseBool(raw)
+	return err != nil || enabled
+}
+
+// resolvedSuperpowersProvider reads the process environment on each call.
+// Service environment changes require a restart; Codex is the unset default.
 func resolvedSuperpowersProvider() (DelegationProvider, error) {
 	raw := strings.ToLower(strings.TrimSpace(os.Getenv("BT_SUPERPOWERS_PROVIDER")))
 	if raw == "" {
-		return DelegationProviderClaude, nil
+		return DelegationProviderCodex, nil
 	}
 	p := DelegationProvider(raw)
 	if !p.Valid() {
 		return "", fmt.Errorf("invalid BT_SUPERPOWERS_PROVIDER %q: must be %q or %q", raw, DelegationProviderClaude, DelegationProviderCodex)
+	}
+	if codexOnlyDelegation() && p != DelegationProviderCodex {
+		return "", fmt.Errorf("codex-only delegation rejects provider %q", p)
 	}
 	return p, nil
 }

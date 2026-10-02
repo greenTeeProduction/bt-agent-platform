@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -27,8 +28,8 @@ func selectorOrderingTree() *evolution.SerializableNode {
 			{
 				Type: "Selector", Name: "Router",
 				Children: []evolution.SerializableNode{
-					{Type: "Sequence", Name: "Cheap"},
-					{Type: "Sequence", Name: "Reliable"},
+					{Type: "Sequence", Name: "Cheap", Children: []evolution.SerializableNode{{Type: "AlwaysSucceed", Name: "CheapDone"}}},
+					{Type: "Sequence", Name: "Reliable", Children: []evolution.SerializableNode{{Type: "AlwaysSucceed", Name: "ReliableDone"}}},
 					{Type: "AlwaysSucceed", Name: "Fallback"},
 				},
 			},
@@ -230,10 +231,21 @@ func TestGardenerRunCycleTool_CallAppliesLearnedSelectorOrdering(t *testing.T) {
 		t.Fatalf("buildGardenerConfig: %v", err)
 	}
 	cfg.Registry = gardener.NewRegistry(treeDir)
-	cfg.MaxMutations = 0 // isolate the reorder — no structural mutations this cycle
-	cfg.EvolveWithoutReflections = true
+	cfg.MaxMutations = 0 // isolate learned ordering from unrelated search passes
+	cfg.CrisisDetector = nil
+	cfg.TranspositionTablePath = ""
+	cfg.IslandModel = nil
+	cfg.EvolveWithoutReflections = false
+	for i := range 3 {
+		if err := cfg.RefStore.Save(&evolution.Record{TaskID: fmt.Sprintf("selector-evidence-%d", i), TreeName: "selector_tree", Task: "research verified tree ordering", Outcome: evolution.Success, DurationMs: 1000}); err != nil {
+			t.Fatal(err)
+		}
+	}
 
 	cfg, v2Cfg := wireSelectorOrdering(cfg, metricsDir)
+	v2Cfg.MCTSStructuralSearch = false
+	v2Cfg.DisableLocalSearch = true
+
 	seedSelectorStats(t, cfg.SelectorStatsPath)
 
 	g := gardener.NewGardener(cfg)
@@ -296,10 +308,20 @@ func TestGardenerRunCycleTool_CallAppliesLearnedSelectorOrdering_PerTreeTelemetr
 		t.Fatalf("buildGardenerConfig: %v", err)
 	}
 	cfg.Registry = gardener.NewRegistry(treeDir)
-	cfg.MaxMutations = 0 // isolate the reorder — no structural mutations this cycle
-	cfg.EvolveWithoutReflections = true
+	cfg.MaxMutations = 0 // isolate learned ordering from unrelated search passes
+	cfg.CrisisDetector = nil
+	cfg.TranspositionTablePath = ""
+	cfg.IslandModel = nil
+	cfg.EvolveWithoutReflections = false
+	for i := range 3 {
+		if err := cfg.RefStore.Save(&evolution.Record{TaskID: fmt.Sprintf("selector-evidence-%d", i), TreeName: "selector_tree", Task: "research verified tree ordering", Outcome: evolution.Success, DurationMs: 1000}); err != nil {
+			t.Fatal(err)
+		}
+	}
 
 	cfg, v2Cfg := wireSelectorOrdering(cfg, metricsDir)
+	v2Cfg.MCTSStructuralSearch = false
+	v2Cfg.DisableLocalSearch = true
 
 	// Seed telemetry only where the real production writer
 	// (agent.RunDeps.flushSelectorTelemetry) actually puts it — a per-tree file

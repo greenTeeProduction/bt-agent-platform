@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 
@@ -28,10 +29,14 @@ func registerHITLTools(server *engine.Server, deps *mcpDeps) {
 				return mcpErr(fmt.Errorf("HITL store not initialized"))
 			}
 			var list []*hitl.Request
+			var err error
 			if params.PendingOnly {
-				list = hitl.DefaultStore.ListPending()
+				list, err = hitl.DefaultStore.ListPendingWithContext(context.Background())
 			} else {
-				list = hitl.DefaultStore.ListAll()
+				list, err = hitl.DefaultStore.ListAllWithContext(context.Background())
+			}
+			if err != nil {
+				return mcpErr(err)
 			}
 			data, _ := json.Marshal(map[string]any{"requests": list, "count": len(list)})
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
@@ -52,7 +57,10 @@ func registerHITLTools(server *engine.Server, deps *mcpDeps) {
 			if hitl.DefaultStore == nil {
 				return mcpErr(fmt.Errorf("HITL store not initialized"))
 			}
-			req, ok := hitl.DefaultStore.Get(params.RequestID)
+			req, ok, err := hitl.DefaultStore.GetWithContext(context.Background(), params.RequestID)
+			if err != nil {
+				return mcpErr(err)
+			}
 			if !ok {
 				return mcpErr(fmt.Errorf("request %q not found", params.RequestID))
 			}
@@ -158,8 +166,13 @@ func registerHITLTools(server *engine.Server, deps *mcpDeps) {
 			if err != nil {
 				return mcpErr(err)
 			}
-			if params.Save && deps.treeStore != nil {
-				_ = deps.treeStore.Save(tree)
+			if params.Save {
+				if deps == nil || deps.treeStore == nil || deps.bt == nil || deps.bb == nil {
+					return mcpErr(fmt.Errorf("tree persistence and live execution are not initialized"))
+				}
+				if err := deps.treeStore.Save(tree); err != nil {
+					return mcpErr(err)
+				}
 				*deps.bt = engine.BuildTree(tree, deps.bb)
 			}
 			data, _ := json.Marshal(map[string]any{"tree": tree, "blocks": blocks.DefaultTaskBlocksWithHITL})

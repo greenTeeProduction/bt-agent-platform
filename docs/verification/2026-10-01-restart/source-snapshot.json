@@ -1,0 +1,179 @@
+{
+  "base_commit": "0ae397f614434d01fc4018c91823fb9f7081cd7c",
+  "changed_files": [
+    {
+      "path": "cmd/bt-assistant/main.go",
+      "sha256": "ce5cc6215613b6e319441b0a16ff7c59233427499355153a3e4c6514cb49f3c9",
+      "bytes": 12955,
+      "mode": "0o664"
+    },
+    {
+      "path": "cmd/bt-dashboard/main.go",
+      "sha256": "a4158fcbb077a0de0ddcd80688d8a9ad083e04b889657ca3705749b991146de9",
+      "bytes": 77924,
+      "mode": "0o664"
+    },
+    {
+      "path": "cmd/bt-dashboard/sprint_restart_safety_test.go",
+      "sha256": "8e4db1dda919a500d03f02e5750aedda6ed02f4c150453b26c52872c5e9d6072",
+      "bytes": 4396,
+      "mode": "0o664"
+    },
+    {
+      "path": "cmd/bt-gardener/main.go",
+      "sha256": "1976bfc6af6a3407952f62995c15710b3f83870698c1b5b98b2bae5f38e86f5f",
+      "bytes": 16680,
+      "mode": "0o664"
+    },
+    {
+      "path": "cmd/bt-langagent/main.go",
+      "sha256": "2f48180a7dd0a130bf1b06b2822773c2091f3ebe46123fe926b2e0354a0faee5",
+      "bytes": 7841,
+      "mode": "0o664"
+    },
+    {
+      "path": "cmd/bt-tree-integration/main.go",
+      "sha256": "106e9ec94bebcc286867a401cacf86bee6e376cae16038053d277ab76c25b457",
+      "bytes": 9972,
+      "mode": "0o664"
+    },
+    {
+      "path": "docs/arc42/05-building-blocks.md",
+      "sha256": "dcf835f83911ca9f3b46925309530fd95dcf079c16c1389e06e4d0c870c83bb2",
+      "bytes": 19776,
+      "mode": "0o664"
+    },
+    {
+      "path": "docs/arc42/06-runtime-view.md",
+      "sha256": "ff31beed2464c071124d7876f6114774b0d6b0a52ed9e54d7c8bac66e91975d5",
+      "bytes": 27068,
+      "mode": "0o664"
+    },
+    {
+      "path": "docs/arc42/07-deployment.md",
+      "sha256": "d2409d209c1fbab7d6d5e291221a4387ada788f17c700cac89637ddc3520e451",
+      "bytes": 15180,
+      "mode": "0o664"
+    },
+    {
+      "path": "docs/arc42/08-crosscutting-concepts.md",
+      "sha256": "dfd53e93d4036dedc0bfcfe547961246073f2c3a0c02de91a9a5519ddde050e2",
+      "bytes": 40072,
+      "mode": "0o664"
+    },
+    {
+      "path": "docs/arc42/09-decisions.md",
+      "sha256": "de9625688a85b615027f6e5936136adbdbe8f6e225e0efb975d1d5a113d2fddc",
+      "bytes": 1218972,
+      "mode": "0o664"
+    },
+    {
+      "path": "docs/arc42/10-quality.md",
+      "sha256": "a86ddc380cbe9577f0bdaefbe69929fb0b172bed2f0cfcd3c49ecbe52e173c75",
+      "bytes": 28856,
+      "mode": "0o664"
+    },
+    {
+      "path": "docs/arc42/11-risks-debt.md",
+      "sha256": "0b4dfe159607edb7cda1b96bba199155249edb83798965e9f780b6a554afca77",
+      "bytes": 19407,
+      "mode": "0o664"
+    },
+    {
+      "path": "docs/arc42/12-glossary.md",
+      "sha256": "4d2d9048469550ceb00db867699ca21d53c99aecb05cead0479fe1cb7ce38688",
+      "bytes": 14421,
+      "mode": "0o664"
+    },
+    {
+      "path": "docs/arc42/README.md",
+      "sha256": "9147c6e10733a5078dc5a4fa7e23df0f82b37be471274796768d63c300c0a80b",
+      "bytes": 6804,
+      "mode": "0o664"
+    },
+    {
+      "path": "docs/plans/2026-09-30-arc42-cleanup.md",
+      "sha256": "8cf87a1c0a87e2f4752e1cedd2ff01eb4f6615fb51cb100e24d6b467042676a0",
+      "bytes": 97923,
+      "mode": "0o664"
+    },
+    {
+      "path": "internal/agent/scheduler.go",
+      "sha256": "89af0fe5bba29c63bb3cf2c86bbf97c23f9a9a20724efa02555974d9f204365b",
+      "bytes": 52624,
+      "mode": "0o664"
+    },
+    {
+      "path": "internal/agent/scheduler_crash_recovery_test.go",
+      "sha256": "f1575684ac9ecf5240b7c318e001804a7174538c3fa8be369aeee3b66cb24f4f",
+      "bytes": 2718,
+      "mode": "0o664"
+    },
+    {
+      "path": "internal/agent/scheduler_restart_safety_test.go",
+      "sha256": "496bff1b8a5fb9cc69d69deece07f57418acf9620f6851252da1e8aa427cb240",
+      "bytes": 9622,
+      "mode": "0o664"
+    },
+    {
+      "path": "internal/agent/scheduler_test.go",
+      "sha256": "a24925b838c121bc851dfc690e37fb188ab85a8520f95c7480bb083aebdaaf15",
+      "bytes": 27091,
+      "mode": "0o664"
+    },
+    {
+      "path": "internal/benchmark/benchmark.go",
+      "sha256": "e964da0d05c464f3a9b5c154925ec7aa95fef8998e56078a2b45a96b6ede7494",
+      "bytes": 71058,
+      "mode": "0o664"
+    },
+    {
+      "path": "internal/config/config.go",
+      "sha256": "f696b3d6d63ce3c7e4995d21496478f6770b53bcdce7cfa34237c07ed540e472",
+      "bytes": 53971,
+      "mode": "0o664"
+    },
+    {
+      "path": "internal/config/defaults.go",
+      "sha256": "ab81373bd6c1539f4cd2cec8b5da5624235c2ec3d2e76481d0fb57df621f63c3",
+      "bytes": 2137,
+      "mode": "0o664"
+    },
+    {
+      "path": "internal/config/sol_policy.go",
+      "sha256": "58220c33f34c7a4c814dd09837e88b2ca203236ddcf271fc62b330a04583d058",
+      "bytes": 434,
+      "mode": "0o664"
+    },
+    {
+      "path": "internal/engine/superpowers_codex_runner.go",
+      "sha256": "f1bb19e4aa3da4596e5afd70a0028a57de47a343fe89e1cdd4713511e9400160",
+      "bytes": 7287,
+      "mode": "0o664"
+    },
+    {
+      "path": "internal/engine/superpowers_provider.go",
+      "sha256": "e4417ea51b087f79ec9504005eec7bbaeee8c994e676855c66a6736b6e79971d",
+      "bytes": 5566,
+      "mode": "0o664"
+    },
+    {
+      "path": "internal/llm/codex.go",
+      "sha256": "cf423856d0e38ad2d9ee95d50d673d14f522d2c9c855a333ed1f0d5bf7fb23e5",
+      "bytes": 6577,
+      "mode": "0o664"
+    },
+    {
+      "path": "internal/llm/provider.go",
+      "sha256": "fc377c3763e2db24317d357d2abb168a200af7bd1f6ec8a90c54db6b4c485b95",
+      "bytes": 5579,
+      "mode": "0o664"
+    }
+  ],
+  "exclusions": [
+    "graphify-out/ (derived)",
+    "docs/verification/ (evidence)"
+  ],
+  "unchanged_files": "Defined by base_commit; modified and untracked files override it.",
+  "snapshot_sha256": "d46d7ae6a33175291de044e7191f2a5284e8bc736ebd49c11851dbf7c94b743c"
+}

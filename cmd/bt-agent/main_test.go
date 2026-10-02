@@ -227,28 +227,9 @@ func TestDaemonWiresDLQReplayConsumer(t *testing.T) {
 	}
 }
 
-// TestDLQCrossProcessConsumersReloadFirst pins — source-level, like
-// TestDaemonWiresDLQReplayConsumer above — that every cross-process DLQ
-// consume site reloads the queue from the shared file before reading or
-// requeuing. Each process (daemon, dashboard, MCP siblings) holds its own
-// in-memory DeadLetterQueue over one file, so a consume against a stale view
-// misses every stamp a sibling wrote since this process last read the file:
-// dashboard/MCP requeues are never replayed and stale listings misreport the
-// queue. Four sites are pinned:
-//
-//  1. the daemon's replay-scan tick (main.go) must call dlq.Reload() inside
-//     each tick, before dlq.RequeuedReady();
-//  2. the bt_dlq_replay tool (tools.go) must call engine.TaskDLQ.Reload()
-//     before engine.TaskDLQ.Requeue, or it requeues against — and merge-saves
-//     from — a view that predates sibling writes;
-//  3. the dashboard's handleDLQ list handler (../bt-dashboard/main.go, read
-//     cross-package the same way requireBuildIdentityWiring audits
-//     ../bt-gardener) must call dlq.Reload() before dlq.List(); today only
-//     handleDLQReplay reloads, so the DLQ panel shows the dashboard's stale
-//     boot-time view.
-//  4. the bt_dlq_list tool (tools.go) must call engine.TaskDLQ.Reload()
-//     before engine.TaskDLQ.List() — today only bt_dlq_replay reloads, so
-//     this MCP-facing listing renders a stale view of the shared file.
+// TestDLQCrossProcessConsumersReloadFirst pins current-state consumers:
+// read-only sites reload with error handling, while mutations use a bounded
+// transaction that reads current disk state before committing their delta.
 func TestDLQCrossProcessConsumersReloadFirst(t *testing.T) {
 	// Site 1: daemon replay-scan tick in main.go.
 	src, err := os.ReadFile("main.go")
@@ -266,7 +247,7 @@ func TestDLQCrossProcessConsumersReloadFirst(t *testing.T) {
 	if loopIdx < 0 || readyIdx < 0 {
 		t.Fatal("main.go replay scan lost its tick loop or RequeuedReady call")
 	}
-	if reloadIdx := strings.Index(scan, "dlq.Reload()"); reloadIdx < loopIdx || reloadIdx > readyIdx {
+	if reloadIdx := strings.Index(scan, "dlq.ReloadWithError()"); reloadIdx < loopIdx || reloadIdx > readyIdx {
 		t.Error("main.go replay scan must call dlq.Reload() inside each tick before dlq.RequeuedReady() — a stale in-memory view never sees dashboard/MCP requeue stamps, so cross-process replay stays dead")
 	}
 
@@ -281,12 +262,8 @@ func TestDLQCrossProcessConsumersReloadFirst(t *testing.T) {
 		t.Fatal("tools.go must register the bt_dlq_replay tool")
 	}
 	handler := tool[regIdx:]
-	requeueIdx := strings.Index(handler, "engine.TaskDLQ.Requeue(")
-	if requeueIdx < 0 {
+	if !strings.Contains(handler, "engine.TaskDLQ.RequeueWithError(") {
 		t.Fatal("bt_dlq_replay must requeue via engine.TaskDLQ.Requeue")
-	}
-	if reloadIdx := strings.Index(handler, "engine.TaskDLQ.Reload()"); reloadIdx < 0 || reloadIdx > requeueIdx {
-		t.Error("bt_dlq_replay must call engine.TaskDLQ.Reload() before engine.TaskDLQ.Requeue — requeuing against a stale view misses sibling stamps and merge-saves stale state over them")
 	}
 
 	// Site 3: dashboard handleDLQ list handler.
@@ -305,7 +282,7 @@ func TestDLQCrossProcessConsumersReloadFirst(t *testing.T) {
 	if listIdx < 0 {
 		t.Fatal("dashboard handleDLQ must list entries via dlq.List()")
 	}
-	if reloadIdx := strings.Index(list, "dlq.Reload()"); reloadIdx < 0 || reloadIdx > listIdx {
+	if reloadIdx := strings.Index(list, "dlq.ReloadWithError()"); reloadIdx < 0 || reloadIdx > listIdx {
 		t.Error("dashboard handleDLQ must call dlq.Reload() before dlq.List() — only handleDLQReplay reloads today, so the DLQ panel renders the dashboard's stale boot-time view of the shared file")
 	}
 
@@ -323,7 +300,7 @@ func TestDLQCrossProcessConsumersReloadFirst(t *testing.T) {
 	if listCallIdx < 0 {
 		t.Fatal("bt_dlq_list must list entries via engine.TaskDLQ.List()")
 	}
-	if reloadIdx := strings.Index(listHandler, "engine.TaskDLQ.Reload()"); reloadIdx < 0 || reloadIdx > listCallIdx {
+	if reloadIdx := strings.Index(listHandler, "engine.TaskDLQ.ReloadWithError()"); reloadIdx < 0 || reloadIdx > listCallIdx {
 		t.Error("bt_dlq_list must call engine.TaskDLQ.Reload() before engine.TaskDLQ.List() — today only bt_dlq_replay reloads, so this MCP-facing listing renders a stale view of the shared file")
 	}
 }
@@ -371,6 +348,7 @@ func TestDLQReplayScanSurvivesPanicAcrossTicks(t *testing.T) {
 	// Tick 1: "flaky" panics mid-scan. The tick must absorb that panic rather
 	// than letting it propagate.
 	runTick(1)
+	// The poison pill is now durably held and later entries still execute.
 	// Tick 2 only runs at all if the scan loop survived tick 1's panic —
 	// exactly the property this test pins. "healthy" was never reached
 	// during tick 1 (it panicked on "flaky" first) so it is still requeued;
@@ -630,6 +608,9 @@ func TestDriftConfigs_FleetOwnerSetsRestartSiblings(t *testing.T) {
 	}
 	if got := strings.Count(string(src), "RestartSiblings: true"); got < 2 {
 		t.Fatalf("found %d 'RestartSiblings: true' in cmd/bt-agent/main.go, want >= 2 (both the periodic watcher config and idleDriftCfg must opt in as fleet owner)", got)
+	}
+	if got := strings.Count(string(src), "agent.RequestOwnedRestart(agent.HomeDir(), unit, revision)"); got != 2 {
+		t.Fatalf("both fleet restart paths must delegate to target ownership; got %d", got)
 	}
 }
 

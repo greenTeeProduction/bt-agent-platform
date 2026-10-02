@@ -8,7 +8,8 @@ user-invocable: false
 
 ## Package consolidation (merge convention)
 
-The b5c4d00 package consolidation is authoritative. New or upstream code that
+The current arc42 building-block inventory is authoritative. The historical
+b5c4d00 consolidation maps removed packages below. New or upstream code that
 references pre-consolidation packages gets rewritten to the current layout:
 
 | Old package | Lives in now |
@@ -16,11 +17,12 @@ references pre-consolidation packages gets rewritten to the current layout:
 | `metrics` | `internal/dashboard` |
 | `reflection` | `internal/evolution` |
 | `mcp` | `internal/engine` |
-| `finance`, `research` | `internal/evolution` |
+| `finance` | `internal/evolution` |
 | `log` | `internal/engine` |
 
 When merging from origin, the consolidation wins — rewrite incoming imports,
-never resurrect the old packages.
+never resurrect the removed packages. `internal/research` is a current package
+for knowledge/goals/programs; do not rewrite those imports.
 
 ## Import cycles into engine
 
@@ -36,9 +38,11 @@ assignment at startup in `cmd/bt-agent`.
 
 ## Persistence (ADR-003)
 
-State is persisted as JSON files under `~/.go-bt-evolve/`, written atomically via
-tmp-file + rename. New persistence code follows this — no databases, no partial
-writes.
+Core state uses atomic JSON/YAML replacement in the configured owner paths.
+Use rooted, unique temporary files and sidecar locks around shared complete
+read/update/write transactions, with bounded context-aware waits. History,
+audit and interaction streams use JSONL as described in arc42 §8.4. No new
+database. Report write failures without retrying completed side effects.
 
 ## Toolchain
 

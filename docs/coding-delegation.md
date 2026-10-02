@@ -1,21 +1,23 @@
-# Coding Delegation Providers (Claude / Codex)
+# Coding delegation: Codex-only deployment
 
-The goap-fusion platform delegates autonomous coding work — implementation,
-review, and PR-shepherd CI repair — to an external coding CLI. Historically
-that CLI was always **Claude Code**. It is now pluggable: the same delegation
-seams can run against **OpenAI Codex CLI** instead.
+The platform delegates implementation, review and PR repair to Codex CLI.
+Unset `BT_SUPERPOWERS_PROVIDER` selects Codex. The default
+`BT_SUPERPOWERS_CODEX_ONLY` policy rejects Claude selection and direct legacy
+adapter execution. Unset or malformed policy values fail closed. Quota
+failure keeps Codex's cooldown and does not launch Claude.
 
-The selection is controlled by a single environment variable:
+| Setting | Default / deployment policy |
+|---|---|
+| `BT_SUPERPOWERS_PROVIDER` | `codex` |
+| `BT_SUPERPOWERS_CODEX_ONLY` | `true`; set explicitly in BT launch environments |
+| `BT_SUPERPOWERS_RATE_LIMIT_FAILOVER` | `false`; ignored while Codex-only policy is enabled |
+| `BT_SUPERPOWERS_CODEX_MODEL` | Source pins `gpt-5.3-codex-spark`; this deployment sets `auto` |
 
-| Env var | Values | Default | Effect |
-|---|---|---|---|
-| `BT_SUPERPOWERS_PROVIDER` | `claude` \| `codex` | `claude` | Which CLI every delegation seam invokes |
-
-- Unset / empty → **claude** (fully backwards compatible).
-- `claude` → Claude Code (`--print`).
-- `codex` → Codex CLI (`codex exec`).
-- Case-insensitive. Any other value is **rejected** (the affected delegation
-  fails with a clear message) rather than silently defaulting to Claude.
+The retained legacy transport is available only through an explicit
+`BT_SUPERPOWERS_CODEX_ONLY=false` compatibility configuration. Historical
+adapter/failover tests use fake runners and scripts. This deployment keeps
+the policy enabled. [ADR-261](arc42/09-decisions.md#adr-261) supersedes the
+provider default in ADR-259 while retaining that decision's history.
 
 ## What routes through the selector
 
@@ -41,7 +43,7 @@ review run into a write-capable session.
 
 | Env var | Values | Default |
 |---|---|---|
-| `BT_SUPERPOWERS_PROVIDER` | `claude` \| `codex` | `claude` |
+| `BT_SUPERPOWERS_PROVIDER` | `codex` (legacy `claude` requires explicit policy opt-out) | `codex` |
 
 ### Claude Code
 
@@ -99,7 +101,8 @@ clears the Claude cooldown, and vice versa. This is pinned by
 
 ## Opt-in rate-limit failover
 
-Set `BT_SUPERPOWERS_RATE_LIMIT_FAILOVER=true` to permit **one** alternate
+With explicit `BT_SUPERPOWERS_CODEX_ONLY=false` legacy compatibility,
+set `BT_SUPERPOWERS_RATE_LIMIT_FAILOVER=true` to permit **one** alternate
 attempt after the selected primary reports a rate limit, or skip a primary
 whose fleet cooldown is already active. Unset/false retains single-provider
 behavior. The primary remains `BT_SUPERPOWERS_PROVIDER`; no process environment
@@ -123,23 +126,50 @@ failover is enabled (it does not silently fall back for missing installations).
 
 ### Deployment after safe integration
 
-`deploy/systemd/rate-limit-failover.conf` enables the opt-in and pins Codex to
-`gpt-5.3-codex-spark`. After integrating the reviewed commit into the deployed
-branch and passing its dirty-worktree preflight, install it under each of:
+The current deployment uses `deploy/systemd/codex-only.conf`.
+The older `deploy/systemd/rate-limit-failover.conf` is a legacy template that enables the
+opt-in and pins Codex to `gpt-5.3-codex-spark`. Validate that the service
+account can use the selected model before applying that pin. When the
+account does not support it, explicitly select an available model or set
+`BT_SUPERPOWERS_CODEX_MODEL=auto` to use the Codex CLI's own configuration;
+the source default itself remains unchanged.
+
+After integrating the reviewed change into a clean deployed branch,
+install the intended drop-in under each applicable service directory:
 
 - `~/.config/systemd/user/bt-agent.service.d/`
 - `~/.config/systemd/user/bt-dashboard.service.d/`
 - `~/.config/systemd/user/bt-gardener.service.d/`
 
-Check for conflicting model values in the operator-managed EnvironmentFile
-(`/mnt/ssd/bt-secrets/codex.env` on the deployed host); systemd EnvironmentFile
-values override `Environment=` settings. Keep its model exactly
-`gpt-5.3-codex-spark` and enable the flag there if it already defines it.
-Then reload/restart the three services and verify their effective non-secret
-provider/model/failover settings. Do not deploy a feature-worktree binary into
-scheduled services that still operate on a different, dirty main branch.
-**Deployment is deferred until safe integration; this template alone does not
-change running services.** Disable the flag and restart to roll back routing.
+Check effective values in the operator-managed EnvironmentFile
+(`/mnt/ssd/bt-secrets/codex.env` on the reviewed host); its values override
+`Environment=` settings. Do not print credentials while inspecting the
+provider/model/failover fields. Reload/restart affected services and verify
+those non-secret settings plus a read-only provider probe under the same
+account. An unsupported-model error requires configuration correction;
+quota failover deliberately does not conceal it.
+
+**Observed 2026-09-16:** the reviewed host uses provider `codex`, model
+`auto`, and rate-limit failover enabled after the pinned Spark model was
+rejected by the account. A successful model probe is not proof that the
+next complete GOAP cycle will verify and land work. See
+[deployment](arc42/07-deployment.md) and
+[cycle outcomes](arc42/06-runtime-view.md#64-self-improvement-cycle-goap-fusion-loop).
+
+Keep deployed binaries consistent with the intended integrated source and
+preserve in-flight work during restart. Disable failover and restart the
+affected services to roll back routing; this does not revert code or state.
+
+## Observed launch configuration, 2026-10-01
+
+All three BT user units have a final `zzzz-codex-only.conf` drop-in with
+provider `codex`, Codex-only `true`, failover `false`, and model `auto`.
+Its final environment file is `~/.config/bt/codex-only.env`, so older
+EnvironmentFile entries cannot restore failover. The shared Hermes MCP
+launch environment carries the same four values. Unit definitions were
+reloaded; the three BT units were inactive at inspection. Configuration
+is established; deployed-binary identity and running-cycle evidence remain
+open in the [cleanup plan](plans/2026-09-30-arc42-cleanup.md).
 
 ## Configuring and restarting the daemon
 
@@ -152,6 +182,9 @@ The daemon is the systemd **user** unit `bt-agent.service` (running
 #    ~/.config/systemd/user/bt-agent.service  (or its EnvironmentFile= path)
 #    Add or change:
 #      BT_SUPERPOWERS_PROVIDER=codex
+#      BT_SUPERPOWERS_CODEX_ONLY=true
+#      BT_SUPERPOWERS_RATE_LIMIT_FAILOVER=false
+#      BT_SUPERPOWERS_CODEX_MODEL=auto
 #    (plus any Codex bin/model/sandbox vars you need)
 
 # 2. Reload the unit definition and restart the daemon.

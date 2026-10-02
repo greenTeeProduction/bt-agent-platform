@@ -284,6 +284,7 @@ func (kg *KnowledgeGraph) RegisterEvolved(baseID, evolvedID string, nodeCount in
 	if exists && fitness <= meta.StructuralFitness {
 		return false
 	}
+	kg.rememberFeedbackBaselineLocked(evolvedID, meta)
 
 	meta.NodeCount = nodeCount
 	meta.EvolvedCount++

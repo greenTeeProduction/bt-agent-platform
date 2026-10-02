@@ -437,9 +437,12 @@ func (panickyPayload) MarshalJSON() ([]byte, error) {
 func TestWebhookPublisherLoop_PanicRecovered(t *testing.T) {
 	if os.Getenv(webhookPublisherPanicSubprocessEnv) == "1" {
 		var requests atomic.Int64
+		delivered := make(chan struct{}, 1)
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			requests.Add(1)
 			w.WriteHeader(http.StatusOK)
+			if requests.Add(1) == 3 {
+				delivered <- struct{}{}
+			}
 		}))
 		defer server.Close()
 
@@ -465,7 +468,12 @@ func TestWebhookPublisherLoop_PanicRecovered(t *testing.T) {
 			})
 		}
 
-		time.Sleep(150 * time.Millisecond)
+		// Observe delivery rather than assuming HTTP/goroutine scheduling fits
+		// inside a 150 ms sleep while other race/build checks run on this host.
+		select {
+		case <-delivered:
+		case <-time.After(5 * time.Second):
+		}
 
 		if got := requests.Load(); got < 3 {
 			fmt.Fprintf(os.Stderr, "expected at least 3 successful posts despite panicking "+

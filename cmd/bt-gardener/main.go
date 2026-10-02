@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/agent"
+	"github.com/nico/go-bt-evolve/internal/config"
 	"github.com/nico/go-bt-evolve/internal/dashboard"
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evaluator"
@@ -186,6 +187,11 @@ func main() {
 		return
 	}
 
+	platformConfig, configErr := config.LoadRuntime()
+	if configErr != nil {
+		fmt.Fprintf(os.Stderr, "fatal: configuration: %v\n", configErr)
+		os.Exit(1)
+	}
 	engine.Init()
 	engine.SetAsDefault()
 	engine.Info("bt-gardener starting", "version", "1.0.0", "binary", "go-bt-gardener")
@@ -199,38 +205,7 @@ func main() {
 		"vcs_time", buildID.CommitTime,
 		"vcs_dirty", buildID.Dirty)
 
-	// Deploy-drift watcher (program 94b0b31) — detection-only by default; WARNs
-	// when this binary falls behind repo HEAD. BT_AUTO_REBUILD_ON_DRIFT=1 opts
-	// into out-of-place rebuild+swap.
-	//
-	// g is declared here and assigned below once the gardener is constructed;
-	// InFlightFn's nil check covers the startup window before that assignment
-	// (nil-safe: no gardener yet means "assume busy" and defer the restart,
-	// mirroring cmd/bt-agent's globalSched wiring).
 	var g *gardener.Gardener
-	if repoDir, wdErr := os.Getwd(); wdErr == nil {
-		agent.StartDriftWatcher(context.Background(), agent.DriftWatchConfig{
-			RepoDir:         repoDir,
-			RunningRevision: buildID.Revision,
-			AutoRebuild:     agent.AutoRebuildEnabled(),
-			// Self-adoption (2026-07-23 review gap 4): without AutoRestart the
-			// gardener rebuilt the same head every 20-minute tick and then ran
-			// the OLD binary up to ~50 minutes until bt-agent's sibling sweep
-			// saved it. Restarting our own unit does not violate the sweep's
-			// single-ownership rule (RestartSiblings stays bt-agent-only), and
-			// the adoption stamp written on restart tells the sweep to skip us.
-			// Evolution cycles exit gracefully on SIGTERM; a lost cycle costs
-			// minutes — InFlightFn below now defers that restart until the
-			// current cycle finishes instead of eating the loss.
-			AutoRestart: agent.AutoRestartEnabled(),
-			// Own binary only: the fleet-wide sweep (and sibling restarts)
-			// is owned by cmd/bt-agent's watcher.
-			Targets:    agent.GardenerRebuildTargets(repoDir),
-			Binary:     "bt-gardener",
-			Backoff:    agent.NewRebuildBackoff(),
-			InFlightFn: func() bool { return g == nil || g.AnyInFlight() },
-		}, agent.DefaultDriftCheckInterval)
-	}
 
 	// ── Tracing (OTel SDK; no-op unless OTEL_EXPORTER_OTLP_ENDPOINT/BT_OTLP_ENDPOINT set) ──
 	tracingShutdown := tracing.InitFromEnv("bt-gardener")
@@ -252,12 +227,16 @@ func main() {
 		fmt.Fprintf(os.Stderr, "fatal: cannot determine home directory: %v\n", err)
 		os.Exit(1)
 	}
-	refDir := filepath.Join(home, ".go-bt-reflections")
+	refDir, refErr := platformConfig.SharedReflectionsDir()
+	if refErr != nil {
+		fmt.Fprintf(os.Stderr, "fatal: reflection root: %v\n", refErr)
+		os.Exit(1)
+	}
 	metricsDir := filepath.Join(home, ".go-bt-gardener")
 	snapDir := filepath.Join(metricsDir, "snapshots")
 	// SLO evidence written by the bt-agent process (B1) — must match the path
 	// bt-agent saves to.
-	sloEvidencePath := filepath.Join(home, ".go-bt-evolve", "slo", "slo-metrics.json")
+	sloEvidencePath := agent.SLOMetricsFile()
 
 	_ = os.MkdirAll(metricsDir, 0755)
 
@@ -323,8 +302,28 @@ Question: {{.input}}`,
 		[]string{"input", "agent_scratchpad"},
 	)
 
-	agent := agents.NewOneShotAgent(ollamaLLM, agentTools, agents.WithPrompt(prompt))
-	executor := agents.NewExecutor(agent, agents.WithMaxIterations(5))
+	analysisAgent := agents.NewOneShotAgent(ollamaLLM, agentTools, agents.WithPrompt(prompt))
+	executor := agents.NewExecutor(analysisAgent, agents.WithMaxIterations(5))
+
+	// Watchers and restart control observe only initialized owners.
+	if repoDir, wdErr := os.Getwd(); wdErr == nil {
+		stopControl, controlErr := agent.StartRestartControl(agent.RestartControlConfig{
+			Home: agent.HomeDir(), Unit: "bt-gardener", Revision: buildID.Revision,
+			BinaryPath: agent.GardenerRebuildTargets(repoDir)[0].OutPath,
+			Enabled:    agent.AutoRestartEnabled(), BeginRestart: g.BeginRestart,
+		})
+		if controlErr != nil {
+			engine.Error("gardener restart control unavailable; sibling requests will defer", "error", controlErr)
+		} else {
+			defer stopControl()
+		}
+		agent.StartDriftWatcher(context.Background(), agent.DriftWatchConfig{
+			RepoDir: repoDir, RunningRevision: buildID.Revision,
+			AutoRebuild: agent.AutoRebuildEnabled(), AutoRestart: agent.AutoRestartEnabled(),
+			Targets: agent.GardenerRebuildTargets(repoDir), Binary: "bt-gardener", Backoff: agent.NewRebuildBackoff(),
+			InFlightFn: g.AnyInFlight, RestartGuardFn: g.BeginRestart,
+		}, agent.DefaultDriftCheckInterval)
+	}
 
 	engine.Info("bt-gardener: initialized",
 		"trees", registry.Count(),
@@ -385,48 +384,52 @@ Question: {{.input}}`,
 			engine.Debug("bt-gardener: cycle skipped", "reason", reason)
 			continue
 		}
-		cycleCount++
-		fmt.Fprintf(os.Stderr, "\n=== Cycle %d @ %s ===\n", cycleCount, time.Now().Format("15:04:05"))
+		if admissionErr := g.WithActivity(func() {
+			cycleCount++
+			fmt.Fprintf(os.Stderr, "\n=== Cycle %d @ %s ===\n", cycleCount, time.Now().Format("15:04:05"))
 
-		// Pick up autopilot-compiled/HITL-approved personal trees written into
-		// a user workspace since the last cycle, so evolution reaches them
-		// without a daemon restart.
-		registry.Rescan()
+			// Pick up autopilot-compiled/HITL-approved personal trees written into
+			// a user workspace since the last cycle, so evolution reaches them
+			// without a daemon restart.
+			registry.Rescan()
 
-		results, err := g.RunCycleV2(v2Cfg)
-		if err != nil {
-			engine.Error("bt-gardener: cycle failed", "error", err, "cycle", cycleCount)
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			continue
-		}
-
-		improved := 0
-		for _, r := range results {
-			if r.Improved {
-				improved++
-				fmt.Fprintf(os.Stderr, "✓ %-25s %.1f → %.1f (+%.1f) mut=%d\n",
-					r.TreeName, r.BaseFitness, r.NewFitness, r.Delta, r.Mutations)
-			}
-		}
-		engine.Info("bt-gardener: cycle complete", "cycle", cycleCount, "improved", improved, "total", len(results))
-		fmt.Fprintf(os.Stderr, "Improved: %d/%d\n", improved, len(results))
-
-		// Every 5 cycles, run langchain analysis
-		if cycleCount%5 == 0 && len(results) > 0 {
-			fmt.Fprintf(os.Stderr, "\n--- Langchain Analysis ---\n")
-			ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-			result, err := chains.Call(ctx, executor, map[string]any{"input": "analyze the current state and suggest which trees to focus on next"})
-			cancel()
+			results, err := g.RunCycleV2(v2Cfg)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Agent error: %v\n", err)
-			} else if output, ok := result["output"].(string); ok {
-				fmt.Fprintf(os.Stderr, "Agent: %s\n", truncateStr(output, 500))
+				engine.Error("bt-gardener: cycle failed", "error", err, "cycle", cycleCount)
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				return
 			}
-		}
 
-		_ = metricsTracker.Save()
-		sum := metricsTracker.Summary()
-		fmt.Fprintf(os.Stderr, "Total: %v cycles | Rate: %v\n", sum["total_cycles"], sum["improvement_rate"])
+			improved := 0
+			for _, r := range results {
+				if r.Improved {
+					improved++
+					fmt.Fprintf(os.Stderr, "✓ %-25s %.1f → %.1f (+%.1f) mut=%d\n",
+						r.TreeName, r.BaseFitness, r.NewFitness, r.Delta, r.Mutations)
+				}
+			}
+			engine.Info("bt-gardener: cycle complete", "cycle", cycleCount, "improved", improved, "total", len(results))
+			fmt.Fprintf(os.Stderr, "Improved: %d/%d\n", improved, len(results))
+
+			// Every 5 cycles, run langchain analysis
+			if cycleCount%5 == 0 && len(results) > 0 {
+				fmt.Fprintf(os.Stderr, "\n--- Langchain Analysis ---\n")
+				ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+				result, err := chains.Call(ctx, executor, map[string]any{"input": "analyze the current state and suggest which trees to focus on next"})
+				cancel()
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Agent error: %v\n", err)
+				} else if output, ok := result["output"].(string); ok {
+					fmt.Fprintf(os.Stderr, "Agent: %s\n", truncateStr(output, 500))
+				}
+			}
+
+			_ = metricsTracker.Save()
+			sum := metricsTracker.Summary()
+			fmt.Fprintf(os.Stderr, "Total: %v cycles | Rate: %v\n", sum["total_cycles"], sum["improvement_rate"])
+		}); admissionErr != nil {
+			engine.Info("bt-gardener: iteration not admitted during restart handoff")
+		}
 	}
 }
 

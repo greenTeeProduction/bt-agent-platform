@@ -656,8 +656,8 @@ func TestRouteBuilder_FluentAPI(t *testing.T) {
 	if len(route.Parameters) != 2 {
 		t.Errorf("expected 2 params, got %d", len(route.Parameters))
 	}
-	if len(route.Responses) != 3 {
-		t.Errorf("expected 3 responses (200+400+500), got %d", len(route.Responses))
+	if len(route.Responses) != 5 {
+		t.Errorf("expected 5 responses (200+400+401+403+500), got %d", len(route.Responses))
 	}
 	if !route.Auth {
 		t.Error("expected auth=true")

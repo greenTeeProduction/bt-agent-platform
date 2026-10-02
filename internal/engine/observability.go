@@ -19,6 +19,16 @@ type observedCommand struct {
 }
 
 func (o *observedCommand) Run(ctx *btcore.BTContext[Blackboard]) int {
+	return o.run(ctx, nil)
+}
+
+// report observes the actual branch result before a sibling's shared stop
+// converts the integer status to failure. A blocked node was never admitted.
+func (o *observedCommand) run(ctx *btcore.BTContext[Blackboard], report func(int)) int {
+	if ctx.Blackboard != nil && ctx.Blackboard.ExecutionError() != nil {
+		ctx.Blackboard.executionBlocked = true
+		return -1
+	}
 	parentCtx := ctx.Context
 	if ctx.Blackboard != nil && ctx.Blackboard.TraceContext != nil {
 		parentCtx = ctx.Blackboard.TraceContext
@@ -62,6 +72,15 @@ func (o *observedCommand) Run(ctx *btcore.BTContext[Blackboard]) int {
 	}()
 
 	code := o.child.Run(ctx)
+	if report != nil {
+		report(code)
+	}
+	if ctx.Blackboard != nil && ctx.Blackboard.ExecutionError() != nil {
+		if code >= 0 {
+			ctx.Blackboard.executionForced = true
+		}
+		code = -1
+	}
 	durMs := time.Since(start).Milliseconds()
 	returned = true
 

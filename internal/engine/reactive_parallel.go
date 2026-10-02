@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"slices"
 
@@ -23,6 +24,9 @@ func forkBlackboard(bb *Blackboard) *Blackboard {
 	cp.VisitedPaths = slices.Clone(bb.VisitedPaths)
 	cp.ChainMemory = cloneParallelValue(bb.ChainMemory)
 	cp.parallelStates = nil
+	cp.executionLocalError = nil
+	cp.executionBlocked = false
+	cp.executionForced = false
 	cp.buildCapture = nil
 	if bb.BB != nil {
 		h := *bb.BB
@@ -137,6 +141,7 @@ type parallelState struct {
 	bases    []*Blackboard
 	contexts []*btcore.BTContext[Blackboard]
 	statuses []int
+	failures []error
 }
 
 func BuildReactiveParallel(node *evolution.SerializableNode, bb *Blackboard) btcore.Command[Blackboard] {
@@ -167,7 +172,7 @@ func (p *parallelCommand) Run(ctx *btcore.BTContext[Blackboard]) int {
 	}
 	state := bb.parallelStates[p]
 	if state == nil {
-		state = &parallelState{bases: make([]*Blackboard, len(p.children)), contexts: make([]*btcore.BTContext[Blackboard], len(p.children)), statuses: make([]int, len(p.children))}
+		state = &parallelState{bases: make([]*Blackboard, len(p.children)), contexts: make([]*btcore.BTContext[Blackboard], len(p.children)), statuses: make([]int, len(p.children)), failures: make([]error, len(p.children))}
 		bb.parallelStates[p] = state
 	}
 	result := p.tick(ctx, state)
@@ -189,7 +194,10 @@ func (p *parallelCommand) tick(ctx *btcore.BTContext[Blackboard], state *paralle
 	}
 	childCtx, cancel := context.WithCancel(parent)
 	defer cancel()
-	type result struct{ index, code int }
+	type result struct {
+		index, code int
+		failure     error
+	}
 	results := make(chan result, len(p.children))
 	before := make([]*Blackboard, len(p.children))
 	count := 0
@@ -214,13 +222,29 @@ func (p *parallelCommand) tick(ctx *btcore.BTContext[Blackboard], state *paralle
 		count++
 		go func() {
 			code := -1
+			var failure error
 			defer func() {
 				if v := recover(); v != nil {
 					reliability.DefaultPanicHandler(v, "parallel child")
+					failure = &reliability.ExecutionStoppedError{Outcome: "panic", Err: fmt.Errorf("parallel child %d panicked: %v", i, v)}
 				}
-				results <- result{i, code}
+				results <- result{i, code, failure}
 			}()
-			code = cmd.Run(local)
+			report := func(actual int) {
+				if actual < 0 && !local.Blackboard.executionBlocked && !local.Blackboard.executionForced && local.Blackboard.executionLocalError == nil {
+					outcome := local.Blackboard.Outcome
+					if !reliability.IsStoppedOutcome(outcome) {
+						outcome = "failure"
+					}
+					failure = &reliability.ExecutionStoppedError{Outcome: outcome, Err: fmt.Errorf("parallel child %d failed: %s", i, local.Blackboard.Result)}
+				}
+			}
+			if observed, ok := cmd.(*observedCommand); ok {
+				code = observed.run(local, report)
+			} else {
+				code = cmd.Run(local)
+				report(code)
+			}
 		}()
 	}
 	winner := -1
@@ -237,6 +261,7 @@ func (p *parallelCommand) tick(ctx *btcore.BTContext[Blackboard], state *paralle
 			r = <-results // Join: tools must honor their child context before returning.
 		}
 		state.statuses[r.index] = r.code
+		state.failures[r.index] = r.failure
 		if winner < 0 && ((p.mode == ParallelAny && r.code == 1) || (p.mode == ParallelRace && r.code != 0)) {
 			winner = r.index
 			cancel()
@@ -246,6 +271,17 @@ func (p *parallelCommand) tick(ctx *btcore.BTContext[Blackboard], state *paralle
 				cancel()
 			}
 		}
+	}
+	// Join only after all admitted work returned. Ordinary-only groups keep
+	// their existing policy; a stopped group must retain failed sibling evidence.
+	if ctx.Blackboard.ExecutionError() != nil {
+		for i, failure := range state.failures {
+			if failure != nil {
+				ctx.Blackboard.stopExecution(state.contexts[i].Blackboard.Result, failure)
+			}
+		}
+		ctx.Blackboard.executionLocalError = ctx.Blackboard.ExecutionError()
+		ctx.Blackboard.applyExecutionStop()
 	}
 	running, failed := false, false
 	for _, code := range state.statuses {

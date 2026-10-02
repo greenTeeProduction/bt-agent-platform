@@ -9,10 +9,22 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 type scopeFile struct {
 	Entries map[string]Entry `json:"entries"`
+}
+
+// NewPersistentManager publishes a default manager only after its persistent
+// namespace is initialized. Failure never returns an in-memory substitute.
+func NewPersistentManager(baseDir string) (*Manager, error) {
+	mgr := DefaultManager()
+	if err := mgr.EnablePersistence(baseDir); err != nil {
+		return nil, err
+	}
+	return mgr, nil
 }
 
 func (m *Manager) EnablePersistence(baseDir string) error {
@@ -25,10 +37,10 @@ func (m *Manager) EnablePersistence(baseDir string) error {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if err := os.MkdirAll(filepath.Join(baseDir, "session"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(baseDir, "session"), 0o750); err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Join(baseDir, "agent"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(baseDir, "agent"), 0o750); err != nil {
 		return err
 	}
 	m.persistDir = baseDir
@@ -67,7 +79,7 @@ func (m *Manager) persistFile(scope Scope) string {
 }
 
 func loadScopeFile(path string, s *scopedStore) error {
-	data, err := os.ReadFile(path)
+	data, err := util.ReadPersistenceFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
@@ -125,6 +137,19 @@ func persistScope(path string, s *scopedStore) error {
 		return err
 	}
 	return os.Rename(tmp, path)
+}
+
+// commitScope runs under the owner's scope gate. Publish only after the atomic
+// file replacement succeeds; failed commits retain entries and byte accounting.
+func commitScope(path string, live, staged *scopedStore) error {
+	if err := persistScope(path, staged); err != nil {
+		return err
+	}
+	live.mu.Lock()
+	defer live.mu.Unlock()
+	live.entries = staged.entries
+	live.totalBytes = staged.totalBytes
+	return nil
 }
 
 func safeFilename(id string) string {

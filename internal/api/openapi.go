@@ -373,7 +373,8 @@ func httpStatusText(code int) string {
 
 // ─── Convenience Schema Constructors ─────────────────────────────────────────
 
-// ObjectSchema creates an object schema with the given properties.
+// ObjectSchema creates an object schema with the given properties and required
+// property names. Human-readable documentation belongs in Schema.Description.
 func ObjectSchema(props map[string]*Schema, required ...string) *Schema {
 	return &Schema{
 		Type:       "object",
@@ -457,6 +458,12 @@ func (rb *RouteBuilder) QueryParam(name, desc string, required bool, schema *Sch
 	return rb
 }
 
+// PathParam documents a required parameter occupying one URL path segment.
+func (rb *RouteBuilder) PathParam(name, desc string, schema *Schema) *RouteBuilder {
+	rb.route.Parameters = append(rb.route.Parameters, RouteParam{Name: name, In: ParamPath, Required: true, Description: desc, Schema: schema})
+	return rb
+}
+
 // JSONResponse overrides the default 200 response with a described schema.
 func (rb *RouteBuilder) JSONResponse(code int, desc string, schema *Schema) *RouteBuilder {
 	if code == 200 {
@@ -496,6 +503,18 @@ func (rb *RouteBuilder) ContentResponse(code int, contentType, desc string) *Rou
 // WithAuth marks the route as requiring API key authentication.
 func (rb *RouteBuilder) WithAuth() *RouteBuilder {
 	rb.route.Auth = true
+	for _, code := range []int{401, 403} {
+		declared := false
+		for _, response := range rb.route.Responses {
+			if response.StatusCode == code {
+				declared = true
+				break
+			}
+		}
+		if !declared {
+			rb.ErrorResponse(code, map[int]string{401: "Authentication required", 403: "Forbidden or invalid CSRF token"}[code])
+		}
+	}
 	return rb
 }
 
@@ -625,7 +644,7 @@ func DashboardRoutes() []Route {
 		"created_at": IntSchema("Unix timestamp of creation"),
 	}, "id", "session_id", "schema", "bookmarked", "rating", "created_at")
 
-	return []Route{
+	routes := []Route{
 		// Public endpoints
 		NewRoute("/api/health", GET).
 			Summary("Health check").
@@ -681,12 +700,12 @@ func DashboardRoutes() []Route {
 				"total_events":    IntSchema("Total events ever captured"),
 				"captured_events": IntSchema("Events currently in buffer"),
 				"buffer_enabled":  BoolSchema("Whether the audit buffer is active"),
-				"event_counts":    ObjectSchema(map[string]*Schema{}, "Count of each event type"),
+				"event_counts":    {Type: "object", Description: "Count of each event type"},
 				"events": ArraySchema(ObjectSchema(map[string]*Schema{
 					"event":     StringSchema("Event type identifier (e.g., mcp_auth_failure, rate_limit_exceeded)"),
 					"timestamp": StringSchema("ISO 8601 event timestamp"),
-					"attrs":     ObjectSchema(map[string]*Schema{}, "Event-specific attributes"),
-				}, "List of recent audit events"), "events"),
+					"attrs":     {Type: "object", Description: "Event-specific attributes"},
+				}, "event", "timestamp"), "List of recent audit events"),
 			}, "capacity", "total_events", "captured_events", "buffer_enabled", "event_counts", "events")).WithAuth().Build(),
 
 		NewRoute("/api/openapi.json", GET).
@@ -694,7 +713,11 @@ func DashboardRoutes() []Route {
 			Description("Returns the OpenAPI 3.0 specification for all dashboard endpoints.").
 			Tags("System").
 			OperationID("getOpenAPISpec").
-			JSONResponse(200, "OpenAPI 3.0 JSON specification", StringSchema("OpenAPI JSON document")).Build(),
+			JSONResponse(200, "OpenAPI 3.0 JSON specification", ObjectSchema(map[string]*Schema{
+				"openapi": StringSchema("OpenAPI version"),
+				"info":    ObjectSchema(nil),
+				"paths":   ObjectSchema(nil),
+			}, "openapi", "info", "paths")).Build(),
 
 		NewRoute("/api/swagger", GET).
 			Summary("Swagger UI").
@@ -777,7 +800,7 @@ func DashboardRoutes() []Route {
 					"startup":   IntSchema(""),
 					"thinktank": IntSchema(""),
 					"evolution": IntSchema(""),
-				}, "categories"),
+				}),
 				"mcp_tools": IntSchema("Total MCP tools"),
 				"model":     StringSchema("LLM model name"),
 			}, "total_trees", "categories", "mcp_tools", "model")).WithAuth().Build(),
@@ -817,7 +840,7 @@ func DashboardRoutes() []Route {
 				}),
 				"trees": ObjectSchema(map[string]*Schema{
 					"total":      IntSchema("Total trees"),
-					"categories": ObjectSchema(map[string]*Schema{}, "Tree counts per category"),
+					"categories": {Type: "object", Description: "Tree counts per category"},
 				}),
 				"gardener": ObjectSchema(map[string]*Schema{
 					"cycles":       IntSchema("Total cycles"),
@@ -842,18 +865,26 @@ func DashboardRoutes() []Route {
 
 		NewRoute("/api/tree/structure", GET).
 			Summary("Get tree structure").
-			Description("Returns the JSON structure of a specific behavior tree.").
+			Description("Returns the bare SerializableNode definition consumed by the mind-map UI. Qualified IDs retain their full name; missing definitions return 404 without substituting a default or metadata placeholder. This is unscoped operator inspection; it does not bind a user identity.").
 			Tags("Trees").
 			OperationID("getTreeStructure").
-			QueryParam("id", "Tree identifier (e.g., 'merged', 'godev')", true, StringSchema("Tree ID")).
+			QueryParam("id", "Tree identifier (e.g., 'godev', 'domain:arc42:section1')", true, StringSchema("Tree ID")).
 			JSONResponse(200, "Tree structure JSON", ObjectSchema(map[string]*Schema{
-				"id":         StringSchema("Tree identifier"),
-				"name":       StringSchema("Display name"),
-				"category":   StringSchema("Category"),
-				"node_count": IntSchema("Number of nodes"),
-				"structure":  ObjectSchema(nil, "structure"),
-			}, "id", "name", "structure")).
-			ErrorResponse(404, "Tree not found").WithAuth().Build(),
+				"type":        StringSchema("Root node type"),
+				"name":        StringSchema("Root node name"),
+				"description": StringSchema("Root node description"),
+				"children": ArraySchema(ObjectSchema(map[string]*Schema{
+					"type": StringSchema("Child node type"),
+					"name": StringSchema("Child node name"),
+				}, "type", "name"), "Nested serializable children; deeper fields are retained but not recursively enforced"),
+				"max_retries": IntSchema("Retry count"),
+				"timeout_ms":  IntSchema("Node timeout in milliseconds"),
+				"metadata":    ObjectSchema(nil),
+				"edges":       ArraySchema(ObjectSchema(nil), "Typed edges"),
+			}, "type", "name")).
+			ErrorResponse(400, "Missing tree id").
+			ErrorResponse(404, "Tree definition not found").
+			ErrorResponse(405, "Method not allowed — GET only").WithAuth().Build(),
 
 		// Thinktank
 		NewRoute("/api/thinktank/fellows", GET).
@@ -908,13 +939,18 @@ func DashboardRoutes() []Route {
 			Tags("Tasks").
 			OperationID("getTasks").
 			JSONResponse(200, "Array of task objects", ArraySchema(ObjectSchema(map[string]*Schema{
-				"id":       StringSchema("Task identifier"),
-				"title":    StringSchema("Task title"),
-				"priority": StringSchema("Priority: critical/high/medium/low"),
-				"role":     StringSchema("Assigned role: CEO/CTO/PM/Engineer/Marketing/Sales"),
-				"sprint":   IntSchema("Sprint number"),
-				"sp":       IntSchema("Story points"),
-				"status":   StringSchema("Status: pending/approved/rejected/in_progress/completed"),
+				"id":         StringSchema("Task identifier"),
+				"title":      StringSchema("Task title"),
+				"priority":   StringSchema("Priority: critical/high/medium/low"),
+				"role":       StringSchema("Assigned role: CEO/CTO/PM/Engineer/Marketing/Sales"),
+				"sprint":     IntSchema("Sprint number"),
+				"sp":         IntSchema("Story points"),
+				"status":     StringSchema("Status: pending/approved/rejected/in_progress/completed/failed"),
+				"output":     StringSchema("Committed execution output"),
+				"outcome":    StringSchema("Observed execution outcome"),
+				"run_id":     StringSchema("Blackboard run ID when available"),
+				"error":      StringSchema("Committed execution diagnostic when present"),
+				"error_kind": StringSchema("Typed execution diagnostic when present"),
 			}), "List of tasks")).WithAuth().Build(),
 
 		NewRoute("/api/tasks/approve", POST).
@@ -927,7 +963,9 @@ func DashboardRoutes() []Route {
 				"status": StringSchema("'approved' on success"),
 				"id":     StringSchema("Task identifier"),
 			}, "status", "id")).
-			ErrorResponse(404, "Task not found").WithAuth().Build(),
+			ErrorResponse(404, "Task not found").
+			ErrorResponse(400, "Invalid task status").
+			ErrorResponse(503, "Task decision or audit persistence failed").WithAuth().Build(),
 
 		NewRoute("/api/tasks/reject", POST).
 			Summary("Reject a task").
@@ -939,7 +977,9 @@ func DashboardRoutes() []Route {
 				"status": StringSchema("'rejected' on success"),
 				"id":     StringSchema("Task identifier"),
 			}, "status", "id")).
-			ErrorResponse(404, "Task not found").WithAuth().Build(),
+			ErrorResponse(404, "Task not found").
+			ErrorResponse(400, "Invalid task status").
+			ErrorResponse(503, "Task decision or audit persistence failed").WithAuth().Build(),
 
 		// Sprint
 		NewRoute("/api/sprint/execute", POST).
@@ -953,21 +993,41 @@ func DashboardRoutes() []Route {
 				"job_id":  StringSchema("Job ID for polling /api/sprint/status"),
 				"message": StringSchema("Human-readable status message"),
 			}, "status")).
-			JSONResponse(400, "No approved tasks", ObjectSchema(map[string]*Schema{
-				"status": StringSchema("'no_approved_tasks'"),
-			})).WithAuth().Build(),
+			ErrorResponse(400, "Malformed mutation body").
+			ErrorResponse(408, "Sprint admission canceled or expired before dispatch").
+			ErrorResponse(503, "Admission or retained task-result reconciliation failed").WithAuth().Build(),
 
 		NewRoute("/api/sprint/status", GET).
 			Summary("Get sprint status").
-			Description("Returns the current sprint execution status.").
+			Description("Returns current sprint execution state and task-store counters. Counts cover all visible tasks, not just the current sprint. Before a sprint starts, progress is idle, elapsed is zero and started_at is absent.").
 			Tags("Sprint").
 			OperationID("getSprintStatus").
 			JSONResponse(200, "Sprint status", ObjectSchema(map[string]*Schema{
-				"running":    BoolSchema("Whether a sprint is currently executing"),
-				"job_id":     StringSchema("Active sprint job ID"),
-				"started_at": StringSchema("ISO 8601 start timestamp"),
-				"progress":   StringSchema("Current progress: starting/running/running_tasks/completing/done"),
-			}, "running", "progress")).WithAuth().Build(),
+				"running":         BoolSchema("Whether a sprint is currently executing"),
+				"job_id":          StringSchema("Most recently admitted sprint job ID; empty before admission"),
+				"started_at":      StringSchema("ISO 8601 start timestamp when a sprint has started"),
+				"deadline_at":     StringSchema("ISO 8601 owned batch deadline when admitted; cancellation is cooperative"),
+				"progress":        StringSchema("Current progress: idle/dispatching/running/done/failed"),
+				"elapsed":         NumberSchema("Seconds since the sprint started; zero before first admission"),
+				"tasks_completed": IntSchema("Visible task-store entries marked completed"),
+				"tasks_total":     IntSchema("Total visible task-store entries"),
+				"current_task":    StringSchema("Most recently dispatched task title; empty before dispatch"),
+				"error":           StringSchema("Sprint execution or task-result commit diagnostic"),
+				"error_kind":      StringSchema("Diagnostic category: persistence/uncertain/stopped/execution"),
+				"diagnostics": ArraySchema(ObjectSchema(map[string]*Schema{
+					"task_id":        StringSchema("Claimed task identifier"),
+					"agent":          StringSchema("Resolved executor agent"),
+					"tree_id":        StringSchema("Selected tree identifier"),
+					"run_id":         StringSchema("Blackboard run ID when available"),
+					"task_status":    StringSchema("Observed disposition to commit: approved/completed/failed"),
+					"output":         StringSchema("Observed execution output, retained even when the task commit failed"),
+					"outcome":        StringSchema("Actual execution outcome"),
+					"error":          StringSchema("Execution and task-commit diagnostics"),
+					"error_kind":     StringSchema("Diagnostic category; empty for untyped expected deferral"),
+					"task_committed": BoolSchema("Whether disposition and result were committed to the task store"),
+					"commit_error":   StringSchema("Outstanding task metadata commit error"),
+				}, "task_id", "agent", "tree_id", "task_status", "output", "outcome", "error", "error_kind", "task_committed"), "Process-local diagnostic evidence until another sprint is admitted or the process exits"),
+			}, "running", "job_id", "progress", "elapsed", "tasks_completed", "tasks_total", "current_task")).WithAuth().Build(),
 
 		// Chat
 		NewRoute("/api/chat", POST).
@@ -999,10 +1059,15 @@ func DashboardRoutes() []Route {
 				"output":        StringSchema("Agent output text"),
 				"duration":      IntSchema("Execution duration in nanoseconds"),
 				"success":       BoolSchema("Whether execution succeeded"),
+				"outcome":       StringSchema("Raw run outcome when available"),
 				"error":         StringSchema("Error message if failed"),
 				"quality_score": NumberSchema("Output quality score 0.0-1.0"),
+				"error_kind":    StringSchema("Terminal execution diagnostic: persistence or uncertain"),
 			}, "agent", "task", "output", "duration", "success")).
 			ErrorResponse(400, "Invalid request body").
+			ErrorResponse(408, "Request canceled or expired; admitted work may have started").
+			ErrorResponse(500, "Execution admission failed").
+			ErrorResponse(503, "Circuit breaker open or execution service unavailable").
 			ErrorResponse(405, "Method not allowed — POST only").WithAuth().Build(),
 
 		// Dead Letter Queue
@@ -1014,19 +1079,23 @@ func DashboardRoutes() []Route {
 			JSONResponse(200, "DLQ entries list", ObjectSchema(map[string]*Schema{
 				"count": IntSchema("Number of dead letter entries"),
 				"entries": ArraySchema(ObjectSchema(map[string]*Schema{
-					"id":        StringSchema("Entry unique identifier"),
-					"task":      StringSchema("Original task text"),
-					"agent":     StringSchema("Agent name"),
-					"error":     StringSchema("Failure error message"),
-					"attempts":  IntSchema("Number of retry attempts made"),
-					"failed_at": StringSchema("ISO 8601 failure timestamp"),
-					"circuit":   StringSchema("Circuit breaker identifier (optional)"),
+					"id":                StringSchema("Entry unique identifier"),
+					"task":              StringSchema("Original task text"),
+					"agent":             StringSchema("Agent name"),
+					"error":             StringSchema("Failure error message"),
+					"attempts":          IntSchema("Number of retry attempts made"),
+					"failed_at":         StringSchema("ISO 8601 failure timestamp"),
+					"circuit":           StringSchema("Circuit breaker identifier (optional)"),
+					"replay_claim":      StringSchema("Durable replay identity; not an authorization credential"),
+					"replay_in_flight":  BoolSchema("Replay admitted without a recorded terminal outcome"),
+					"recovery_required": BoolSchema("Explicit reconciliation required before retry"),
+					"recovery_reason":   StringSchema("Reason replay is held"),
 				}), "List of dead letter entries"),
-			}, "count", "entries")).WithAuth().Build(),
+			}, "count", "entries")).ErrorResponse(503, "Dead letter storage unavailable").WithAuth().Build(),
 
 		NewRoute("/api/dlq/replay", POST).
 			Summary("Requeue a dead letter entry").
-			Description("Flags a specific DLQ entry for retry (stamping requeued_at) without removing it, so bt-agent's executor picks it up on its next scan.").
+			Description("Durably flags an unclaimed entry for retry. Held or exhausted work is rejected; bt-agent persists a unique claim before dispatch.").
 			Tags("Reliability").
 			OperationID("postDLQReplay").
 			QueryParam("id", "DLQ entry identifier", true, StringSchema("Entry UUID")).
@@ -1043,17 +1112,20 @@ func DashboardRoutes() []Route {
 				"pending": IntSchema("Remaining entries in DLQ"),
 			}, "status", "entry", "pending")).
 			ErrorResponse(400, "Missing id parameter").
-			ErrorResponse(404, "Entry not found").WithAuth().Build(),
+			ErrorResponse(404, "Entry not found").
+			ErrorResponse(409, "Recovery reconciliation required or attempts exhausted").
+			ErrorResponse(503, "Dead letter storage unavailable").WithAuth().Build(),
 
 		NewRoute("/api/dlq/purge", DELETE).
 			Summary("Purge dead letter queue").
-			Description("Removes all entries from the dead letter queue. IRREVERSIBLE.").
+			Description("Removes unclaimed entries after committing the purge; retains all recovery-held work.").
 			Tags("Reliability").
 			OperationID("deleteDLQPurge").
 			JSONResponse(200, "Purge confirmation", ObjectSchema(map[string]*Schema{
 				"status":  StringSchema("'purged' on success"),
-				"cleared": IntSchema("Number of entries cleared"),
-			}, "status", "cleared")).WithAuth().Build(),
+				"removed": IntSchema("Number of unclaimed entries removed"),
+				"pending": IntSchema("Retained recovery-held entries"),
+			}, "status", "removed", "pending")).ErrorResponse(503, "Dead letter storage unavailable").WithAuth().Build(),
 
 		// Session Management
 		NewRoute("/api/login", POST).
@@ -1197,8 +1269,12 @@ func DashboardRoutes() []Route {
 				"run_id":     StringSchema("Run identifier"),
 				"session_id": StringSchema("Session identifier"),
 				"error":      StringSchema("Error message if failed"),
+				"error_kind": StringSchema("Terminal execution diagnostic: persistence or uncertain"),
 			}, "agent", "outcome")).
-			ErrorResponse(400, "Missing agent parameter").WithAuth().Build(),
+			ErrorResponse(400, "Missing agent parameter").
+			ErrorResponse(408, "Request canceled or expired; admitted work may have started").
+			ErrorResponse(500, "Execution admission failed").
+			ErrorResponse(503, "Circuit breaker open or execution service unavailable").WithAuth().Build(),
 
 		NewRoute("/api/agents/create", POST).
 			Summary("Create an agent").
@@ -1280,7 +1356,8 @@ func DashboardRoutes() []Route {
 				"status": StringSchema("'approved' on success"),
 				"id":     StringSchema("Workflow task identifier"),
 			}, "status", "id")).
-			ErrorResponse(404, "No active workflow, or workflow task not found").WithAuth().Build(),
+			ErrorResponse(404, "No active workflow, or workflow task not found").
+			ErrorResponse(503, "Task decision or audit persistence failed").WithAuth().Build(),
 
 		NewRoute("/api/workflow/reject", POST).
 			Summary("Reject a workflow task").
@@ -1292,7 +1369,8 @@ func DashboardRoutes() []Route {
 				"status": StringSchema("'rejected' on success"),
 				"id":     StringSchema("Workflow task identifier"),
 			}, "status", "id")).
-			ErrorResponse(404, "No active workflow, or workflow task not found").WithAuth().Build(),
+			ErrorResponse(404, "No active workflow, or workflow task not found").
+			ErrorResponse(503, "Task decision or audit persistence failed").WithAuth().Build(),
 
 		NewRoute("/api/workflow/run-full-pipeline", POST).
 			Summary("Run the full thinktank-to-sprint pipeline").
@@ -1322,9 +1400,11 @@ func DashboardRoutes() []Route {
 				"proposed":   StringSchema("Proposed action or result preview"),
 				"agent_name": StringSchema("Agent name"),
 				"tree_id":    StringSchema("Behavior tree ID"),
-			}), "List of pending HITL requests")).WithAuth().Build(),
+			}), "List of pending HITL requests")).
+			ErrorResponse(503, "HITL store unavailable").WithAuth().Build(),
 
-		NewRoute("/api/hitl/", GET).
+		NewRoute("/api/hitl/{id}", GET).
+			PathParam("id", "HITL request identifier", StringSchema("Request identifier")).
 			Summary("HITL request operations").
 			Description("Routes HITL REST operations under /api/hitl/{id}, /api/hitl/{id}/approve, /api/hitl/{id}/reject, and /api/hitl/{id}/escalate. GET /api/hitl/{id} returns a single request; POST to the approve/reject/escalate sub-paths records a reviewer decision (body: {reviewer, comment, reason}).").
 			Tags("HITL").
@@ -1344,10 +1424,40 @@ func DashboardRoutes() []Route {
 			ErrorResponse(404, "Request not found").
 			ErrorResponse(503, "HITL store not initialized").WithAuth().Build(),
 
+		NewRoute("/api/hitl/{id}/approve", POST).
+			Summary("Approve HITL request").Tags("HITL").OperationID("approveHITLRequest").
+			RequestBody(hitlDecisionSchema()).
+			PathParam("id", "HITL request identifier", StringSchema("Request identifier")).
+			JSONResponse(200, "Resolved HITL request", ObjectSchema(map[string]*Schema{
+				"id": StringSchema("Request identifier"), "status": StringSchema("Request status"),
+			}, "id", "status")).
+			ErrorResponse(400, "Invalid decision or malformed request").
+			ErrorResponse(503, "HITL store not initialized").WithAuth().Build(),
+
+		NewRoute("/api/hitl/{id}/reject", POST).
+			Summary("Reject HITL request").Tags("HITL").OperationID("rejectHITLRequest").
+			RequestBody(hitlDecisionSchema()).
+			PathParam("id", "HITL request identifier", StringSchema("Request identifier")).
+			JSONResponse(200, "Resolved HITL request", ObjectSchema(map[string]*Schema{
+				"id": StringSchema("Request identifier"), "status": StringSchema("Request status"),
+			}, "id", "status")).
+			ErrorResponse(400, "Invalid decision or malformed request").
+			ErrorResponse(503, "HITL store not initialized").WithAuth().Build(),
+
+		NewRoute("/api/hitl/{id}/escalate", POST).
+			Summary("Escalate HITL request").Tags("HITL").OperationID("escalateHITLRequest").
+			RequestBody(hitlDecisionSchema()).
+			PathParam("id", "HITL request identifier", StringSchema("Request identifier")).
+			JSONResponse(200, "Resolved HITL request", ObjectSchema(map[string]*Schema{
+				"id": StringSchema("Request identifier"), "status": StringSchema("Request status"),
+			}, "id", "status")).
+			ErrorResponse(400, "Invalid decision or malformed request").
+			ErrorResponse(503, "HITL store not initialized").WithAuth().Build(),
+
 		// Pipelines
 		NewRoute("/api/pipelines", GET).
 			Summary("List pipelines").
-			Description("Lists all pipeline YAML files from agents/workflows/ with their name, description, version, and step count.").
+			Description("Lists readable pipeline YAML files under the configured workflows root; escaping symlinks and invalid files are omitted. A missing root is an empty inventory; other directory failures return 503.").
 			Tags("Pipelines").
 			OperationID("getPipelines").
 			JSONResponse(200, "Array of pipeline info objects", ArraySchema(ObjectSchema(map[string]*Schema{
@@ -1357,15 +1467,16 @@ func DashboardRoutes() []Route {
 				"version":     StringSchema("Pipeline version"),
 				"step_count":  IntSchema("Number of steps"),
 			}), "List of pipelines")).
+			ErrorResponse(503, "Pipeline inventory unavailable").
 			ErrorResponse(405, "Method not allowed — GET only").WithAuth().Build(),
 
 		NewRoute("/api/pipelines/run", POST).
 			Summary("Run a pipeline").
-			Description("Starts pipeline execution asynchronously and returns a run_id immediately; poll GET /api/pipelines/status?id= for the result. Body: {pipeline_name (required), input}.").
+			Description("Starts pipeline execution asynchronously from a basename under the configured workflows root. Directory/traversal names are rejected and symlinks cannot escape the root. Optional .yaml suffix. Poll GET /api/pipelines/status?id= for the result. Body: {pipeline_name (required), input}.").
 			Tags("Pipelines").
 			OperationID("postPipelinesRun").
 			RequestBody(ObjectSchema(map[string]*Schema{
-				"pipeline_name": StringSchema("Pipeline name (required)"),
+				"pipeline_name": StringSchema("Workflow basename, with optional .yaml suffix (required)"),
 				"input":         StringSchema("Pipeline input text"),
 			}, "pipeline_name")).
 			JSONResponse(202, "Run accepted", ObjectSchema(map[string]*Schema{
@@ -1374,8 +1485,9 @@ func DashboardRoutes() []Route {
 				"pipeline": StringSchema("Pipeline name"),
 				"message":  StringSchema("Status polling instructions"),
 			}, "run_id", "status", "pipeline")).
-			ErrorResponse(400, "Missing pipeline_name, or invalid pipeline YAML").
-			ErrorResponse(404, "Pipeline not found").
+			ErrorResponse(400, "Missing/invalid workflow basename, or invalid pipeline YAML").
+			ErrorResponse(404, "Pipeline not found or unavailable within the configured root").
+			ErrorResponse(503, "Pipeline runner or persistent blackboard unavailable").
 			ErrorResponse(405, "Method not allowed — POST only").WithAuth().Build(),
 
 		NewRoute("/api/pipelines/status", GET).
@@ -1386,12 +1498,16 @@ func DashboardRoutes() []Route {
 			QueryParam("id", "Pipeline run identifier", true, StringSchema("Run ID")).
 			JSONResponse(200, "Pipeline run status", ObjectSchema(map[string]*Schema{
 				"run_id":     StringSchema("Run identifier"),
-				"status":     StringSchema("'running'/'complete'/'failed'"),
+				"status":     StringSchema("'running'/'waiting'/'complete'/'failed'"),
 				"started_at": StringSchema("ISO 8601 start timestamp"),
-				"error":      StringSchema("Error message if failed"),
-				"workflow":   StringSchema("Pipeline/workflow name"),
-				"outcome":    StringSchema("Run outcome: success/failure/partial"),
-				"duration":   StringSchema("Run duration"),
+				"error":      StringSchema("Execution diagnostic when stopped or waiting"),
+				"error_kind": StringSchema("Optional terminal diagnostic: stopped/persistence/uncertain"),
+				"steps": ArraySchema(ObjectSchema(map[string]*Schema{
+					"step_id": StringSchema("Step identifier"), "agent": StringSchema("Agent or container"), "outcome": StringSchema("Canonical step outcome"), "output": StringSchema("Received output"), "duration": NumberSchema("Duration in nanoseconds"), "error": StringSchema("Step diagnostic"), "hitl_task_id": StringSchema("Approval task identifier"), "hitl_request_id": StringSchema("Approval request identifier"), "steps": ArraySchema(ObjectSchema(nil), "Retained nested child results"),
+				}, "step_id", "outcome", "output", "duration"), "Completed/stopped steps with nested child evidence"),
+				"workflow": StringSchema("Pipeline/workflow name"),
+				"outcome":  StringSchema("Run outcome, including pending_approval/input-required/auth-required/rejected/escalated/aborted"),
+				"duration": StringSchema("Run duration"),
 			}, "run_id", "status")).
 			ErrorResponse(400, "Missing id parameter").
 			ErrorResponse(404, "Pipeline run not found").
@@ -1439,4 +1555,23 @@ func DashboardRoutes() []Route {
 			ErrorResponse(405, "Method not allowed — GET only").
 			ErrorResponse(503, "Agent runner not configured").WithAuth().Build(),
 	}
+	for i := range routes {
+		declared := false
+		for _, response := range routes[i].Responses {
+			if response.StatusCode == http.StatusServiceUnavailable {
+				declared = true
+				break
+			}
+		}
+		if !declared {
+			builder := RouteBuilder{route: routes[i]}
+			builder.ErrorResponse(http.StatusServiceUnavailable, "Dashboard restart handoff pending; request was not admitted")
+			routes[i] = builder.Build()
+		}
+	}
+	return routes
+}
+
+func hitlDecisionSchema() *Schema {
+	return ObjectSchema(map[string]*Schema{"reviewer": StringSchema("Reviewer name"), "comment": StringSchema("Comment"), "reason": StringSchema("Decision reason")})
 }

@@ -29,11 +29,35 @@ func TestClassifyGoapCycleFailurePrecedence(t *testing.T) {
 		{"infra stays infra", "failure", "Superpowers Worktree Failed", goapCycleFailureInfra},
 		{"own-code gate failure is genuine", "failure", "✗ golangci-lint found issues", goapCycleFailureGenuine},
 		{"plain decline is genuine", "failure", "agent declined milestone", goapCycleFailureGenuine},
+		{"GREEN test logs cannot claim RED passed", "failure",
+			"## GOAP Superpowers Execution Failed\n\ntask GREEN verification failed: go test ./internal/engine\nerror: exit status 1\n" +
+				"time=now level=WARN msg=\"RED command unexpectedly passed; refusing to run GREEN without failing regression evidence: go test ./internal/example\"\nFAIL",
+			goapCycleFailureGenuine},
+		{"GREEN test logs cannot claim infrastructure failure", "failure",
+			"## GOAP Superpowers Execution Failed\n\ntask GREEN verification failed: go test ./internal/engine\nerror: exit status 1\n" +
+				"fixture: Superpowers Worktree Failed; pending_patch: probe; reached your quota /usage-credits; cycle budget exhausted\nFAIL",
+			goapCycleFailureGenuine},
+		{"deadline remains infrastructure despite embedded test markers", "failure",
+			"## GOAP Superpowers Execution Failed\n\ntask GREEN verification aborted: cycle budget exhausted (context deadline exceeded)\nerror: signal: killed\n" +
+				"fixture: RED command unexpectedly passed; Tests failed. Fix before committing.",
+			goapCycleFailureInfra},
+		{"run verification logs cannot claim RED passed", "failure",
+			"## GOAP Superpowers Verification Failed\n\nverification changed-packages-tests failed: exit status 1\n" +
+				"RED command unexpectedly passed; cycle budget exhausted\nFAIL",
+			goapCycleFailureGenuine},
 	}
 	for _, tc := range cases {
 		if got := classifyGoapCycleFailure(tc.outcome, tc.result); got != tc.want {
 			t.Errorf("%s: classifyGoapCycleFailure = %q, want %q", tc.name, got, tc.want)
 		}
+	}
+}
+
+func TestExtractRedPassCommandIgnoresVerificationOutput(t *testing.T) {
+	result := "## GOAP Superpowers Execution Failed\n\ntask GREEN verification failed: go test ./internal/engine\nerror: exit status 1\n" +
+		"RED command unexpectedly passed; refusing to run GREEN without failing regression evidence: go test ./internal/example"
+	if got := extractRedPassCommand(result); got != "" {
+		t.Fatalf("test output must not become stale-work evidence, got %q", got)
 	}
 }
 

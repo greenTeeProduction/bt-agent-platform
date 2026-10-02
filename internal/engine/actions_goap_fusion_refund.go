@@ -93,6 +93,7 @@ var goapPendingPatchResultMarkers = []string{
 // isGoapPendingPatchFailure reports whether a failed cycle parked as
 // pending_patch specifically, rather than a different infrastructure wedge.
 func isGoapPendingPatchFailure(outcome, result string) bool {
+	result = goapFailureDiagnostic(result)
 	if outcome == "pending_patch" {
 		return true
 	}
@@ -120,12 +121,30 @@ const goapWorkingTreeDriftMarker = "Build Tree Preflight" + " Failed"
 // isGoapWorkingTreeDriftFailure reports whether a failed cycle died because
 // the on-disk build tree had drifted from HEAD.
 func isGoapWorkingTreeDriftFailure(result string) bool {
-	return strings.Contains(result, goapWorkingTreeDriftMarker)
+	return strings.Contains(goapFailureDiagnostic(result), goapWorkingTreeDriftMarker)
+}
+
+// goapFailureDiagnostic excludes subprocess output from verification failures.
+// Engine tests log simulated RED passes, quota errors, and pending patches;
+// those fixtures describe neither the outer command nor this cycle's outcome.
+// Keep the executor's diagnostic (including its deadline marker), while the
+// original Result and command artifacts retain all output for investigation.
+func goapFailureDiagnostic(result string) string {
+	lines := strings.Split(result, "\n")
+	for i, line := range lines {
+		if strings.HasPrefix(line, "task GREEN verification ") ||
+			strings.HasPrefix(line, "task RED verification ") ||
+			strings.HasPrefix(line, "verification ") {
+			return strings.Join(lines[:i+1], "\n")
+		}
+	}
+	return result
 }
 
 // isGoapInfraCycleFailure reports whether a failed cycle died for
 // infrastructure reasons rather than an implementation failure.
 func isGoapInfraCycleFailure(outcome, result string) bool {
+	result = goapFailureDiagnostic(result)
 	// An own-code gate failure (lint/vet/fmt/test/mod-tidy) is a genuine
 	// implementation failure that reproduces every cycle — checked FIRST so it
 	// wins over the generic applied_uncommitted / pending_patch markers (both of
@@ -220,7 +239,7 @@ const (
 // out-of-band (hand-landed rescue, sibling lane) or the plan wrote a weak
 // test — never an unbuildable milestone.
 func isGoapRedUnexpectedlyPassed(result string) bool {
-	return strings.Contains(result, "RED command unexpectedly passed")
+	return strings.Contains(goapFailureDiagnostic(result), "RED command unexpectedly passed")
 }
 
 // extractRedPassCommand pulls the RED command out of the executor's refusal
@@ -229,6 +248,7 @@ func isGoapRedUnexpectedlyPassed(result string) bool {
 // line. Empty when the marker is absent or malformed; RecordRedPass treats
 // an empty command as "keep the previous record".
 func extractRedPassCommand(result string) string {
+	result = goapFailureDiagnostic(result)
 	const marker = "failing regression evidence: "
 	_, after, ok := strings.Cut(result, marker)
 	if !ok {
