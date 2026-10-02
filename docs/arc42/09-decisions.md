@@ -6979,7 +6979,7 @@ separates the deployed b615 baseline from this new source correction.
 
 **Limits:** Native metadata assumes trusted local tools/storage; it is not a
 cryptographic attestation or proof of causal research benefit. A shared clone
-uses the source object database during its bounded build lifetime. Native build
+uses the source object database during its build lifetime. Native build
 identity does not prove safe restart, whole-fleet adoption or useful task impact.
 
 ---

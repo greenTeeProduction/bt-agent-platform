@@ -59,3 +59,9 @@ All twelve arc42 sections were considered: current runtime/deployment/quality/
 risk views and the decision log changed; goals, constraints, external interfaces,
 strategy, package ownership, persistence semantics and glossary are unchanged.
 The change adds only agent → util ownership, no engine import or new database.
+
+Upstream subsequently merged PR83 as `06fd71c350183cf7734f250aa003918bb1f2403b`.
+Its merge tree adds no code differences to the already integrated review branch;
+the upstream ancestry is retained alongside the native rebuild correction.
+`implementation-commit-checks.txt` records full normal vet, lint, tidy, documentation,
+44 CI Doctor and short-suite acceptance for implementation commit `5cfeb412`.
