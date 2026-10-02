@@ -1,0 +1,31 @@
+{
+  "status": "passed",
+  "observed_utc": "2026-10-02T00:21:18.412688+00:00",
+  "kind": "actual daemon wall-clock cron; native clean Sol runtime; no manual RunNow",
+  "agent": "auto-64b3ade6ccf45796470168daa91d8cf9",
+  "owner": "runtime-qualification",
+  "tree_id": "factory:automation_1d567a2eb3b272f9fd7ecf2880b9353a",
+  "tree_version": "sha256:100a5627accd8d0e832f3d9690a5b2f76c9dfb68e2c847ec8b69edb2aabd9846",
+  "build": {
+    "revision": "b615595b9cb55cdadf6664a8c9d306602abf60d6",
+    "commit_time": "2026-10-02T00:02:59Z",
+    "module": "github.com/nico/go-bt-evolve",
+    "dirty": false,
+    "known": true
+  },
+  "run_id": "run_1790900359504453066",
+  "terminal_record": "/home/nico/.go-bt-reflections/reflection-run-87b025e12b9a05a3f571dc1354c2ba57.json",
+  "terminal_sha256": "ac3650b3d4a6244410bc32832d48cd480a24f680a7bdaab4276b45d5c4724605",
+  "output_sha256": "56c1ca660c716e104de25df230ed968292ad32b97eaac06cc06aac4647f49f76",
+  "expected": {
+    "active_services": 3,
+    "sol_services": 3,
+    "clean_builds": 3,
+    "revision": "b615595b9cb55cdadf6664a8c9d306602abf60d6"
+  },
+  "approval_kind": "existing host policy automatically approved; no manual owner approval claimed",
+  "repeat_schedule_removed": true,
+  "limits": [
+    "Scoped actual service-status file task; not broad assistant competence or causal research impact"
+  ]
+}

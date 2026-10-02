@@ -316,6 +316,7 @@ Navigation and provenance:
 | ADR-288 | [Runtime Build, Publication and Recomputable Result Evidence](#adr-288) | Accepted — causal research impact open | 2026-10-01 |
 | ADR-289 | [Observed Effects for Compiled and Dynamic GOAP](#adr-289) | Accepted — built-in adapters and rollout open | 2026-10-02 |
 | ADR-290 | [Program Review Holds and Verified Code Delivery](#adr-290) | Accepted — semantic impact and rollout open | 2026-10-02 |
+| ADR-291 | [Native Identity Before Automatic Binary Replacement](#adr-291) | Accepted | 2026-10-02 |
 
 <a id="adr-001"></a>
 
@@ -6945,6 +6946,41 @@ local storage. The remaining historical done labels have no verified delivery
 credit. Review revision checks changed text, not the semantic quality of its test.
 Immutable research-source lineage through rewrites, paired code-change experiments,
 broader task corpora and production deployment remain separate work.
+
+<a id="adr-291"></a>
+
+## ADR-291: Native Identity Before Automatic Binary Replacement
+
+**Context:** The host Go toolchain omits native VCS metadata in linked worktrees.
+The existing automatic rebuild path could therefore produce functioning binaries
+that could not qualify code adoption. Inherited Git variables could redirect the
+compiler's identity lookup. The CLI rebuild target also differed from `bin/`.
+
+**Decision:** Capture the source HEAD, create a private ordinary shared clone,
+check out that exact commit with hooks disabled, and scrub inherited Git variables
+for every Git/compiler call. Build with native VCS stamping and preserve display
+ldflags only for compatibility. Before replacement, inspect the actual executable
+and require the expected module, exact revision, commit time, clean state and no
+local replacements. On failure retain the previous executable. Build the CLI into
+`bin/`; a deployed root alias can preserve historical callers.
+
+**Alternatives:** Display revision strings are assertions, not native evidence.
+Building in the writable source checkout could include another worker's edits.
+An ordinary private checkout preserves both committed input and native identity.
+
+**Status:** Accepted (2026-10-02); real compiler/Git tests pass. Automatic restart
+remains disabled until separate process-wide admission and handoff acceptance.
+
+**Evidence:** [Native rebuild regressions](../../internal/agent/rebuild_provenance_test.go)
+cover ordinary, bare and linked source repositories, inherited Git overrides,
+source preservation, executable behavior and rejection before replacement.
+[Release and retained RED/green evidence](../verification/2026-10-02-runtime-release/README.md)
+separates the deployed b615 baseline from this new source correction.
+
+**Limits:** Native metadata assumes trusted local tools/storage; it is not a
+cryptographic attestation or proof of causal research benefit. A shared clone
+uses the source object database during its bounded build lifetime. Native build
+identity does not prove safe restart, whole-fleet adoption or useful task impact.
 
 ---
 

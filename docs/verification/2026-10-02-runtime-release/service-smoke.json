@@ -1,0 +1,99 @@
+{
+  "status": "passed",
+  "observed_utc": "2026-10-02T00:15:31.622940+00:00",
+  "processes": [
+    {
+      "unit": "bt-agent",
+      "pid": 2778489,
+      "active": true,
+      "executable_sha256": "dc63943b52199d860e52959c4959f44af7cd929a54f9a2d4049909af042c2275",
+      "native_revision": "b615595b9cb55cdadf6664a8c9d306602abf60d6",
+      "native_dirty": false,
+      "model_settings": {
+        "BT_CODEX_BIN": "/home/nico/.local/bin/codex",
+        "BT_LLM_PROVIDER": "codex",
+        "BT_LLM_SOL_ONLY": "true",
+        "BT_SUPERPOWERS_CODEX_BIN": "/home/nico/.local/bin/codex",
+        "BT_SUPERPOWERS_CODEX_MODEL": "gpt-6.1-sol",
+        "BT_SUPERPOWERS_CODEX_ONLY": "true",
+        "BT_SUPERPOWERS_PROVIDER": "codex",
+        "BT_SUPERPOWERS_RATE_LIMIT_FAILOVER": "false"
+      }
+    },
+    {
+      "unit": "bt-dashboard",
+      "pid": 2778481,
+      "active": true,
+      "executable_sha256": "edc89d692ff18a7cd116d768a67381b7815d3801c104753f6ecd478fb9b28539",
+      "native_revision": "b615595b9cb55cdadf6664a8c9d306602abf60d6",
+      "native_dirty": false,
+      "model_settings": {
+        "BT_CODEX_BIN": "/home/nico/.local/bin/codex",
+        "BT_LLM_PROVIDER": "codex",
+        "BT_LLM_SOL_ONLY": "true",
+        "BT_SUPERPOWERS_CODEX_BIN": "/home/nico/.local/bin/codex",
+        "BT_SUPERPOWERS_CODEX_MODEL": "gpt-6.1-sol",
+        "BT_SUPERPOWERS_CODEX_ONLY": "true",
+        "BT_SUPERPOWERS_PROVIDER": "codex",
+        "BT_SUPERPOWERS_RATE_LIMIT_FAILOVER": "false"
+      }
+    },
+    {
+      "unit": "bt-gardener",
+      "pid": 2778495,
+      "active": true,
+      "executable_sha256": "37f579d61a2463fddc5fb10604dada0741bdc194d59687dcd1a815c2fbd6be4e",
+      "native_revision": "b615595b9cb55cdadf6664a8c9d306602abf60d6",
+      "native_dirty": false,
+      "model_settings": {
+        "BT_CODEX_BIN": "/home/nico/.local/bin/codex",
+        "BT_LLM_PROVIDER": "codex",
+        "BT_LLM_SOL_ONLY": "true",
+        "BT_SUPERPOWERS_CODEX_BIN": "/home/nico/.local/bin/codex",
+        "BT_SUPERPOWERS_CODEX_MODEL": "gpt-6.1-sol",
+        "BT_SUPERPOWERS_CODEX_ONLY": "true",
+        "BT_SUPERPOWERS_PROVIDER": "codex",
+        "BT_SUPERPOWERS_RATE_LIMIT_FAILOVER": "false"
+      }
+    }
+  ],
+  "http_checks": [
+    {
+      "path": "/api/health",
+      "authenticated": false,
+      "http_status": 200,
+      "bytes": 84
+    },
+    {
+      "path": "/api/tasks",
+      "authenticated": false,
+      "http_status": 401,
+      "bytes": 75
+    },
+    {
+      "path": "/api/tasks",
+      "authenticated": true,
+      "http_status": 200,
+      "bytes": 35451
+    },
+    {
+      "path": "/api/trees",
+      "authenticated": true,
+      "http_status": 200,
+      "bytes": 14461
+    },
+    {
+      "path": "/api/agents",
+      "authenticated": true,
+      "http_status": 200,
+      "bytes": 5590
+    },
+    {
+      "path": "/api/metrics",
+      "authenticated": false,
+      "http_status": 200,
+      "bytes": 3679
+    }
+  ],
+  "scope": "running native identity, effective provider policy, protected routes and HTTP liveness; task execution checked separately"
+}

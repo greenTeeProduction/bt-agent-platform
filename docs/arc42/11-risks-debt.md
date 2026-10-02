@@ -106,9 +106,10 @@ ADR-285 replaces autopilot administrative plans with exact governed task reuse,
 adds immutable version consent and missing-ledger holds for marked definitions,
 and verifies one real file-task fixture including rejection without overwrite.
 Additional external capabilities, dynamic semantic
-oracles, file-task evolution corpora, actual cron dispatch, incomplete-reservation
-recovery and stale feedback-review IDs remain open. These changes are not deployed
-and do not qualify broad personal assistant behavior.
+oracles, file-task evolution corpora, incomplete-reservation recovery and stale
+feedback-review IDs remain open. Clean native b615 deployment and one real
+wall-clock Sol file task are now verified; that bounded task does not qualify
+broad personal assistant behavior.
 
 Typed checkpoint/source mismatches, retry state loss across ticks and standalone
 GOAP agent prediction-to-observation conflation are repaired by ADR-286. The
@@ -134,7 +135,18 @@ pre-run milestone references with verified Git delivery. The host repair moved
 Paired code-change experiments, semantic goal fulfillment, immutable research
 source identity through program rewrites and historical backfill remain open.
 Exact matching intentionally leaves rewritten/automatically scoped goals unlinked.
-No production deployment is claimed by local protocol or live model tests.
+Local protocol/live-model tests alone do not establish deployment. Separate
+2026-10-02 native PID/hash and actual cron evidence establishes b615 deployment
+for the three canonical services; causal research impact remains open.
+
+Native rebuild attribution is repaired in source (ADR-291): private ordinary
+checkouts and executable metadata checks replace unverifiable linked-worktree
+builds. All three canonical services already run the preceding clean b615 release.
+The new guard still needs release adoption. R13 remains open because bt-agent
+self restart samples scheduler state without sealing all process admission;
+automatic flags remain disabled. [Release evidence and remaining acceptance](../verification/2026-10-02-runtime-release/README.md)
+separate successful manual deployment/one cron file task from autonomous fleet
+handoff and causal research qualification.
 
 ---
 

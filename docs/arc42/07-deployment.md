@@ -1,6 +1,6 @@
 # 7. Deployment View
 
-2026-10-01: all three BT units retain Sol-only ordinary inference, `/home/nico/.local/bin/codex` 0.159.3 and disabled alternate fallbacks; services remain stopped. NotebookLM MCP uses `bin/bt-notebooklm-auth --mcp`; a separate user timer renews its existing profile every 15 minutes without starting BT services. The upgraded 0.14.0 integration recovered the existing account headlessly and listed 29 notebooks. See [policy](../sol-model-policy.md) and [auth operations](../../internal/notebooklmauth/README.md).
+2026-10-02: all three BT units are active and enabled on clean native release `b615595b`, with effective Sol-only ordinary inference and disabled alternate fallbacks. Automatic rebuild/restart remain disabled pending daemon-wide restart admission. The dated observations below retain their original scope; see the current release evidence at the end of this section. NotebookLM MCP uses `bin/bt-notebooklm-auth --mcp`; a separate user timer renews its existing profile every 15 minutes without starting BT services. The upgraded 0.14.0 integration recovered the existing account headlessly and listed 29 notebooks. See [policy](../sol-model-policy.md) and [auth operations](../../internal/notebooklmauth/README.md).
 
 The reference deployment is a supervised, single-host installation.
 Configuration observations below were checked on **2026-09-16**; source
@@ -316,6 +316,30 @@ processes for agent, dashboard and gardener. All three effectively select Codex,
 DeepSeek/auto settings are overridden. No configuration change or service start
 was needed. PR83 head `af780cdb` was fetched and is already in the review branch.
 This increment does not deploy that branch or qualify production task outcomes.
+
+### Verified native host release and bounded scheduled task
+
+The 2026-10-02 manual release installed fourteen clean native `b615595b`
+executables after preserving prior binaries/configuration and the resolved state
+directories with all three services stopped. Actual PID executable hashes and
+native Go metadata establish that agent, dashboard and gardener adopted that
+revision; effective process settings enforce ordinary Sol 6.1. All three units
+are active and enabled. Public health and protected 401/200 checks passed.
+
+The actual scheduler then executed one factory-created personal file task using
+Sol, retained its exact tree/version/build and verified output receipt, and
+returned the diagnostic automation to on-demand. This closes the bounded
+wall-clock dispatch check, not general assistant or causal research acceptance.
+Local master now contains the reviewed framework so the coding loop's master
+checkout does not revert it; the old CLI is backed up and its root path aliases
+`bin/bt-agent-cli`. See [retained release evidence](../verification/2026-10-02-runtime-release/README.md).
+
+Automatic rebuild source now uses a captured commit in a private ordinary local
+clone and rejects executables without matching clean native identity before
+replacement (ADR-291). Real native tests cover ordinary, bare and linked source
+repositories. That correction is not a deployed automatic handoff claim. Both
+automatic flags remain zero until bt-agent owns all in-flight admission; never
+restart a scheduled implementation merely because a wait timed out.
 
 ---
 

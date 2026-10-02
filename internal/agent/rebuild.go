@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"debug/buildinfo"
 	"fmt"
 	"os"
 	"os/exec"
@@ -8,10 +9,12 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 // Out-of-place binary rebuild (program 94b0b31 milestone 2). To adopt a
-// committed fix, the daemon materializes the repo HEAD into a throwaway worktree,
+// committed fix, the daemon materializes the repo HEAD into a private checkout,
 // builds each target to "<binary>.new" there, and only os.Renames over the live
 // binary when its build SUCCEEDS — a live binary is never truncated by an
 // in-place `go build` (the bug that overwrote the running binary on 2026-07-03).
@@ -44,7 +47,7 @@ type RebuildTarget struct {
 func DefaultRebuildTargets(repoDir string) []RebuildTarget {
 	return []RebuildTarget{
 		{Name: "bt-agent", Pkg: "./cmd/bt-agent", OutPath: filepath.Join(repoDir, "bin", "bt-agent"), Unit: "bt-agent"},
-		{Name: "bt-agent-cli", Pkg: "./cmd/bt-agent-cli", OutPath: filepath.Join(repoDir, "bt-agent-cli")},
+		{Name: "bt-agent-cli", Pkg: "./cmd/bt-agent-cli", OutPath: filepath.Join(repoDir, "bin", "bt-agent-cli")},
 		{Name: "bt-gardener", Pkg: "./cmd/bt-gardener", OutPath: filepath.Join(repoDir, "bin", "bt-gardener"), Unit: "bt-gardener"},
 		{Name: "bt-dashboard", Pkg: "./cmd/bt-dashboard", OutPath: filepath.Join(repoDir, "bin", "bt-dashboard"), Unit: "bt-dashboard"},
 	}
@@ -119,43 +122,64 @@ func RebuildBinaries(repoDir string, targets []RebuildTarget) error {
 	return nil
 }
 
-// defaultRebuildMaterialize adds a detached worktree at HEAD (bare-repo safe)
-// and returns a cleanup that removes it.
+// defaultRebuildMaterialize creates a private ordinary checkout of the captured
+// commit. The installed Go toolchain omits native VCS metadata for linked
+// worktrees, even with -buildvcs=true. A local shared clone keeps a real .git
+// directory without copying the source object database or changing its refs.
 func defaultRebuildMaterialize(repoDir string) (string, func(), error) {
+	repoDir, err := filepath.Abs(repoDir)
+	if err != nil {
+		return "", func() {}, err
+	}
+	head := exec.Command("git", "-C", repoDir, "rev-parse", "--verify", "HEAD^{commit}")
+	head.Env = scrubGitEnv()
+	revision, err := head.Output()
+	if err != nil {
+		return "", func() {}, fmt.Errorf("resolve rebuild commit: %w", err)
+	}
 	scratch, err := os.MkdirTemp("", "bt-rebuild-*")
 	if err != nil {
 		return "", func() {}, err
 	}
-	add := exec.Command("git", "-C", repoDir, "worktree", "add", "--detach", scratch, "HEAD")
-	add.Env = scrubGitEnv()
-	if out, err := add.CombinedOutput(); err != nil {
-		_ = os.RemoveAll(scratch)
-		return "", func() {}, fmt.Errorf("git worktree add: %w\n%s", err, out)
+	cleanup := func() { _ = os.RemoveAll(scratch) }
+	clone := exec.Command("git", "-c", "core.hooksPath=/dev/null", "clone", "--quiet", "--shared", "--no-checkout", "--", repoDir, scratch)
+	clone.Env = scrubGitEnv()
+	if out, err := clone.CombinedOutput(); err != nil {
+		cleanup()
+		return "", func() {}, fmt.Errorf("git clone for rebuild: %w\n%s", err, out)
 	}
-	cleanup := func() {
-		rm := exec.Command("git", "-C", repoDir, "worktree", "remove", "--force", scratch)
-		rm.Env = scrubGitEnv()
-		_ = rm.Run()
-		_ = os.RemoveAll(scratch)
+	checkout := exec.Command("git", "-C", scratch, "-c", "core.hooksPath=/dev/null", "checkout", "--quiet", "--detach", strings.TrimSpace(string(revision)))
+	checkout.Env = scrubGitEnv()
+	if out, err := checkout.CombinedOutput(); err != nil {
+		cleanup()
+		return "", func() {}, fmt.Errorf("checkout rebuild commit: %w\n%s", err, out)
 	}
 	return scratch, cleanup, nil
 }
 
-// defaultRebuildBuild runs `go build -o <newPath> <pkg>` inside workDir, VCS-
-// stamping the binary with workDir's HEAD so a binary rebuilt from the bare main
-// repo (which go build cannot stamp on its own) stays comparable against repo
-// HEAD by DriftStatus — otherwise the auto-rebuilt daemon would itself be blind
-// to the next drift.
+// defaultRebuildBuild requires native clean provenance for the exact checkout
+// commit before its caller can replace a deployed binary. The display stamp is
+// retained for compatibility but cannot substitute for executable metadata.
 func defaultRebuildBuild(workDir, pkg, newPath string) error {
-	args := []string{"build"}
-	if ld := buildStampLdflags(workDir); ld != "" {
-		args = append(args, "-ldflags", ld)
+	ld := buildStampLdflags(workDir)
+	if ld == "" {
+		return fmt.Errorf("rebuild requires a committed Git checkout")
 	}
-	args = append(args, "-o", newPath, pkg)
+	revision := strings.TrimPrefix(ld, "-X github.com/nico/go-bt-evolve/internal/dashboard.stampedRevision=")
+	args := []string{"build", "-buildvcs=true", "-ldflags", ld, "-o", newPath, pkg}
 	build := exec.Command(resolveGoBinary(), args...)
 	build.Dir = workDir
+	build.Env = scrubGitEnv()
 	if out, err := build.CombinedOutput(); err != nil {
 		return fmt.Errorf("go build %s: %w\n%s", pkg, err, out)
+	}
+	info, err := buildinfo.ReadFile(newPath)
+	if err != nil {
+		return fmt.Errorf("read rebuilt executable provenance: %w", err)
+	}
+	proof := util.BuildProvenanceFromInfo(info)
+	if !proof.QualifiesCodeIdentity() || proof.Revision != revision || proof.CommitTime == "" {
+		return fmt.Errorf("rebuilt executable lacks clean native provenance for %s", revision)
 	}
 	return nil
 }

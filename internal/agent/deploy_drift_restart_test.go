@@ -251,13 +251,13 @@ func TestAutoRestartEnabled(t *testing.T) {
 // daemon (rebuilds swapped a binary nothing executed) — and bin/bt-agent
 // doubles as the MCP server binary .mcp.json boots per cycle-session, so the
 // former separate unit-less "bt-agent-mcp" target collapsed into the self
-// target. NO target may point at the repo root except bt-agent-cli (the CLI
-// tool's canonical path, no owning unit).
+// target. All targets use bin/, including bt-agent-cli; deployments may retain
+// a repo-root CLI symlink for historical callers.
 func TestDefaultRebuildTargets_PinsFullList(t *testing.T) {
 	got := DefaultRebuildTargets("/repo")
 	want := []RebuildTarget{
 		{Name: "bt-agent", Pkg: "./cmd/bt-agent", OutPath: filepath.Join("/repo", "bin", "bt-agent"), Unit: "bt-agent"},
-		{Name: "bt-agent-cli", Pkg: "./cmd/bt-agent-cli", OutPath: filepath.Join("/repo", "bt-agent-cli")},
+		{Name: "bt-agent-cli", Pkg: "./cmd/bt-agent-cli", OutPath: filepath.Join("/repo", "bin", "bt-agent-cli")},
 		{Name: "bt-gardener", Pkg: "./cmd/bt-gardener", OutPath: filepath.Join("/repo", "bin", "bt-gardener"), Unit: "bt-gardener"},
 		{Name: "bt-dashboard", Pkg: "./cmd/bt-dashboard", OutPath: filepath.Join("/repo", "bin", "bt-dashboard"), Unit: "bt-dashboard"},
 	}

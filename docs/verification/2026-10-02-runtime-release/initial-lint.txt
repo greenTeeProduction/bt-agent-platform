@@ -1,0 +1,5 @@
+internal/agent/rebuild.go:169:2: Consider preallocating args with capacity 7 (prealloc)
+	args := []string{"build", "-buildvcs=true", "-ldflags", ld}
+	^
+1 issues:
+* prealloc: 1

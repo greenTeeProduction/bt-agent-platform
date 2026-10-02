@@ -1,0 +1,13 @@
+{
+  "baseline": "b615595b9cb55cdadf6664a8c9d306602abf60d6",
+  "code_sha256": {
+    "internal/agent/rebuild.go": "27d0ceafe9c37c39b38ec4f9fb75d4dbeb286ceeda7cff35768ecebfbc97c18d",
+    "internal/agent/rebuild_provenance_test.go": "d126b53886b3cfba29e56cdd36c729d70e021b0b2f3bc61fa94238b532dae3fe",
+    "internal/agent/deploy_drift_restart_test.go": "9b34703220c57f370f553db12e38a1c01c8b4d79eea367268f707dd557028ef8"
+  },
+  "pr83_head": "af780cdbf4745432b4b3a2d890a9c9e88443237e",
+  "pr83_upstream_merge": "06fd71c350183cf7734f250aa003918bb1f2403b",
+  "ordinary_llm": "gpt-6.1-sol through Codex",
+  "benchmark_policy": "real qualified Ollama with actual Sol fallback; no new LLM benchmark claim in native rebuild tests",
+  "conventions_review": "agent imports util only; no engine layer change, retired package or new database; committed checkout and native executable gate; no actionable convention findings"
+}
