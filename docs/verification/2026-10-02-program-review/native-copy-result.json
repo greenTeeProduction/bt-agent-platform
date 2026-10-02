@@ -1,0 +1,28 @@
+{
+  "status": "passed",
+  "scope": "copy",
+  "observed_utc": "2026-10-01T23:56:06Z",
+  "binary_sha256": "eb6fc7f9a183f44e07d0ad07672a07681b5facc7fcfd4361d102557b7d003fa4",
+  "programs": 145,
+  "milestones": 473,
+  "before": {
+    "done": 429,
+    "blocked": 44
+  },
+  "after": {
+    "done": 369,
+    "blocked": 44,
+    "needs_review": 60
+  },
+  "corrected": 60,
+  "verified_code_deliveries": 0,
+  "legacy_unverified_done": 369,
+  "before_sha256": "f9a02909cf6f6f3af3073f5d3abb36726562d13aa424cc7b81df5983f978af2e",
+  "after_sha256": "933eae46721d97ae6d8977b0a61d247b14990dca53947fff96fa699967053ac2",
+  "backup": "/home/nico/Documents/Codex/2026-10-01-please-give-me-a-status-report/bt-runtime-impact-evidence/program-review/native-copy/agent/research/programs.json.before-red-review-f9a02909cf6f6f3af3073f5d3abb36726562d13aa424cc7b81df5983f978af2e.json",
+  "backup_matches": true,
+  "repeat_byte_identical": true,
+  "unrelated_milestones_unchanged": true,
+  "models_called_for_this_repair": false,
+  "services_started": false
+}

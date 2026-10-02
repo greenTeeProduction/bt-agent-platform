@@ -315,6 +315,7 @@ Navigation and provenance:
 | ADR-287 | [Research Sources and Verified Code Delivery Are Separate Evidence](#adr-287) | Accepted — adoption and measured impact links open | 2026-10-01 |
 | ADR-288 | [Runtime Build, Publication and Recomputable Result Evidence](#adr-288) | Accepted — causal research impact open | 2026-10-01 |
 | ADR-289 | [Observed Effects for Compiled and Dynamic GOAP](#adr-289) | Accepted — built-in adapters and rollout open | 2026-10-02 |
+| ADR-290 | [Program Review Holds and Verified Code Delivery](#adr-290) | Accepted — semantic impact and rollout open | 2026-10-02 |
 
 <a id="adr-001"></a>
 
@@ -6902,6 +6903,48 @@ version adoption. Full GOAP configuration mutation preservation, broader semanti
 oracles, alternate-capability replanning, durable external retry recovery and
 production rollout remain open. The tests prove the stated file/value tasks;
 they do not establish general personal-assistant competence or causal research impact.
+
+<a id="adr-290"></a>
+
+## ADR-290: Program Review Holds and Verified Code Delivery
+
+**Context:** Program milestones could complete after repeated preimplementation
+RED passes or completion labels without real Git attribution. The host retained
+60 such RED-pass completions. Later dependent work could advance on that unsupported
+premise, and program metadata failure lacked durable delivery reconciliation.
+
+**Decision:** Repeated passes create `needs_review`, not completion. Hold dependent
+selection/batching. Preserve historical original bytes before correcting known
+RED labels and retain their prior disposition. Expose framework-scoped MCP review
+and reconciliation tools; revision requires an exact current goal and changed
+requirements, preserves history and reopens pending work without credit.
+
+Capture program/index/exact goal in the run before implementation. Validate actual
+Git landing, verification and completed task/file scope before recording a detached
+delivery receipt. Keep program persistence within the pending-delivery journal so
+failed bookkeeping is repaired without rerunning implementation. Validate backlog
+shape/identities, bound lock waits and resolve the configured platform home after
+startup. Failed admission persistence prevents planning.
+
+**Alternatives:** Repeated passing tests and merely present files cannot establish
+new delivery. Guessing milestone identity from shared filenames after execution
+can misattribute unrelated work. Deleting historical claims loses audit evidence.
+Those shortcuts are rejected.
+
+**Status:** Accepted (2026-10-02); implemented and locally verified, host metadata
+corrected; semantic research impact and service rollout remain open.
+
+**Evidence:** [Program delivery/recovery tests](../../internal/engine/program_delivery_test.go),
+[backup/revision tests](../../internal/research/program_review_test.go),
+[MCP tests](../../cmd/bt-agent/impact_tools_test.go) and
+[compiled MCP host correction plus race/live regressions](../verification/2026-10-02-program-review/README.md).
+
+**Limits:** An anchored task/file intersection attributes a code delivery; it does
+not prove that the whole natural-language goal is satisfied. Stored receipts trust
+local storage. The remaining historical done labels have no verified delivery
+credit. Review revision checks changed text, not the semantic quality of its test.
+Immutable research-source lineage through rewrites, paired code-change experiments,
+broader task corpora and production deployment remain separate work.
 
 ---
 

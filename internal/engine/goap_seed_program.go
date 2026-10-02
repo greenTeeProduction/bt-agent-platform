@@ -57,7 +57,7 @@ func chooseProgramProposal(nlmOut string, claudeFn func() string) string {
 
 func init() {
 	RegisterCondition("NeedsFreshProgram", func(bb *Blackboard) bool {
-		ps, err := research.OpenPrograms(goapProgramsPath)
+		ps, err := research.OpenPrograms(currentGoapProgramsPath())
 		if err != nil {
 			return false
 		}
@@ -69,7 +69,7 @@ func init() {
 
 	RegisterAction("SeedNextProgram", func(ctx *btcore.BTContext[Blackboard]) int {
 		bb := ctx.Blackboard
-		ps, err := research.OpenPrograms(goapProgramsPath)
+		ps, err := research.OpenPrograms(currentGoapProgramsPath())
 		if err != nil {
 			bb.Result += "\n\n## Backlog Seeding Skipped\n\nProgram store unreadable: " + err.Error()
 			return 1

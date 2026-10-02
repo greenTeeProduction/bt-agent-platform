@@ -1,16 +1,16 @@
 # Graph Report - runtime-impact-20261001  (2026-10-02)
 
 ## Corpus Check
-- 1262 files · ~1,620,390 words
+- 1269 files · ~1,629,433 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 33256 nodes · 43048 edges · 7527 communities (6282 shown, 1245 thin omitted)
-- Extraction: 74% EXTRACTED · 26% INFERRED · 0% AMBIGUOUS · INFERRED: 11320 edges (avg confidence: 0.8)
+- 33306 nodes · 43223 edges · 7532 communities (6281 shown, 1251 thin omitted)
+- Extraction: 74% EXTRACTED · 26% INFERRED · 0% AMBIGUOUS · INFERRED: 11427 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `d9ae7182`
+- Built from commit: `26de2da0`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -203,13 +203,13 @@
 - [[_COMMUNITY_Community 185|Community 185]]
 - [[_COMMUNITY_Community 186|Community 186]]
 - [[_COMMUNITY_Community 187|Community 187]]
-- [[_COMMUNITY_Community 188|Community 188]]
 - [[_COMMUNITY_Community 189|Community 189]]
 - [[_COMMUNITY_Community 190|Community 190]]
 - [[_COMMUNITY_Community 191|Community 191]]
 - [[_COMMUNITY_Community 192|Community 192]]
 - [[_COMMUNITY_Community 193|Community 193]]
 - [[_COMMUNITY_Community 194|Community 194]]
+- [[_COMMUNITY_Community 195|Community 195]]
 - [[_COMMUNITY_Community 196|Community 196]]
 - [[_COMMUNITY_Community 197|Community 197]]
 - [[_COMMUNITY_Community 198|Community 198]]
@@ -329,7 +329,6 @@
 - [[_COMMUNITY_Community 312|Community 312]]
 - [[_COMMUNITY_Community 313|Community 313]]
 - [[_COMMUNITY_Community 314|Community 314]]
-- [[_COMMUNITY_Community 315|Community 315]]
 - [[_COMMUNITY_Community 316|Community 316]]
 - [[_COMMUNITY_Community 317|Community 317]]
 - [[_COMMUNITY_Community 318|Community 318]]
@@ -345,6 +344,7 @@
 - [[_COMMUNITY_Community 328|Community 328]]
 - [[_COMMUNITY_Community 329|Community 329]]
 - [[_COMMUNITY_Community 330|Community 330]]
+- [[_COMMUNITY_Community 331|Community 331]]
 - [[_COMMUNITY_Community 332|Community 332]]
 - [[_COMMUNITY_Community 333|Community 333]]
 - [[_COMMUNITY_Community 334|Community 334]]
@@ -365,7 +365,6 @@
 - [[_COMMUNITY_Community 349|Community 349]]
 - [[_COMMUNITY_Community 350|Community 350]]
 - [[_COMMUNITY_Community 351|Community 351]]
-- [[_COMMUNITY_Community 352|Community 352]]
 - [[_COMMUNITY_Community 353|Community 353]]
 - [[_COMMUNITY_Community 354|Community 354]]
 - [[_COMMUNITY_Community 355|Community 355]]
@@ -378,6 +377,7 @@
 - [[_COMMUNITY_Community 362|Community 362]]
 - [[_COMMUNITY_Community 363|Community 363]]
 - [[_COMMUNITY_Community 364|Community 364]]
+- [[_COMMUNITY_Community 365|Community 365]]
 - [[_COMMUNITY_Community 366|Community 366]]
 - [[_COMMUNITY_Community 367|Community 367]]
 - [[_COMMUNITY_Community 368|Community 368]]
@@ -514,8 +514,8 @@
 - [[_COMMUNITY_Community 499|Community 499]]
 - [[_COMMUNITY_Community 500|Community 500]]
 - [[_COMMUNITY_Community 501|Community 501]]
-- [[_COMMUNITY_Community 502|Community 502]]
 - [[_COMMUNITY_Community 503|Community 503]]
+- [[_COMMUNITY_Community 504|Community 504]]
 - [[_COMMUNITY_Community 505|Community 505]]
 - [[_COMMUNITY_Community 506|Community 506]]
 - [[_COMMUNITY_Community 507|Community 507]]
@@ -551,9 +551,9 @@
 - [[_COMMUNITY_Community 537|Community 537]]
 - [[_COMMUNITY_Community 538|Community 538]]
 - [[_COMMUNITY_Community 539|Community 539]]
-- [[_COMMUNITY_Community 540|Community 540]]
 - [[_COMMUNITY_Community 541|Community 541]]
 - [[_COMMUNITY_Community 542|Community 542]]
+- [[_COMMUNITY_Community 543|Community 543]]
 - [[_COMMUNITY_Community 544|Community 544]]
 - [[_COMMUNITY_Community 545|Community 545]]
 - [[_COMMUNITY_Community 546|Community 546]]
@@ -812,15 +812,15 @@
 - [[_COMMUNITY_Community 801|Community 801]]
 - [[_COMMUNITY_Community 802|Community 802]]
 - [[_COMMUNITY_Community 803|Community 803]]
-- [[_COMMUNITY_Community 804|Community 804]]
 - [[_COMMUNITY_Community 805|Community 805]]
-- [[_COMMUNITY_Community 808|Community 808]]
+- [[_COMMUNITY_Community 806|Community 806]]
+- [[_COMMUNITY_Community 807|Community 807]]
+- [[_COMMUNITY_Community 809|Community 809]]
 - [[_COMMUNITY_Community 810|Community 810]]
-- [[_COMMUNITY_Community 811|Community 811]]
 - [[_COMMUNITY_Community 812|Community 812]]
 - [[_COMMUNITY_Community 813|Community 813]]
 - [[_COMMUNITY_Community 814|Community 814]]
-- [[_COMMUNITY_Community 817|Community 817]]
+- [[_COMMUNITY_Community 815|Community 815]]
 - [[_COMMUNITY_Community 818|Community 818]]
 - [[_COMMUNITY_Community 819|Community 819]]
 - [[_COMMUNITY_Community 820|Community 820]]
@@ -2223,18 +2223,18 @@
 - [[_COMMUNITY_Community 2217|Community 2217]]
 - [[_COMMUNITY_Community 2218|Community 2218]]
 - [[_COMMUNITY_Community 2219|Community 2219]]
+- [[_COMMUNITY_Community 2220|Community 2220]]
 - [[_COMMUNITY_Community 2221|Community 2221]]
-- [[_COMMUNITY_Community 2223|Community 2223]]
+- [[_COMMUNITY_Community 2222|Community 2222]]
 - [[_COMMUNITY_Community 2224|Community 2224]]
-- [[_COMMUNITY_Community 2225|Community 2225]]
 - [[_COMMUNITY_Community 2226|Community 2226]]
 - [[_COMMUNITY_Community 2227|Community 2227]]
 - [[_COMMUNITY_Community 2228|Community 2228]]
 - [[_COMMUNITY_Community 2229|Community 2229]]
 - [[_COMMUNITY_Community 2230|Community 2230]]
 - [[_COMMUNITY_Community 2231|Community 2231]]
-- [[_COMMUNITY_Community 2234|Community 2234]]
-- [[_COMMUNITY_Community 2235|Community 2235]]
+- [[_COMMUNITY_Community 2232|Community 2232]]
+- [[_COMMUNITY_Community 2233|Community 2233]]
 - [[_COMMUNITY_Community 2236|Community 2236]]
 - [[_COMMUNITY_Community 2237|Community 2237]]
 - [[_COMMUNITY_Community 2238|Community 2238]]
@@ -2625,19 +2625,19 @@
 - [[_COMMUNITY_Community 2623|Community 2623]]
 - [[_COMMUNITY_Community 2624|Community 2624]]
 - [[_COMMUNITY_Community 2625|Community 2625]]
+- [[_COMMUNITY_Community 2626|Community 2626]]
 - [[_COMMUNITY_Community 2627|Community 2627]]
+- [[_COMMUNITY_Community 2629|Community 2629]]
 - [[_COMMUNITY_Community 2631|Community 2631]]
 - [[_COMMUNITY_Community 2632|Community 2632]]
-- [[_COMMUNITY_Community 2633|Community 2633]]
+- [[_COMMUNITY_Community 2636|Community 2636]]
+- [[_COMMUNITY_Community 2637|Community 2637]]
 - [[_COMMUNITY_Community 2638|Community 2638]]
 - [[_COMMUNITY_Community 2639|Community 2639]]
-- [[_COMMUNITY_Community 2640|Community 2640]]
-- [[_COMMUNITY_Community 2641|Community 2641]]
+- [[_COMMUNITY_Community 2643|Community 2643]]
 - [[_COMMUNITY_Community 2644|Community 2644]]
-- [[_COMMUNITY_Community 2646|Community 2646]]
-- [[_COMMUNITY_Community 2647|Community 2647]]
+- [[_COMMUNITY_Community 2645|Community 2645]]
 - [[_COMMUNITY_Community 2648|Community 2648]]
-- [[_COMMUNITY_Community 2649|Community 2649]]
 - [[_COMMUNITY_Community 2650|Community 2650]]
 - [[_COMMUNITY_Community 2651|Community 2651]]
 - [[_COMMUNITY_Community 2652|Community 2652]]
@@ -3440,14 +3440,13 @@
 - [[_COMMUNITY_Community 3449|Community 3449]]
 - [[_COMMUNITY_Community 3450|Community 3450]]
 - [[_COMMUNITY_Community 3451|Community 3451]]
-- [[_COMMUNITY_Community 3465|Community 3465]]
-- [[_COMMUNITY_Community 3467|Community 3467]]
-- [[_COMMUNITY_Community 3471|Community 3471]]
-- [[_COMMUNITY_Community 3475|Community 3475]]
-- [[_COMMUNITY_Community 3476|Community 3476]]
-- [[_COMMUNITY_Community 3477|Community 3477]]
-- [[_COMMUNITY_Community 3478|Community 3478]]
-- [[_COMMUNITY_Community 3479|Community 3479]]
+- [[_COMMUNITY_Community 3452|Community 3452]]
+- [[_COMMUNITY_Community 3453|Community 3453]]
+- [[_COMMUNITY_Community 3454|Community 3454]]
+- [[_COMMUNITY_Community 3455|Community 3455]]
+- [[_COMMUNITY_Community 3464|Community 3464]]
+- [[_COMMUNITY_Community 3470|Community 3470]]
+- [[_COMMUNITY_Community 3472|Community 3472]]
 - [[_COMMUNITY_Community 3480|Community 3480]]
 - [[_COMMUNITY_Community 3481|Community 3481]]
 - [[_COMMUNITY_Community 3482|Community 3482]]
@@ -3495,10 +3494,10 @@
 - [[_COMMUNITY_Community 3524|Community 3524]]
 - [[_COMMUNITY_Community 3525|Community 3525]]
 - [[_COMMUNITY_Community 3526|Community 3526]]
+- [[_COMMUNITY_Community 3527|Community 3527]]
 - [[_COMMUNITY_Community 3528|Community 3528]]
 - [[_COMMUNITY_Community 3529|Community 3529]]
 - [[_COMMUNITY_Community 3530|Community 3530]]
-- [[_COMMUNITY_Community 3531|Community 3531]]
 - [[_COMMUNITY_Community 3532|Community 3532]]
 - [[_COMMUNITY_Community 3533|Community 3533]]
 - [[_COMMUNITY_Community 3534|Community 3534]]
@@ -3516,10 +3515,10 @@
 - [[_COMMUNITY_Community 3546|Community 3546]]
 - [[_COMMUNITY_Community 3547|Community 3547]]
 - [[_COMMUNITY_Community 3548|Community 3548]]
+- [[_COMMUNITY_Community 3549|Community 3549]]
 - [[_COMMUNITY_Community 3550|Community 3550]]
 - [[_COMMUNITY_Community 3551|Community 3551]]
 - [[_COMMUNITY_Community 3552|Community 3552]]
-- [[_COMMUNITY_Community 3553|Community 3553]]
 - [[_COMMUNITY_Community 3554|Community 3554]]
 - [[_COMMUNITY_Community 3555|Community 3555]]
 - [[_COMMUNITY_Community 3556|Community 3556]]
@@ -3718,10 +3717,10 @@
 - [[_COMMUNITY_Community 3749|Community 3749]]
 - [[_COMMUNITY_Community 3750|Community 3750]]
 - [[_COMMUNITY_Community 3751|Community 3751]]
+- [[_COMMUNITY_Community 3752|Community 3752]]
 - [[_COMMUNITY_Community 3753|Community 3753]]
 - [[_COMMUNITY_Community 3754|Community 3754]]
 - [[_COMMUNITY_Community 3755|Community 3755]]
-- [[_COMMUNITY_Community 3756|Community 3756]]
 - [[_COMMUNITY_Community 3757|Community 3757]]
 - [[_COMMUNITY_Community 3758|Community 3758]]
 - [[_COMMUNITY_Community 3759|Community 3759]]
@@ -3775,18 +3774,23 @@
 - [[_COMMUNITY_Community 3807|Community 3807]]
 - [[_COMMUNITY_Community 3808|Community 3808]]
 - [[_COMMUNITY_Community 3809|Community 3809]]
+- [[_COMMUNITY_Community 3810|Community 3810]]
+- [[_COMMUNITY_Community 3811|Community 3811]]
+- [[_COMMUNITY_Community 3812|Community 3812]]
+- [[_COMMUNITY_Community 3813|Community 3813]]
+- [[_COMMUNITY_Community 3814|Community 3814]]
 
 ## God Nodes (most connected - your core abstractions)
-1. `9. Architecture Decisions` - 292 edges
+1. `9. Architecture Decisions` - 293 edges
 2. `NewRequest()` - 181 edges
 3. `NewKnowledgeGraph()` - 179 edges
 4. `DefaultTree()` - 162 edges
 5. `registerMCPTools()` - 158 edges
 6. `RegisterAction()` - 118 edges
-7. `newDefaultConfig()` - 101 edges
-8. `newTestBlackboard()` - 92 edges
-9. `RealLLM()` - 91 edges
-10. `RED phase` - 91 edges
+7. `OpenPrograms()` - 105 edges
+8. `newDefaultConfig()` - 101 edges
+9. `newTestBlackboard()` - 92 edges
+10. `RealLLM()` - 91 edges
 
 ## Surprising Connections (you probably didn't know these)
 - `TestHandleHealth_UsesDashboardHealthJSON()` --calls--> `NewRequest()`  [INFERRED]
@@ -3800,523 +3804,523 @@
 - `main()` --calls--> `NewProvider()`  [INFERRED]
   cmd/bt-gardener/main.go → internal/llm/provider.go
 
-## Communities (7527 total, 1245 thin omitted)
+## Communities (7532 total, 1251 thin omitted)
 
 ### Community 0 - "Community 0"
 Cohesion: 0.01
-Nodes (292): 9. Architecture Decisions, ADR-001: Behavior Trees as Core Execution Model, ADR-002: MCP as External Interface, ADR-003: File-Based Persistence over SQL, ADR-004: YAML-Defined Agent Platform, ADR-005: Stockfish-Adapted Evolution Engine, ADR-006: ChainAction — LLM Integration via BT Nodes, ADR-007: Reliability Architecture — Circuit Breakers, Retry, DLQ (+284 more)
+Nodes (293): 9. Architecture Decisions, ADR-001: Behavior Trees as Core Execution Model, ADR-002: MCP as External Interface, ADR-003: File-Based Persistence over SQL, ADR-004: YAML-Defined Agent Platform, ADR-005: Stockfish-Adapted Evolution Engine, ADR-006: ChainAction — LLM Integration via BT Nodes, ADR-007: Reliability Architecture — Circuit Breakers, Retry, DLQ (+285 more)
 
 ### Community 1 - "Community 1"
-Cohesion: 0.03
-Nodes (131): TestAuthSchemaDefaultsDoNotReplaceExplicitContract(), TestProtectedDashboardErrorSchemasPreserveAuthDispositions(), TestResponseSchemaFallbackRequiresExplicitDefault(), TestNumberSchema(), TestRouteBuilder_Build(), TestSchemaToMap_Format(), DeprecationHeader, HTTPMethod (+123 more)
+Cohesion: 0.02
+Nodes (158): TestKnowledgeGraphRegistersAllDomainTrees(), TestKnowledgeGraphRegistersResolverSpecialCaseTrees(), TestComputeAnalytics_BottleneckCarriesStructuredFailure(), TestComputeAnalytics_Bottlenecks(), TestComputeAnalytics_BottleneckWithoutTraceHasEmptyFailure(), TestComputeAnalytics_BottleneckWithTrace(), TestComputeAnalytics_Centrality(), TestComputeAnalytics_CoverageGapsIncludeResolverSpecialCases() (+150 more)
 
 ### Community 2 - "Community 2"
-Cohesion: 0.03
-Nodes (129): evaluatorServer, TestIntegration_EdgeCases(), TestIntegration_MutationOperators(), TestIntegration_QualityGatesFullFlow(), TestIntegration_ReflectionAndPersistence(), TestContainsWord_EmptySource(), TestContainsWord_EmptyWord(), TestContainsWord_ExactMatch() (+121 more)
+Cohesion: 0.04
+Nodes (138): TestSet_ByteLimitTooLargeStillErrors(), TestSet_EvictsOldestOnEntryLimit(), TestSet_EvictsOnByteLimit(), TestSet_NoEvictKeepsStrictLimit(), TestSet_UpdateDoesNotEvictAtEntryLimit(), NewHandle(), NewManager(), defaultGoapReviewDeps() (+130 more)
 
 ### Community 3 - "Community 3"
 Cohesion: 0.03
-Nodes (126): TestReviewA2AHandlerBoundsChunkedBody(), TestReviewGlobalDiscoveryAdvertisesNoUnservedRPC(), CompressionMiddleware(), gzipDecompress(), TestCompressionMiddleware_AlreadyCompressed(), TestCompressionMiddleware_BinaryContentType(), TestCompressionMiddleware_EmptyBody(), TestCompressionMiddleware_GzipRequest() (+118 more)
+Nodes (121): evaluatorServer, TestContainsWord_EmptySource(), TestContainsWord_EmptyWord(), TestContainsWord_ExactMatch(), TestContainsWord_NoMatch(), TestContainsWord_PrefixMatch(), TestContainsWord_ShorterThanWord(), TestContainsWord_SuffixMatch() (+113 more)
 
 ### Community 4 - "Community 4"
-Cohesion: 0.04
-Nodes (125): TestLiveFactoryEvolutionPromotesAndRollsBackMeasuredVersion(), TestQualityGateFloorOn100Scale(), NewQualityGate(), TestQualityGateGlobalStreakDisablesAllTrees(), TestQualityGatePerTreeIsolation(), TestQualityGatePerTreeResetOnPass(), registerGardenerFixtureLeaves(), TestAdoptionFixturesBuild() (+117 more)
+Cohesion: 0.03
+Nodes (137): TestReviewA2AHandlerBoundsChunkedBody(), TestReviewGlobalDiscoveryAdvertisesNoUnservedRPC(), CompressionMiddleware(), gzipDecompress(), TestCompressionMiddleware_AlreadyCompressed(), TestCompressionMiddleware_BinaryContentType(), TestCompressionMiddleware_EmptyBody(), TestCompressionMiddleware_GzipRequest() (+129 more)
 
 ### Community 5 - "Community 5"
 Cohesion: 0.03
-Nodes (110): ErrorCategory, ApplyJitter(), ClassifyError(), contextDeadlineExceeded(), DecorrelatedJitter(), DefaultRetryPolicy(), EqualJitter(), FullJitter() (+102 more)
+Nodes (124): mcpErr(), registerBlockTools(), resolveStrategyTree(), blockOnHeldServerLock(), TestBTBlocksComposeRejectsUnknownStrategyTree(), TestBTBlocksComposeSaveGatesActivation(), TestBTBlocksComposeSaveHoldsServerLock(), TestBTHITLComposeTaskSaveHoldsServerLock() (+116 more)
 
 ### Community 6 - "Community 6"
-Cohesion: 0.04
-Nodes (114): blockOnHeldServerLock(), TestBTBlocksComposeRejectsUnknownStrategyTree(), TestBTBlocksComposeSaveGatesActivation(), TestBTBlocksComposeSaveHoldsServerLock(), TestBTHITLComposeTaskSaveHoldsServerLock(), TestDLQToolsPreserveCompletionPrecedence(), TestDLQToolsRejectRestartedOriginalUncertainty(), echoTaskLeaf (+106 more)
+Cohesion: 0.03
+Nodes (111): TestAuthSchemaDefaultsDoNotReplaceExplicitContract(), TestProtectedDashboardErrorSchemasPreserveAuthDispositions(), TestResponseSchemaFallbackRequiresExplicitDefault(), TestNumberSchema(), TestRouteBuilder_Build(), TestSchemaToMap_Format(), DeprecationHeader, ArraySchema() (+103 more)
 
 ### Community 7 - "Community 7"
-Cohesion: 0.02
-Nodes (40): buildMapReduceFallback(), execMapReduce(), expandChainStateTemplates(), splitLines(), DemoChainTree(), TestChainAction_DemoTree(), TestChainAction_MapReduce_AllSubtasksFail(), TestChainAction_MapReduce_ContextWindowed() (+32 more)
+Cohesion: 0.03
+Nodes (110): ErrorCategory, ApplyJitter(), ClassifyError(), contextDeadlineExceeded(), DecorrelatedJitter(), DefaultRetryPolicy(), EqualJitter(), ExecuteWithPolicy() (+102 more)
 
 ### Community 8 - "Community 8"
 Cohesion: 0.03
-Nodes (100): clearSuperpowersPlanState(), loadSuperpowersPlanState(), goapBacktickValueAfter(), goapFusionImplDegradedSection(), goapFusionMaterializerSnapshotsSection(), goapFusionParkedBranchesSection(), init(), loadGoapFusionReportedSnapshots() (+92 more)
+Nodes (106): clearSuperpowersPlanState(), init(), parseSplitOutput(), registerSuperpowersDesignLoopActions(), newGrillLoopTestRun(), TestGrillDesign_ApprovedWhenNoOpenCriticals(), TestGrillDesign_NeedsWorkWithFeedbackWhenCriticalsOpen(), TestGrillDesign_NoProgressBreakerFailsAfterTwoStaleRounds() (+98 more)
 
 ### Community 9 - "Community 9"
 Cohesion: 0.03
-Nodes (71): newDefaultConfig(), TestCheckRuntime_AllEmptyPaths(), TestCheckRuntime_AllOk(), TestCheckRuntime_ConfigFileNotFound(), TestCheckRuntime_CreatedDir_Valid(), TestCheckRuntime_DeepSeekEmptyHost(), TestCheckRuntime_DeepSeekNoOllamaCheck(), TestCheckRuntime_DeepSeekReachable() (+63 more)
+Nodes (87): newDefaultConfig(), TestCheckRuntime_AllEmptyPaths(), TestCheckRuntime_AllOk(), TestCheckRuntime_ConfigFileNotFound(), TestCheckRuntime_CreatedDir_Valid(), TestCheckRuntime_DeepSeekEmptyHost(), TestCheckRuntime_DeepSeekNoOllamaCheck(), TestCheckRuntime_DeepSeekReachable() (+79 more)
 
 ### Community 10 - "Community 10"
-Cohesion: 0.04
-Nodes (100): RealLLM(), TestLiveLLM_GenerateCtx(), TestLiveLLM_GenerateWithTimeout(), TestLoadSWEVerifiedAndEvaluate(), TestMax1(), TestTauBenchBuiltinRetailAndDefaultEntries(), benchmarkPlanTree(), benchmarkSuccessTree() (+92 more)
+Cohesion: 0.03
+Nodes (106): isGoapNotebookLMQuotaError(), saveNlmQuotaExhausted(), TestIsGoapNotebookLMQuotaError(), extractConversationID(), extractGoapGoals(), extractGoapNotebookLMRecommendation(), extractJSONStringField(), extractNotebookLMAnswer() (+98 more)
 
 ### Community 11 - "Community 11"
 Cohesion: 0.03
-Nodes (75): agentExecuteResult(), buildDashboardKnowledgeGraph(), dashboardAPIKey(), dashboardCSRFMiddleware(), dashboardLocalAgentResult(), dashboardSessionAuth(), decodeMutation(), getHomeDir() (+67 more)
+Nodes (71): TestA2ASDKPreservesNestedStopEvidenceAndHonestWinnerHealth(), TestSDKStoppedTaskCannotReplayThroughRunOnce(), ApprovalWaitResult, TestWorkflowPauseDoesNotTurnConditionalSkipIntoFault(), TestWorkflowPauseRetainsAdmittedSiblingFailure(), TestWorkflowMixedParallelDiagnosticsRetainUnknownBranch(), TestWorkflowParallelUnknownExecutionCannotReplayGroup(), TestWorkflowTerminalResultWinsRacingStepDeadline() (+63 more)
 
 ### Community 12 - "Community 12"
-Cohesion: 0.03
-Nodes (63): summarizeOutput(), TestSummarizeOutput(), init(), registerGoDevActions(), containsAnyStr(), findChildByName(), TestAssignComplexityAction_NoLLM_DefaultsMedium(), TestAssignComplexityAction_NoLLM_HeuristicHigh() (+55 more)
+Cohesion: 0.05
+Nodes (103): headMilestoneAttempts(), redPassBB(), seedChargedDeliverableProgram(), seedDeliverableProgram(), stubRepoFileState(), TestPrecheck_MissingDeliverableNeitherCompletesNorKeepsEvidence(), TestRedPass_GoalWithoutTestDeliverableIsUnaffected(), TestRedPass_GoalWithoutTestDeliverableStillRequiresReview() (+95 more)
 
 ### Community 13 - "Community 13"
-Cohesion: 0.06
-Nodes (87): gitOutput(), TestNoCommittedRootBinaries(), chargeGoapResearchGoalFailure(), goapAbandonedResearchGoal(), goapGoalFailureNote(), goapResearchGoalKey(), stripGoapGoalScopeSuffix(), stripGoapGoalTransientNotes() (+79 more)
+Cohesion: 0.04
+Nodes (101): RealLLM(), TestLiveLLM_GenerateCtx(), TestLiveLLM_GenerateWithTimeout(), TestLoadSWEVerifiedAndEvaluate(), TestMax1(), TestTauBenchBuiltinRetailAndDefaultEntries(), BuiltinBFCLV3(), EvaluateBFCLV3() (+93 more)
 
 ### Community 14 - "Community 14"
-Cohesion: 0.05
-Nodes (83): runFusionAction(), TestFusionResearchRoutingConditions(), TestQueryNotebookLMResearchSurfacesOnlyNewVaultNotes(), TestReportNoNewResearchSucceedsWithoutReportWrite(), TestSearchForBTPatternsOnlyReportsUnknownFindings(), TestSearchForBTPatternsQueriesArc42AnchoredResearch(), TestSearchForBTPatternsSurvivesResearchFailure(), TestWithFusionKnowledgeStubsLiveNotebookLMResearch() (+75 more)
+Cohesion: 0.04
+Nodes (96): newProductionPopulation(), TestNewProductionPopulationAttachesSpecialists(), Duration(), TestDuration(), BuildCircuitBreaker(), BuildTimeout(), TestIntegration_EdgeCases(), TestIntegration_MutationOperators() (+88 more)
 
 ### Community 15 - "Community 15"
-Cohesion: 0.06
-Nodes (84): precheckGoapStaleMilestones(), headMilestoneAttempts(), redPassBB(), seedChargedDeliverableProgram(), seedDeliverableProgram(), stubRepoFileState(), TestPrecheck_MissingDeliverableNeitherCompletesNorKeepsEvidence(), TestRedPass_GoalWithoutTestDeliverableIsUnaffected() (+76 more)
+Cohesion: 0.02
+Nodes (29): expandChainStateTemplates(), DemoChainTree(), TestChainAction_DemoTree(), TestExpandChainStateTemplates_Basic(), TestExpandChainStateTemplates_MissingKey(), TestExpandChainStateTemplates_MultipleSubstitutions(), TestExpandChainStateTemplates_NilChainState(), TestExtractDuckDuckGoResults_EmptyHTML() (+21 more)
 
 ### Community 16 - "Community 16"
-Cohesion: 0.02
-Nodes (13): agentTestMockLLM, ctxAwareFusionMockLLM, emptyDecomposeMockLLM, errorMockLLM, flakyDecomposeMockLLM, flakyOnceMockLLM, flakySubtaskMockLLM, indexedErrorMockLLM (+5 more)
+Cohesion: 0.05
+Nodes (92): gitOutput(), TestNoCommittedRootBinaries(), chargeGoapResearchGoalFailure(), goapAbandonedResearchGoal(), goapGoalFailureNote(), goapResearchGoalKey(), stripGoapGoalScopeSuffix(), stripGoapGoalTransientNotes() (+84 more)
 
 ### Community 17 - "Community 17"
+Cohesion: 0.03
+Nodes (67): TestOutcomeErrorDetail(), FeedbackFile(), RunDeps, applyOutcomeRefinement(), IsHealthyOutcome(), IsRateLimitCarryover(), OutcomeErrorDetail(), TestApplyOutcomeRefinement() (+59 more)
+
+### Community 18 - "Community 18"
+Cohesion: 0.03
+Nodes (60): summarizeOutput(), TestSummarizeOutput(), containsAnyStr(), findChildByName(), TestCheckConfidence_ConditionExists(), TestContainsAnyLower_BasicMatch(), TestContainsAnyLower_CaseInsensitive(), TestContainsAnyLower_EmptyInput() (+52 more)
+
+### Community 19 - "Community 19"
+Cohesion: 0.06
+Nodes (90): TestLiveFactoryEvolutionPromotesAndRollsBackMeasuredVersion(), TestDeepSearchWriteFailurePreservesCommittedEvidence(), TestOrdinaryAdoptionFailurePreservesCommittedEvidence(), setupGardener(), TestEvolveTreeV2_WithRealTree(), TestNewGardener(), biasCandidatesWithExperience(), DefaultEvolveV2Config() (+82 more)
+
+### Community 20 - "Community 20"
+Cohesion: 0.06
+Nodes (73): TestRunEvidenceIncludesOuterQualityFailureAndOwner(), init(), loadBanditStats(), TestBanditSelector_CachesStatsAcrossTicksNoPerTickReload(), TestBanditSelector_ColdStartTriesEveryArmOnce(), TestBanditSelector_ConcurrentTicksNoLostOutcomes(), TestBanditSelector_ConcurrentTicksNoLostOutcomesEnabled(), TestBanditSelector_DisabledMatchesSelectorSemantics() (+65 more)
+
+### Community 21 - "Community 21"
 Cohesion: 0.04
 Nodes (11): code:block3 (FILES_CHANGED:), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN phase complete, GREEN_RESULTS, NOTES, RED phase (+3 more)
 
-### Community 18 - "Community 18"
-Cohesion: 0.06
-Nodes (79): TestSet_ByteLimitTooLargeStillErrors(), TestSet_EvictsOldestOnEntryLimit(), TestSet_EvictsOnByteLimit(), TestSet_NoEvictKeepsStrictLimit(), TestSet_UpdateDoesNotEvictAtEntryLimit(), NewHandle(), NewManager(), defaultGoapReviewDeps() (+71 more)
-
-### Community 19 - "Community 19"
-Cohesion: 0.04
-Nodes (76): extractConversationID(), extractGoapGoals(), extractGoapNotebookLMRecommendation(), extractJSONStringField(), extractNotebookLMAnswer(), extractSection(), TestGrillState_ChainStateFallbackParsesString(), TestGrillState_InvalidRoundDefaultsToOne() (+68 more)
-
-### Community 20 - "Community 20"
-Cohesion: 0.04
-Nodes (51): TestA2ASDKPreservesNestedStopEvidenceAndHonestWinnerHealth(), TestSDKStoppedTaskCannotReplayThroughRunOnce(), TestWorkflowPauseDoesNotTurnConditionalSkipIntoFault(), TestWorkflowPauseRetainsAdmittedSiblingFailure(), TestWorkflowMixedParallelDiagnosticsRetainUnknownBranch(), TestWorkflowParallelUnknownExecutionCannotReplayGroup(), TestWorkflowTerminalResultWinsRacingStepDeadline(), TestWorkflowUncertainRetryRetainsUnknownOutcome() (+43 more)
-
-### Community 21 - "Community 21"
-Cohesion: 0.05
-Nodes (81): TestEndpointsFromCardsSingleNodeYieldsNoPeers(), TestRemoteDashboardHistoryFailureNeverReplays(), TestRemoteDashboardStoppedDispositionNeverReplays(), handleScalability(), TestHandleScalability_ReflectsInjectedQueueAndRouter(), biddingExecutor, TestLegacyRetryDoesNotReplayTerminalExecution(), TestRejectedRemoteThenTerminalLocalFallbackDoesNotReplay() (+73 more)
-
 ### Community 22 - "Community 22"
-Cohesion: 0.07
-Nodes (66): buildPRFixPrompt(), defaultPRShepherdDeps(), fleetPRBranch(), fleetPRTitleAndBody(), githubTokenFromCredentialStore(), init(), loadPRShepherdState(), newGitHubPRClientFromEnv() (+58 more)
+Cohesion: 0.05
+Nodes (69): AgentBus, AgentEvent, InitAgentBus(), PublishHealthAlert(), PublishServiceDown(), TestAgentBus_AllSubscribersReceiveAll(), TestAgentBus_CloseSubscriberChannelsClosed(), TestAgentBus_ConcurrentPublish() (+61 more)
 
 ### Community 23 - "Community 23"
-Cohesion: 0.06
-Nodes (63): TestRunEvidenceIncludesOuterQualityFailureAndOwner(), init(), loadBanditStats(), TestBanditSelector_CachesStatsAcrossTicksNoPerTickReload(), TestBanditSelector_ColdStartTriesEveryArmOnce(), TestBanditSelector_ConcurrentTicksNoLostOutcomes(), TestBanditSelector_ConcurrentTicksNoLostOutcomesEnabled(), TestBanditSelector_DisabledMatchesSelectorSemantics() (+55 more)
+Cohesion: 0.05
+Nodes (80): TestRemoteDashboardHistoryFailureNeverReplays(), TestRemoteDashboardStoppedDispositionNeverReplays(), TestHandleScalability_ReflectsInjectedQueueAndRouter(), biddingExecutor, TestLegacyRetryDoesNotReplayTerminalExecution(), TestRejectedRemoteThenTerminalLocalFallbackDoesNotReplay(), TestRemoteAmbiguousResponsesNeverReplay(), TestRemoteCompletedPersistenceDiagnosticRemainsTerminal() (+72 more)
 
 ### Community 24 - "Community 24"
-Cohesion: 0.05
-Nodes (65): isClaudeRateLimit(), TestDelegationPreflightBackoff_ClearsExpiredState(), blockedApplyRunner, delegatingRunner, delegationAttemptError, DelegationRateLimitError, failoverRunnerFunc, backoffChainKey() (+57 more)
+Cohesion: 0.03
+Nodes (12): agentTestMockLLM, countedErrorMockLLM, ctxAwareFusionMockLLM, errorMockLLM, flakySubtaskMockLLM, incompleteSynthMockLLM, indexedErrorMockLLM, maxTokensMockLLM (+4 more)
 
 ### Community 25 - "Community 25"
 Cohesion: 0.04
 Nodes (69): AgentDefinition, ContentType, TestAddTag(), TestAddTag_EmptyDescription(), TestContentResponse_200(), TestContentResponse_Non200(), TestDeprecatedHandler_NoSunset(), TestDeprecatedHandler_WithSunsetDate() (+61 more)
 
 ### Community 26 - "Community 26"
-Cohesion: 0.03
-Nodes (46): cacheCheckAction(), cacheResultAction(), execLLMCallAction(), execRefineAction(), generatePlanAction(), hasClearTaskCond(), knowledgeQueryAction(), NewEngine() (+38 more)
+Cohesion: 0.07
+Nodes (64): buildPRFixPrompt(), defaultPRShepherdDeps(), fleetPRBranch(), fleetPRTitleAndBody(), githubTokenFromCredentialStore(), init(), loadPRShepherdState(), newGitHubPRClientFromEnv() (+56 more)
 
 ### Community 27 - "Community 27"
-Cohesion: 0.06
-Nodes (72): TestCompiledPlanTree_ValidatesAndRuns(), setupObservedGoapTools(), NewAgent(), NewDocPlanner(), TestAutomationActions_ReachTaskAutomated(), assertError(), TestAgentActionFails(), TestAgentCallbacks() (+64 more)
-
-### Community 28 - "Community 28"
-Cohesion: 0.05
-Nodes (77): conditionDescriptionGaps(), conditionGuardEdgeGaps(), coverageRootName(), describableDomainTrees(), edgeMetadataGaps(), findNode(), idEqualityLiterals(), nonRegistrySmokeTestableTrees() (+69 more)
-
-### Community 29 - "Community 29"
 Cohesion: 0.04
 Nodes (19): AgentEndpoint, AgentExecutor, AgentResult, CircuitBreakerOptions, CircuitSummary, ConcurrencyLimiter, DeadLetterEntry, DeadLetterQueue (+11 more)
 
+### Community 28 - "Community 28"
+Cohesion: 0.05
+Nodes (74): ChainConfig, availableToolNames(), bbRunID(), bbTemplateDisplay(), bbTemplateValue(), buildMapReduceFallback(), buildToolList(), chainContext() (+66 more)
+
+### Community 29 - "Community 29"
+Cohesion: 0.03
+Nodes (44): cacheCheckAction(), cacheResultAction(), execLLMCallAction(), execRefineAction(), generatePlanAction(), knowledgeQueryAction(), NewEngine(), reflectOnOutcomeAction() (+36 more)
+
 ### Community 30 - "Community 30"
 Cohesion: 0.04
-Nodes (49): AntiPattern, countTreeNodes(), TestCrossover_Single(), TestDTAnalyzer_New(), TestExpertKnowledge_DetectAntiPatterns(), TestExpertKnowledge_New(), TestExpertKnowledge_RecommendMutations(), TestExpertKnowledge_ValidateArchetype() (+41 more)
+Nodes (71): ABDelta, ABTest, absDiff(), AgentMonitorSuite(), AlertRouterSuite(), AnnotateMetrics(), Arc42DocsyncSuite(), Arc42SeederSuite() (+63 more)
 
 ### Community 31 - "Community 31"
 Cohesion: 0.05
-Nodes (57): escalateFlaggedTreeForReview(), recordUserFeedback(), registerFeedbackTools(), TestBTFeedbackRegistered(), TestFinalizeFeedbackEscalation_ResumesAutomationAfterHumanApproval(), TestPersistGeneratedTreeForUser_UserWorkspaceAndFallback(), TestRecordUserFeedback_FeedsSatisfactionAndFlags(), TestRecordUserFeedback_FlaggedForReviewDoesNotReEscalateWhilePending() (+49 more)
+Nodes (75): conditionDescriptionGaps(), conditionGuardEdgeGaps(), coverageRootName(), describableDomainTrees(), edgeMetadataGaps(), findNode(), idEqualityLiterals(), nonRegistrySmokeTestableTrees() (+67 more)
 
 ### Community 32 - "Community 32"
-Cohesion: 0.04
-Nodes (50): Approval, mockOrch, mockTTOrch, Workflow, newTaskNonce(), NewWorkflow(), sortTasks(), TestApproval_Fields() (+42 more)
+Cohesion: 0.06
+Nodes (28): cloneTree(), extractTreeType(), TestExtractTreeType(), Individual, CloneMetadata(), cloneTree(), collectNodeNames(), containsCrisisReason() (+20 more)
 
 ### Community 33 - "Community 33"
-Cohesion: 0.05
-Nodes (68): ABDelta, ABTest, absDiff(), AgentMonitorSuite(), AlertRouterSuite(), AnnotateMetrics(), Arc42DocsyncSuite(), Arc42SeederSuite() (+60 more)
+Cohesion: 0.06
+Nodes (63): autofixScriptRunner, autofixScriptStep, killedClaudeRunner, partialLandingRunner, scriptedClaudeRunner, scriptedSuperpowersRunner, TestApplySuperpowersRunToMainRepoSavesPendingPatchWhenMainRepoDirty(), greenFail() (+55 more)
 
 ### Community 34 - "Community 34"
 Cohesion: 0.05
-Nodes (55): condCase, condTest(), simpleContainsCond(), TestCondBulk_StandardConditions(), TestCondFallback_HasModelToolIssues(), TestCondFallback_HasNewContent(), TestCondFallback_HasSkillGaps(), TestCondFallback_HasStackTrace() (+47 more)
+Nodes (58): TestArc42SectionsAgainstRealRepoDocs(), TestNewFileReadTool_Structure(), TestNewFileWriteTool_Structure(), TestNewGoBuildTool_Structure(), TestNewGoTestTool_Structure(), TestNewGoVetTool_Structure(), TestNewShellExecTool_Structure(), TestNewWebSearchTool_Structure() (+50 more)
 
 ### Community 35 - "Community 35"
 Cohesion: 0.05
-Nodes (46): Catalog, extractYAMLField(), inferTree(), splitTags(), CatalogEntry, baselineCmd(), baselinePath(), checkCmd() (+38 more)
+Nodes (40): apiKey, KeyHash(), NewKeyRing(), NewKeyRotationScheduler(), sha256Hex(), TestExpireKey_NotFound(), TestExpireKey_Success(), TestExpiringKeys_EmptyRing() (+32 more)
 
 ### Community 36 - "Community 36"
 Cohesion: 0.06
-Nodes (57): TestAutoCreateTree_ConfidenceThreshold(), TestAutoCreateTree_Existing(), TestAutoCreateTree_New(), TestBreed(), TestBreed_FromArchetype(), TestBreed_FromArchetype_Fallback(), TestBreed_NoParents(), TestBreed_TooFewParents() (+49 more)
+Nodes (70): TestScoreChild_GoalAlignmentBranch(), TestScoreChildren_BasicRanking(), ParallelMode, intSliceFromInterface(), BuildReactiveParallel(), runReactiveParallel(), ScoringCriteria, BuildUtilitySelector() (+62 more)
 
 ### Community 37 - "Community 37"
-Cohesion: 0.06
-Nodes (27): cloneTree(), extractTreeType(), TestExtractTreeType(), Individual, CloneMetadata(), cloneTree(), collectNodeNames(), containsCrisisReason() (+19 more)
+Cohesion: 0.05
+Nodes (55): condCase, condTest(), simpleContainsCond(), TestCondBulk_StandardConditions(), TestCondFallback_HasModelToolIssues(), TestCondFallback_HasNewContent(), TestCondFallback_HasSkillGaps(), TestCondFallback_HasStackTrace() (+47 more)
 
 ### Community 38 - "Community 38"
-Cohesion: 0.06
-Nodes (60): buildGoapFusionNotebookLMQuery(), buildGrillRound1Query(), buildClaudeReviewPrompt(), TestBuildClaudeReviewPrompt_ContractMarkers(), implementedGoalsPromptBlock(), arc42GoalsPromptBlock(), arc42ResearchTopics(), loadArc42QualityGoals() (+52 more)
+Cohesion: 0.07
+Nodes (63): NewAgent(), NewDocPlanner(), goalEntry, TestAutomationActions_ReachTaskAutomated(), assertError(), TestAgentActionFails(), TestAgentCallbacks(), TestAgentGetSetState() (+55 more)
 
 ### Community 39 - "Community 39"
 Cohesion: 0.05
-Nodes (63): ChainConfig, availableToolNames(), bbRunID(), bbTemplateDisplay(), bbTemplateValue(), buildToolList(), chainContext(), chainRetryPolicy() (+55 more)
+Nodes (51): TestPipelineHTTPRetainsWaitingAndFailedOwnership(), TestTaskDecisionHTTPReportsPartialCommitAndRetryRecovers(), ApplyHITLPolicy(), TestWorkflowApprovalCreationObeysCallerBudgetDuringContention(), TestWorkflowApprovalWait_EscalatedIsNotApproved(), WorkflowApprovalTaskID(), WorkflowApprovalWait(), TestHITLStorageFailuresReturnUnavailableWithEnforcedSchema() (+43 more)
 
 ### Community 40 - "Community 40"
 Cohesion: 0.06
-Nodes (56): applyScriptRunner, bareApplyScriptRunner, bareSyncRunner, cleanApplyScriptRunner, acquireSuperpowersApplyLock(), applySuperpowersRunFromBareRepo(), applySuperpowersRunToMainRepo(), assertNoForcedMasterWrite() (+48 more)
+Nodes (61): AllTools(), bindToolCommandCancellation(), DevTools(), DiskUsage(), FileRead(), HTTPGet(), MemoryUsage(), MonitorTools() (+53 more)
 
 ### Community 41 - "Community 41"
-Cohesion: 0.09
-Nodes (54): TestBTPG_QualityMetrics_AllDomainTrees(), TestBFCL_AllDomainTrees_Accuracy(), AlertRouterTree(), Arc42DocsyncTree(), TestArc42DocsyncTreeRegistered(), TestArc42DocsyncTreeShape(), Arc42SeederTree(), TestArc42SeederTreeRegistered() (+46 more)
+Cohesion: 0.04
+Nodes (44): TestBuildDelegateBlockTree(), TestLiveGoapModelResultRequiresExactValueOracle(), countTreeNodes(), TestSuperpowersPipelineSimulation(), ChildTick, childTickLog, definitionCommand, installGoapTestAction() (+36 more)
 
 ### Community 42 - "Community 42"
 Cohesion: 0.06
-Nodes (45): AllSLOMetrics(), GetSLOMetrics(), stringsContains(), TestAllSLOMetrics(), TestGetSLOMetrics_SameInstance(), TestSLOMetrics_Summary(), LoadSLOEvidence(), readSLOFile() (+37 more)
+Nodes (58): TestAutomationAdmissionRejectsUnreadableAndContradictoryLedger(), TestResolveGeneratedTree_AutomationStatusGate(), TestResolveGeneratedTreeForUser_AutomationStatusGate(), TestResolveGeneratedTreeForUser_TwoUserCollision(), TestResolveTreeIDForUser_ScopesToRequestingUser(), TestRunOnce_RefusesExecutionForNonApprovedAutomation(), activateAutomation(), automationAgentName() (+50 more)
 
 ### Community 43 - "Community 43"
 Cohesion: 0.06
-Nodes (50): AgentCircuitBreakerStore, circuitBreakerFileEntry, circuitBreakersFile, circuitBreakersFileForTest, NewAgentCircuitBreaker(), NewAgentCircuitBreakerStore(), newCircuitBreakerStore(), NewWinnerCircuitBreakerStore() (+42 more)
+Nodes (53): deregisterLiveRun(), EnqueueLiveMutation(), ListLiveRuns(), LiveMutationJournal(), registerLiveRun(), TestBuildNodeCapture(), TestLiveRunEnqueueAndDrain(), TestLiveRunOpCap() (+45 more)
 
 ### Community 44 - "Community 44"
 Cohesion: 0.05
-Nodes (48): ParseCheckpointContract(), TestCheckpointContractPreservesTypedGOAPFacts(), TestCheckpointContractRejectsMalformedOrWeakenedDeclarations(), TestCheckpointSourceAndFactsCannotBeRemovedByEvolution(), CheckpointContract, EffectReceipt, ParseFileTask(), TestFileTaskContractAndGovernancePreservation() (+40 more)
+Nodes (51): AgentCircuitBreakerStore, circuitBreakerFileEntry, circuitBreakersFile, circuitBreakersFileForTest, NewAgentCircuitBreaker(), NewAgentCircuitBreakerStore(), newCircuitBreakerStore(), NewWinnerCircuitBreakerStore() (+43 more)
 
 ### Community 45 - "Community 45"
-Cohesion: 0.04
-Nodes (49): ChildTick, childTickLog, TestScoreChild_GoalAlignmentBranch(), TestValidateOutputQuality_BlankResult(), TestValidateOutputQuality_ErrorPattern(), TestValidateOutputQuality_MarkdownStructure(), TestValidateOutputQualityRejectsRefusals(), collectNames() (+41 more)
+Cohesion: 0.05
+Nodes (48): a2aExecutionOwnerKey, BTAgentClient, treeSkillName(), ConfigurePlatformClient(), interpretSendResult(), NewBTAgentClient(), safetyGetMessageText(), sameOrigin() (+40 more)
 
 ### Community 46 - "Community 46"
+Cohesion: 0.06
+Nodes (50): TestGoapFusionLoopTreeIsProductionWired(), treeContainsNode(), agentTemplateYAML, TestNonRegistryDescriptionsHaveNoOrphans(), TestAllDomainTreesWrappedInClaudeErrorHandler(), TestResolveDomainTreeIsWrapped(), TestResolveTreeID_FusionAliases(), HermesSelfEvolutionTree() (+42 more)
+
+### Community 47 - "Community 47"
+Cohesion: 0.07
+Nodes (52): pushLandingMasterToOrigin(), applyScriptRunner, bareApplyScriptRunner, bareSyncRunner, cleanApplyScriptRunner, applySuperpowersRunFromBareRepo(), applySuperpowersRunToMainRepo(), assertNoForcedMasterWrite() (+44 more)
+
+### Community 48 - "Community 48"
 Cohesion: 0.07
 Nodes (45): TestAllSuites_Complete(), AllSuites(), CodeReview(), Cron(), DataPipeline(), DevOps(), Evolution(), Finance() (+37 more)
 
-### Community 47 - "Community 47"
+### Community 49 - "Community 49"
 Cohesion: 0.03
 Nodes (63): dart:convert, _ActivityCard, _ApproveButton, BTStudioApp, build, _buildBody, _buildOverview, Card (+55 more)
 
-### Community 48 - "Community 48"
+### Community 50 - "Community 50"
 Cohesion: 0.06
 Nodes (26): cli(), configure(), main(), memory_auth_writes(), no_processes(), Unattended adapter for notebooklm-mcp-cli 0.14.x (embedded in Go).  Only restore, Use the installed serializer, staging complete 0600 files before replace.      T, Use 0.14's bounded profile lock and atomic, storage-mode-aware writer.      Comp (+18 more)
 
-### Community 49 - "Community 49"
-Cohesion: 0.05
-Nodes (55): TestArc42SectionsAgainstRealRepoDocs(), TestNewFileReadTool_Structure(), TestNewFileWriteTool_Structure(), TestNewGoBuildTool_Structure(), TestNewGoTestTool_Structure(), TestNewGoVetTool_Structure(), TestNewShellExecTool_Structure(), TestNewWebSearchTool_Structure() (+47 more)
-
-### Community 50 - "Community 50"
-Cohesion: 0.09
-Nodes (56): SuiteForTree(), TestSuiteForTree_Matching(), hasNodeName(), isStructuralOnlyPathTree(), TestAllRegisteredSuites_BaselinePathMatchRate(), TestAllRegisteredSuites_ReportQualificationGaps(), TestDomainTree_Registration(), TestFullTreeIntegration_RunsAllTreesWithRealLLM() (+48 more)
-
 ### Community 51 - "Community 51"
-Cohesion: 0.05
-Nodes (52): brokenTool, ChainKind, BuildChainAction(), buildChainActionFn(), generateTemplateOutput(), TestGenerateTemplateOutput_Basic(), TestGenerateTemplateOutput_NilChainState(), TestGenerateTemplateOutput_NoArc42Section() (+44 more)
+Cohesion: 0.07
+Nodes (46): TestCompileSeedsForSameTreeIDDoNotOverwriteAnotherOwner(), TestFeedbackForSameTreeIDStaysWithItsOwner(), escalateFlaggedTreeForReview(), recordUserFeedback(), registerFeedbackTools(), newFeedbackDeps(), TestBTFeedbackRegistered(), TestPersistGeneratedTreeForUser_UserWorkspaceAndFallback() (+38 more)
 
 ### Community 52 - "Community 52"
 Cohesion: 0.06
-Nodes (50): ConnPool, NewConnPool(), NewSharedConnPool(), TestAgentRouter_PooledExecutors_LeastConnections(), TestAgentRouter_WithSharedPool(), TestConnPool_Close(), TestConnPool_CloseIdleConnections(), TestConnPool_CustomConfig() (+42 more)
+Nodes (51): agentExecuteResult(), buildDashboardKnowledgeGraph(), dashboardAPIKey(), dashboardCSRFMiddleware(), dashboardLocalAgentResult(), dashboardSessionAuth(), decodeMutation(), getHomeDir() (+43 more)
 
 ### Community 53 - "Community 53"
-Cohesion: 0.08
-Nodes (21): TestWinnerBreakerStore_SaveLocksReadModifyWrite(), TestAgentCircuitBreakerStore_SaveLocksReadModifyWrite(), Manager, commitScope(), isPersistentScope(), loadScope(), loadScopeFile(), persistScope() (+13 more)
-
-### Community 54 - "Community 54"
 Cohesion: 0.06
 Nodes (21): code:block1 (delegate_hooks_test.go:20: AgentMemoryBaseDir zero value = "), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/benchmark	0.064s), code:go (lower := strings.ToLower(response)          // haystack lowe), code:block4 (/usr/local/go/bin/go test ./internal/engine -short -count=1 ), code:block5 (now=14:59:00 -> 2026-08-24 15:02:00  matches=true), FILES_CHANGED, FILES_CHANGED, FILES_CHANGED (+13 more)
 
+### Community 54 - "Community 54"
+Cohesion: 0.05
+Nodes (47): TestScoreChild_NilChainState(), TestValidateOutputQuality_BlankResult(), TestValidateOutputQuality_ErrorPattern(), TestValidateOutputQuality_MarkdownStructure(), TestValidateOutputQualityRejectsRefusals(), collectNames(), contains(), TestBlackboard_AllFields() (+39 more)
+
 ### Community 55 - "Community 55"
 Cohesion: 0.05
-Nodes (40): IsHealthyOutcome(), TestSchedulerTerminalDeadLetterSurvivesRestart(), TestLocalAgentResultNilResultAndSuccessPathsUnchanged(), TestLocalAgentResultPreservesOutcomeOnError(), attemptOutcomeError(), dlqReplayOutcomeError(), endpointsFromCards(), experienceBankDir() (+32 more)
+Nodes (46): ActionFunc, ActionProvider, TestArc42DocsyncNodesRegistered(), ConditionFunc, ConditionProvider, Engine, TestAssignComplexityAction_NoLLM_DefaultsMedium(), TestAssignComplexityAction_NoLLM_HeuristicHigh() (+38 more)
 
 ### Community 56 - "Community 56"
-Cohesion: 0.07
-Nodes (47): autofixScriptRunner, autofixScriptStep, killedClaudeRunner, scriptedClaudeRunner, scriptedSuperpowersRunner, buildSuperpowersGreenPrompt(), buildSuperpowersRedPrompt(), buildSuperpowersTaskPrompt() (+39 more)
+Cohesion: 0.09
+Nodes (55): CodeReviewSuite(), cohensD(), DefaultMock(), fishersExact(), GoDevSuite(), minF(), QuickValidate(), RunABTest() (+47 more)
 
 ### Community 57 - "Community 57"
-Cohesion: 0.05
-Nodes (25): eventDataString(), newRoutineThrottle(), throttleEntry, WebhookPublisher, handlePipelineRun(), handlePipelineStatus(), newPipelineRunner(), newRunID() (+17 more)
+Cohesion: 0.1
+Nodes (47): TestBTPG_QualityMetrics_AllDomainTrees(), TestBFCL_AllDomainTrees_Accuracy(), Arc42DocsyncTree(), TestArc42DocsyncTreeRegistered(), TestArc42DocsyncTreeShape(), Arc42SeederTree(), TestArc42SeederTreeRegistered(), TestArc42SeederTreeShape() (+39 more)
 
 ### Community 58 - "Community 58"
-Cohesion: 0.07
-Nodes (39): governedMultiFitness(), growthFitness(), FitnessDimension, MultiFitness, MultiIndividual, clampScore(), countActions(), countConditions() (+31 more)
+Cohesion: 0.06
+Nodes (48): ConnPool, NewConnPool(), NewSharedConnPool(), TestAgentRouter_PooledExecutors_LeastConnections(), TestAgentRouter_WithSharedPool(), TestConnPool_Close(), TestConnPool_CloseIdleConnections(), TestConnPool_CustomConfig() (+40 more)
 
 ### Community 59 - "Community 59"
-Cohesion: 0.07
-Nodes (26): quickSuite(), QuickValidateCandidate(), Info(), candidateAcceptor, TestBaseNodeCount(), TestSharedCatalogEvidenceMatchesRuntimeIDButNotPersonalOwner(), TestUnrelatedAndUnownedRecordsCannotSatisfyEvolutionEvidence(), candidatesFromScored() (+18 more)
+Cohesion: 0.06
+Nodes (39): BTOptimizer, TestBTOptimizer_New(), collectSelectorChildConditions(), collectSelectors(), conditionOverlap(), extractCondition(), findMainSelector(), TestExtractCondition() (+31 more)
 
 ### Community 60 - "Community 60"
-Cohesion: 0.06
-Nodes (48): ClearGoapFusionStateHashes(), goapFusionCircuitBreakerVerdict(), goapFusionCircuitBreakerWindow(), goapFusionCircuitPolicyVerdict(), goapFusionCircuitPolicyVerdictWithBypass(), goapFusionImplementationGateWired(), goapFusionNoopPatchStreak(), goapFusionPreflightWired() (+40 more)
+Cohesion: 0.11
+Nodes (49): SuiteForTree(), TestSuiteForTree_Matching(), hasNodeName(), isStructuralOnlyPathTree(), TestAllRegisteredSuites_BaselinePathMatchRate(), TestAllRegisteredSuites_ReportQualificationGaps(), TestDomainTree_Registration(), TestFullTreeIntegration_RunsAllTreesWithRealLLM() (+41 more)
 
 ### Community 61 - "Community 61"
-Cohesion: 0.1
-Nodes (50): CodeReviewSuite(), cohensD(), DefaultMock(), fishersExact(), GoDevSuite(), minF(), QuickValidate(), RunABTest() (+42 more)
+Cohesion: 0.07
+Nodes (28): TestMatchBlockPattern(), AntiPattern, DesignPattern, BlockIDFromRef(), containsStr(), coreHeuristics(), hasNodeMatching(), hasNodeType() (+20 more)
 
 ### Community 62 - "Community 62"
+Cohesion: 0.08
+Nodes (39): routineThrottle, runDashboardRestartOwnerFixture(), TestDashboardRestartOwnerAcrossProcesses(), waitRestartFixtureFile(), TestReviewSprintRetryReturnsExistingJob(), TestAcceptedSprintDetachesHTTPAndRetainsCapacityUntilCleanup(), TestSprintAdmissionDeadlineDoesNotClaimOrBlockStatus(), TestSprintBudgetDoesNotReleaseRunningWorkOrTickRemainingClaims() (+31 more)
+
+### Community 63 - "Community 63"
 Cohesion: 0.09
 Nodes (31): Collect(), indexOf(), GoapFusionPreflightNode(), TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionGatesClaudeImplementation(), TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionNotebookGuardsNonFatal(), TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesCircuitBreaker(), TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesCircuitPolicy(), TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightComposesGitRemote() (+23 more)
 
-### Community 63 - "Community 63"
-Cohesion: 0.07
-Nodes (50): BuildEventDrivenAbort(), evaluateEventCondition(), evaluateEventPredicate(), evaluatePredicate(), eventMatches(), parseEventSources(), TestBuildEventDrivenAbort_BlackboardKeyCondition(), TestBuildEventDrivenAbort_BlackboardKeyNotPresent() (+42 more)
-
 ### Community 64 - "Community 64"
-Cohesion: 0.05
-Nodes (30): benchmarkAdmission(), benchmarkOutcome(), TestFileTaskRequiresDedicatedBenchmarkFixture(), unsupportedNode(), DefaultLLM(), RunSuite(), RunSuiteWithLLM(), taskContractPassed() (+22 more)
+Cohesion: 0.09
+Nodes (42): AllSLOMetrics(), GetSLOMetrics(), TestAllSLOMetrics(), LoadSLOEvidence(), readSLOFile(), resetSLORegistry(), TestSaveSLOMetrics_CorruptExistingFileDoesNotBlockTheWrite(), TestSaveSLOMetrics_OwnKeysWinOverStaleDiskEntries() (+34 more)
 
 ### Community 65 - "Community 65"
-Cohesion: 0.06
-Nodes (36): FileJobStore, JobStore, TestFileJobStore_AllowsEmptySaveOnFreshStore(), TestFileJobStore_AllowsLegitimateEmptyAfterOwnership(), TestFileJobStore_RefusesEmptyOverwriteFromBlindProcess(), TestReadOnlyJobStore_LoadsButNeverSaves(), NewFileJobStore(), NewReadOnlyJobStore() (+28 more)
+Cohesion: 0.09
+Nodes (46): buildSelfReviewPrompt(), canonicalSelfReviewSig(), defaultSelfReviewDeps(), extractSelfReviewFindingsArray(), filterAutonomousCommits(), init(), loadSelfReviewState(), normalizeSelfReviewTitle() (+38 more)
 
 ### Community 66 - "Community 66"
-Cohesion: 0.06
-Nodes (40): adoptionStamp, TestAdoptDriftOnIdle_AdoptsSynchronously(), TestAdoptDriftOnIdle_SwallowsErrors(), AdoptDriftOnIdle(), adoptionStampHead(), AutoRebuildEnabled(), AutoRestartEnabled(), TestAdoptionStamps_InertUnderTestWithoutOptIn() (+32 more)
-
-### Community 67 - "Community 67"
-Cohesion: 0.07
-Nodes (40): TestResolveGeneratedTree_EndToEnd(), TestResolveGeneratedTree_UserWorkspaceFallback(), TestAutomationAdmissionRejectsUnreadableAndContradictoryLedger(), TestResolveGeneratedTree_AutomationStatusGate(), TestResolveGeneratedTreeForUser_AutomationStatusGate(), TestResolveGeneratedTreeForUser_TwoUserCollision(), TestResolveTreeIDForUser_ScopesToRequestingUser(), TestRunOnce_RefusesExecutionForNonApprovedAutomation() (+32 more)
-
-### Community 68 - "Community 68"
 Cohesion: 0.07
 Nodes (30): buildGardenerConfig(), experienceBankDir(), TestBuildGardenerConfig_ExperienceBankSharedWithDaemon(), TestBuildGardenerConfig_FeedbackPersistenceArmed(), TestBuildGardenerConfig_KnowledgeGraphWired(), TestBuildGardenerConfig_SafetyComponentsWired(), TestBuildGardenerConfig_SnapshotDirCreated(), TestBuildGardenerConfig_TranspositionTableWired() (+22 more)
 
-### Community 69 - "Community 69"
-Cohesion: 0.07
-Nodes (40): TestNewQTable(), TestNewReinforcementLearner(), TestPopulation_StatsAccessors(), TestEvolveWithExperience_NilBankStillEvolves(), TestEvolveWithExperience_WarmStartConsultsBankHints(), TestQTableExploresGovernanceMutations(), TestRegisteredBlocksDoNotStarveGovernanceMutations(), TestMAPElitesPopulation_EvolveMAPElites_ObservesLearnedPatternRepeatedly() (+32 more)
+### Community 67 - "Community 67"
+Cohesion: 0.09
+Nodes (43): GateResult, TestQualityGateFloorOn100Scale(), ListRevisions(), loadSnapshotIndex(), NewQualityGate(), TestQualityGateGlobalStreakDisablesAllTrees(), TestQualityGatePerTreeIsolation(), TestQualityGatePerTreeResetOnPass() (+35 more)
 
-### Community 70 - "Community 70"
-Cohesion: 0.08
-Nodes (46): collectSystem(), BuildDecisionTree(), childMatchesDecision(), chooseDecisionBranch(), decisionKey(), decisionValue(), defaultDecisionBranch(), stringifyDecisionValue() (+38 more)
-
-### Community 71 - "Community 71"
+### Community 68 - "Community 68"
 Cohesion: 0.06
 Nodes (40): Analysis, Contradiction, CoveragePoint, fakeCaller, fakeTool, flakyCaller, remainingDeadline(), TestJudge_ParsesStructuredJSON() (+32 more)
 
-### Community 72 - "Community 72"
-Cohesion: 0.09
-Nodes (32): AuctionDelegate(), NewAuctioneer(), cardWithURL(), newAuctionTransport(), newDeadlineProbeTransport(), TestAuctionDelegate_AwardsWinnerFromCardRegistry(), TestAuctionDelegate_ChainStateCandidateOverride(), TestAuctionDelegate_DispatchRetryExhaustedFallsBack() (+24 more)
+### Community 69 - "Community 69"
+Cohesion: 0.07
+Nodes (34): HTTPMethod, collectViolations(), fieldPath(), matchRouteTemplate(), pathOrRoot(), ResponseValidator(), routeKey(), TestResponseValidator_Enforcement_ErrorBodyIsValidJSON() (+26 more)
 
-### Community 73 - "Community 73"
+### Community 70 - "Community 70"
 Cohesion: 0.08
-Nodes (37): routineThrottle, runDashboardRestartOwnerFixture(), TestDashboardRestartOwnerAcrossProcesses(), waitRestartFixtureFile(), TestReviewSprintRetryReturnsExistingJob(), TestAcceptedSprintDetachesHTTPAndRetainsCapacityUntilCleanup(), TestSprintAdmissionDeadlineDoesNotClaimOrBlockStatus(), TestSprintBudgetDoesNotReleaseRunningWorkOrTickRemainingClaims() (+29 more)
+Nodes (37): governedMultiFitness(), growthFitness(), FitnessDimension, MultiFitness, MultiIndividual, cappedIndividuals(), clampScore(), countActions() (+29 more)
 
-### Community 74 - "Community 74"
+### Community 71 - "Community 71"
 Cohesion: 0.07
 Nodes (37): agentNameFromBB(), init(), registerDelegateNodes(), NewMemoryStore(), priorityWeight(), storeForTest(), TestContextBlock_EmptyStoreReturnsEmpty(), TestContextBlock_IncludesFactsPitfallsPatterns() (+29 more)
 
-### Community 75 - "Community 75"
-Cohesion: 0.09
-Nodes (45): buildSelfReviewPrompt(), canonicalSelfReviewSig(), defaultSelfReviewDeps(), extractSelfReviewFindingsArray(), filterAutonomousCommits(), init(), loadSelfReviewState(), normalizeSelfReviewTitle() (+37 more)
-
-### Community 76 - "Community 76"
+### Community 72 - "Community 72"
 Cohesion: 0.08
-Nodes (32): dashboardActivityGate, dashboardAgentExecution, dashBackgroundBusy(), TestDashboardDriftGuardRetainsCanceledFallbackExecution(), TestDashboardDriftGuardRetainsDetachedPipeline(), TestDashboardDriftGuardRetainsDetachedSprint(), TestDashboardRestartResponseMatchesAllRouteSchemas(), TestDashboardRestartSealCannotRaceOwnedAdmission() (+24 more)
+Nodes (43): TestDaemonConfiguresGoalPlanBrainstorm(), TestChangedPackagesLintCommandMirrorsHookGate(), TestBrainstormExpansionAcceptedWhenDeeper(), TestBrainstormNotCalledWhenPlanAlreadyFull(), TestBrainstormRejectedWhenFilesNotGoPath(), TestBrainstormRejectedWhenMalformedOrProse(), TestBrainstormRejectedWhenNotDeeper(), TestBrainstormRejectedWhenRunOmitsShort() (+35 more)
 
-### Community 77 - "Community 77"
-Cohesion: 0.06
-Nodes (24): TestSetWithContextBoundsScopeAndFileContention(), TestWorkflowApprovalCreationObeysCallerBudgetDuringContention(), TestExecutorPreCanceledContextDoesNotExecuteOrRecordFailure(), TestExecutorPropagatesCallerDeadlineToTree(), TestHermesFallbackPreservesExitErrorAndCallerDeadline(), TestTaskExecutionBatchRejectsMissingOrConflictingMemberAtomically(), TestTaskExecutionContextBoundsMutexAndFileContention(), TestCodexDelegationWritesArtifactOptIn() (+16 more)
+### Community 73 - "Community 73"
+Cohesion: 0.08
+Nodes (31): dashboardActivityGate, dashboardAgentExecution, dashBackgroundBusy(), TestDashboardDriftGuardRetainsCanceledFallbackExecution(), TestDashboardDriftGuardRetainsDetachedPipeline(), TestDashboardDriftGuardRetainsDetachedSprint(), TestDashboardRestartResponseMatchesAllRouteSchemas(), TestDashboardRestartSealCannotRaceOwnedAdmission() (+23 more)
 
-### Community 78 - "Community 78"
+### Community 74 - "Community 74"
 Cohesion: 0.09
 Nodes (25): AgentRunner, Checkpoint, extractCycleFacts(), TestExtractCycleFacts(), truncateForLog(), RunContext, ScheduledJob, Scheduler (+17 more)
 
-### Community 79 - "Community 79"
-Cohesion: 0.09
-Nodes (40): TestRunOncePreservesTerminalDelegationAcrossOuterRetry(), NewHistory(), TestHistoryConfinesIdentifiersAndSymlinksToOwner(), TestHistoryStatsConcurrentWithRecording(), TestHistoryWriteFailureDoesNotAcknowledgeOrCache(), TestRunHistoryFailureIsReportedWithExecutionResult(), TestScheduler_RemoveNonexistent(), TestScheduler_UnknownAgent() (+32 more)
-
-### Community 80 - "Community 80"
+### Community 75 - "Community 75"
 Cohesion: 0.08
-Nodes (38): TestDebugPhase_DryRunSkipsClaudeAndWritesMarker(), TestDebugPhases_WriteEvidenceFiles(), TestDiscardWorktree_RefusesEmptyPath(), TestDiscardWorktree_RefusesMainRepoPath(), TestDiscardWorktree_RemovesWorktreeAndDeletesBranch(), TestPushBranchAndCreatePR_InvokesGitPushAndGhPr(), withSwappedSuperpowersRunners(), init() (+30 more)
+Nodes (39): mockOrch, mockTTOrch, NewWorkflow(), TestApproval_Fields(), TestApproveTask(), TestExecuteSprint(), TestExecuteSprint_ApprovedToCompleted(), TestExecuteSprint_ConcurrentWorkflowsShareCompanyState() (+31 more)
 
-### Community 81 - "Community 81"
-Cohesion: 0.05
-Nodes (27): TestBuildDelegateBlockTree(), TestLiveGoapModelResultRequiresExactValueOracle(), A2AHandoffBlock(), TestA2AHandoffBlock_BuildAndValidate(), TestA2AHandoffBlock_Structure(), DelegateBlock(), TestDelegateBlock_BuildAndValidate(), TestDelegateBlock_Structure() (+19 more)
+### Community 76 - "Community 76"
+Cohesion: 0.08
+Nodes (35): TestRunOnce_EmitsRunRootSpan(), TestRunJob_WebhookSpanJoinsRunTrace(), TestNestedActionSpansParentCorrectly(), TestPanickingActionRestoresTraceContextAndEndsSpan(), TestRegisteredActionEmitsSpan(), TestRegisteredConditionEmitsSpan(), withRecordingGlobalTracer(), TestTracedLLM_GenerateWithMaxTokens_ForwardsAndEmitsSpan() (+27 more)
 
-### Community 82 - "Community 82"
+### Community 77 - "Community 77"
+Cohesion: 0.08
+Nodes (36): NewDefaultCompany(), CompanyOrchestrator, EngineerTree(), MarketingTree(), SalesTree(), StartupTrees(), clamp(), safeDiv() (+28 more)
+
+### Community 78 - "Community 78"
+Cohesion: 0.07
+Nodes (37): handleAnalyze(), handleFellows(), handleWorkflowRunFullPipeline(), TestHandleAgentRun_CircuitBreakerOpenReturns503(), TestHandleAnalyze_TaskIDsUniqueAcrossAnalyses(), TestHandleAnalyze_UsesWorkflowForTaskDerivation(), TestHandleSprintExecute_UpdatesCurrentWorkflow(), TestHandleWorkflowRunFullPipeline_PersistsWorkflowAndTasks() (+29 more)
+
+### Community 79 - "Community 79"
 Cohesion: 0.08
 Nodes (44): TestPushToDLQAction(), TestDLQReplayScanSurvivesPanicAcrossTicks(), TestBTDLQToolsListAndReplay(), TestDLQReplayWaitReportsFailureOutcome(), TestHandleDLQ_IncludesCategoryCounts(), TestHandleDLQReplay_RequeuesInsteadOfDropping(), pushToDLQAction(), TestPushToDLQAction_FailedStorageStopsEscalation() (+36 more)
 
-### Community 83 - "Community 83"
+### Community 80 - "Community 80"
 Cohesion: 0.12
 Nodes (37): main(), run(), Check, dependabotConfig, workflow, boolDetail(), containsExactOrKey(), errDetail() (+29 more)
 
-### Community 84 - "Community 84"
-Cohesion: 0.09
-Nodes (33): BehavioralDescriptor, FeatureDimension, Bucket(), Descriptor(), NewMAPElitesGrid(), NewMAPElitesPopulation(), cellFitnesses(), insertPersistNiche() (+25 more)
+### Community 81 - "Community 81"
+Cohesion: 0.07
+Nodes (22): StartDriftWatcher(), handleSprintExecute(), sprintTaskDisposition(), syncWorkflowTaskStatus(), reserveSprint(), writeSprintAdmissionError(), executeSprintTasks(), executeSprintTasksWithContext() (+14 more)
 
-### Community 85 - "Community 85"
-Cohesion: 0.08
-Nodes (39): ctxAwareBlockingRunner, TestClaudeErrorHandler_ClassifiesUnclassifiedFailure(), TestClaudeErrorHandler_GoapFailureGetsGoapCategory(), buildErrorHandlerPrompt(), errorHandlerCooldown(), errorHandlerEnabled(), errorHandlerMaxNodes(), errorHandlerNodeDepth() (+31 more)
+### Community 82 - "Community 82"
+Cohesion: 0.07
+Nodes (35): adoptionStamp, TestAdoptDriftOnIdle_AdoptsSynchronously(), TestAdoptDriftOnIdle_SwallowsErrors(), AdoptDriftOnIdle(), adoptionStampHead(), AutoRebuildEnabled(), AutoRestartEnabled(), TestAdoptionStamps_InertUnderTestWithoutOptIn() (+27 more)
 
-### Community 86 - "Community 86"
+### Community 83 - "Community 83"
 Cohesion: 0.04
 Nodes (45): code:go (package agent), code:go (package agent), code:bash (git add internal/agent/concurrency_group.go internal/agent/c), code:go (package agent), code:go (package agent), code:bash (git add internal/agent/lanes.go internal/agent/lanes_test.go), code:go (package agent), code:go (lanes      *laneState        // admission control for concur) (+37 more)
 
-### Community 87 - "Community 87"
+### Community 84 - "Community 84"
+Cohesion: 0.07
+Nodes (41): handleScalability(), fullBlockedPool(), TestAdmissionPreCanceledContextConsumesNoCapacity(), TestLimiterConcurrentReservationsBalance(), TestLimiterDeadlineRetainsExistingOwnerAndRecoversCapacity(), TestWorkerPoolDeadlineRejectsFullQueueWithoutAdmission(), TestWorkerPoolShutdownUnblocksFullQueueSubmitter(), ConcurrencyLimiterStats (+33 more)
+
+### Community 85 - "Community 85"
 Cohesion: 0.12
 Nodes (37): NewEvolvedAgent(), saveRecordWithDelay(), TestConfig_AllFields(), TestCreateAgentTool_Call_NilFactory(), TestEvolvedAgent_Run(), TestEvolvedAgent_Run_Error(), TestEvolvedAgent_Run_WithAutoEvolve(), TestEvolvedAgent_StructFields() (+29 more)
 
+### Community 86 - "Community 86"
+Cohesion: 0.08
+Nodes (32): BehavioralDescriptor, FeatureDimension, Bucket(), Descriptor(), NewMAPElitesGrid(), cellFitnesses(), insertPersistNiche(), newPersistElite() (+24 more)
+
+### Community 87 - "Community 87"
+Cohesion: 0.09
+Nodes (41): buildGoapFusionNotebookLMQuery(), buildGrillRound1Query(), buildClaudeReviewPrompt(), TestBuildClaudeReviewPrompt_ContractMarkers(), implementedGoalsPromptBlock(), scopeGoapGoalLine(), TestScopeGoapGoalLineAppendsGrepMatches(), graphifyComponentsPromptBlock() (+33 more)
+
 ### Community 88 - "Community 88"
 Cohesion: 0.09
-Nodes (38): TestBrainstormExpansionAcceptedWhenDeeper(), TestBrainstormNotCalledWhenPlanAlreadyFull(), TestBrainstormRejectedWhenFilesNotGoPath(), TestBrainstormRejectedWhenMalformedOrProse(), TestBrainstormRejectedWhenNotDeeper(), TestBrainstormRejectedWhenRunOmitsShort(), withBrainstorm(), brainstormExpandPlan() (+30 more)
+Nodes (34): UsersDir(), TestLoadedDefinitionHomeOwnsBlackboardBeforeFirstRun(), TestPipelineRejectsMissingOrFailedBlackboardOwnerBeforeSteps(), TestRunDepsReportsBlackboardInitializationFailure(), NewRunDeps(), isolateRunDepsEnv(), TestConfiguredReflectionRootReachesStoresAndResolver(), TestNewRunDeps_ConfigLoadFailure_FallsBackToZeroConfig() (+26 more)
 
 ### Community 89 - "Community 89"
-Cohesion: 0.08
-Nodes (30): IsKnownChainKind(), parseChainConfig(), TestChainAction_ParseConfig(), TestIsKnownChainKind(), asFloat(), compiledGoapActionFor(), compiledGoapConditionFor(), goapValuesEqual() (+22 more)
+Cohesion: 0.07
+Nodes (28): TestIsBreakerSuccess(), IsBreakerSuccess(), RunPipeline(), RunPipelineWithID(), TestRunPipelineWithID_RecordsAgentMetrics(), TestRecordTaskBlockFitness(), AgentExecutor, BlockFitnessSnapshot() (+20 more)
 
 ### Community 90 - "Community 90"
-Cohesion: 0.12
-Nodes (37): newThrottleTestServer(), taskCompleteEvent(), TestFailureAndDegradedOutcomesNeverThrottled(), TestRoutineNoChangeHeartbeatAfterQuietDay(), TestRoutineNoChangeNotificationsThrottledAfterBaseline(), TestThrottleStatePersistsAcrossPublisherRestarts(), panickyPayload, throttleTestServer (+29 more)
+Cohesion: 0.08
+Nodes (37): ctxAwareBlockingRunner, TestClaudeErrorHandler_ClassifiesUnclassifiedFailure(), TestClaudeErrorHandler_GoapFailureGetsGoapCategory(), buildErrorHandlerPrompt(), errorHandlerCooldown(), errorHandlerEnabled(), errorHandlerMaxNodes(), errorHandlerNodeDepth() (+29 more)
 
 ### Community 91 - "Community 91"
-Cohesion: 0.07
-Nodes (32): a2aExecutionOwnerKey, treeSkillName(), ConfigurePlatformClient(), NewBTAgentClient(), a2aExecutionServer(), executionRPCFixture(), TestA2AActiveTaskPollsWithoutResending(), TestA2AAsyncRequestEndsButExplicitCancelStopsCooperativeTree() (+24 more)
+Cohesion: 0.08
+Nodes (37): goapBacktickValueAfter(), goapFusionImplDegradedSection(), goapFusionMaterializerSnapshotsSection(), goapFusionParkedBranchesSection(), init(), loadGoapFusionReportedSnapshots(), markGoapFusionReportedSnapshots(), registerGoapFusionProductionAdditions() (+29 more)
 
 ### Community 92 - "Community 92"
 Cohesion: 0.09
-Nodes (37): registerA2ANodes(), TestDelegateToA2A_ContextPropagates(), TestDelegateToA2A_FnNotConfigured(), TestDelegateToA2A_FnReturnsError(), TestDelegateToA2A_MissingTaskEmptyChainState(), TestDelegateToA2A_MissingURL(), TestDelegateToA2A_RateLimitCarryoverPropagates(), TestDelegateToA2A_Success() (+29 more)
+Nodes (18): quickSuite(), QuickValidateCandidate(), Info(), candidateAcceptor, candidatesFromScored(), cloneTreeForGardener(), exportSLOMetrics(), fileExists() (+10 more)
 
 ### Community 93 - "Community 93"
-Cohesion: 0.07
-Nodes (28): appendMissingRealTools(), inferToolsForTask(), init(), registerSetupActions(), TestAppendMissingRealTools_AllUnknownReturnsEmptySlice(), TestAppendMissingRealTools_NilBlackboardReturnsNil(), TestAppendMissingRealTools_SkipsEmptyExistingAndUnknownNames(), TestDiscoverAvailableTools_InitializesNilChainState() (+20 more)
+Cohesion: 0.09
+Nodes (29): TestSecurityAuditRealResponsesSurviveEnforcedValidation(), handleSecurityAudit(), CaptureAuditEvent(), CountEvents(), GlobalAuditBuffer(), NewAuditBuffer(), SetGlobalAuditBuffer(), TestAuditBuffer_Capacity() (+21 more)
 
 ### Community 94 - "Community 94"
-Cohesion: 0.06
-Nodes (32): TestGetEmbedding_5xxIsRetriedThenSucceeds(), TestGetEmbedding_EmptyEmbeddingOn200IsError(), TestGetEmbedding_HTTPErrorStatusIsError(), NewOpenAICompatClient(), TestOpenAICompat_ClientErrorsDoNotTripBreaker(), TestOpenAICompat_ErrorResponse(), TestOpenAICompat_GenerateWithModel_RetryPolicyByStatusCode(), TestOpenAICompat_GenerateWithModel_SendsChatCompletion() (+24 more)
+Cohesion: 0.07
+Nodes (26): BlockConfig, ApplyDiffMutation(), DefaultBlockConfig(), findBlockForNode(), NewMetaPromptEvolver(), NewMutationContext(), TestApplyDiffMutation(), TestBlockConfig_FilterMutations() (+18 more)
 
 ### Community 95 - "Community 95"
+Cohesion: 0.07
+Nodes (35): TestLocalSearcher_New(), isPkgSelector(), isTmpConcat(), scanPersistencePrimitives(), scanTmpRenames(), TestConcurrentPersistDoesNotLoseEntries(), TestEvolutionDeclaresNoLocalPersistencePrimitives(), TestPersistLeavesNoLockSidecar() (+27 more)
+
+### Community 96 - "Community 96"
+Cohesion: 0.09
+Nodes (37): registerA2ANodes(), TestDelegateToA2A_ContextPropagates(), TestDelegateToA2A_FnNotConfigured(), TestDelegateToA2A_FnReturnsError(), TestDelegateToA2A_MissingTaskEmptyChainState(), TestDelegateToA2A_MissingURL(), TestDelegateToA2A_RateLimitCarryoverPropagates(), TestDelegateToA2A_Success() (+29 more)
+
+### Community 97 - "Community 97"
+Cohesion: 0.08
+Nodes (29): AgentMetrics, AgentStats, TestBuildIdentityStampedRevisionFallback(), BuildIdentity, HealthResponse, HistogramSnap, LabeledHistogram, BuildIdentityFromBuildInfo() (+21 more)
+
+### Community 98 - "Community 98"
+Cohesion: 0.09
+Nodes (38): ClearGoapFusionStateHashes(), goapFusionCircuitBreakerVerdict(), goapFusionCircuitBreakerWindow(), goapFusionCircuitPolicyVerdict(), goapFusionCircuitPolicyVerdictWithBypass(), goapFusionNoopPatchStreak(), goapFusionRepeatedHashBypassed(), goapFusionStateHashes() (+30 more)
+
+### Community 99 - "Community 99"
+Cohesion: 0.08
+Nodes (29): IsKnownChainKind(), parseChainConfig(), TestChainAction_ParseConfig(), TestIsKnownChainKind(), asFloat(), compiledGoapActionFor(), compiledGoapConditionFor(), goapValuesEqual() (+21 more)
+
+### Community 100 - "Community 100"
+Cohesion: 0.06
+Nodes (32): CosineSimilarity(), hammerRegister(), TestBuildIndex_ConcurrentRegisterNoRace(), TestBuildIndex_PanicRecovered(), TestCosineSimilarity_BothZero(), TestCosineSimilarity_DifferentLengths(), TestCosineSimilarity_Empty(), TestCosineSimilarity_Identical() (+24 more)
+
+### Community 101 - "Community 101"
 Cohesion: 0.09
 Nodes (25): TestLiveRunEvidenceRecordsVerifiedModelResult(), evolutionTreeSelection, TestLivePersonalFileAutomation(), currentTreeEvidence(), evolveCurrentTree(), publicationBaseline(), publicationStore(), publishEvolutionProposal() (+17 more)
 
-### Community 96 - "Community 96"
-Cohesion: 0.08
-Nodes (18): TestGoalFactory(), Debug(), errTest, errToString(), NewHealthMonitor(), TestHealthMonitorDegradationError(), TestHealthMonitorNilSafety(), TestHealthMonitorProbe() (+10 more)
+### Community 102 - "Community 102"
+Cohesion: 0.12
+Nodes (7): Request, Status, Store, cloneRequest(), expireRequests(), latestTaskRequest(), newestTaskRequest()
 
-### Community 97 - "Community 97"
-Cohesion: 0.1
-Nodes (38): appendGoapResearchGoals(), collapseToSingleLine(), completeGoapProgramMilestone(), extractGoapResearchGoals(), fallbackGoapGoal(), goapFusionNotebookLMGoalsFromGaps(), goapResearchGapLines(), goapResearchGoalLines() (+30 more)
-
-### Community 98 - "Community 98"
-Cohesion: 0.08
-Nodes (28): restorePreviousBinary(), TestRollbackConfinesBackupAndAtomicallyReplacesExecutable(), TestRollbackFailedReplacementPreservesLiveImage(), TreeStore, EnsurePersistenceParent(), EnsurePersistenceParentMode(), LoadJSON(), OpenPersistenceRoot() (+20 more)
-
-### Community 99 - "Community 99"
-Cohesion: 0.09
-Nodes (28): handleSecurityAudit(), CaptureAuditEvent(), CountEvents(), GlobalAuditBuffer(), NewAuditBuffer(), SetGlobalAuditBuffer(), TestAuditBuffer_Capacity(), TestAuditBuffer_EmptyBuffer() (+20 more)
-
-### Community 100 - "Community 100"
-Cohesion: 0.09
-Nodes (33): TestGoapFusionLoopTreeIsProductionWired(), treeContainsNode(), agentTemplateYAML, TestAllDomainTreesWrappedInClaudeErrorHandler(), TestResolveDomainTreeIsWrapped(), TestResolveTreeID_FusionAliases(), findRepoTemplatesDir(), TestAllTemplatesResolveTree() (+25 more)
-
-### Community 101 - "Community 101"
+### Community 103 - "Community 103"
 Cohesion: 0.1
 Nodes (14): TestDetermineCategory(), TestExtractKeywords(), Factory, AutoCreateTreeWith(), containsAnyStr(), determineCategory(), extractKeywords(), extractSubtree() (+6 more)
 
-### Community 102 - "Community 102"
-Cohesion: 0.07
-Nodes (11): evolvedFitness(), mergeFeedback(), mergeTreeFeedback(), readCommittedFeedback(), treeFeedbackFor(), feedbackDelta, feedbackPersistState, feedbackSnapshot (+3 more)
-
-### Community 103 - "Community 103"
-Cohesion: 0.06
-Nodes (29): Config, CycleMetrics, CollectAgentSLOs(), maxInt(), NewRegistry(), NewRegistryWithUsers(), deepSearchGardener(), deepSearchV2Config() (+21 more)
-
 ### Community 104 - "Community 104"
-Cohesion: 0.09
-Nodes (31): TestCheckpointKeepsAttemptSnapshotAndBudgetAcrossRunningTicks(), TestCheckpointMalformedContractFailsBeforeChildAndValidation(), TestCheckpointUsesExplicitTypedStateAfterPersistence(), cloneCheckpointState(), extractWorldState(), hasWorldState(), NewCheckpointVerifier(), readPostconditions() (+23 more)
-
-### Community 105 - "Community 105"
 Cohesion: 0.14
 Nodes (36): BuildCachedCondition(), BuildInverter(), BuildRepeater(), BuildRunner(), BuildSucceeder(), actionChild(), decoratorsTestNode(), init() (+28 more)
 
-### Community 106 - "Community 106"
+### Community 105 - "Community 105"
 Cohesion: 0.06
 Nodes (21): AgentScore, Runner, Suite, SuiteResult, TestCase, TestKind, TestResult, collectErrors() (+13 more)
 
-### Community 107 - "Community 107"
-Cohesion: 0.11
-Nodes (7): Request, Status, Store, cloneRequest(), expireRequests(), latestTaskRequest(), newestTaskRequest()
+### Community 106 - "Community 106"
+Cohesion: 0.07
+Nodes (33): brokenTool, ChainKind, BuildChainAction(), buildChainActionFn(), generateTemplateOutput(), TestGenerateTemplateOutput_Basic(), TestGenerateTemplateOutput_NilChainState(), TestGenerateTemplateOutput_NoArc42Section() (+25 more)
 
 ### Community 108 - "Community 108"
-Cohesion: 0.07
-Nodes (30): ActionFunc, ActionProvider, ConditionFunc, ConditionProvider, Engine, hermesBehind, Provider, actionStatusString() (+22 more)
+Cohesion: 0.08
+Nodes (33): defaultDriftRestart(), TestRestartArtifactRequiresExactCleanIdentity(), TestRestartControlDispositionAndIdentity(), TestRestartControlLostReplyAndPanicRetainOwnerSeal(), TestRestartControlRejectsMalformedRequestsAndWrongPeer(), TestSystemdCommandFailureAfterStartRetainsUncertainty(), verifyRestartPeer(), verifyRestartPeerUID() (+25 more)
+
+### Community 109 - "Community 109"
+Cohesion: 0.09
+Nodes (32): orderingSweepRunner, safeSlug(), archiveAndDeleteSuperpowersBranch(), TestResolveSuperpowersWorktreeBaseDefault(), TestResolveSuperpowersWorktreeBaseEnvOverride(), TestShepherdFixWorktreePathUsesBase(), cleanupAppliedSuperpowersWorktree(), cleanupSuperpowersWorktree() (+24 more)
 
 ### Community 110 - "Community 110"
-Cohesion: 0.09
-Nodes (30): TestRunOnce_EmitsRunRootSpan(), TestRunJob_WebhookSpanJoinsRunTrace(), TestNestedActionSpansParentCorrectly(), TestPanickingActionRestoresTraceContextAndEndsSpan(), TestRegisteredActionEmitsSpan(), TestRegisteredConditionEmitsSpan(), withRecordingGlobalTracer(), TestTracedLLM_GenerateWithMaxTokens_ForwardsAndEmitsSpan() (+22 more)
+Cohesion: 0.13
+Nodes (15): TestCompletedPromotionFailureKeepsHealthyEvidenceAndStopsReplay(), TestConcurrentBlackboardOwnerRetainsAllWritersAndPinnedRoot(), TestEntryMetadataCannotMutateCommittedScopeOutsideTransaction(), TestRelatedEntryGroupCommitsTogetherAndHonorsDeadline(), TestRelatedEntryGroupRejectsPartialMutationAndEviction(), Manager, commitScope(), isPersistentScope() (+7 more)
 
 ### Community 111 - "Community 111"
-Cohesion: 0.11
-Nodes (32): UsersDir(), TestLoadedDefinitionHomeOwnsBlackboardBeforeFirstRun(), TestPipelineRejectsMissingOrFailedBlackboardOwnerBeforeSteps(), TestRunDepsReportsBlackboardInitializationFailure(), NewRunDeps(), isolateRunDepsEnv(), TestConfiguredReflectionRootReachesStoresAndResolver(), TestNewRunDeps_ConfigLoadFailure_FallsBackToZeroConfig() (+24 more)
+Cohesion: 0.09
+Nodes (32): restorePreviousBinary(), FileJobStore, TestRollbackConfinesBackupAndAtomicallyReplacesExecutable(), TestRollbackFailedReplacementPreservesLiveImage(), TestSharedJSONConcurrentTransactions(), TestSharedJSONFailurePreservesCommittedValue(), UpdateSharedJSON(), UpdateSharedJSONWithContext() (+24 more)
 
 ### Community 112 - "Community 112"
 Cohesion: 0.08
-Nodes (24): TestIsBreakerSuccess(), IsBreakerSuccess(), RunPipeline(), RunPipelineWithID(), TestRunPipelineWithID_RecordsAgentMetrics(), AgentExecutor, hermesOutcome(), isAuctionShapedTask() (+16 more)
+Nodes (27): NewNodeHeartbeat(), NewNodeHeartbeatWithCleanupInterval(), TestNodeHeartbeat_CleanupKeepsAliveNodes(), TestNodeHeartbeat_CleanupRemovesExpired(), TestNodeHeartbeat_ConcurrentAccess(), TestNodeHeartbeat_ConcurrentDeregister(), TestNodeHeartbeat_Deregister(), TestNodeHeartbeat_EmptyListAlive() (+19 more)
 
 ### Community 113 - "Community 113"
-Cohesion: 0.1
-Nodes (37): TestApplyMutations_Batch(), TestApplyMutations_DuplicateFallbackRejected(), TestApplyMutations_NoOpDoesNotCountAsApplied(), TestApplyMutations_PromptToolIterationMutationsAreBounded(), TestCountNodes(), TestDefaultTree_Structure(), TestMutation_AddAfter(), TestMutation_AddBefore() (+29 more)
+Cohesion: 0.07
+Nodes (12): Embedding, EmbeddingClient, DeepSeekClient, OpenAICompatClient, OpenAICompatConfig, openAICompatMessage, openAICompatRequest, openAICompatResponse (+4 more)
 
 ### Community 115 - "Community 115"
-Cohesion: 0.1
-Nodes (31): TestBlackboardOwnerFailurePreventsAdmissionAndMemoryFallback(), BlackboardDir(), CircuitBreakersFile(), DLQFile(), HistoryDir(), HomeDir(), LogsDir(), MemoryDir() (+23 more)
+Cohesion: 0.07
+Nodes (12): ApprovalPolicy, NewHabitMiner(), minerInput(), TestHabitMiner_BelowThresholdYieldsNothing(), TestHabitMiner_DetectsRecurringPattern(), TestHabitMiner_EmbeddingFailureFallsBackToKeywords(), TestHabitMiner_UsesEmbeddingsWhenAvailable(), TestSanitizeUserID() (+4 more)
 
 ### Community 116 - "Community 116"
-Cohesion: 0.09
-Nodes (29): AgentMetrics, AgentStats, TestBuildIdentityStampedRevisionFallback(), BuildIdentity, HealthResponse, Histogram, bucketForStatus(), BuildIdentityFromBuildInfo() (+21 more)
+Cohesion: 0.08
+Nodes (29): JobStore, TestFileJobStore_AllowsEmptySaveOnFreshStore(), TestFileJobStore_AllowsLegitimateEmptyAfterOwnership(), TestFileJobStore_RefusesEmptyOverwriteFromBlindProcess(), TestReadOnlyJobStore_LoadsButNeverSaves(), NewFileJobStore(), NewReadOnlyJobStore(), TestFileJobStoreIgnoresPreplantedTempSymlink() (+21 more)
 
 ### Community 117 - "Community 117"
-Cohesion: 0.09
-Nodes (37): TestScoreChild_NilChainState(), TestScoreChildren_BasicRanking(), ScoringCriteria, BuildUtilitySelector(), DefaultScoringCriteria(), ScoreChild(), ScoreChildren(), TestBuildUtilitySelector_AllInvalidReturnsFailure() (+29 more)
+Cohesion: 0.11
+Nodes (33): TestRunOncePreservesTerminalDelegationAcrossOuterRetry(), NewHistory(), TestHistoryConfinesIdentifiersAndSymlinksToOwner(), TestHistoryStatsConcurrentWithRecording(), TestHistoryWriteFailureDoesNotAcknowledgeOrCache(), TestRunHistoryFailureIsReportedWithExecutionResult(), TestScheduler_RemoveNonexistent(), TestScheduler_UnknownAgent() (+25 more)
 
 ### Community 118 - "Community 118"
+Cohesion: 0.09
+Nodes (36): TestApplyMutations_Batch(), TestApplyMutations_DuplicateFallbackRejected(), TestApplyMutations_NoOpDoesNotCountAsApplied(), TestApplyMutations_PromptToolIterationMutationsAreBounded(), TestCountNodes(), TestDefaultTree_Structure(), TestMutation_AddAfter(), TestMutation_AddBefore() (+28 more)
+
+### Community 119 - "Community 119"
+Cohesion: 0.08
+Nodes (16): envDefault(), main(), run(), TestExecutorPreCanceledContextDoesNotExecuteOrRecordFailure(), TestExecutorPropagatesCallerDeadlineToTree(), TestHermesFallbackPreservesExitErrorAndCallerDeadline(), TestCodexDelegationWritesArtifactOptIn(), newImplementationDelegatingRunner() (+8 more)
+
+### Community 120 - "Community 120"
 Cohesion: 0.11
 Nodes (36): TestWalkValidate_DepthLimitExceeded(), TestWalkValidate_DestroySideEffectNoGate(), TestWalkValidate_ExternalSideEffectNoGate(), TestWalkValidate_HumanApprovalGateSetsFlag(), TestWalkValidate_KnownNodeTypePasses(), TestWalkValidate_MaxRetriesLimitExceeded(), TestWalkValidate_NilNode(), TestWalkValidate_NodeCountLimitExceeded() (+28 more)
 
-### Community 119 - "Community 119"
-Cohesion: 0.12
-Nodes (35): TestSnapshotFilesKeepRestrictivePerms(), GateResult, ListRevisions(), loadSnapshotIndex(), RestoreTree(), RestoreTreeBeforeRegressionStreak(), RestoreTreeRevision(), saveSnapshotIndex() (+27 more)
-
-### Community 120 - "Community 120"
+### Community 121 - "Community 121"
 Cohesion: 0.1
 Nodes (33): distributedDispatch, appendDispatchErr(), driveDistributedDispatch(), main(), parseNodes(), run(), multiNodeReport, MultiNodeProbeConfig (+25 more)
 
-### Community 121 - "Community 121"
+### Community 122 - "Community 122"
 Cohesion: 0.08
 Nodes (31): newLiveModel(), ModelEvidence, NewACPClient(), countCrashInvocations(), TestACPClientCircuitBreakerShortCircuitsRepeatedSubprocessFailures(), TestACPClientGenerateCtx_StderrBufferRace(), TestACPClientGenerateReturnsErrorWhenSessionMissing(), TestACPClientGenerateTalksToACPServer() (+23 more)
 
-### Community 122 - "Community 122"
-Cohesion: 0.11
-Nodes (32): ScoreAnnouncement(), cardResponder, TestExecuteAgentNameFromCtxWinsOverContextID(), TestReviewA2ACallerCancellationReachesTree(), rpcRequest, rpcResponse, RespondToAnnouncement(), SetTreeResolver() (+24 more)
-
 ### Community 123 - "Community 123"
-Cohesion: 0.1
-Nodes (17): app, fakeExecutor, fakeLLM, generator, buildGraph(), main(), newApp(), normalizeFlagArgs() (+9 more)
+Cohesion: 0.09
+Nodes (35): Session, NewSessionStore(), TestSessionStore_CreateReclaimsExpiredCapacity(), TestSessionStore_ValidationReturnsSnapshot(), TestSessionCleanup_PanicRecovered(), TestSessionMiddleware_APIKeyFallback(), TestSessionMiddleware_CustomCheckFunc(), TestSessionMiddleware_ExpiredCookie() (+27 more)
 
 ### Community 124 - "Community 124"
-Cohesion: 0.09
-Nodes (30): orderingSweepRunner, archiveAndDeleteSuperpowersBranch(), TestResolveSuperpowersWorktreeBaseDefault(), TestResolveSuperpowersWorktreeBaseEnvOverride(), TestShepherdFixWorktreePathUsesBase(), cleanupAppliedSuperpowersWorktree(), cleanupSuperpowersWorktree(), createSuperpowersWorktree() (+22 more)
-
-### Community 125 - "Community 125"
 Cohesion: 0.1
 Nodes (32): callArc42Action(), isolateGoapFusionGraphReport(), TestArc42Action_DetectHardware(), TestArc42Action_DetectProcesses(), TestArc42Action_GitHistory(), TestArc42Action_ListBinaries(), TestArc42Action_ListExternalAPIs(), TestArc42Action_ListMCPTools() (+24 more)
 
+### Community 125 - "Community 125"
+Cohesion: 0.09
+Nodes (14): TestWinnerBreakerStore_SaveLocksReadModifyWrite(), acquireExperienceFileLock(), cloneProposalJSON(), detachedExperience(), jaccardSimilarity(), TestJaccardSimilarity(), TestTokenize(), tokenize() (+6 more)
+
 ### Community 126 - "Community 126"
-Cohesion: 0.08
-Nodes (33): stringContains(), TestBuildGoapStepPrompt(), TestPlanStepsToStrings(), TestPlanStepsToStrings_Empty(), TestWorldStateFromMap(), buildGoapStepPrompt(), getStepResults(), planStepsToStrings() (+25 more)
+Cohesion: 0.09
+Nodes (34): TestLiveGoapPlansObserveActualPersonalFileEffects(), applyGoapMetadata(), decodeGoapValue(), executeObservedGoapStep(), failGoapExecution(), goapNodeHasMetadata(), setupObservedGoapTools(), registerGoapNodes() (+26 more)
 
 ### Community 127 - "Community 127"
-Cohesion: 0.13
-Nodes (28): TestCompileSeedsForSameTreeIDDoNotOverwriteAnotherOwner(), TestFeedbackForSameTreeIDStaysWithItsOwner(), newFeedbackDeps(), TestSeedCompileReflection_WritesOnceAndOverwrites(), goalError(), goalFactory(), goalTreeSlug(), personaStyleHints() (+20 more)
+Cohesion: 0.12
+Nodes (32): AlertRouterTree(), Arc42Trees(), chain(), section10Quality(), section11Risks(), section12Glossary(), section1IntroGoals(), section2Constraints() (+24 more)
 
 ### Community 128 - "Community 128"
-Cohesion: 0.11
-Nodes (22): crowdingDistances(), NewNSGAIIPopulation(), NewNSGAIISorter(), nonDominatedSort(), frontIndexSets(), sameFronts(), TestNewNSGAIIPopulation(), TestNewNSGAIIPopulation_SeedsSpecialists() (+14 more)
+Cohesion: 0.07
+Nodes (35): TestBuiltinSWELite_CoverageAndUniqueness(), benchmarkPlanTree(), benchmarkSuccessTree(), TestBFCLV3LoadErrorsAndEmptyEvaluation(), TestBFCLV3LoadFlattenAndEvaluate(), TestBuiltinBFCLSuitesHaveStableShape(), TestBuiltinBFCLV3StableShape(), TestGAIABuiltinAndEvaluation() (+27 more)
 
 ### Community 129 - "Community 129"
-Cohesion: 0.13
-Nodes (36): Duration(), TestDuration(), BuildCircuitBreaker(), BuildTimeout(), NewExperienceBank(), bankHasEntry(), BenchmarkAddFromMutation(), BenchmarkRetrieve() (+28 more)
+Cohesion: 0.09
+Nodes (15): addContractRecovery(), ContractRecoveryTargets(), FitnessFunc, firstNodeNameByType(), firstOpName(), maxInt(), MergeScoredMutations(), SelectStructuralStrategy() (+7 more)
 
 ### Community 130 - "Community 130"
 Cohesion: 0.08
-Nodes (34): TestPriorityQueue_PersistAndReloadViaInterface(), TestPriorityTaskQueue_DequeueEmpty(), TestPriorityTaskQueue_EnqueueDequeue(), TestPriorityTaskQueue_Peek(), TestPriorityTaskQueue_PeekEmpty(), TestPriorityTaskQueue_PurgeViaInterface(), TestPriorityTaskQueue_SamePriorityFIFO(), TestPriorityTaskQueueInterfaceCompliance() (+26 more)
+Nodes (29): TestPromoteRunToAgentScope(), TestReviewRunScopeReleasedAfterConsumers(), DefaultManager(), TestHandle_RunScope(), TestHandle_SessionScope(), TestListPersistedScopeIDs(), TestManager_Append(), TestManager_AppendConcurrent() (+21 more)
 
 ### Community 131 - "Community 131"
 Cohesion: 0.05
@@ -4324,15 +4328,15 @@ Nodes (36): Chunk 1: Backend Domain Models & File-Based Storage, Chunk 2: AI Int
 
 ### Community 132 - "Community 132"
 Cohesion: 0.08
-Nodes (28): TestClient_AnalyzeComplexity_FallbackOnError(), TestClient_Generate_ConnectionRefused(), TestClient_GeneratePlan_FallbackOnError(), TestClient_Reflect_FallbackOnError(), TestDeepSeekClient_AnalyzeComplexity(), TestDeepSeekClient_Generate_APIError(), TestDeepSeekClient_Generate_ConnectionRefused(), TestDeepSeekClient_Generate_EmptyChoices() (+20 more)
+Nodes (34): TestPriorityQueue_PersistAndReloadViaInterface(), TestPriorityTaskQueue_DequeueEmpty(), TestPriorityTaskQueue_EnqueueDequeue(), TestPriorityTaskQueue_Peek(), TestPriorityTaskQueue_PeekEmpty(), TestPriorityTaskQueue_PurgeViaInterface(), TestPriorityTaskQueue_SamePriorityFIFO(), TestPriorityTaskQueueInterfaceCompliance() (+26 more)
 
 ### Community 133 - "Community 133"
-Cohesion: 0.12
-Nodes (34): KeyHash(), NewKeyRing(), NewKeyRotationScheduler(), TestExpireKey_NotFound(), TestExpireKey_Success(), TestExpiringKeys_EmptyRing(), TestExpiringKeys_OnlyPermanent(), TestExpiringKeys_OutsideWindow() (+26 more)
+Cohesion: 0.08
+Nodes (28): TestClient_AnalyzeComplexity_FallbackOnError(), TestClient_Generate_ConnectionRefused(), TestClient_GeneratePlan_FallbackOnError(), TestClient_Reflect_FallbackOnError(), TestDeepSeekClient_AnalyzeComplexity(), TestDeepSeekClient_Generate_APIError(), TestDeepSeekClient_Generate_ConnectionRefused(), TestDeepSeekClient_Generate_EmptyChoices() (+20 more)
 
 ### Community 134 - "Community 134"
-Cohesion: 0.1
-Nodes (34): ParallelMode, intSliceFromInterface(), BuildReactiveParallel(), runReactiveParallel(), TestReviewBuiltReactiveSingleRunning(), evaluateGuardCondition(), TestBuildReactiveParallel_AbortOnEventDelegates(), TestBuildReactiveParallel_AllModeSuccess() (+26 more)
+Cohesion: 0.09
+Nodes (29): composeOrderedWithMiddle(), ComposePreset(), ComposePresetWithTools(), ComposeTaskTreeAgentic(), ComposeTaskTreeFull(), ListToolProfileBlocks(), PipelineWithToolsProfile(), profileOrDefault() (+21 more)
 
 ### Community 135 - "Community 135"
 Cohesion: 0.09
@@ -4340,1935 +4344,1927 @@ Nodes (25): BenchEvalFunc, countConditionsActions(), DefaultCascadeConfig(), max
 
 ### Community 136 - "Community 136"
 Cohesion: 0.06
-Nodes (35): code:go (type Tracer interface {), code:go (type ContentType string), code:go (type KnowledgeGraph struct { ... }), code:go (type Analyzer struct { ... }), code:go (type LLM interface {), code:go (type ThinkTank struct { ... }), code:go (type CompanyState struct {), code:go (type Evaluator struct { ... }) (+27 more)
+Nodes (35): code:go (package engine), code:go (// goapReviewContext is what the Claude review fallback will), code:bash (git add internal/engine/actions_goap_fusion_claude_review.go), code:go (type fakeReviewClaudeRunner struct {), code:go (// goapReviewAllowedTools keeps the review run read-only: th), code:bash (git add internal/engine/actions_goap_fusion_claude_review.go), code:go (func TestNotebookLMActions_SkipWhileQuotaCached(t *testing.T), code:go (if nlmQuotaExhausted(bb) {) (+27 more)
 
 ### Community 137 - "Community 137"
 Cohesion: 0.06
-Nodes (35): code:go (package engine), code:go (// goapReviewContext is what the Claude review fallback will), code:bash (git add internal/engine/actions_goap_fusion_claude_review.go), code:go (type fakeReviewClaudeRunner struct {), code:go (// goapReviewAllowedTools keeps the review run read-only: th), code:bash (git add internal/engine/actions_goap_fusion_claude_review.go), code:go (func TestNotebookLMActions_SkipWhileQuotaCached(t *testing.T), code:go (if nlmQuotaExhausted(bb) {) (+27 more)
+Nodes (35): Binaries, code:go (type Counter struct { ... }), code:go (type ContentType string), code:go (type Alert struct {), code:go (type Evaluator struct { ... }), code:go (type Agent struct { ... }), code:go (type Store struct { ... }), code:go (type TestSuite struct { ... }) (+27 more)
 
 ### Community 138 - "Community 138"
-Cohesion: 0.09
-Nodes (21): auctionAnnouncement(), auctionCandidates(), AuctionDelegateWithContext(), betterBid(), candidateContext(), candidateOverride(), cardURL(), NewPersistentAuctioneer() (+13 more)
+Cohesion: 0.06
+Nodes (35): code:go (type Store struct { ... }                                // ), code:go (type Suite struct {), code:go (type KnowledgeGraph struct { ... }), code:go (type Analyzer struct { ... }), code:go (type LLM interface {), code:go (type ThinkTank struct { ... }), code:go (type CompanyState struct {), code:go (type Gardener struct { ... }) (+27 more)
 
 ### Community 139 - "Community 139"
-Cohesion: 0.1
-Nodes (13): TestMutationFailurePreservesCacheAndAccounting(), TestPersistentMutationFailureDoesNotPublishCache(), FitnessFunc, firstNodeNameByType(), firstOpName(), maxInt(), SelectStructuralStrategy(), MCTSMetrics (+5 more)
+Cohesion: 0.09
+Nodes (27): TestBlackboardOwnerFailurePreventsAdmissionAndMemoryFallback(), TestDriftWatchOnce_SkipsRestartWhenJobStartedMidRebuild(), TestRunJob_KicksOnCycleIdleWhenQueueEmpty(), TestRunJob_NoIdleKickWhileAnotherJobInFlight(), TestStartDriftWatcher_KickTriggersImmediateCheck(), BlackboardDir(), CircuitBreakersFile(), DLQFile() (+19 more)
 
 ### Community 140 - "Community 140"
-Cohesion: 0.09
-Nodes (32): TestAdmissionPreCanceledContextConsumesNoCapacity(), ConcurrencyLimiterStats, TestWorkerPool_MultiplePanics(), TestWorkerPool_PanicRecovery(), QueueStats, NewConcurrencyLimiter(), NewWorkerPool(), TestConcurrencyLimiter_AcquireRelease() (+24 more)
+Cohesion: 0.11
+Nodes (22): crowdingDistances(), NewNSGAIIPopulation(), NewNSGAIISorter(), nonDominatedSort(), frontIndexSets(), sameFronts(), TestNewNSGAIIPopulation(), TestNewNSGAIIPopulation_SeedsSpecialists() (+14 more)
 
 ### Community 141 - "Community 141"
-Cohesion: 0.11
-Nodes (25): CompanyOrchestrator, EngineerTree(), MarketingTree(), SalesTree(), StartupTrees(), clamp(), safeDiv(), CEOTree() (+17 more)
+Cohesion: 0.13
+Nodes (29): precheckGoapStaleMilestones(), reloadPrecheckMilestone(), seedPrecheckProgram(), stubRedPrecheck(), TestPrecheckGoapStaleMilestones_DefaultRunnerInertUnderTest(), TestPrecheckGoapStaleMilestones_ReleasesClaimHeldByPriorCycle(), TestPrioritizeGoapGoals_RedPrecheckCompletesStaleMilestone(), TestPrioritizeGoapGoals_RedPrecheckFailingRedClearsHypothesis() (+21 more)
 
 ### Community 142 - "Community 142"
+Cohesion: 0.11
+Nodes (21): ChildStats, TestNormalizedIG(), NodeExecutionRecord, applyOrderToNode(), collectSelectorNames(), Entropy(), GiniImpurity(), InformationGain() (+13 more)
+
+### Community 143 - "Community 143"
 Cohesion: 0.1
 Nodes (33): introspectionResult, DefaultOAuth2DiscoveryConfig(), DefaultOAuth2IntrospectionConfig(), DiscoverOAuth2IntrospectionConfig(), OAuth2DiscoveryValidator(), OAuth2IntrospectionValidator(), TestDefaultOAuth2DiscoveryConfig(), TestDiscoverOAuth2IntrospectionConfig_Defaults() (+25 more)
 
-### Community 143 - "Community 143"
+### Community 144 - "Community 144"
+Cohesion: 0.1
+Nodes (18): AuctionDelegate(), cardWithURL(), newAuctionTransport(), TestAuctionDelegate_AwardsWinnerFromCardRegistry(), TestAuctionDelegate_ChainStateCandidateOverride(), TestAuctionDelegate_DispatchRetryExhaustedFallsBack(), TestAuctionDelegate_NoCandidatesFallsBack(), TestAuctionDelegate_NoEligibleBidsFallsBack() (+10 more)
+
+### Community 145 - "Community 145"
+Cohesion: 0.13
+Nodes (31): ScoreAnnouncement(), cardResponder, TestReviewA2ACallerCancellationReachesTree(), rpcRequest, rpcResponse, RespondToAnnouncement(), SetTreeResolver(), bidArtifact() (+23 more)
+
+### Community 146 - "Community 146"
 Cohesion: 0.06
 Nodes (34): Arc42 cleanup and refactoring goals — 2026-09-30, Eighteenth increment — process restart safety, Evidence log, Execution and architectural review, Fifth increment — configured runtime owners, 2026-10-01, Fourth increment — metadata and shared snapshot revisions, Goals and acceptance, Nineteenth increment — actual PR scanning corrections (+26 more)
 
-### Community 144 - "Community 144"
+### Community 147 - "Community 147"
 Cohesion: 0.06
 Nodes (34): Agent Categories, Architecture, BT Agent Platform, code:text (Agent definition → Registry / scoped resolver → Runner → Bui), code:bash (# Prerequisites: Go 1.26.5+; Ollama is optional for LLM-back), code:mermaid (flowchart TD), code:text (collect evidence → propose / score → path-specific gates → p), Documentation (+26 more)
 
-### Community 145 - "Community 145"
-Cohesion: 0.11
-Nodes (28): AgentBus, AgentEvent, InitAgentBus(), PublishHealthAlert(), PublishServiceDown(), TestAgentBus_AllSubscribersReceiveAll(), TestAgentBus_CloseSubscriberChannelsClosed(), TestAgentBus_ConcurrentPublish() (+20 more)
+### Community 148 - "Community 148"
+Cohesion: 0.09
+Nodes (18): handleTrees(), relocateDomainDescription(), setupHITLFinalizationTest(), TestHandleHealth_UsesDashboardHealthJSON(), TestHandleHITL_ApproveActivatesAutomation(), TestHandleHITL_ApproveResumesFeedbackEscalation(), TestHandleHITL_RejectQuarantinesAutomationTree(), TestHandleTrees_DomainDescriptionsResolveThroughDescriptionFor() (+10 more)
 
-### Community 146 - "Community 146"
+### Community 149 - "Community 149"
+Cohesion: 0.1
+Nodes (15): Config, diffSecretField(), ConfiguredReflectionsDir(), ConfigurePlatformPaths(), currentPlatformPaths(), PlatformAgentDefinitionsDir(), PlatformHistoryDir(), PlatformHome() (+7 more)
+
+### Community 150 - "Community 150"
 Cohesion: 0.14
 Nodes (28): NewMCTSMutator(), hasNodeWithPrefix(), mctsSelectorTree(), mockFitnessEvaluator(), testBaseTree(), TestMCTSMutation_FitnessGap(), TestMCTSMutator_Backpropagate(), TestMCTSMutator_BuildMutationOps() (+20 more)
 
-### Community 147 - "Community 147"
-Cohesion: 0.09
-Nodes (26): TestLiveGoapPlansObserveActualPersonalFileEffects(), applyGoapMetadata(), decodeGoapValue(), executeObservedGoapStep(), failGoapExecution(), goapNodeHasMetadata(), goapRuntimeStep, convertGoapChildren() (+18 more)
-
-### Community 148 - "Community 148"
-Cohesion: 0.11
-Nodes (32): NewSessionStore(), TestSessionStore_CreateReclaimsExpiredCapacity(), TestSessionStore_ValidationReturnsSnapshot(), TestSessionCleanup_PanicRecovered(), TestSessionMiddleware_APIKeyFallback(), TestSessionMiddleware_CustomCheckFunc(), TestSessionMiddleware_ExpiredCookie(), TestSessionMiddleware_InvalidAPIKey() (+24 more)
-
-### Community 149 - "Community 149"
-Cohesion: 0.06
-Nodes (33): Binaries, code:go (type Counter struct { ... }), code:go (type Suite struct {), code:go (type Alert struct {), code:go (type Agent struct { ... }), code:go (type Store struct { ... }), code:go (type TestSuite struct { ... }), code:go (type Workflow struct { ... }) (+25 more)
-
-### Community 150 - "Community 150"
-Cohesion: 0.06
-Nodes (33): ClaudeErrorHandler Node Implementation Plan, code:go (// internal/engine/error_handler_store_test.go), code:bash (git add internal/engine/registry.go internal/engine/error_ha), code:go (// internal/engine/error_handler_claude_test.go), code:go (// internal/engine/error_handler_claude.go), code:bash (git add internal/engine/error_handler_claude.go internal/eng), code:go (// internal/engine/error_handler_node_test.go), code:go (// ClaudeErrorHandler — self-extending recovery decorator: c) (+25 more)
-
 ### Community 151 - "Community 151"
+Cohesion: 0.07
+Nodes (18): builtinBlocks(), TestBuiltinBlocks_Count(), TestBuiltinBlocks_UniqueNonEmptyIDs(), DLQEscalateBlock(), EvolveOnFailureBlock(), HITLEscalateBlock(), HumanReviewBlock(), HITLTieredBlock() (+10 more)
+
+### Community 152 - "Community 152"
+Cohesion: 0.2
+Nodes (33): TestClaudeErrorHandler_DoesNotClobberExistingCategory(), errorHandlerSignatureFromBB(), requestErrorHandlerProposal(), swapErrorHandlerRunner(), TestRequestErrorHandlerProposal_RespectsCallerContext(), TestRequestErrorHandlerProposal_StampsLedgerOnEveryOutcome(), ehTestCodeFixJSON(), ehTestHandlerNode() (+25 more)
+
+### Community 153 - "Community 153"
 Cohesion: 0.06
 Nodes (31): code:bash (sudo mkdir -p /usr/local/go/bin), code:bash (export BT_API_KEY=dev-local-key), code:bash (tmux -f /exec-daemon/tmux.portal.conf new-session -d -s bt-d), Common commands, Current architecture and coding-agent policy, Cursor Cloud specific instructions, Dependency refresh (automatic), LLM authentication (+23 more)
 
-### Community 152 - "Community 152"
-Cohesion: 0.09
-Nodes (21): handleSummary(), SolOnly(), CodexRunner, execCodexRunner, registerScriptNodes(), TestRegisterScriptNodes_Failure(), TestRegisterScriptNodes_Success(), writeFakePython() (+13 more)
-
-### Community 153 - "Community 153"
-Cohesion: 0.07
-Nodes (17): builtinBlocks(), TestBuiltinBlocks_Count(), TestBuiltinBlocks_UniqueNonEmptyIDs(), DLQEscalateBlock(), EvolveOnFailureBlock(), HITLEscalateBlock(), HumanReviewBlock(), HITLTieredBlock() (+9 more)
-
 ### Community 154 - "Community 154"
-Cohesion: 0.1
-Nodes (26): buildRunActivitySummary(), fencedItems(), isFactLine(), joinCapped(), salientOutputLines(), TestBuildRunActivitySummaryCapsLongFencedLists(), TestBuildRunActivitySummaryEmptyEverything(), TestBuildRunActivitySummaryFailureLeadsWithReason() (+18 more)
+Cohesion: 0.06
+Nodes (33): ClaudeErrorHandler Node Implementation Plan, code:go (// internal/engine/error_handler_store_test.go), code:bash (git add internal/engine/registry.go internal/engine/error_ha), code:go (// internal/engine/error_handler_claude_test.go), code:go (// internal/engine/error_handler_claude.go), code:bash (git add internal/engine/error_handler_claude.go internal/eng), code:go (// internal/engine/error_handler_node_test.go), code:go (// ClaudeErrorHandler — self-extending recovery decorator: c) (+25 more)
 
 ### Community 155 - "Community 155"
-Cohesion: 0.09
-Nodes (26): TestPromoteRunToAgentScope(), TestReviewRunScopeReleasedAfterConsumers(), DefaultManager(), TestHandle_RunScope(), TestHandle_SessionScope(), TestListPersistedScopeIDs(), TestManager_Append(), TestManager_AppendConcurrent() (+18 more)
+Cohesion: 0.12
+Nodes (13): cloneRuntimeRelease(), commitRelease(), readPublicationQualification(), readRelease(), readVersion(), saveVersion(), versionFile(), RuntimeQualification (+5 more)
 
 ### Community 156 - "Community 156"
-Cohesion: 0.21
-Nodes (32): TestClaudeErrorHandler_DoesNotClobberExistingCategory(), errorHandlerSignatureFromBB(), swapErrorHandlerRunner(), TestRequestErrorHandlerProposal_RespectsCallerContext(), TestRequestErrorHandlerProposal_StampsLedgerOnEveryOutcome(), ehTestCodeFixJSON(), ehTestHandlerNode(), ehTestProposalJSON() (+24 more)
+Cohesion: 0.06
+Nodes (32): 8.10 Autonomous Landing Pipeline, 8.11 Observability, 8.12 A2A Auction Task Allocation, 8.13 Leaf-Node Structural Validation, 8.14 Fleet-Wide Node Description Coverage, 8.15 Validation-Gated Composition Activation, 8.16 Self-Extending Claude Error Recovery, 8.17 Composable Blocks and Expand-at-Build (+24 more)
 
 ### Community 158 - "Community 158"
-Cohesion: 0.13
-Nodes (28): activateAutomation(), automationAgentName(), considerAutomation(), finalizeAutomationApproval(), loadAutomationTemplate(), proposeAutomation(), proposeTaskAutomation(), recurringTaskTemplate() (+20 more)
+Cohesion: 0.08
+Nodes (20): TestCodexOnlyPolicyRejectsClaudeAndFailover(), delegatingRunner, DelegationProvider, errInvalidProvider, fakeCodexRunner, TestDelegationBinary_Provider(), routingClaudeRunner, notebookLMReadOnly() (+12 more)
 
 ### Community 159 - "Community 159"
-Cohesion: 0.14
-Nodes (22): cooldownStepIndex(), DefaultLoginThrottleConfig(), NewLoginThrottle(), stripPort(), TestCooldownStepIndex(), TestLoginThrottle_CleanupExpired(), TestLoginThrottle_ConcurrentAccess(), TestLoginThrottle_DecayWindowReset() (+14 more)
+Cohesion: 0.09
+Nodes (28): stringContains(), TestBuildGoapStepPrompt(), buildGoapStepPrompt(), getStepResults(), TestAction_ExecuteGoapStep_AccumulatesAndSynthesizes(), TestAction_ExecuteGoapStep_NoLLM(), TestAction_ExecuteGoapStep_WithLLM(), TestAction_ExecuteGoapStepAccumulatesObservedCapabilities() (+20 more)
 
 ### Community 160 - "Community 160"
-Cohesion: 0.06
-Nodes (31): 8.10 Autonomous Landing Pipeline, 8.11 Observability, 8.12 A2A Auction Task Allocation, 8.13 Leaf-Node Structural Validation, 8.14 Fleet-Wide Node Description Coverage, 8.15 Validation-Gated Composition Activation, 8.16 Self-Extending Claude Error Recovery, 8.17 Composable Blocks and Expand-at-Build (+23 more)
+Cohesion: 0.14
+Nodes (22): cooldownStepIndex(), DefaultLoginThrottleConfig(), NewLoginThrottle(), stripPort(), TestCooldownStepIndex(), TestLoginThrottle_CleanupExpired(), TestLoginThrottle_ConcurrentAccess(), TestLoginThrottle_DecayWindowReset() (+14 more)
 
 ### Community 161 - "Community 161"
 Cohesion: 0.06
 Nodes (31): Brainstorm Grill-Driven Design-Improvement Loop — Implementation Plan, code:go (// internal/engine/superpowers_runner.go), code:go (// Package engine — grill-driven design-improvement loop act), code:bash (git add internal/engine/actions_superpowers_design_loop.go i), code:block12 (=== CLEAR DESIGN ===), code:go (const splitFakeOutput = `=== CLEAR DESIGN ===), code:go (RegisterAction("SplitDesignArtifact", func(ctx *btcore.BTCon), code:go (func parseSplitOutput(out string) (clear, followup, program ) (+23 more)
 
-### Community 162 - "Community 162"
-Cohesion: 0.12
-Nodes (21): NewFallbackLLM(), TestFallbackLLM_CircuitBreakerSkipsPersistentlyFailingModel(), TestFallbackLLM_GenerateAllPanicReturnsAggregatedError(), TestFallbackLLM_GenerateRecoversPanicAndTriesNextModel(), TestFallbackLLM_GenerateReturnsAllFailures(), TestFallbackLLM_GenerateUsesNextModelAfterPrimaryFailure(), TestFallbackLLM_ValidationErrorsDoNotTripBreaker(), capNumPredictHandler() (+13 more)
-
 ### Community 163 - "Community 163"
-Cohesion: 0.13
-Nodes (26): cmdImpact(), impactedTestsForSource(), TestImpactedTestsForSource_AbsoluteSourceUnderRoot(), writeImpactCLIFixture(), goFileInfo, BuildImpactGraph(), collectGoFiles(), ImpactedTests() (+18 more)
-
-### Community 164 - "Community 164"
-Cohesion: 0.11
-Nodes (18): Definition, InputSpec, Instance, OutputSpec, QualitySpec, Registry, cloneDefinition(), cloneInstance() (+10 more)
-
-### Community 165 - "Community 165"
-Cohesion: 0.09
-Nodes (29): TestBuildChainActionFn_LlmCallNilLLM(), TestBuildChainActionFn_UnknownChainType(), TestComputeSubtreeMetrics_MixedChildren(), TestComputeSubtreeMetrics_NilInput(), TestComputeSubtreeMetrics_UpdatesMaxValues(), TestComputeTreeMetrics_MaxRetriesAndTimeout(), TestComputeTreeMetrics_NestedChildren(), TestComputeTreeMetrics_ParallelWidth() (+21 more)
-
-### Community 167 - "Community 167"
-Cohesion: 0.09
-Nodes (12): Embedding, EmbeddingClient, DeepSeekClient, OpenAICompatClient, OpenAICompatConfig, openAICompatMessage, openAICompatRequest, openAICompatResponse (+4 more)
-
-### Community 168 - "Community 168"
-Cohesion: 0.12
-Nodes (21): TestNonRegistryDescriptionsHaveNoOrphans(), HermesSelfEvolutionTree(), HermesObsidianOptimizerTree(), KanbanAutoPilotTree(), KanbanBoardMonitorTree(), KanbanQATree(), KanbanRefinerTree(), KanbanTaskCreatorTree() (+13 more)
-
-### Community 169 - "Community 169"
 Cohesion: 0.09
 Nodes (12): NewPageAgent(), TestAgentLLMGeneration(), TestAgentMockFallback(), TestBubbleRecommendation(), Handler, NewHandler(), TestHandleBookmark(), TestHandleIntent() (+4 more)
 
-### Community 170 - "Community 170"
-Cohesion: 0.06
-Nodes (30): code:go (// internal/engine/tree_mutation_test.go), code:go (// internal/engine/run_task_mutable.go), code:go (if bb.liveRun != nil {), code:bash (cd /home/nico/go-bt-evolve && git add internal/engine/run_ta), code:go (// internal/agent/mutated_trees_test.go), code:go (// internal/agent/mutated_trees.go), code:go (runCtx := ctx), code:go (func resolveTree(id string) *evolution.SerializableNode {) (+22 more)
-
-### Community 171 - "Community 171"
-Cohesion: 0.12
-Nodes (18): BTOptimizer, collectSelectorChildConditions(), collectSelectors(), conditionOverlap(), extractCondition(), findMainSelector(), TestFindMainSelector(), TestSplitCamelCase() (+10 more)
-
-### Community 172 - "Community 172"
-Cohesion: 0.12
-Nodes (25): ApplyParameters(), cholesky(), collectParams(), ExtractParameters(), invertCholesky(), multiplyCholesky(), navigateToPath(), NewCMAESOptimizer() (+17 more)
-
-### Community 173 - "Community 173"
-Cohesion: 0.15
-Nodes (26): islandTestPopulation(), islandTestTree(), TestExperienceBank_TransferExperiencesIsSourceTreeAware(), TestIslandModel_AddGetAndSingleIslandMigration(), TestIslandModel_DiversityEdgeCases(), TestIslandModel_DiversityStatsAndSummary(), TestIslandModel_EvolveAllEvaluatesPopulations(), TestIslandModel_LoadCapEvictionIncrementsEvictedIndividuals() (+18 more)
-
-### Community 174 - "Community 174"
+### Community 164 - "Community 164"
 Cohesion: 0.13
-Nodes (22): fakeClaude, fakeCommitRunner, hookFailureClass, TestVerifyNotebookLMEvidenceAcceptsRealNotebookPayload(), TestVerifyNotebookLMEvidenceRejectsEmptyOrUngroundedSuccess(), TestVerifyNotebookLMEvidenceRejectsFabricatedOutput(), verifyNotebookLMEvidenceAction(), applyDeterministicCommitFixes() (+14 more)
+Nodes (26): cmdImpact(), impactedTestsForSource(), TestImpactedTestsForSource_AbsoluteSourceUnderRoot(), writeImpactCLIFixture(), goFileInfo, BuildImpactGraph(), collectGoFiles(), ImpactedTests() (+18 more)
 
-### Community 175 - "Community 175"
+### Community 165 - "Community 165"
+Cohesion: 0.09
+Nodes (14): Blackboard, artifactDigest(), buildFileTask(), readTaskArtifact(), TestArtifactReadbackRejectsMissingWrongAndEscapingFiles(), TestFileTaskRejectsWrongOutputAndChangedInputBeforeWriting(), verifyTaskArtifact(), writeTaskArtifact() (+6 more)
+
+### Community 166 - "Community 166"
 Cohesion: 0.15
 Nodes (7): Task, TaskDecisionPersistenceError, TaskExecutionResult, cloneTask(), priorityRank(), resolveHITLAudit(), TaskStore
 
-### Community 176 - "Community 176"
-Cohesion: 0.19
-Nodes (28): readErrorHandlerJSONStrict(), TestSeedCodeFixProgram_ConcurrentWithPersistGoapProgramAllSurvive(), acquireSelfFixStoreLock(), seedCodeFixProgram(), selfFixCooldown(), selfFixDir(), selfFixEnabled(), selfFixLedgerPath() (+20 more)
+### Community 167 - "Community 167"
+Cohesion: 0.09
+Nodes (29): TestBuildChainActionFn_LlmCallNilLLM(), TestBuildChainActionFn_UnknownChainType(), TestComputeSubtreeMetrics_MixedChildren(), TestComputeSubtreeMetrics_NilInput(), TestComputeSubtreeMetrics_UpdatesMaxValues(), TestComputeTreeMetrics_MaxRetriesAndTimeout(), TestComputeTreeMetrics_NestedChildren(), TestComputeTreeMetrics_ParallelWidth() (+21 more)
 
-### Community 177 - "Community 177"
-Cohesion: 0.15
-Nodes (20): extractBulletPoints(), extractFirstLine(), extractListSection(), extractSection(), findNextSection(), parseDebateTranscript(), parseProbability(), parseReport() (+12 more)
+### Community 168 - "Community 168"
+Cohesion: 0.06
+Nodes (30): code:go (// internal/engine/tree_mutation_test.go), code:go (// internal/engine/run_task_mutable.go), code:go (if bb.liveRun != nil {), code:bash (cd /home/nico/go-bt-evolve && git add internal/engine/run_ta), code:go (// internal/agent/mutated_trees_test.go), code:go (// internal/agent/mutated_trees.go), code:go (runCtx := ctx), code:go (func resolveTree(id string) *evolution.SerializableNode {) (+22 more)
 
-### Community 178 - "Community 178"
+### Community 169 - "Community 169"
 Cohesion: 0.09
 Nodes (26): applyDotEnvFiles(), applyDotEnvToConfig(), applyEnvOverrides(), Load(), LoadFile(), LoadFileWithDotEnv(), parseBool(), TestLoadFile_Basic() (+18 more)
 
-### Community 179 - "Community 179"
+### Community 170 - "Community 170"
 Cohesion: 0.12
-Nodes (25): splitPipeline(), TestSplitPipeline_DoubleQuotedPipeIgnored(), TestSplitPipeline_Empty(), TestSplitPipeline_LogicalOrKeptTogether(), TestSplitPipeline_MultiplePipes(), TestSplitPipeline_NoPipe(), TestSplitPipeline_QuotedPipeIgnored(), TestSplitPipeline_SinglePipe() (+17 more)
+Nodes (17): Definition, InputSpec, Instance, OutputSpec, QualitySpec, Registry, cloneDefinition(), cloneInstance() (+9 more)
 
-### Community 180 - "Community 180"
+### Community 171 - "Community 171"
+Cohesion: 0.19
+Nodes (28): readErrorHandlerJSONStrict(), TestSeedCodeFixProgram_ConcurrentWithPersistGoapProgramAllSurvive(), acquireSelfFixStoreLock(), seedCodeFixProgram(), selfFixCooldown(), selfFixDir(), selfFixEnabled(), selfFixLedgerPath() (+20 more)
+
+### Community 172 - "Community 172"
+Cohesion: 0.13
+Nodes (24): runTreeRecovery(), TestRecoveryCommandRequiresOfflineAndReportsCommittedFiles(), acquireSuperpowersApplyLock(), NewRuntimeReleaseStore(), releaseFixture(), TestContractRecoveryMutationPreservesOracleAndIsBounded(), TestRuntimePublicationSnapshotCannotBeBorrowedOrMutated(), TestRuntimeReleaseConcurrentPromotionAndBoundedLock() (+16 more)
+
+### Community 173 - "Community 173"
+Cohesion: 0.15
+Nodes (20): extractBulletPoints(), extractFirstLine(), extractListSection(), extractSection(), findNextSection(), parseDebateTranscript(), parseProbability(), parseReport() (+12 more)
+
+### Community 174 - "Community 174"
+Cohesion: 0.12
+Nodes (25): ApplyParameters(), cholesky(), collectParams(), ExtractParameters(), invertCholesky(), multiplyCholesky(), navigateToPath(), NewCMAESOptimizer() (+17 more)
+
+### Community 175 - "Community 175"
+Cohesion: 0.11
+Nodes (18): attachSuperpowersLogRecorder(), attachLogHandler(), buildBaseHandler(), buildLogger(), envLogLevel(), Error(), Init(), L() (+10 more)
+
+### Community 176 - "Community 176"
 Cohesion: 0.13
 Nodes (21): docgenState, allSections(), buildSectionMap(), contains(), fileHash(), hashSectionSources(), isSectionDone(), main() (+13 more)
 
-### Community 181 - "Community 181"
-Cohesion: 0.14
-Nodes (22): runTreeRecovery(), TestRecoveryCommandRequiresOfflineAndReportsCommittedFiles(), addContractRecovery(), ContractRecoveryTargets(), NewRuntimeReleaseStore(), releaseFixture(), TestContractRecoveryMutationPreservesOracleAndIsBounded(), TestRuntimePublicationSnapshotCannotBeBorrowedOrMutated() (+14 more)
-
-### Community 182 - "Community 182"
-Cohesion: 0.09
-Nodes (26): collectDiscoverIDs(), TestDiscover_RegisterNotStarvedBySlowEmbeddingCall(), TestDiscoverRelated_Bidirectional(), TestDiscoverRelated_ConnectedFrom(), TestDiscoverRelated_ConnectedTo(), TestDiscoverRelated_Deduplicates(), TestDiscoverRelated_EmptyGraph(), TestDiscoverRelated_NonExistentTree() (+18 more)
-
-### Community 183 - "Community 183"
-Cohesion: 0.1
-Nodes (20): BuildTaskFromInputs(), ParseInputParams(), TestBuildTaskFromInputs(), TestParseInputParams(), TestValidateInputs_Default(), TestValidateInputs_File(), TestValidateInputs_JSON(), TestValidateInputs_Required() (+12 more)
-
-### Community 184 - "Community 184"
+### Community 177 - "Community 177"
 Cohesion: 0.1
 Nodes (20): TestDefaultRebuildTargets_PinsFullList(), buildStampLdflags(), copyFile(), DashboardRebuildTargets(), defaultRebuildBuild(), DefaultRebuildTargets(), GardenerRebuildTargets(), RebuildBinaries() (+12 more)
 
-### Community 185 - "Community 185"
+### Community 178 - "Community 178"
+Cohesion: 0.09
+Nodes (11): Approval, Workflow, newTaskNonce(), sortTasks(), TestPriority_String(), TestSortTasks(), TestSortTasks_StableOrder(), TestTaskStatus_String() (+3 more)
+
+### Community 179 - "Community 179"
+Cohesion: 0.08
+Nodes (24): TestValidate_BanditSelectorRequiresUniqueName(), TestCachedCondition_RefusesHITLConditions(), TestCachedCondition_RefusesNestedHITLConditions(), TestValidateTree_NestedChildren(), TestValidateTree_ValidTree(), TestValidate_MemoryNodesDuplicateNames(), TestValidate_MemoryNodesRequireUniqueNames(), TestCompactContractResultDoesNotRequireProsePadding() (+16 more)
+
+### Community 180 - "Community 180"
 Cohesion: 0.13
-Nodes (17): ChildStats, NodeExecutionRecord, applyOrderToNode(), collectSelectorNames(), Entropy(), GiniImpurity(), InformationGain(), isSelectorFallback() (+9 more)
+Nodes (27): registerGardenerFixtureLeaves(), TestAdoptionFixturesBuild(), assertIslandAdoptionSkipped(), chainTree(), eliteSeedTree(), eliteSeedV2Config(), entryRecords(), hasNodeNamed() (+19 more)
+
+### Community 181 - "Community 181"
+Cohesion: 0.16
+Nodes (24): NewAuctioneer(), newDeadlineProbeTransport(), TestAuctioneer_RunAuction_AppliesDefaultDispatchDeadline(), TestAuctioneer_RunAuction_BoundsWinnerDispatchWithAnnouncementDeadline(), TestAuctioneer_RunAuction_DispatchesToWinnerAndReturnsResult(), TestAuctioneer_RunAuction_NoEligibleBidsDispatchesNothing(), TestAuctioneer_RunAuction_RejectsEmptyDescription(), TestCollectBids_AppliesDefaultDeadlineWhenAnnouncementHasNone() (+16 more)
+
+### Community 182 - "Community 182"
+Cohesion: 0.09
+Nodes (22): benchmarkAdmission(), benchmarkOutcome(), TestFileTaskRequiresDedicatedBenchmarkFixture(), unsupportedNode(), RunSuite(), taskContractPassed(), TestDetectPath_FromCurrentPath(), TestDetectPath_FromVisitedPaths() (+14 more)
+
+### Community 183 - "Community 183"
+Cohesion: 0.12
+Nodes (24): AssessGovernance(), boundedRecovery(), executableChildren(), hasAgentGuidance(), hasExecutionBudget(), isMandatoryInputGuard(), isMandatoryResultCheck(), IsTaskWork() (+16 more)
+
+### Community 185 - "Community 185"
+Cohesion: 0.15
+Nodes (10): app, generator, buildGraph(), main(), newApp(), normalizeFlagArgs(), parseIntent(), printUsage() (+2 more)
 
 ### Community 186 - "Community 186"
-Cohesion: 0.12
-Nodes (25): composeOrderedWithMiddle(), ComposePreset(), ComposePresetWithTools(), ComposeTaskTreeFull(), ListToolProfileBlocks(), PipelineWithToolsProfile(), profileOrDefault(), sliceContains() (+17 more)
-
-### Community 187 - "Community 187"
-Cohesion: 0.1
-Nodes (13): Blackboard, artifactDigest(), buildFileTask(), readTaskArtifact(), TestArtifactReadbackRejectsMissingWrongAndEscapingFiles(), verifyTaskArtifact(), writeTaskArtifact(), buildGoapStep() (+5 more)
-
-### Community 188 - "Community 188"
-Cohesion: 0.09
-Nodes (19): TestCodexOnlyPolicyRejectsClaudeAndFailover(), DelegationProvider, errInvalidProvider, fakeCodexRunner, TestDelegationBinary_Provider(), routingClaudeRunner, notebookLMReadOnly(), TestSolPolicyBlocksNotebookGenerationBeforeTransport() (+11 more)
-
-### Community 189 - "Community 189"
-Cohesion: 0.12
-Nodes (25): envDefault(), main(), run(), finishProbe(), headerEquals(), headerPresent(), probeCSRFCookie(), ProbeDashboard() (+17 more)
-
-### Community 191 - "Community 191"
-Cohesion: 0.13
-Nodes (26): NewNodeHeartbeat(), NewNodeHeartbeatWithCleanupInterval(), TestNodeHeartbeat_CleanupKeepsAliveNodes(), TestNodeHeartbeat_CleanupRemovesExpired(), TestNodeHeartbeat_ConcurrentAccess(), TestNodeHeartbeat_ConcurrentDeregister(), TestNodeHeartbeat_Deregister(), TestNodeHeartbeat_EmptyListAlive() (+18 more)
-
-### Community 192 - "Community 192"
-Cohesion: 0.11
-Nodes (19): LoadMutatedTreeOverride(), mutatedTreesDir(), sanitizeTreeID(), SaveMutatedTree(), TestLoadMutatedTreeOverride_CorruptFileReturnsNil(), TestMutatedTreeFilenameSanitized(), TestMutatedTreeOverrideRoundTrip(), FeedbackFile() (+11 more)
-
-### Community 193 - "Community 193"
-Cohesion: 0.13
-Nodes (23): TaskLogPath(), Entry, blockFitness, captureBlockFitness(), captureNodeTicks(), constCommand(), TestMetricsHooks_NilHooksRecordNothingAndCallSitesStillWork(), TestRecordBlockFitnessFn_InitializesNilChainState() (+15 more)
-
-### Community 194 - "Community 194"
 Cohesion: 0.09
 Nodes (20): isKnownActionName(), isKnownConditionName(), TestIsKnownActionName(), TestIsKnownConditionName(), TestBuildNode_AbortOnEvent(), TestBuildNode_PlannerNode(), TestBuildNode_ReactiveParallel(), TestBuildNode_UtilitySelector() (+12 more)
 
-### Community 196 - "Community 196"
+### Community 187 - "Community 187"
+Cohesion: 0.18
+Nodes (25): loadNlmQueryCache(), loadNlmUsage(), nlmBudgetFor(), nlmExtractQuery(), nlmIsResearchImport(), nlmIsResearchStart(), nlmPacificDay(), nlmPostflight() (+17 more)
+
+### Community 189 - "Community 189"
 Cohesion: 0.12
 Nodes (22): graphReportBuiltCommit(), arc42OutputDir(), countCPUCores(), execWithTimeout(), getBoolChainState(), init(), registerArc42Nodes(), sectionFileExists() (+14 more)
 
-### Community 197 - "Community 197"
-Cohesion: 0.11
-Nodes (7): goalEntry, TestGoalQueue_DeadlineBreaksPriorityTies(), goalHeap, GoalQueue, entryLess(), NewGoalQueueFrom(), TestNewGoalQueueFrom()
+### Community 190 - "Community 190"
+Cohesion: 0.08
+Nodes (17): perTreeStats(), TestBaseNodeCount(), TestBenchmarkLiveIntegration(), TestBenchmarkMockIntegration(), TestMetricsTracker_BestFitnessTracking(), TestMetricsTracker_ImprovementRate(), TestMetricsTracker_LastFitnessTracking(), TestMetricsTracker_RecordAndCyclesForTree() (+9 more)
 
-### Community 198 - "Community 198"
+### Community 191 - "Community 191"
 Cohesion: 0.07
 Nodes (27): Bubble System, Core User Journey, Data Model, DoorMate Page-First AI Assistant Design, Feedback Event, Follow-Up Bubbles, Generated Page, Generated Page (+19 more)
 
-### Community 199 - "Community 199"
-Cohesion: 0.1
-Nodes (5): ApprovalPolicy, Profile, SanitizeUserID(), Store, Workspace
+### Community 192 - "Community 192"
+Cohesion: 0.17
+Nodes (24): islandTestPopulation(), islandTestTree(), TestExperienceBank_TransferExperiencesIsSourceTreeAware(), TestIslandModel_AddGetAndSingleIslandMigration(), TestIslandModel_DiversityEdgeCases(), TestIslandModel_DiversityStatsAndSummary(), TestIslandModel_EvolveAllEvaluatesPopulations(), TestIslandModel_LoadCapEvictionIncrementsEvictedIndividuals() (+16 more)
 
-### Community 200 - "Community 200"
-Cohesion: 0.08
-Nodes (16): perTreeStats(), TestBenchmarkLiveIntegration(), TestBenchmarkMockIntegration(), TestMetricsTracker_BestFitnessTracking(), TestMetricsTracker_ImprovementRate(), TestMetricsTracker_LastFitnessTracking(), TestMetricsTracker_RecordAndCyclesForTree(), TestMetricsTracker_SaveAndLoadRoundTrip() (+8 more)
+### Community 193 - "Community 193"
+Cohesion: 0.11
+Nodes (21): TestBlockMutationsInsert(), TestComposeTaskTreeWithStrategy(), TestPromoteSubtree(), TestWrapReliable_HasTimeoutAndFallbacks(), init(), ApplyBlockMutations(), blockIDFromOp(), collectNames() (+13 more)
 
-### Community 201 - "Community 201"
-Cohesion: 0.12
-Nodes (5): apiKey, sha256Hex(), APIKeyInfo, KeyRing, KeyRotationScheduler
+### Community 194 - "Community 194"
+Cohesion: 0.11
+Nodes (19): tickStatusLabel(), observedCommand, BuildParallel(), parallelCommand, parallelState, cloneParallelValue(), forkBlackboard(), mergeParallelOutput() (+11 more)
 
-### Community 202 - "Community 202"
-Cohesion: 0.1
-Nodes (18): TestEstimateQualityPenalizesGenericShortSuccess(), TestEstimateQualityScoresEvidenceRichDeterministicReports(), TestValidateQualitySpec_BlockedPattern(), TestValidateQualitySpec_MinLength(), TestValidateQualitySpec_NilSpecUsesHeuristic(), TestValidateQualitySpec_RequiredSections(), ValidateQualitySpec(), IsRateLimitCarryover() (+10 more)
-
-### Community 203 - "Community 203"
-Cohesion: 0.12
-Nodes (21): TestLocalSearcher_New(), TestLocalSearchMutableParamsAndTabu(), extractMutableParams(), getFloatMeta(), NewLocalSearcher(), setFloatMeta(), TestExtractMutableParams_CoversStructFields(), TestLocalSearcher_HillClimb_CrossesStepPlateau() (+13 more)
-
-### Community 204 - "Community 204"
+### Community 195 - "Community 195"
 Cohesion: 0.11
 Nodes (24): fakeGrillClaude, grillAnswerers, grillQuestion, grillResult, designBodyHash(), grillRoundHeading(), openCriticalDigest(), parseGrillQuestions() (+16 more)
 
-### Community 205 - "Community 205"
+### Community 196 - "Community 196"
 Cohesion: 0.13
 Nodes (23): arc42GuidelineFor(), classifyAffectedArc42Sections(), syncArc42Section(), syncArc42SectionsAndReadme(), syncReadme(), TestArc42GuidelineForMissingFileDegrades(), TestArc42GuidelineForSlicesOneSection(), TestClassifyAffectedArc42Sections() (+15 more)
 
-### Community 206 - "Community 206"
+### Community 197 - "Community 197"
+Cohesion: 0.11
+Nodes (11): DefaultLLM(), RunSuiteWithLLM(), PublishRuntimeCandidate(), measureTask(), QualificationCases(), QualifyRuntimeCandidate(), TestConfiguredInferenceDoesNotSubstituteMockEvidence(), benchmarkGateEvolvedWinner() (+3 more)
+
+### Community 198 - "Community 198"
 Cohesion: 0.07
 Nodes (26): BT Platform Video Walkthrough, Chapter 1 — Platform Health (0:00–1:00), Chapter 2 — Build and Test Confidence (1:00–2:30), Chapter 3 — Dashboard Tour (2:30–4:30), Chapter 4 — Behavior Tree Execution (4:30–6:30), Chapter 5 — Observability and Diagnostics (6:30–8:00), Chapter 6 — Security and Configuration (8:00–9:30), Chapter 7 — Scalability and Reliability (9:30–11:00) (+18 more)
 
-### Community 207 - "Community 207"
+### Community 199 - "Community 199"
 Cohesion: 0.14
 Nodes (9): code:block1 (go test ./internal/reliability ./cmd/bt-agent ./internal/age), code:block2 (ok  github.com/nico/go-bt-evolve/internal/reliability), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES, RED phase (+1 more)
 
-### Community 208 - "Community 208"
+### Community 200 - "Community 200"
+Cohesion: 0.14
+Nodes (24): appendMissingRealTools(), inferToolsForTask(), init(), registerSetupActions(), TestAppendMissingRealTools_AllUnknownReturnsEmptySlice(), TestAppendMissingRealTools_NilBlackboardReturnsNil(), TestAppendMissingRealTools_SkipsEmptyExistingAndUnknownNames(), TestDiscoverAvailableTools_InitializesNilChainState() (+16 more)
+
+### Community 201 - "Community 201"
+Cohesion: 0.13
+Nodes (23): runFusionAction(), TestCheckCodebaseFitSucceedsOnZeroProbeExit(), TestCheckCodebaseFitToleratesNonzeroProbeExit(), TestGetNotebookLMNotebook_UsesDefaultNotebookID(), TestListNotebookLMNotebooks_StoresListInChainState(), TestQueryNotebookLM_QueriesDefaultNotebookWithTaskAsQuestion(), TestResearchNotebookLM_ImportOmitsCitedOnlyWithoutCitedStatus(), TestResearchNotebookLM_ImportRequestsCitedOnlyWhenStatusMentionsCited() (+15 more)
+
+### Community 202 - "Community 202"
+Cohesion: 0.21
+Nodes (24): acquireErrorHandlerClaudeLock(), acquireErrorHandlerFileLock(), acquireErrorHandlerStoreLock(), activeErrorHandlerExtensions(), appendErrorHandlerExtension(), errorHandlerDir(), errorHandlerExtensionsPath(), errorHandlerLedgerPath() (+16 more)
+
+### Community 203 - "Community 203"
+Cohesion: 0.1
+Nodes (18): Config, CycleMetrics, TestSharedCatalogEvidenceMatchesRuntimeIDButNotPersonalOwner(), TestUnrelatedAndUnownedRecordsCannotSatisfyEvolutionEvidence(), maxInt(), NewRegistry(), NewRegistryWithUsers(), TestRegistry_Rescan_PicksUpTreeAddedAfterConstruction() (+10 more)
+
+### Community 204 - "Community 204"
 Cohesion: 0.16
 Nodes (25): NewCrisisDetector(), containsReason(), TestCrisisDetector_Detect_DeclineRunsFireStagnation(), TestCrisisDetector_Detect_DiversityCollapse(), TestCrisisDetector_Detect_DiversityZero(), TestCrisisDetector_Detect_FlatFitnessIsPlateauNotStagnation(), TestCrisisDetector_Detect_ImprovementResetsStagnation(), TestCrisisDetector_Detect_NoCrisis() (+17 more)
 
-### Community 209 - "Community 209"
-Cohesion: 0.11
-Nodes (21): TestBlockMutationsInsert(), TestComposeTaskTreeWithStrategy(), TestPromoteSubtree(), init(), ApplyBlockMutations(), blockIDFromOp(), collectNames(), evolutionApplyAddAfter() (+13 more)
+### Community 205 - "Community 205"
+Cohesion: 0.08
+Nodes (25): 5.0 Composable Blocks, 5.1 Whitebox Overall System, 5.2 Core Engine, 5.3 Evolution Engine, 5.4 Dashboard, 5.5 Chain Types, 5.6 Personalization and Generated Trees, 5.7 Research and Code Improvement (+17 more)
 
-### Community 210 - "Community 210"
-Cohesion: 0.15
-Nodes (9): acquireExperienceFileLock(), cloneProposalJSON(), detachedExperience(), jaccardSimilarity(), TestJaccardSimilarity(), TestTokenize(), tokenize(), ExperienceBank (+1 more)
-
-### Community 211 - "Community 211"
-Cohesion: 0.22
-Nodes (24): acquireErrorHandlerClaudeLock(), acquireErrorHandlerFileLock(), acquireErrorHandlerStoreLock(), activeErrorHandlerExtensions(), appendErrorHandlerExtension(), errorHandlerDir(), errorHandlerExtensionsPath(), errorHandlerLedgerPath() (+16 more)
-
-### Community 212 - "Community 212"
-Cohesion: 0.13
-Nodes (21): NewMockLLM(), TestMockLLMGenerateCtxAndTimeoutDelegate(), TestMockLLMGenerateIgnoresPrompt(), TestMockLLMGeneratePrecedence(), TestMockLLMGenerateWithTimeoutDoesNotBlock(), TestMockLLMPassthroughAccessors(), TestMockLLMResponseLengths(), TestNewMockLLMDefaults() (+13 more)
-
-### Community 213 - "Community 213"
+### Community 206 - "Community 206"
 Cohesion: 0.12
 Nodes (7): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/benchmark	0.064s), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/agentexec	0.040s), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES, Summary
 
-### Community 214 - "Community 214"
+### Community 207 - "Community 207"
 Cohesion: 0.14
 Nodes (11): code:block1 (cmd/bt-agent/main_test.go:374:8: undefined: jitteredDriftInt), code:block2 (ok  	github.com/nico/go-bt-evolve/cmd/bt-agent	0.235s), code:block3 (ok  	github.com/nico/go-bt-evolve/cmd/bt-agent	0.2s), code:block4 (ok  	github.com/nico/go-bt-evolve/cmd/bt-agent	0.356s), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS (+3 more)
 
-### Community 215 - "Community 215"
+### Community 208 - "Community 208"
 Cohesion: 0.14
 Nodes (11): code:block1 (PATH=/usr/local/go/bin:$PATH /usr/local/go/bin/go test ./int), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/agent	3.198s), code:block3 (ok  	github.com/nico/go-bt-evolve/internal/agent	2.696s), FILES_CHANGED, Final Report, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS (+3 more)
 
-### Community 216 - "Community 216"
-Cohesion: 0.13
-Nodes (24): AllTools(), bindToolCommandCancellation(), DevTools(), DiskUsage(), HTTPGet(), MemoryUsage(), MonitorTools(), ProcessCheck() (+16 more)
-
-### Community 217 - "Community 217"
-Cohesion: 0.1
-Nodes (23): outcomeScore(), TestOutcomeScore_ChainFailed(), TestOutcomeScore_ChainPanic(), TestOutcomeScore_ChainSuccess(), TestOutcomeScore_Default(), TestOutcomeScore_Failure(), TestOutcomeScore_SharedVocabulary(), TestOutcomeScore_Success() (+15 more)
-
-### Community 218 - "Community 218"
+### Community 209 - "Community 209"
 Cohesion: 0.12
-Nodes (23): TestFeedbackDistinctSameTreeRunsSurviveAndAreIdempotent(), TestFeedbackEvolutionCountsAndBestMetadataSurvive(), TestFeedbackFailedSaveRetainsBoundedPendingEvidence(), hasToolEdge(), readFeedbackSnapshot(), TestFeedbackFlush_ForceOnShutdown(), TestFeedbackFlush_ThrottlesWrites(), TestLoadFeedback_DoesNotClobberRegisteredStaticMetadata() (+15 more)
+Nodes (17): langAgentServer, main(), newLangAgentServer(), newLangAgentServerWithReflections(), newTestServer(), seedRecords(), TestHandleEvolve_DefaultTreeHasNoMatchingTargetsSoNothingApplies(), TestHandleEvolve_TreeWithAnalyzeTaskGetsWrapRetryApplied() (+9 more)
 
-### Community 219 - "Community 219"
-Cohesion: 0.13
-Nodes (20): CollectBlockIDs(), FitnessRanking(), RecordTaskBlockFitness(), ScoreFromBlackboard(), TestRecordTaskBlockFitness(), mcpErr(), registerBlockTools(), resolveStrategyTree() (+12 more)
+### Community 210 - "Community 210"
+Cohesion: 0.14
+Nodes (18): TestCheckpointKeepsAttemptSnapshotAndBudgetAcrossRunningTicks(), TestCheckpointMalformedContractFailsBeforeChildAndValidation(), TestCheckpointUsesExplicitTypedStateAfterPersistence(), cloneCheckpointState(), extractWorldState(), hasWorldState(), NewCheckpointVerifier(), readPostconditions() (+10 more)
 
-### Community 220 - "Community 220"
-Cohesion: 0.1
-Nodes (21): TestValidate_BanditSelectorRequiresUniqueName(), TestCachedCondition_RefusesHITLConditions(), TestCachedCondition_RefusesNestedHITLConditions(), TestValidateTree_NestedChildren(), TestValidateTree_ValidTree(), TestValidate_MemoryNodesDuplicateNames(), TestValidate_MemoryNodesRequireUniqueNames(), containsLeafChildrenMsg() (+13 more)
-
-### Community 221 - "Community 221"
-Cohesion: 0.15
-Nodes (19): AgentFactory, NewAnalyzer(), NewAgentFactory(), NewAgentFactoryWithReflections(), TestFactory_RejectsInvalidGeneratedTreeBeforePersisting(), TestGenerator_CompilesSkillActionsToChainActions(), skillName(), TestAnalyzer_EmptyResponse_Error() (+11 more)
-
-### Community 222 - "Community 222"
+### Community 211 - "Community 211"
 Cohesion: 0.18
 Nodes (23): CompileActionStep(), CompilePlanToTree(), compileStep(), encodePairs(), encodePairsReadable(), executableNode(), outcomeSelector(), PlanHash() (+15 more)
 
-### Community 223 - "Community 223"
-Cohesion: 0.13
-Nodes (17): TestUnavailableBlackboardOwnerRejectsHTTPBeforePipelineReservation(), TestLiveMetricsCategoryMapSurvivesEnforcedValidation(), TestSecurityAuditRealResponsesSurviveEnforcedValidation(), TestDLQHTTPRecoveryAndStorageAcknowledgement(), dashboardMux(), isolatePipelinePaths(), TestPipelineInventoryOmitsEscapesAndReportsDirectoryFailure(), TestPipelineRunConfinesRequestsAndSymlinksToWorkflowRoot() (+9 more)
+### Community 212 - "Community 212"
+Cohesion: 0.11
+Nodes (18): auctionAnnouncement(), auctionCandidates(), AuctionDelegateWithContext(), betterBid(), candidateOverride(), cardURL(), NewPersistentAuctioneer(), stateFloat() (+10 more)
 
-### Community 224 - "Community 224"
+### Community 213 - "Community 213"
+Cohesion: 0.15
+Nodes (19): AgentFactory, NewAnalyzer(), NewAgentFactory(), NewAgentFactoryWithReflections(), TestFactory_RejectsInvalidGeneratedTreeBeforePersisting(), TestGenerator_CompilesSkillActionsToChainActions(), skillName(), TestAnalyzer_EmptyResponse_Error() (+11 more)
+
+### Community 214 - "Community 214"
 Cohesion: 0.08
 Nodes (24): Added, Added, Changed, Changelog, Chores, Fixed, Fixed, Miscellaneous (+16 more)
 
-### Community 225 - "Community 225"
-Cohesion: 0.08
-Nodes (24): 5.0 Composable Blocks, 5.1 Whitebox Overall System, 5.2 Core Engine, 5.3 Evolution Engine, 5.4 Dashboard, 5.5 Chain Types, 5.6 Personalization and Generated Trees, 5.7 Research and Code Improvement (+16 more)
+### Community 215 - "Community 215"
+Cohesion: 0.12
+Nodes (20): NewOpenAICompatClient(), TestOpenAICompat_ClientErrorsDoNotTripBreaker(), TestOpenAICompat_ErrorResponse(), TestOpenAICompat_GenerateWithModel_RetryPolicyByStatusCode(), TestOpenAICompat_GenerateWithModel_SendsChatCompletion(), TestOpenAICompat_NonJSONServerError_IsRetried(), TestOpenAICompat_NonRetryableProbeErrorDoesNotWedgeBreaker(), TestOpenAICompat_OpenBreakerRejectsWithoutRequest() (+12 more)
 
-### Community 226 - "Community 226"
+### Community 216 - "Community 216"
 Cohesion: 0.12
 Nodes (16): code:block1 (--- FAIL: TestBuildCompositeChildren_GuardReevaluatedEachTic), code:block2 (/usr/local/go/bin/go test ./internal/engine -short -count=1 ), code:block3 ("Should I deploy now"   -> lower="should i deploy now"   mat), code:block4 (/usr/local/go/bin/go test ./internal/engine -short -count=1 ), FILES_CHANGED, FILES_CHANGED, GREEN_COMMANDS, GREEN phase (+8 more)
 
-### Community 227 - "Community 227"
+### Community 217 - "Community 217"
 Cohesion: 0.28
 Nodes (4): FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT
 
-### Community 228 - "Community 228"
-Cohesion: 0.11
-Nodes (20): TestKnowledgeGraphRegistersAllDomainTrees(), TestKnowledgeGraphRegistersResolverSpecialCaseTrees(), NotebookLMFitness(), RegisterNotebookLMFitness(), TestRegisterNotebookLMFitness_DoesNotAffectOtherTrees(), TestRegisterNotebookLMFitness_WiresIntoKnowledgeGraph(), TestRegisterNotebookLMFitness_WiresIntoRealProductionTree(), NotebookLMRunSummary (+12 more)
-
-### Community 229 - "Community 229"
-Cohesion: 0.08
-Nodes (15): TestComputeAnalytics_BottleneckCarriesStructuredFailure(), TestComputeAnalytics_Bottlenecks(), TestComputeAnalytics_BottleneckWithoutTraceHasEmptyFailure(), TestComputeAnalytics_BottleneckWithTrace(), TestComputeAnalytics_Centrality(), TestComputeAnalytics_CoverageGapsIncludeResolverSpecialCases(), TestComputeAnalytics_CoverageGapsUseExpectedDomains(), TestComputeAnalytics_EmptyGraph() (+7 more)
-
-### Community 230 - "Community 230"
-Cohesion: 0.1
-Nodes (5): Config, diffSecretField(), LoadRuntime(), PlatformHome(), TestPlatformHomePrecedence()
-
-### Community 231 - "Community 231"
-Cohesion: 0.16
-Nodes (16): ApprovalWaitResult, Pipeline, PipelineResult, Runner, Step, StepKind, StepResult, wfState (+8 more)
-
-### Community 232 - "Community 232"
+### Community 218 - "Community 218"
 Cohesion: 0.13
-Nodes (19): ClaudeRunner, CommandResult, CommandRunner, execClaudeRunner, execCommandRunner, resolvedSuperpowersClaudeEffort(), resolvedSuperpowersClaudeModel(), captureExecClaudeArgs() (+11 more)
+Nodes (6): Debug(), errToString(), TestStatusString(), HealthMonitor, HealthState, HealthStatus
 
-### Community 233 - "Community 233"
-Cohesion: 0.15
-Nodes (21): TestClassifyGoapCycleFailurePrecedence(), TestExtractRedPassCommandIgnoresVerificationOutput(), classifyGoapCycleFailure(), extractRedPassCommand(), goapFailureDiagnostic(), isGoapInfraCycleFailure(), isGoapPendingPatchFailure(), isGoapRedUnexpectedlyPassed() (+13 more)
+### Community 219 - "Community 219"
+Cohesion: 0.13
+Nodes (19): Block, TestComposeAndExpand(), Category, Compose(), ComposeFromRefs(), ComposeTaskTree(), composeWithMiddle(), ComposeSpec (+11 more)
 
-### Community 234 - "Community 234"
+### Community 220 - "Community 220"
 Cohesion: 0.16
 Nodes (22): dataFileMetrics(), extractExistingDataPath(), init(), inspectDataSource(), registerDomainActions(), domainActionCases(), runDomainAction(), TestApplyTransform() (+14 more)
 
-### Community 235 - "Community 235"
-Cohesion: 0.19
-Nodes (20): MutationOp, migrateNodeState(), applyMutationOp(), cloneNode(), mapCorrespondence(), maxChildrenForType(), parseIndexPath(), resolveIndexPath() (+12 more)
+### Community 221 - "Community 221"
+Cohesion: 0.17
+Nodes (18): fakeClaude, fakeCommitRunner, hookFailureClass, applyDeterministicCommitFixes(), buildCommitFixPrompt(), classifyHookFailure(), commitFixMaxAttempts(), commitWithAutoFix() (+10 more)
 
-### Community 236 - "Community 236"
-Cohesion: 0.19
-Nodes (22): Arc42Trees(), chain(), section10Quality(), section11Risks(), section12Glossary(), section1IntroGoals(), section2Constraints(), section3ContextScope() (+14 more)
+### Community 222 - "Community 222"
+Cohesion: 0.14
+Nodes (16): fakeLLM, NewGoalFactory(), TestGoalFactory_ArchetypeFallbackWhenLLMKeepsFailing(), TestGoalFactory_ArchetypeFallbackWithoutLLM(), TestGoalFactory_EmptyIntent(), TestGoalFactory_FromIntentLLM(), TestGoalFactory_FromPattern(), TestGoalFactory_GroundsKeyVariantsAndValues() (+8 more)
 
-### Community 237 - "Community 237"
+### Community 223 - "Community 223"
+Cohesion: 0.13
+Nodes (19): ClaudeRunner, CommandResult, CommandRunner, execClaudeRunner, execCommandRunner, resolvedSuperpowersClaudeEffort(), resolvedSuperpowersClaudeModel(), captureExecClaudeArgs() (+11 more)
+
+### Community 224 - "Community 224"
 Cohesion: 0.14
 Nodes (14): code:block1 (/usr/local/go/bin/go test ./internal/domains -short -count=1), code:block2 (/usr/local/go/bin/go test ./internal/domains -short -count=1), code:block3 (/usr/local/go/bin/go test ./internal/domains -short -count=1), FILES_CHANGED, FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS (+6 more)
 
-### Community 238 - "Community 238"
-Cohesion: 0.14
-Nodes (12): code:block1 (/usr/local/go/bin/go test ./cmd/bt-agent -short -count=1 -ti), code:block2 (--- FAIL: TestBTEvolveBottlenecksPrioritizedAndCapped (0.00s), FILES_CHANGED, GREEN phase, NOTES, RED_COMMAND, RED phase, RED phase complete (+4 more)
-
-### Community 239 - "Community 239"
+### Community 225 - "Community 225"
 Cohesion: 0.13
 Nodes (8): code:block1 (--- FAIL: TestBuildCompositeChildren_GuardReevaluatedEachTic), code:block2 (--- FAIL: TestClarifyGateBlock_LeafOrder (0.00s)), code:block3 ("Should I deploy now"   -> lower="should i deploy now"   mat), FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT, Summary
 
-### Community 240 - "Community 240"
-Cohesion: 0.11
-Nodes (10): ContentItem, InputSchema, sanitizeArg(), Message, Property, RPCError, Server, ToolDef (+2 more)
+### Community 226 - "Community 226"
+Cohesion: 0.14
+Nodes (12): code:block1 (/usr/local/go/bin/go test ./cmd/bt-agent -short -count=1 -ti), code:block2 (--- FAIL: TestBTEvolveBottlenecksPrioritizedAndCapped (0.00s), FILES_CHANGED, GREEN phase, NOTES, RED_COMMAND, RED phase, RED phase complete (+4 more)
 
-### Community 241 - "Community 241"
-Cohesion: 0.12
-Nodes (14): tracingMiddleware(), ContextWithTraceParentHeader(), Endpoint(), InitFromEnv(), parseOTLPEndpoint(), ParseOTLPTarget(), newRecordingTracer(), TestContextWithTraceParentHeader() (+6 more)
+### Community 227 - "Community 227"
+Cohesion: 0.15
+Nodes (14): ErrorRecorder, capNumPredictHandler(), TestClient_GenerateCtx_RetryPolicyByFailureKind(), TestClient_GenerateWithMaxTokens_SetsNumPredictOption(), TestClient_GenerateWithMaxTokens_ZeroLeavesRequestUnbounded(), TestErrorRecorder_GenerateWithMaxTokens_FallsBackToGenerateWhenInnerLacksSupport(), TestErrorRecorder_GenerateWithMaxTokens_ForwardsToCapableInnerLLM(), TestErrorRecorder_GenerateWithMaxTokens_RecordsError() (+6 more)
 
-### Community 242 - "Community 242"
+### Community 228 - "Community 228"
 Cohesion: 0.17
 Nodes (21): evidenceVerificationReport, defaultStorageDir(), encodeJSON(), main(), run(), contains(), mustParseTime(), TestDefaultStorageDirUsesEnv() (+13 more)
 
-### Community 243 - "Community 243"
+### Community 229 - "Community 229"
 Cohesion: 0.13
 Nodes (17): NewTraceStore(), TestExplainLastFailure_NoTrace(), TestExplainLastFailure_RendersPathFromChildTicks(), TestExplainLastFailure_TraceFound(), TestTraceStore_GetByTreeID(), TestTraceStore_GetEmpty(), TestTraceStore_GetLimited(), TestTraceStore_GetNoMatch() (+9 more)
 
-### Community 244 - "Community 244"
-Cohesion: 0.11
-Nodes (14): NewCatalog(), TestCatalog_Export(), TestCatalog_ListInstalled(), TestCatalog_ListTemplates(), TestCatalog_Search(), TestCatalog_SkillToAgent(), TestInferTree(), TestCatalog_EmptyTemplates() (+6 more)
-
-### Community 245 - "Community 245"
-Cohesion: 0.15
-Nodes (16): BTAgentClient, interpretSendResult(), safetyGetMessageText(), sameOrigin(), taskResponseEvidence(), TestInterpretSendResult_HonestlyReportsFailureStates(), uncertainResponse(), waitForTaskPoll() (+8 more)
-
-### Community 246 - "Community 246"
-Cohesion: 0.14
-Nodes (20): TestBTOptimizer_New(), TestExtractCondition(), TestMergeOverlappingPaths_MergeNode(), TestPathHitRatioExtras(), TestPruneDeadPaths(), NewBTOptimizer(), NewDTAnalyzer(), pathStat() (+12 more)
-
-### Community 247 - "Community 247"
-Cohesion: 0.19
-Nodes (18): FusionDeliberationTree(), collectFusionNames(), findFusionNode(), TestFusionDeliberationTree_HasFusionAndDirectPaths(), TestFusionDeliberationTree_UsesFusionChainAction(), NewAction(), NewAdapt(), NewChainAction() (+10 more)
-
-### Community 248 - "Community 248"
-Cohesion: 0.15
-Nodes (15): fakeLLM, NewGoalFactory(), TestGoalFactory_ArchetypeFallbackWhenLLMKeepsFailing(), TestGoalFactory_ArchetypeFallbackWithoutLLM(), TestGoalFactory_EmptyIntent(), TestGoalFactory_FromIntentLLM(), TestGoalFactory_FromPattern(), TestGoalFactory_GroundsKeyVariantsAndValues() (+7 more)
-
-### Community 249 - "Community 249"
-Cohesion: 0.14
-Nodes (16): langAgentServer, main(), newLangAgentServer(), newLangAgentServerWithReflections(), newTestServer(), seedRecords(), TestHandleEvolve_DefaultTreeHasNoMatchingTargetsSoNothingApplies(), TestHandleEvolve_TreeWithAnalyzeTaskGetsWrapRetryApplied() (+8 more)
-
-### Community 250 - "Community 250"
+### Community 230 - "Community 230"
 Cohesion: 0.24
 Nodes (22): NewConfigWatcher(), TestConfigWatcher_ConfigChangeWithDotEnv(), TestConfigWatcher_DotEnvChangeDoesNotTriggerOnNoChange(), TestConfigWatcher_DotEnvFileDisappears(), TestConfigWatcher_DotEnvHotReload(), TestConfigWatcher_FileAppears(), TestConfigWatcher_InvalidConfigNoCallback(), TestConfigWatcher_LargeChange() (+14 more)
 
-### Community 251 - "Community 251"
+### Community 231 - "Community 231"
 Cohesion: 0.11
 Nodes (21): envBool(), hasExplicitField(), mergeFileConfig(), TestEnvBool(), marshalConfig(), TestDiff_DifferentValues(), TestDiff_EmptyConfigs(), TestEnvBool_DefaultValue() (+13 more)
 
-### Community 252 - "Community 252"
+### Community 232 - "Community 232"
+Cohesion: 0.11
+Nodes (14): NewCatalog(), TestCatalog_Export(), TestCatalog_ListInstalled(), TestCatalog_ListTemplates(), TestCatalog_Search(), TestCatalog_SkillToAgent(), TestInferTree(), TestCatalog_EmptyTemplates() (+6 more)
+
+### Community 233 - "Community 233"
+Cohesion: 0.12
+Nodes (15): SchedulerJobsFile(), ResolvePipelineAgent(), TestRemoveAgentJobs(), TestResolvePipelineAgent_Aliases(), TestApplySchedule_PersistsRegistryAndJobs(), TestDeleteRegisteredAgent(), TestScheduler_SyncFromRegistry_UpdatesChangedSchedule(), ApplySchedule() (+7 more)
+
+### Community 234 - "Community 234"
+Cohesion: 0.19
+Nodes (18): FusionDeliberationTree(), collectFusionNames(), findFusionNode(), TestFusionDeliberationTree_HasFusionAndDirectPaths(), TestFusionDeliberationTree_UsesFusionChainAction(), NewAction(), NewAdapt(), NewChainAction() (+10 more)
+
+### Community 235 - "Community 235"
+Cohesion: 0.12
+Nodes (16): collectSelectorNames(), DecisionTreeStatsFile(), SelectorStatsFile(), selectorTelemetryPath(), TestRunOnceFlushesDecisionTreeTelemetry(), TestRunOnceFlushesSelectorTelemetry(), TestSelectorStatsFileSanitizesTreeID(), TestPackageTestsIsolateHomeDir() (+8 more)
+
+### Community 236 - "Community 236"
+Cohesion: 0.1
+Nodes (16): CollectAgentSLOs(), deepSearchV2Config(), relocateDomainDescription(), TestCollectAgentSLOs_NoMemoryNoFile_ReturnsNil(), TestCollectAgentSLOs_ReadsPersistedFileEvidence(), TestEvolveTreeV2_DeepSearchMetrics_PopulatedWhenTTConfigured(), TestEvolveTreeV2_DeepSearchMetrics_ZeroWithoutTranspositionTable(), TestMetricsTracker_CyclesForTree() (+8 more)
+
+### Community 237 - "Community 237"
+Cohesion: 0.13
+Nodes (3): goalHeap, GoalQueue, entryLess()
+
+### Community 238 - "Community 238"
 Cohesion: 0.13
 Nodes (15): code:block1 (--- FAIL: TestAllDomainTreeConditionsHaveDescriptions (0.00s), code:block2 (--- FAIL: TestEveryResolverSelectableTreeIsDescribable/godev), code:block3 (/usr/local/go/bin/go test ./internal/domains -short -count=1), FILES_CHANGED, FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS (+7 more)
 
-### Community 253 - "Community 253"
+### Community 239 - "Community 239"
 Cohesion: 0.13
 Nodes (7): BuildMutationPrompt(), EnsembleConfig, EnsembleStats, EvolutionContext, ModelEnsemble, ModelRole, PriorSolution
 
-### Community 254 - "Community 254"
-Cohesion: 0.16
-Nodes (18): defaultDriftRestart(), TestRestartArtifactRequiresExactCleanIdentity(), TestRestartControlDispositionAndIdentity(), TestRestartControlLostReplyAndPanicRetainOwnerSeal(), TestRestartControlRejectsMalformedRequestsAndWrongPeer(), TestSystemdCommandFailureAfterStartRetainsUncertainty(), verifyRestartPeer(), verifyRestartPeerUID() (+10 more)
+### Community 240 - "Community 240"
+Cohesion: 0.12
+Nodes (10): ContentItem, InputSchema, sanitizeArg(), Message, Property, RPCError, Server, ToolDef (+2 more)
 
-### Community 255 - "Community 255"
-Cohesion: 0.13
-Nodes (11): BlockConfig, ApplyDiffMutation(), findBlockForNode(), TestApplyDiffMutation(), TestFindBlockForNode(), DiffMutation, EvolveBlock, MetaPromptEvolver (+3 more)
+### Community 241 - "Community 241"
+Cohesion: 0.19
+Nodes (15): autoApproveFromNode(), buildHumanApprovalGate(), childExecuted(), failHITLGate(), hitlPhase(), hitlStatus(), hitlStore(), init() (+7 more)
 
-### Community 256 - "Community 256"
+### Community 242 - "Community 242"
 Cohesion: 0.13
 Nodes (18): DiversityMetrics, EvolutionParameters, FitnessMetrics, BuildPopulationState(), BuildPopulationStateWithGrid(), clamp01(), clampMutationRate(), DefaultPhaseRanges() (+10 more)
 
-### Community 257 - "Community 257"
-Cohesion: 0.1
-Nodes (16): BuildBudget(), budgetCmd, BuildMonitor(), TestBuildBudget_MaxTicks(), TestBuildInverter(), TestBuildMonitor_IncrementsCounter(), TestBuildParallel_AllMustSucceed(), TestBuildParallel_OneSuccess() (+8 more)
+### Community 243 - "Community 243"
+Cohesion: 0.11
+Nodes (15): assertNoExecutePlanStubs(), TestGoapFusionLoopSeedsBeforeResearch(), TestGoapFusionLoopTree_ClaudeReviewFallback(), TestGoapFusionTreeHasResearchRouter(), containsNodeName(), TestGoapFusion_Structure(), GoapFusionTree(), GoapFusionLoopTree() (+7 more)
 
-### Community 258 - "Community 258"
-Cohesion: 0.17
-Nodes (20): TestDaemonConfiguresGoalPlanBrainstorm(), addFusionNewCount(), addFusionNewItems(), btFusionPatternQuestion(), btFusionResearchFindings(), fusionMarkdown(), fusionNewCount(), fusionTitle() (+12 more)
-
-### Community 259 - "Community 259"
-Cohesion: 0.16
-Nodes (14): GoalArchetype, GoalFactory, clamp01(), containsAny(), DefaultInitialState(), DetectArchetype(), extractJSONObject(), goalSlug() (+6 more)
-
-### Community 260 - "Community 260"
-Cohesion: 0.16
-Nodes (18): esc(), computeLayout(), loadMindMap(), nodeAtPath(), nodeColor(), nodeColors, pushDescendantsDown(), renderTree() (+10 more)
-
-### Community 261 - "Community 261"
+### Community 245 - "Community 245"
 Cohesion: 0.17
 Nodes (13): TestClient_AnalyzeComplexity_High(), TestClient_Reflect_FallbackSections(), TestClient_Reflect_OnlyWentWell(), fakeSpan, fakeTracer, mockOllamaServer(), newTestClient(), TestClient_AnalyzeComplexity() (+5 more)
 
-### Community 262 - "Community 262"
-Cohesion: 0.22
-Nodes (11): cloneRuntimeRelease(), commitRelease(), readPublicationQualification(), readRelease(), readVersion(), saveVersion(), versionFile(), RuntimeQualification (+3 more)
+### Community 247 - "Community 247"
+Cohesion: 0.17
+Nodes (11): TestLocalSearchMutableParamsAndTabu(), extractMutableParams(), getFloatMeta(), setFloatMeta(), TestExtractMutableParams_CoversStructFields(), toFloat64(), LocalSearcher, LocalSearchStrategy (+3 more)
 
-### Community 263 - "Community 263"
-Cohesion: 0.2
-Nodes (14): autoApproveFromNode(), buildHumanApprovalGate(), failHITLGate(), hitlPhase(), hitlStatus(), hitlStore(), init(), markChildExecuted() (+6 more)
+### Community 248 - "Community 248"
+Cohesion: 0.19
+Nodes (19): arc42GoalsPromptBlock(), arc42ResearchTopics(), loadArc42QualityGoals(), TestArc42GoalsPromptBlockContainsEveryGoal(), TestArc42GoalsPromptBlockEmptyWhenDocMissing(), TestArc42ResearchTopicsAnchoredToGoals(), TestBuildClaudeReviewPromptIncludesArc42Goals(), TestBuildGrillRound1QueryIncludesArc42Goals() (+11 more)
 
-### Community 264 - "Community 264"
-Cohesion: 0.15
-Nodes (12): attachSuperpowersLogRecorder(), attachLogHandler(), buildBaseHandler(), buildLogger(), envLogLevel(), Error(), Init(), L() (+4 more)
+### Community 249 - "Community 249"
+Cohesion: 0.11
+Nodes (19): TestBuildPlannerNode_AllFail(), TestBuildPlannerNode_FailThenSuccess(), TestBuildPlannerNode_ChainStateGoals(), TestReadGoals_ChainStateFallback(), TestReadGoals_InvalidItemInList(), TestReadGoals_NonListMetadata(), TestReadGoals_Preconditions(), GoalDefinition (+11 more)
 
-### Community 265 - "Community 265"
-Cohesion: 0.2
-Nodes (17): handleSprintExecute(), sprintTaskDisposition(), syncWorkflowTaskStatus(), reserveSprint(), writeSprintAdmissionError(), executeSprintTasks(), executeSprintTasksWithContext(), reconcileSprintCommitsLocked() (+9 more)
-
-### Community 266 - "Community 266"
-Cohesion: 0.13
-Nodes (15): DefaultBlockConfig(), NewMetaPromptEvolver(), NewMutationContext(), TestBlockConfig_FilterMutations(), TestBlockConfig_IsMutable(), TestCrisisDetector_LastDiversity(), TestDefaultBlockConfig(), TestMetaPromptEvolver_EvolveTemplates() (+7 more)
-
-### Community 267 - "Community 267"
-Cohesion: 0.14
-Nodes (15): TestBuildDashboardKnowledgeGraph_SetsExpectedDomainsAndSurfacesGaps(), HistogramSnap, LabeledGauge, LabeledHistogram, labelKey(), PrometheusHandler(), RecordKGAnalytics(), scrapeMetrics() (+7 more)
-
-### Community 268 - "Community 268"
-Cohesion: 0.14
-Nodes (13): deregisterLiveRun(), EnqueueLiveMutation(), ListLiveRuns(), registerLiveRun(), TestBuildNodeCapture(), TestLiveRunEnqueueAndDrain(), TestLiveRunOpCap(), TestLiveRunRegistryLifecycle() (+5 more)
-
-### Community 269 - "Community 269"
+### Community 250 - "Community 250"
 Cohesion: 0.15
 Nodes (15): allDigits(), consecutiveFailures(), diagnoseFailureMode(), getLatestTimestamp(), groupByTreeName(), inferAgentName(), init(), registerBTManagerActions() (+7 more)
 
-### Community 270 - "Community 270"
+### Community 251 - "Community 251"
+Cohesion: 0.17
+Nodes (13): GoalArchetype, GoalFactory, clamp01(), containsAny(), DetectArchetype(), extractJSONObject(), goalSlug(), normalizeValue() (+5 more)
+
+### Community 252 - "Community 252"
 Cohesion: 0.22
 Nodes (19): NewRedisPriorityQueue(), NewRedisPriorityQueueFromClient(), NewRedisQueue(), NewRedisQueueFromClient(), testRedisAddr(), testRedisClient(), TestRedisPriorityQueue_DefaultKey(), TestRedisPriorityQueue_DequeueOrder() (+11 more)
 
-### Community 271 - "Community 271"
-Cohesion: 0.14
-Nodes (14): handleFellows(), DefaultFellows(), NewThinkTank(), TestDefaultFellows(), TestFellowConfidence(), TestFullAnalysis_MultipleTopics(), TestNewThinkTank(), TestOrchestrator_Debate() (+6 more)
+### Community 253 - "Community 253"
+Cohesion: 0.18
+Nodes (17): Alert, apiFetch(), esc(), getCookie(), sleep(), cbIcon(), createAgent(), deleteAgent() (+9 more)
 
-### Community 272 - "Community 272"
+### Community 254 - "Community 254"
 Cohesion: 0.15
 Nodes (20): Claude Code, code:bash (# 1. Edit the unit's EnvironmentFile (operator-managed, outs), code:block2 (## Scheduled GOAP Fusion Runtime Preflight Passed), Codex CLI, Coding delegation: Codex-only deployment, Coding Delegation Providers (Claude / Codex), Coding delegation: Sol 6.1 through Codex login, Configuring and restarting the daemon (+12 more)
 
-### Community 273 - "Community 273"
+### Community 255 - "Community 255"
 Cohesion: 0.12
 Nodes (20): 1. Prerequisites, 2. Install, 3. Run tests, 4. Start the dashboard, 5. Run your first task, API Endpoints, Architecture, code:bash (git clone https://github.com/nico/go-bt-evolve.git) (+12 more)
 
-### Community 274 - "Community 274"
+### Community 256 - "Community 256"
 Cohesion: 0.1
 Nodes (20): 6.1 Task Execution Scenario, 6.2 Evolution Cycle, 6.3 Sprint Execution, 6.4 Self-Improvement Cycle (goap-fusion loop), 6.5 Error Recovery, 6.6 Browser Authentication and Session Expiry, 6.7 Personal Automation and Feedback, 6.8 Inspect a Tree Definition (+12 more)
 
-### Community 275 - "Community 275"
+### Community 257 - "Community 257"
 Cohesion: 0.18
 Nodes (7): code:block1 (cmd/bt-dashboard/main_test.go:116:9: got.RequeuedAt undefine), code:block2 (ok  	github.com/nico/go-bt-evolve/cmd/bt-dashboard	0.025s), GREEN phase, GREEN phase complete, RED phase, RED phase complete, Summary
 
-### Community 276 - "Community 276"
-Cohesion: 0.16
-Nodes (18): TestEligibleBidders(), TestEligibleBidders_NoRequiredTagsMatchesAll(), BuildCardRegistry(), capabilityActionTags(), cardCoversTags(), ConvertToAgentCard(), EligibleBidders(), legacyTreeTags() (+10 more)
-
-### Community 277 - "Community 277"
-Cohesion: 0.18
-Nodes (17): cardSignatureValid(), loadOrCreateSigningKey(), SignAgentCard(), TestAuctionCandidates_RejectsTamperedCardSignature(), TestConvertToAgentCard_AttachesSignature(), TestHandleGlobalAgentCard_ResponseIsSigned(), TestLoadOrCreateSigningKey_LogsWarningOnPersistFailure(), TestSignAgentCard() (+9 more)
-
-### Community 278 - "Community 278"
+### Community 258 - "Community 258"
 Cohesion: 0.14
-Nodes (13): TestExpertKnowledge_SeedSpecialistsCarryProvenance(), TestPopulationHealthSnapshot_DiversityCollapseRun(), TestNSGAIIPopulation_Evolve_ResurrectsExtinctSpecialist(), appendResurrectedTag(), firstSpecialistType(), itoa(), NewSpecialistRegistry(), TestSpecialistRegistry_ExtinctSpecialists() (+5 more)
+Nodes (11): tracingMiddleware(), fanoutHandler, traceContextHandler, ContextWithTraceParentHeader(), SpanContextFrom(), newRecordingTracer(), TestContextWithTraceParentHeader(), TestInitFromEnv_NoEndpointIsNoop() (+3 more)
 
-### Community 279 - "Community 279"
+### Community 259 - "Community 259"
+Cohesion: 0.14
+Nodes (13): TestExpertKnowledge_SeedSpecialistsCarryProvenance(), TestPopulationEvolve_ResurrectsExtinctSpecialist(), TestNSGAIIPopulation_Evolve_ResurrectsExtinctSpecialist(), appendResurrectedTag(), firstSpecialistType(), itoa(), NewSpecialistRegistry(), TestSpecialistRegistry_ExtinctSpecialists() (+5 more)
+
+### Community 260 - "Community 260"
 Cohesion: 0.15
 Nodes (10): Counter, Gauge, LabeledCounter, anchors(), check(), main(), prose(), Remove fenced/inline code so example links and IDs are not obligations. (+2 more)
 
-### Community 280 - "Community 280"
+### Community 261 - "Community 261"
 Cohesion: 0.12
 Nodes (6): runDomainCondCases(), TestConditionsDomain_LowercasedTaskConditions(), TestConditionsDomain_ResultKeywordConditions(), TestConditionsDomain_TaskKeywordConditions(), TestConditionsDomain_TaskKeywordConditions_CaseInsensitive(), domainCondCase
 
-### Community 281 - "Community 281"
-Cohesion: 0.21
-Nodes (16): bbTool, bbToolAppend(), bbToolList(), bbToolRead(), bbToolRecent(), bbToolSessionAppend(), bbToolSessionList(), bbToolSessionRead() (+8 more)
+### Community 262 - "Community 262"
+Cohesion: 0.16
+Nodes (14): DefaultRegressionConfig(), NewBaselineStore(), NewComparator(), TestBaselineStore_Load_EmptyFile(), TestBaselineStore_Load_MissingFile(), TestBaselineStore_Save_MissingParentDirErrors(), TestBaselineStore_SaveAndLoad_RoundTrip(), TestBaselineStore_UpdateBaseline() (+6 more)
 
-### Community 282 - "Community 282"
+### Community 264 - "Community 264"
 Cohesion: 0.16
 Nodes (9): TestHermesUpdateVerdict(), Entry, Store, DefaultPath(), Key(), normalize(), truncateRunes(), TestDefaultKnowledgePathUsesConfiguredHome() (+1 more)
 
-### Community 284 - "Community 284"
+### Community 265 - "Community 265"
+Cohesion: 0.15
+Nodes (7): main(), CodexClient, LangChainModel, Command(), helperCommand(), MCPCommand(), BindCommandCancellation()
+
+### Community 266 - "Community 266"
 Cohesion: 0.18
-Nodes (8): code:block1 (/usr/local/go/bin/go test ./cmd/bt-dashboard ./internal/reli), code:block2 (--- FAIL: TestHandleDLQReplay_RequeuesEntryForCrossProcessRe), code:block3 (ok  	github.com/nico/go-bt-evolve/cmd/bt-dashboard	0.023s), GREEN phase, RED phase, RED phase complete, RED phase result, Summary
+Nodes (17): cardSignatureValid(), loadOrCreateSigningKey(), SignAgentCard(), TestAuctionCandidates_RejectsTamperedCardSignature(), TestConvertToAgentCard_AttachesSignature(), TestHandleGlobalAgentCard_ResponseIsSigned(), TestLoadOrCreateSigningKey_LogsWarningOnPersistFailure(), TestSignAgentCard() (+9 more)
 
-### Community 285 - "Community 285"
-Cohesion: 0.14
-Nodes (7): code:block1 (go test ./internal/reliability ./cmd/bt-agent ./internal/age), code:block2 (ok  github.com/nico/go-bt-evolve/internal/reliability), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES, Summary
+### Community 267 - "Community 267"
+Cohesion: 0.16
+Nodes (18): TestEligibleBidders(), TestEligibleBidders_NoRequiredTagsMatchesAll(), BuildCardRegistry(), capabilityActionTags(), cardCoversTags(), ConvertToAgentCard(), EligibleBidders(), legacyTreeTags() (+10 more)
 
-### Community 286 - "Community 286"
+### Community 268 - "Community 268"
+Cohesion: 0.1
+Nodes (13): renderTab(), renderAgents(), renderCompany(), renderDoormate(), loadEvolutionData(), renderEvolution(), renderMindMap(), loadScalability() (+5 more)
+
+### Community 269 - "Community 269"
 Cohesion: 0.16
 Nodes (8): code:block1 (--- FAIL: TestBuildSeedProgramPromptCarriesGraphAnalyticalSe), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES, RED phase, Summary
 
-### Community 287 - "Community 287"
-Cohesion: 0.15
-Nodes (9): fanoutHandler, InitLogExport(), logExportTarget(), newTraceContextHandler(), TestInitLogExport_Idempotent(), TestLogExportTarget(), TestTraceContextHandler_InjectsTraceIDs(), traceContextHandler (+1 more)
-
-### Community 288 - "Community 288"
+### Community 270 - "Community 270"
 Cohesion: 0.18
-Nodes (17): CosineSimilarity(), hammerRegister(), TestBuildIndex_ConcurrentRegisterNoRace(), TestBuildIndex_PanicRecovered(), TestCosineSimilarity_BothZero(), TestCosineSimilarity_DifferentLengths(), TestCosineSimilarity_Empty(), TestCosineSimilarity_Identical() (+9 more)
+Nodes (8): code:block1 (/usr/local/go/bin/go test ./cmd/bt-dashboard ./internal/reli), code:block2 (--- FAIL: TestHandleDLQReplay_RequeuesEntryForCrossProcessRe), code:block3 (ok  	github.com/nico/go-bt-evolve/cmd/bt-dashboard	0.023s), GREEN phase, RED phase, RED phase complete, RED phase result, Summary
 
-### Community 289 - "Community 289"
-Cohesion: 0.13
-Nodes (5): Server, NewHTTPServer(), ListenerAddress(), TestSecurityListenerAddress(), TestReviewHTTPServerDeadlines()
+### Community 271 - "Community 271"
+Cohesion: 0.14
+Nodes (7): code:block1 (go test ./internal/reliability ./cmd/bt-agent ./internal/age), code:block2 (ok  github.com/nico/go-bt-evolve/internal/reliability), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES, Summary
 
-### Community 290 - "Community 290"
+### Community 272 - "Community 272"
 Cohesion: 0.15
 Nodes (18): handleAgentsList(), AgentHistoryEntry, AgentInfo, agentStatus(), ListAgents(), ListAgentsWithCB(), listRegistryAgents(), loadCircuitBreakers() (+10 more)
 
-### Community 291 - "Community 291"
+### Community 273 - "Community 273"
 Cohesion: 0.13
-Nodes (3): Milestone, Program, ProgramStore
+Nodes (5): Server, NewHTTPServer(), ListenerAddress(), TestSecurityListenerAddress(), TestReviewHTTPServerDeadlines()
 
-### Community 292 - "Community 292"
+### Community 274 - "Community 274"
+Cohesion: 0.19
+Nodes (16): extractTaskID(), init(), nlmMarkResearchQueryDone(), nlmResearchQueryKeyContent(), nlmResearchQueryRecentlySeen(), registerNotebookLMActions(), TestExtractTaskID(), TestNlmResearchQueryKeyContent() (+8 more)
+
+### Community 275 - "Community 275"
+Cohesion: 0.23
+Nodes (17): registerDecisionTreeAction(), TestDecisionTreeRoutesByChainStateMatch(), TestDecisionTreeUsesDefaultBranchWhenNoMatch(), TestDecisionTreeValidatesAsKnownNodeType(), RouteHistory(), modelRouterTree(), TestCollectBranchLabels_SkipsDefault(), TestModelRouting_HighConfidenceRoutesToModelLabel() (+9 more)
+
+### Community 276 - "Community 276"
 Cohesion: 0.16
-Nodes (14): NotebookLMTree(), findChildByName(), hasNode(), TestNotebookLMTreeIncludesIdempotencyStateActions(), TestNotebookLMTreeIsZeroLLM(), TestNotebookLMTreeRecordsRealPathDuringExecution(), TestNotebookLMTreeRoutesResearchBeforeIngestAndQuery(), TestNotebookLMTreeUsesDeterministicEvidenceGateBeforeSuccess() (+6 more)
+Nodes (13): resolvedSuperpowersCodexModel(), captureRunnerCodexArgs(), TestExecCodexRunnerBuildsReadOnlyArgs(), TestExecCodexRunnerBuildsWriteArgs(), TestExecCodexRunnerForceReadOnlyPinsSandbox(), TestExecCodexRunnerOmitsModelWhenAuto(), TestExecCodexRunnerSandboxEnvOverride(), TestResolvedSuperpowersCodexModelAllowsExplicitAuto() (+5 more)
 
-### Community 293 - "Community 293"
+### Community 277 - "Community 277"
 Cohesion: 0.22
-Nodes (16): toast(), apiPost(), approveHITL(), approveTask(), executeSprint(), pollSprintStatus(), refreshHITL(), refreshTasks() (+8 more)
+Nodes (15): bbTool, bbToolAppend(), bbToolList(), bbToolRead(), bbToolRecent(), bbToolSessionAppend(), bbToolSessionList(), bbToolSessionRead() (+7 more)
 
-### Community 294 - "Community 294"
+### Community 278 - "Community 278"
+Cohesion: 0.2
+Nodes (15): attachBlackboardTools(), PrepareBlackboard(), findBBTool(), TestBBRecentTool_NewestFirst(), TestBBSessionRecentTool(), TestBBSessionTools(), TestBBToolAppend(), TestBBToolList() (+7 more)
+
+### Community 279 - "Community 279"
 Cohesion: 0.18
 Nodes (17): AgentMetric, AlertReport, MetricsJSON, evaluateAgentAlerts(), EvaluateAlerts(), EvaluateFromJSON(), evaluateGlobalAlerts(), evaluateHTTPAlerts() (+9 more)
 
-### Community 295 - "Community 295"
+### Community 280 - "Community 280"
+Cohesion: 0.22
+Nodes (16): toast(), apiPost(), approveHITL(), approveTask(), executeSprint(), pollSprintStatus(), refreshHITL(), refreshTasks() (+8 more)
+
+### Community 281 - "Community 281"
 Cohesion: 0.11
 Nodes (18): Architecture, Bounds and reload semantics, code:json ({), Configuration, Dispatch, Dispatch guards, Env (boot defaults), Exclusion groups (+10 more)
 
-### Community 296 - "Community 296"
+### Community 282 - "Community 282"
 Cohesion: 0.12
 Nodes (3): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/engine -shor), code:block2 (--- FAIL: TestTelegramInit_HasQuestion_ShouldIMarker (0.00s)), RED phase result
 
-### Community 297 - "Community 297"
+### Community 283 - "Community 283"
 Cohesion: 0.16
 Nodes (14): code:block1 (internal/gardener/evolve_v2_test.go:2497:3: unknown field Lo), code:block2 (/usr/local/go/bin/go test ./internal/evolution ./internal/ga), code:block3 (/usr/local/go/bin/go test ./internal/evolution ./internal/ga), FILES_CHANGED, FILES_CHANGED, GREEN_COMMANDS, GREEN_COMMANDS / GREEN_RESULTS, GREEN phase (+6 more)
 
-### Community 298 - "Community 298"
+### Community 284 - "Community 284"
 Cohesion: 0.17
 Nodes (11): code:block1 (/usr/local/go/bin/go test ./cmd/bt-dashboard ./internal/reli), code:block2 (cmd/bt-dashboard/main_test.go:115:16: entries[0].RequeuedAt ), code:block3 (ok  	github.com/nico/go-bt-evolve/cmd/bt-dashboard	0.021s), FILES_CHANGED, GREEN phase, NOTES, RED_COMMAND, RED phase (+3 more)
 
-### Community 299 - "Community 299"
+### Community 285 - "Community 285"
 Cohesion: 0.16
 Nodes (12): code:block1 (/usr/local/go/bin/go test ./cmd/bt-agent -short -count=1 -ti), code:block2 (/usr/local/go/bin/go test ./internal/knowledge ./cmd/bt-agen), code:block3 (ok  	github.com/nico/go-bt-evolve/internal/knowledge	0.085s), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES (+4 more)
 
-### Community 300 - "Community 300"
-Cohesion: 0.19
-Nodes (8): sameJSONID(), scanJSONLines(), startScanJSONLines(), TestStartScanJSONLines_ReaderPanicRecoveredOnScanErr(), writeACPMessage(), ACPClient, ACPConfig, syncBuffer
-
-### Community 301 - "Community 301"
+### Community 286 - "Community 286"
 Cohesion: 0.19
 Nodes (12): CleanupOldLogs(), NewRotatingWriter(), TestCleanupOldLogs(), TestCleanupOldLogs_NoBackups(), TestNewRotatingWriter_AppendToExisting(), TestNewRotatingWriter_CreatesFile(), TestRotatingWriter_Close(), TestRotatingWriter_MaxBackups() (+4 more)
 
-### Community 302 - "Community 302"
+### Community 287 - "Community 287"
+Cohesion: 0.21
+Nodes (12): TestGoalFactory(), errTest, NewHealthMonitor(), TestHealthMonitorDegradationError(), TestHealthMonitorNilSafety(), TestHealthMonitorProbe(), TestHealthMonitorProbeFailure(), TestHealthMonitorProbeUnreachable() (+4 more)
+
+### Community 288 - "Community 288"
 Cohesion: 0.24
 Nodes (16): bbError(), bbManager(), parseBBScope(), registerBlackboardTools(), invokeBB(), newBBServer(), TestBBManagerRequiresAgentRunner(), TestBTBBDeleteMissingKeyErrors() (+8 more)
 
-### Community 303 - "Community 303"
-Cohesion: 0.16
-Nodes (13): TestRunOnceFlushesDecisionTreeTelemetry(), TestRunOnceFlushesSelectorTelemetry(), TestSelectorStatsFileSanitizesTreeID(), TestPersistenceFirstSaveCreatesParent(), TestPersistenceLockFailurePreservesState(), NewSelectorOptimizer(), TestSelectorOptimizer_ApplyOrdering(), TestSelectorOptimizer_ConcurrentMergeSumsCounts() (+5 more)
-
-### Community 304 - "Community 304"
-Cohesion: 0.2
-Nodes (17): NewEventBus(), itoa(), TestEventBus_Close(), TestEventBus_CloseMultipleSubscribers(), TestEventBus_ConcurrentAccess(), TestEventBus_DropOnFullChannel(), TestEventBus_HasFired(), TestEventBus_HasFiredAfterReset() (+9 more)
-
-### Community 305 - "Community 305"
+### Community 289 - "Community 289"
 Cohesion: 0.17
 Nodes (14): reportFusionCycleBaseChainState(), TestReportFusionCycleListsAgedUnmergedSuperpowersBranchesAsPendingPatch(), TestReportFusionCycleListsMaterializerSnapshotsFilenameSizeAndChangedCount(), TestVerifyGoapFusionEvidenceAcceptsCommittedPROpened(), TestVerifyGoapFusionEvidenceAcceptsDelegatedVerification(), TestVerifyGoapFusionEvidenceKeysOnNormalizedDelegationToken(), TestVerifyGoapFusionEvidenceRejectsBogusVerification(), writeGoapFusionCycleReport() (+6 more)
 
-### Community 306 - "Community 306"
-Cohesion: 0.22
-Nodes (14): attachBlackboardTools(), PrepareBlackboard(), findBBTool(), TestBBRecentTool_NewestFirst(), TestBBSessionRecentTool(), TestBBSessionTools(), TestBBToolAppend(), TestBBToolList() (+6 more)
+### Community 290 - "Community 290"
+Cohesion: 0.17
+Nodes (14): TestBuildDashboardKnowledgeGraph_SetsExpectedDomainsAndSurfacesGaps(), Histogram, LabeledGauge, PrometheusHandler(), RecordKGAnalytics(), RecordTask(), scrapeMetrics(), TestAgentTaskDurationHistogramSeriesRendered() (+6 more)
 
-### Community 307 - "Community 307"
-Cohesion: 0.11
-Nodes (11): renderTab(), renderAgents(), renderCompany(), loadEvolutionData(), renderEvolution(), renderMindMap(), loadScalability(), renderScalability() (+3 more)
+### Community 291 - "Community 291"
+Cohesion: 0.21
+Nodes (17): evaluateEventCondition(), TestEvaluateEventCondition_BoolAsFloat(), TestEvaluateEventCondition_BoolEvalFalse(), TestEvaluateEventCondition_BoolEvalNonBool(), TestEvaluateEventCondition_BoolEvalTrue(), TestEvaluateEventCondition_IntValue(), TestEvaluateEventCondition_KeyNotExists(), TestEvaluateEventCondition_NilChainState() (+9 more)
 
-### Community 308 - "Community 308"
+### Community 292 - "Community 292"
+Cohesion: 0.2
+Nodes (17): NewEventBus(), itoa(), TestEventBus_Close(), TestEventBus_CloseMultipleSubscribers(), TestEventBus_ConcurrentAccess(), TestEventBus_DropOnFullChannel(), TestEventBus_HasFired(), TestEventBus_HasFiredAfterReset() (+9 more)
+
+### Community 293 - "Community 293"
+Cohesion: 0.19
+Nodes (8): sameJSONID(), scanJSONLines(), startScanJSONLines(), TestStartScanJSONLines_ReaderPanicRecoveredOnScanErr(), writeACPMessage(), ACPClient, ACPConfig, syncBuffer
+
+### Community 294 - "Community 294"
 Cohesion: 0.11
 Nodes (17): BT Agents — Operator Guide, code:block1 (Agent YAML  →  Registry  →  Scheduler (optional)  →  resolve), DoorMate (not a BT agent), Evolution and agents, Execution path comparison, Known limitations, MCP agent tools (quick reference), Mental model (+9 more)
 
-### Community 309 - "Community 309"
+### Community 295 - "Community 295"
 Cohesion: 0.11
 Nodes (17): 10. Testing, 11. Known baseline caveat, 1. Node semantics, 2. Error signature, 3. Persistence (ADR-003), 4. Claude invocation, 5. Validation (strict, before any graft), 6. Guardrails (+9 more)
 
-### Community 310 - "Community 310"
+### Community 296 - "Community 296"
 Cohesion: 0.11
 Nodes (17): arc42 conformance restructures (from the official tips), arc42 Docs Consolidation & Per-Section Sync Nodes — Design, B1. Read-side repoint, B2. Section manifest + shared sync engine (new files in `internal/engine`), B3. Registered nodes + tree, B4. Pipeline integration, B5. Retirements & docgen, B6. Drift script (+9 more)
 
-### Community 311 - "Community 311"
+### Community 297 - "Community 297"
 Cohesion: 0.11
-Nodes (17): arc42 Docs Consolidation & Per-Section Sync Nodes — Implementation Plan, Canonical section layout (used by merge tasks, Go manifest, and drift script — keep all three in lockstep), code:bash (grep -F '## 10.1 Quality Tree' docs/arc42/10-quality.md && g), code:bash (grep -rn 'ADR-010' --include='*.go' internal/ cmd/), code:bash (PATH=/usr/local/go/bin:$PATH go build ./... && PATH=/usr/loc), code:bash (grep -c 'RegisterAction(' internal/engine/*.go | awk -F: '{s), code:bash (grep -c '^| Q[0-9] | \*\*' docs/arc42/01-introduction-goals.), code:bash (for f in 02-constraints 03-context-scope 04-solution-strateg) (+9 more)
+Nodes (17): arc42 Docs Consolidation & Per-Section Sync Nodes — Implementation Plan, Canonical section layout (used by merge tasks, Go manifest, and drift script — keep all three in lockstep), code:bash (cd <repo-root>), code:bash (grep -F '## 10.1 Quality Tree' docs/arc42/10-quality.md && g), code:bash (grep -rn 'ADR-010' --include='*.go' internal/ cmd/), code:bash (PATH=/usr/local/go/bin:$PATH go build ./... && PATH=/usr/loc), code:bash (git status --short          # expect: empty), code:bash (for f in 02-constraints 03-context-scope 04-solution-strateg) (+9 more)
 
-### Community 312 - "Community 312"
-Cohesion: 0.14
-Nodes (14): code:block1 (/usr/local/go/bin/go test ./internal/domains -short -count=1), code:block2 (--- FAIL: TestPrefixedDomainIDsAreDescribable/domain:code_re), code:block3 (/usr/local/go/bin/go test ./internal/domains -short -count=1), FILES_CHANGED, FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS (+6 more)
-
-### Community 313 - "Community 313"
+### Community 298 - "Community 298"
 Cohesion: 0.2
 Nodes (5): code:block1 (--- FAIL: TestBuildGoalDrivenPlan_InjectsPreviousFailureNote), GREEN phase, RED phase, Summary, Summary
 
-### Community 314 - "Community 314"
+### Community 299 - "Community 299"
 Cohesion: 0.16
 Nodes (10): code:block1 (ok  	github.com/nico/go-bt-evolve/cmd/bt-agent	0.106s), code:block2 (/usr/local/go/bin/go test ./internal/agent ./cmd/bt-agent -s), code:block3 (ok  github.com/nico/go-bt-evolve/internal/agent   1.539s), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES (+2 more)
 
-### Community 316 - "Community 316"
-Cohesion: 0.13
-Nodes (10): FitnessProbeBlock(), AuditLogBlock(), TestAuditLogBlock_Structure(), TestTraceCheckpointBlock_BuildAndValidate(), TestTraceCheckpointBlock_Structure(), TestValidateTreeFull_SameNameLeafIdiomNoCycle(), TraceCheckpointBlock(), TestAuditLogAction() (+2 more)
+### Community 300 - "Community 300"
+Cohesion: 0.14
+Nodes (14): code:block1 (/usr/local/go/bin/go test ./internal/domains -short -count=1), code:block2 (--- FAIL: TestPrefixedDomainIDsAreDescribable/domain:code_re), code:block3 (/usr/local/go/bin/go test ./internal/domains -short -count=1), FILES_CHANGED, FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS (+6 more)
 
-### Community 317 - "Community 317"
-Cohesion: 0.18
-Nodes (13): Block, Category, Compose(), ComposeFromRefs(), ComposeTaskTree(), composeWithMiddle(), ComposeSpec, TestComposedTaskTree_BuildExpand_EmptyTaskFails() (+5 more)
-
-### Community 318 - "Community 318"
+### Community 302 - "Community 302"
 Cohesion: 0.14
 Nodes (14): DiskInfo, GardenerMetrics, MemInfo, Metrics, loadGardenerMetrics(), rankTopWinners(), TestCollect_IncludesDLQCategoriesFromHook(), TestCollect_SurfacesTopEvolvedWinnersFromTrees() (+6 more)
 
-### Community 319 - "Community 319"
-Cohesion: 0.17
-Nodes (12): parallelCommand, parallelState, cloneParallelValue(), forkBlackboard(), mergeParallelOutput(), TestReviewForkMutablePointers(), TestReviewForkPreservesDataGraphWithoutSharingBranches(), TestReviewParallelCancelsAndJoins() (+4 more)
+### Community 303 - "Community 303"
+Cohesion: 0.19
+Nodes (13): CollectBlockIDs(), FitnessRanking(), RecordTaskBlockFitness(), ScoreFromBlackboard(), BlockFitnessRanking(), BlockMetricsSnapshot(), NodeMetricsSnapshot(), ObserveBlockCompose() (+5 more)
 
-### Community 320 - "Community 320"
-Cohesion: 0.13
-Nodes (16): TestBuiltinSWELite_CoverageAndUniqueness(), TestBuiltinBFCLSuitesHaveStableShape(), BFCLEntry, BFCLEvalResult, BFCLFunction, BFCLMetrics, BFCLSuite, BuiltinBFCLMultiple() (+8 more)
+### Community 304 - "Community 304"
+Cohesion: 0.25
+Nodes (16): addFusionNewCount(), addFusionNewItems(), btFusionPatternQuestion(), btFusionResearchFindings(), fusionMarkdown(), fusionNewCount(), fusionTitle(), init() (+8 more)
 
-### Community 321 - "Community 321"
-Cohesion: 0.12
-Nodes (16): TestValidate_CBCooldownSecs_TooHigh(), TestValidate_CBCooldownSecs_TooLow(), TestValidate_CBThreshold_TooHigh(), TestValidate_CBThreshold_TooLow(), TestValidate_DLQMaxEntries_TooHigh(), TestValidate_DLQMaxEntries_TooLow(), TestValidate_RetryBaseDelayMs_TooHigh(), TestValidate_RetryBaseDelayMs_TooLow() (+8 more)
+### Community 305 - "Community 305"
+Cohesion: 0.23
+Nodes (13): fixture(), read(), TestCancellationTerminatesRestoreSubprocess(), TestCorruptCooldownFailsClosed(), TestCronUsesSameCrossProcessCooldown(), TestCrossProcessPolicy(), TestRecheckDeterminesFinalVerdict(), TestRestoreFailuresPreserveProfilesAndCooldown() (+5 more)
 
-### Community 322 - "Community 322"
+### Community 306 - "Community 306"
 Cohesion: 0.12
 Nodes (16): code:bash (# 1. Get a runner token from GitHub), code:bash (# Check status), code:yaml (runs-on: [self-hosted, jetson, arm64]), code:bash (rm -rf ~/actions-runner/_work/_actions), Nightly tests failing with "Ollama not reachable", Prerequisites, Quick Setup, Runner appears offline (+8 more)
 
-### Community 323 - "Community 323"
-Cohesion: 0.12
-Nodes (17): Agent Executor, Circuit Breaker, code:go (type CircuitBreaker struct { ... }), code:go (func RetryWithBackoff(fn func() error, maxAttempts int, base), code:go (type DeadLetterQueue struct { ... }), code:go (type WorkerPool struct { ... }), code:go (type ConcurrencyLimiter struct { ... }), code:go (type Queue interface {) (+9 more)
-
-### Community 324 - "Community 324"
-Cohesion: 0.12
-Nodes (17): Audit, code:go (type RateLimiter struct { ... }), code:go (func SanitizeMiddleware(next http.Handler) http.Handler), code:go (type SecurityHeadersConfig struct {), code:go (func CrossOriginMiddleware(allowedOrigins []string) func(htt), code:go (type IPFilterMode int  // FilterAllowlist | FilterBlocklist), code:go (func AuditSecurityEvent(ctx context.Context, eventType strin), code:go (func GenerateRequestID() string            // crypto/rand, 1) (+9 more)
-
-### Community 325 - "Community 325"
+### Community 307 - "Community 307"
 Cohesion: 0.12
 Nodes (16): code:block1 (┌──────────────────────────────────────────────┐), Idle assets that the vision needs (build on, don't rebuild), Part 1 — Review: Current State vs arc42 Goals, Part 2 — Target Architecture, Part 3 — Phased Roadmap, Part 4 — Sequencing, Risks, Metrics, Personalized Self-Evolving Agents — Strategy and Implementation Plan, Phase 0 — Close the creation→execution loop (prerequisite, small) (+8 more)
 
-### Community 326 - "Community 326"
+### Community 308 - "Community 308"
 Cohesion: 0.12
 Nodes (16): Alternatives considered, ApproveDesign HITL enrichment, Brainstorm Grill-Driven Design-Improvement Loop — Design, code:block1 (MemSequence BrainstormBranch), Design, Error handling, Goals, GrillDesignArtifact (modified — becomes the ReviewCycle reviewer) (+8 more)
 
-### Community 327 - "Community 327"
+### Community 309 - "Community 309"
 Cohesion: 0.13
 Nodes (9): code:block1 (/usr/local/go/bin/go test ./cmd/bt-agent -short -count=1 -ti), code:block2 (--- FAIL: TestBTEvolveBottlenecksPrioritizedAndCapped (0.00s), FILES_CHANGED, NOTES, RED_COMMAND, RED phase complete, RED phase result, RED_RESULT (+1 more)
 
-### Community 328 - "Community 328"
+### Community 310 - "Community 310"
 Cohesion: 0.15
 Nodes (8): code:block1 (PATH=/usr/local/go/bin:$PATH /usr/local/go/bin/go test ./int), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/agent	3.198s), code:block3 (ok  	github.com/nico/go-bt-evolve/internal/agent	2.696s), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES, Summary
 
-### Community 329 - "Community 329"
+### Community 311 - "Community 311"
+Cohesion: 0.12
+Nodes (17): Audit, code:go (type RateLimiter struct { ... }), code:go (func SanitizeMiddleware(next http.Handler) http.Handler), code:go (type SecurityHeadersConfig struct {), code:go (func CrossOriginMiddleware(allowedOrigins []string) func(htt), code:go (type IPFilterMode int  // FilterAllowlist | FilterBlocklist), code:go (func AuditSecurityEvent(ctx context.Context, eventType strin), code:go (func GenerateRequestID() string            // crypto/rand, 1) (+9 more)
+
+### Community 312 - "Community 312"
+Cohesion: 0.12
+Nodes (17): Agent Executor, Circuit Breaker, code:go (type CircuitBreaker struct { ... }), code:go (func RetryWithBackoff(fn func() error, maxAttempts int, base), code:go (type DeadLetterQueue struct { ... }), code:go (type WorkerPool struct { ... }), code:go (type ConcurrencyLimiter struct { ... }), code:go (type Queue interface {) (+9 more)
+
+### Community 313 - "Community 313"
+Cohesion: 0.19
+Nodes (13): finishProbe(), headerEquals(), headerPresent(), probeCSRFCookie(), ProbeDashboard(), probeSessionCookies(), statusCheck(), TestProbeDashboard_FailsMissingHardeningHeaders() (+5 more)
+
+### Community 314 - "Community 314"
 Cohesion: 0.28
 Nodes (14): TemplatesDir(), cmdCreate(), cmdDelete(), cmdInstallTemplates(), cmdList(), cmdLogs(), cmdRun(), cmdSchedule() (+6 more)
 
-### Community 330 - "Community 330"
+### Community 316 - "Community 316"
+Cohesion: 0.14
+Nodes (9): FitnessProbeBlock(), AuditLogBlock(), TestAuditLogBlock_Structure(), TestTraceCheckpointBlock_BuildAndValidate(), TestTraceCheckpointBlock_Structure(), TestValidateTreeFull_SameNameLeafIdiomNoCycle(), TraceCheckpointBlock(), TestAuditLogAction() (+1 more)
+
+### Community 317 - "Community 317"
 Cohesion: 0.16
-Nodes (4): Session, SessionInfo, SessionStore, SessionStoreConfig
+Nodes (7): BuildBudget(), estimateTokensForTest(), TestBuildBudget_MaxTokens_TripsOnCumulativeUsage(), TestGenerateWithRetry_IncrementsBlackboardTokensUsed(), budgetCmd, budgetTokensMockLLM, TestBuildBudget_MaxTicks()
 
-### Community 332 - "Community 332"
-Cohesion: 0.19
-Nodes (12): collectSelectorNames(), DecisionTreeStatsFile(), SelectorStatsFile(), selectorTelemetryPath(), DecisionTreeChildOutcome, RecordDecisionTreeChildOutcomes(), RecordSelectorChildOutcomes(), TestRecordDecisionTreeChildOutcomes_SkipsEmptyAndMalformed() (+4 more)
-
-### Community 333 - "Community 333"
-Cohesion: 0.41
-Nodes (13): partialLandingRunner, greenFail(), greenPass(), partialLandingRun(), redFail(), TestBatchFirstTaskFailureStaysAllOrNothing(), TestBatchFullSuccessUnwrapsSnapshots(), TestBatchMidBatchSnapshotDegradeStillUnwraps() (+5 more)
-
-### Community 334 - "Community 334"
-Cohesion: 0.36
-Nodes (15): LiveMutationJournal(), RunTaskMutable(), enqueueWhenLiveThenRelease(), init(), marksOf(), muttestMark(), newGateBB(), TestRunTaskMutableCursorArithmeticAdd() (+7 more)
-
-### Community 335 - "Community 335"
+### Community 318 - "Community 318"
 Cohesion: 0.17
 Nodes (5): enforceIslandCap(), mergeIslandPopulation(), islandArchive, IslandModel, IslandStats
 
-### Community 336 - "Community 336"
+### Community 319 - "Community 319"
 Cohesion: 0.25
 Nodes (5): cloneEntry(), newScopedStore(), normalizeKey(), truncateSummary(), scopedStore
 
-### Community 337 - "Community 337"
+### Community 320 - "Community 320"
+Cohesion: 0.18
+Nodes (6): TestPlanMultiple(), Planner, PlanMultiple(), plannerNode, plannerNodeHeap, PlannerStats
+
+### Community 321 - "Community 321"
 Cohesion: 0.23
 Nodes (6): NewGoalStore(), TestGoalStore_AddRemoveRoundtrip(), TestGoalStore_LoadEmpty(), TestGoalStore_Queue(), TestGoalStore_ValidatesInput(), GoalStore
 
-### Community 338 - "Community 338"
+### Community 322 - "Community 322"
 Cohesion: 0.13
 Nodes (6): ActionFunc, ActionRegistry, Agent, AgentCallbacks, AgentRun, AgentState
 
-### Community 339 - "Community 339"
-Cohesion: 0.14
-Nodes (11): TestArc42DocsyncNodesRegistered(), init(), init(), registerSuperpowersConditions(), TestRegisterCondition_And_GetCondition(), TestRegisteredNames_SortedAndComplete(), RegisterCondition(), RegisteredActionNames() (+3 more)
+### Community 323 - "Community 323"
+Cohesion: 0.18
+Nodes (7): handleSummary(), SolOnly(), Client, Config, LLM, DefaultConfig(), extractSection()
 
-### Community 340 - "Community 340"
+### Community 324 - "Community 324"
+Cohesion: 0.17
+Nodes (10): ParseCheckpointContract(), TestCheckpointContractPreservesTypedGOAPFacts(), TestCheckpointContractRejectsMalformedOrWeakenedDeclarations(), TestCheckpointSourceAndFactsCannotBeRemovedByEvolution(), CheckpointContract, hasPostconditionContract(), contractNumber(), contractValuesEqual() (+2 more)
+
+### Community 325 - "Community 325"
 Cohesion: 0.12
 Nodes (15): Architecture, Background constraints, code:go (// LiveRunInfo names the run for registry listing and persis), code:go (type MutationOp struct {), code:go (// internal/engine — nil-checked, wired from cmd/bt-agent.), Decisions (from brainstorming), Error handling, Goal (+7 more)
 
-### Community 341 - "Community 341"
+### Community 326 - "Community 326"
 Cohesion: 0.2
 Nodes (11): code:block1 (ollama_test.go:41: expected Generate to succeed after one ji), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/llm	21.140s), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES, RED_COMMAND (+3 more)
 
-### Community 342 - "Community 342"
+### Community 327 - "Community 327"
 Cohesion: 0.19
 Nodes (8): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/llm	3.844s), code:block2 (--- FAIL: TestChainAction_SingleShotExecutors_RetryOnTransie), code:block3 (ok  	github.com/nico/go-bt-evolve/internal/engine	50-55s), GREEN phase, RED phase, Summary, Summary, Summary
 
-### Community 343 - "Community 343"
+### Community 328 - "Community 328"
 Cohesion: 0.19
 Nodes (7): FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES, RED phase, Summary
 
-### Community 344 - "Community 344"
+### Community 329 - "Community 329"
 Cohesion: 0.15
 Nodes (7): code:block1 (/usr/local/go/bin/go test ./cmd/bt-agent ./cmd/bt-gardener .), code:block2 (ok  	github.com/nico/go-bt-evolve/cmd/bt-agent	0.235s), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES, Summary
 
-### Community 345 - "Community 345"
+### Community 330 - "Community 330"
 Cohesion: 0.21
 Nodes (6): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/knowledge	0.086s), GREEN phase, RED phase, RED phase complete, RED phase result, Summary
 
-### Community 346 - "Community 346"
+### Community 331 - "Community 331"
 Cohesion: 0.31
 Nodes (13): main(), newEvaluatorServer(), newTestEvaluatorServer(), sampleTree(), seedRecords(), TestHandleDeepen_DefaultsMaxDepthAndAutoSavesTT(), TestHandleDeepen_HonorsExplicitMaxDepth(), TestHandleEvaluate_NoTreeLoadedReturnsError() (+5 more)
 
-### Community 347 - "Community 347"
-Cohesion: 0.24
-Nodes (3): Registry, cloneTree(), NewRegistry()
+### Community 332 - "Community 332"
+Cohesion: 0.26
+Nodes (8): NewFallbackLLM(), TestFallbackLLM_CircuitBreakerSkipsPersistentlyFailingModel(), TestFallbackLLM_GenerateAllPanicReturnsAggregatedError(), TestFallbackLLM_GenerateRecoversPanicAndTriesNextModel(), TestFallbackLLM_GenerateReturnsAllFailures(), TestFallbackLLM_GenerateUsesNextModelAfterPrimaryFailure(), TestFallbackLLM_ValidationErrorsDoNotTripBreaker(), stubLLM
 
-### Community 348 - "Community 348"
-Cohesion: 0.18
-Nodes (10): TestComposeAndExpand(), ComposeTaskTreeAgentic(), Expand(), expandNode(), HasSubTreeRefs(), annotateBlockSource(), traceBlockOp(), TestComposePreset_Agentic() (+2 more)
-
-### Community 349 - "Community 349"
-Cohesion: 0.16
-Nodes (6): TestEngineBlackboardAppendTool(), TestEngineBlackboardToolsRoundTrip(), TestEngineExpandBBTemplate_InLLMCall(), TestEnginePrepareBlackboard_Idempotent(), promptCaptureLLM, seqMockLLM
-
-### Community 350 - "Community 350"
-Cohesion: 0.25
-Nodes (11): circuitBreakerCmd, errorAwareCmd, init(), registerReliabilityNodes(), buildCircuitBreaker(), buildTimeout(), circuitBreakerFor(), cooldownFromNode() (+3 more)
-
-### Community 351 - "Community 351"
-Cohesion: 0.21
-Nodes (13): BuiltinToolBench(), EvaluateToolBench(), formatAvailableAPIs(), TestToolBench_APISelection(), TestToolBench_EmptyEntries(), TestToolBench_EvaluateWithCodeReviewTree(), TestToolBench_EvaluateWithGoDevTree(), TestToolBench_IndividualEntries() (+5 more)
-
-### Community 352 - "Community 352"
+### Community 333 - "Community 333"
 Cohesion: 0.13
 Nodes (15): LoadDotEnv(), stripInlineComment(), TestLoadDotEnv_Basic(), TestLoadDotEnv_CommentsAndBlanks(), TestLoadDotEnv_EmptyFile(), TestLoadDotEnv_ExportPrefix(), TestLoadDotEnv_InlineComments(), TestLoadDotEnv_MissingFile() (+7 more)
 
-### Community 353 - "Community 353"
+### Community 334 - "Community 334"
+Cohesion: 0.24
+Nodes (13): buildRunActivitySummary(), fencedItems(), isFactLine(), joinCapped(), salientOutputLines(), TestBuildRunActivitySummaryCapsLongFencedLists(), TestBuildRunActivitySummaryEmptyEverything(), TestBuildRunActivitySummaryFailureLeadsWithReason() (+5 more)
+
+### Community 335 - "Community 335"
+Cohesion: 0.24
+Nodes (3): Registry, cloneTree(), NewRegistry()
+
+### Community 336 - "Community 336"
+Cohesion: 0.14
+Nodes (10): BaselineStore, BenchmarkResult, HasRegressions(), HasWarnings(), pctChange(), TestHasRegressions(), TestHasWarnings(), Comparator (+2 more)
+
+### Community 337 - "Community 337"
+Cohesion: 0.19
+Nodes (14): collectSystem(), buildRoutePrompt(), classifyTaskRoute(), exactLabel(), extractJSONObject(), fallbackDecision(), isModelRouted(), parseRouteResponse() (+6 more)
+
+### Community 338 - "Community 338"
+Cohesion: 0.25
+Nodes (10): CodexRunner, execCodexRunner, isolateProductionExploration(), isolationGit(), isolationRepo(), TestExplorationCLIIsolatedBeforeProbe(), TestExplorationIsolationAliasAndImplementationWorktree(), TestExplorationIsolationCancelledBeforeAgent() (+2 more)
+
+### Community 339 - "Community 339"
+Cohesion: 0.16
+Nodes (6): TestEngineBlackboardAppendTool(), TestEngineBlackboardToolsRoundTrip(), TestEngineExpandBBTemplate_InLLMCall(), TestEnginePrepareBlackboard_Idempotent(), promptCaptureLLM, seqMockLLM
+
+### Community 340 - "Community 340"
 Cohesion: 0.18
 Nodes (6): saveBaseline(), TestRunCheckNoRegressionExitsClean(), TestRunCheckRejectsEmptyInput(), TestRunCheckSeverityExitCodes(), TestRunResetRemovesBaselineFile(), TestRunShowWithBaseline()
 
-### Community 354 - "Community 354"
-Cohesion: 0.24
-Nodes (12): Alert, apiFetch(), getCookie(), sleep(), cbIcon(), createAgent(), deleteAgent(), loadAgents() (+4 more)
+### Community 341 - "Community 341"
+Cohesion: 0.25
+Nodes (12): computeLayout(), loadMindMap(), nodeAtPath(), nodeColor(), nodeColors, pushDescendantsDown(), renderTree(), resolveCollisions() (+4 more)
 
-### Community 355 - "Community 355"
-Cohesion: 0.13
-Nodes (14): BT Agent Platform, code:bash (PATH=/usr/local/go/bin:$PATH make check-quick), Commands, Conventions, Known flake, MCP, Toolchain — read this first, BT Agent Platform (+6 more)
-
-### Community 356 - "Community 356"
+### Community 342 - "Community 342"
 Cohesion: 0.13
 Nodes (14): Binary Size Overview, code:block1 (Go version:), code:block2 (ok  	github.com/nico/go-bt-evolve/cmd/bt-assistant	0.035s), code:block3 (-rwxrwxr-x 1 nico nico  13M Jun  2 08:32 /home/nico/go-bt-ev), code:block4 (bt-agent:), code:block5 (coverage: 100.0), code:block6 ({"packages":19,"status":"ok","trees":38,"uptime":"operationa), code:block7 (=== Doc Drift Validation ===) (+6 more)
 
-### Community 357 - "Community 357"
+### Community 343 - "Community 343"
+Cohesion: 0.13
+Nodes (14): 7.1 Infrastructure Level 1, 7.2.1 Process topology, 7.2.2 Storage and configuration, 7.2.3 Network and effective configuration, 7.2 Infrastructure Level 2, 7.3 Release, Recovery and Operational Checks, 7. Deployment View, Bounded operational qualification — 2026-10-01 (+6 more)
+
+### Community 344 - "Community 344"
 Cohesion: 0.13
 Nodes (14): 1. Shared primitive — `seedCodeFixProgram`, 2. Part A — Error-handler escalation (reactive), 3. Part B — Proactive self-audit agent (proactive), Architecture, code:block1 ([ClaudeErrorHandler]  tree -1, unresolvable + is-bug ──┐), code:go (func seedCodeFixProgram(sig, title, milestoneGoal, source st), Files, Goal (+6 more)
 
-### Community 358 - "Community 358"
+### Community 345 - "Community 345"
+Cohesion: 0.25
+Nodes (11): circuitBreakerCmd, errorAwareCmd, init(), registerReliabilityNodes(), buildCircuitBreaker(), buildTimeout(), circuitBreakerFor(), cooldownFromNode() (+3 more)
+
+### Community 346 - "Community 346"
+Cohesion: 0.13
+Nodes (14): BT Agent Platform, code:bash (PATH=/usr/local/go/bin:$PATH make check-quick), Commands, Conventions, Known flake, MCP, Toolchain — read this first, BT Agent Platform (+6 more)
+
+### Community 347 - "Community 347"
 Cohesion: 0.18
 Nodes (10): code:block1 (internal/agentexec/wiring_test.go:47:12: undefined: ResolveG), code:block2 (PATH=/usr/local/go/bin:$PATH go test ./internal/agentexec ./), code:block3 (ok  	github.com/nico/go-bt-evolve/internal/agentexec	0.018s), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES (+2 more)
 
-### Community 359 - "Community 359"
+### Community 348 - "Community 348"
 Cohesion: 0.14
 Nodes (13): code:block1 (/usr/local/go/bin/go test -race ./internal/blackboard -short), code:block2 (--- FAIL: TestReviewBlackboardPeerFileLockDoesNotStallRunSco), code:block3 (/usr/local/go/bin/go test -race ./internal/blackboard -short), FILES_CHANGED, FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS (+5 more)
 
-### Community 360 - "Community 360"
+### Community 349 - "Community 349"
 Cohesion: 0.13
 Nodes (14): code:block1 (/usr/local/go/bin/go test -race ./internal/util -short -coun), code:block2 (# github.com/nico/go-bt-evolve/internal/util [github.com/nic), code:block3 (save error = commit .../fixture.json: rename .../fixture.jso), code:block4 (/usr/local/go/bin/go test -race ./internal/util -short -coun), FILES_CHANGED, FILES_CHANGED, GREEN_COMMANDS, GREEN phase (+6 more)
 
-### Community 361 - "Community 361"
+### Community 350 - "Community 350"
 Cohesion: 0.13
 Nodes (14): code:block1 (/usr/local/go/bin/go test ./internal/engine -short -count=1 ), code:block2 (--- FAIL: TestBuildCompositeChildren_GuardEvaluatedAtRunTime), code:go (if cond := guardConditionForChild(node.Edges, i); cond != ""), code:block4 (/usr/local/go/bin/go test ./internal/engine -short -count=1 ), FILES_CHANGED, FILES_CHANGED, GREEN_COMMANDS, GREEN phase (+6 more)
 
-### Community 362 - "Community 362"
-Cohesion: 0.23
-Nodes (9): classify(), Ensure(), renewSession(), runCLI(), saveState(), stateError(), policy, Result (+1 more)
-
-### Community 363 - "Community 363"
-Cohesion: 0.24
-Nodes (10): newFakeTransport(), TestAuctioneer_AttributesBidToAnnouncedCandidate(), TestAuctioneer_CollectsValidBids(), TestAuctioneer_DropsInvalidAndForeignBids(), TestAuctioneer_FansOutToAllCandidates(), TestAuctioneer_RejectsInvalidAnnouncement(), TestAuctioneer_SkipsErroringAndEmptyCandidates(), TestBTAgentClient_SendTask_RetriesTransientFailureThenSucceeds() (+2 more)
-
-### Community 364 - "Community 364"
+### Community 351 - "Community 351"
 Cohesion: 0.34
 Nodes (13): concurrencyScheduler(), receiveAgent(), TestSchedulerBoundedOldestFirst(), TestSchedulerBusyLaneDoesNotConsumeBreakerProbe(), TestSchedulerConcurrencyConfig(), TestSchedulerConcurrentDueAgents(), TestSchedulerIdleOnlyAfterAllWorkers(), TestSchedulerPanicAndMissingAgentReleaseLanes() (+5 more)
 
-### Community 366 - "Community 366"
-Cohesion: 0.23
-Nodes (11): ComposeTaskTreeWithHITL(), HumanGateBlock(), TestComposeTaskTreeWithHITL_EmptyNameDefaults(), TestComposeTaskTreeWithHITL_IncludesHumanGate(), TestComposeTaskTreeWithHITL_NilRegistryUsesDefault(), TestComposeTaskTreeWithHITL_RootName(), TestComposeTaskTreeWithHITL_Validates(), TestComposeTaskTreeWithHITL_WithStrategy() (+3 more)
-
-### Community 367 - "Community 367"
+### Community 353 - "Community 353"
 Cohesion: 0.2
 Nodes (10): fakeSuperpowersReviewRunner, fixedDiffRunner, buildSuperpowersReviewPrompt(), parseSuperpowersReviewVerdict(), superpowersTaskReview(), TestParseSuperpowersReviewVerdict(), TestSuperpowersTaskGreenAction_InjectsReviewFeedbackWhenPresent(), TestSuperpowersTaskGreenAction_NoFeedback_PromptUnchanged() (+2 more)
 
-### Community 368 - "Community 368"
-Cohesion: 0.16
-Nodes (6): EdgeType, maxTokensFromMetadata(), ValidateEdge(), NodeValidationInfo, SerializableNode, TypedEdge
-
-### Community 369 - "Community 369"
+### Community 354 - "Community 354"
 Cohesion: 0.21
 Nodes (5): LoadNotebookLMState(), loadNotebookLMStateAction(), QueryHash(), saveNotebookLMStateAction(), NotebookLMState
 
-### Community 370 - "Community 370"
-Cohesion: 0.18
-Nodes (5): TestSharedJSONConcurrentTransactions(), TestSharedJSONFailurePreservesCommittedValue(), UpdateSharedJSON(), UpdateSharedJSONWithContext(), GoalAttemptStore
+### Community 355 - "Community 355"
+Cohesion: 0.25
+Nodes (5): Catalog, extractYAMLField(), inferTree(), splitTags(), CatalogEntry
 
-### Community 371 - "Community 371"
+### Community 356 - "Community 356"
+Cohesion: 0.23
+Nodes (9): classify(), Ensure(), renewSession(), runCLI(), saveState(), stateError(), policy, Result (+1 more)
+
+### Community 357 - "Community 357"
 Cohesion: 0.14
 Nodes (13): bookmarkBtn, camBtn, canvasBox, doormateTab, emptyState, inputEl, micBtn, pageContainer (+5 more)
 
-### Community 372 - "Community 372"
+### Community 358 - "Community 358"
+Cohesion: 0.16
+Nodes (6): EdgeType, maxTokensFromMetadata(), ValidateEdge(), NodeValidationInfo, SerializableNode, TypedEdge
+
+### Community 359 - "Community 359"
 Cohesion: 0.14
 Nodes (13): Acceptance Criteria, code:go (package fusion), code:bash (bt-agent run fusion-deliberation "Survey the strongest argum), code:bash (go build ./...), code:bash (git add docs/fusion-bt-agent.md README.md), code:bash (cd /home/nico/go-bt-evolve), Current Codebase Anchors, Final Verification Checklist (+5 more)
 
-### Community 373 - "Community 373"
+### Community 360 - "Community 360"
 Cohesion: 0.14
-Nodes (13): code:text (docs/superpowers/runs/<run-id>/), code:markdown (### Task N: Title), code:go (evolution.SerializableNode{), code:text (ApproveSuperpowersPRPush (HumanApprovalGate, side_effect_cla), code:yaml (name: superpowers-prod-runner), Current Stub Surface To Replace, Done Definition, Production Acceptance Criteria (+5 more)
+Nodes (13): code:text (docs/superpowers/runs/<run-id>/), code:go (sel("Phase1_Design",), code:markdown (### Task N: Title), code:go (evolution.SerializableNode{), code:go (func SuperpowersPipelineTree() *evolution.SerializableNode {), Current Stub Surface To Replace, Done Definition, Production Acceptance Criteria (+5 more)
 
-### Community 374 - "Community 374"
-Cohesion: 0.14
-Nodes (13): 7.1 Infrastructure Level 1, 7.2.1 Process topology, 7.2.2 Storage and configuration, 7.2.3 Network and effective configuration, 7.2 Infrastructure Level 2, 7.3 Release, Recovery and Operational Checks, 7. Deployment View, Bounded operational qualification — 2026-10-01 (+5 more)
-
-### Community 375 - "Community 375"
+### Community 361 - "Community 361"
 Cohesion: 0.14
 Nodes (13): 1. Tree change (`internal/domains/goap_fusion_loop.go`), 2. Quota memory (`internal/engine/actions_goap_fusion_claude_review.go`), 3. New action `RunClaudeCodeReviewResearch`, code:go (sel("ResearchRouter",), code:go (const goapReviewAllowedTools = "Read,Glob,Grep," +), Decisions (defaults chosen during design), Design, Error handling summary (+5 more)
 
-### Community 376 - "Community 376"
+### Community 362 - "Community 362"
 Cohesion: 0.23
 Nodes (5): code:block1 (internal/domains/domains_test.go:371:10: undefined: AuctionD), code:block2 (internal/domains/domains_test.go:367:10: undefined: AuctionD), GREEN phase, RED phase, Summary
 
-### Community 377 - "Community 377"
-Cohesion: 0.23
-Nodes (7): code:block1 (/usr/local/go/bin/go test ./internal/domains -short -count=1), code:block2 (--- FAIL: TestEveryDomainTreeIsEngineBuildable/superpowers_w), FILES_CHANGED, NOTES, RED_COMMAND, RED Phase Result — Task 3, RED_RESULT
-
-### Community 378 - "Community 378"
+### Community 363 - "Community 363"
 Cohesion: 0.14
 Nodes (13): code:block1 (/usr/local/go/bin/go test ./internal/domains -short -count=1), code:block2 (/usr/local/go/bin/go test ./internal/domains -short -count=1), code:block3 (=== RUN 1 ===  ok  github.com/nico/go-bt-evolve/internal/dom), FILES_CHANGED, FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS (+5 more)
 
-### Community 379 - "Community 379"
+### Community 364 - "Community 364"
 Cohesion: 0.23
 Nodes (10): code:block1 (/usr/local/go/bin/go test ./internal/benchmark -short -count), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/benchmark	0.065s), code:block3 (ok  	github.com/nico/go-bt-evolve/internal/domains	5.185s), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES (+2 more)
 
-### Community 380 - "Community 380"
+### Community 365 - "Community 365"
 Cohesion: 0.14
 Nodes (13): code:block1 (/usr/local/go/bin/go test ./internal/security -short -count=), code:block2 (--- FAIL: TestRotateKey_ReplacementDoesNotSilentlyExpire (0.), code:block3 (/usr/local/go/bin/go test ./internal/security -short -count=), FILES_CHANGED, FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS (+5 more)
 
-### Community 381 - "Community 381"
+### Community 366 - "Community 366"
 Cohesion: 0.14
 Nodes (13): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/knowledge -s), code:block2 (/usr/local/go/bin/go test ./internal/knowledge -short -count), code:block3 (ok  github.com/nico/go-bt-evolve/internal/knowledge  21.290s), FILES_CHANGED, FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS (+5 more)
 
-### Community 382 - "Community 382"
+### Community 367 - "Community 367"
 Cohesion: 0.14
 Nodes (13): code:block1 (/usr/local/go/bin/go test ./internal/engine -run 'TestBuildR), code:block2 (--- FAIL: TestBuildRateLimit_IntervalResolution), code:block3 (/usr/local/go/bin/go test ./internal/engine -run 'TestBuildR), FILES_CHANGED, FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS (+5 more)
 
-### Community 383 - "Community 383"
+### Community 368 - "Community 368"
+Cohesion: 0.23
+Nodes (7): code:block1 (/usr/local/go/bin/go test ./internal/domains -short -count=1), code:block2 (--- FAIL: TestEveryDomainTreeIsEngineBuildable/superpowers_w), FILES_CHANGED, NOTES, RED_COMMAND, RED Phase Result — Task 3, RED_RESULT
+
+### Community 369 - "Community 369"
 Cohesion: 0.14
 Nodes (13): code:block1 (/usr/local/go/bin/go test ./internal/agent ./internal/a2a -s), code:block2 (--- FAIL: TestAgentCircuitBreakerStore_SaveLocksReadModifyWr), code:block3 (/usr/local/go/bin/go test ./internal/agent ./internal/a2a -s), FILES_CHANGED, FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS (+5 more)
 
-### Community 384 - "Community 384"
+### Community 370 - "Community 370"
 Cohesion: 0.24
-Nodes (5): Client, Config, LLM, DefaultConfig(), extractSection()
+Nodes (10): ComposeTaskTreeWithHITL(), HumanGateBlock(), TestComposeTaskTreeWithHITL_EmptyNameDefaults(), TestComposeTaskTreeWithHITL_NilRegistryUsesDefault(), TestComposeTaskTreeWithHITL_RootName(), TestComposeTaskTreeWithHITL_Validates(), TestComposeTaskTreeWithHITL_WithStrategy(), TestHumanGateBlock_ReturnsFreshValues() (+2 more)
 
-### Community 385 - "Community 385"
-Cohesion: 0.23
-Nodes (8): NewHabitMiner(), minerInput(), TestHabitMiner_BelowThresholdYieldsNothing(), TestHabitMiner_DetectsRecurringPattern(), TestHabitMiner_EmbeddingFailureFallsBackToKeywords(), TestHabitMiner_UsesEmbeddingsWhenAvailable(), TestLog_AppendAllSince(), TestSanitizeUserID()
+### Community 371 - "Community 371"
+Cohesion: 0.22
+Nodes (9): TaskLogPath(), Entry, auditLogAction(), fitnessProbeAction(), fitnessScoreFromBB(), init(), registerOpsActions(), traceCheckpointAction() (+1 more)
 
-### Community 386 - "Community 386"
-Cohesion: 0.15
-Nodes (3): CrisisDetector, CrisisState, InterveneAction
-
-### Community 388 - "Community 388"
-Cohesion: 0.32
-Nodes (11): bbManager(), bbManagerAt(), cmdBB(), cmdBBList(), cmdBBRead(), cmdBBScopes(), parseBBScopeFlag(), printBBUsage() (+3 more)
-
-### Community 389 - "Community 389"
+### Community 372 - "Community 372"
 Cohesion: 0.21
 Nodes (4): Clock, NewFakeClock(), FakeClock, RealClock
 
-### Community 390 - "Community 390"
+### Community 373 - "Community 373"
+Cohesion: 0.17
+Nodes (3): stringsContains(), TestGetSLOMetrics_SameInstance(), TestSLOMetrics_Summary()
+
+### Community 374 - "Community 374"
+Cohesion: 0.15
+Nodes (3): CrisisDetector, CrisisState, InterveneAction
+
+### Community 376 - "Community 376"
+Cohesion: 0.32
+Nodes (11): bbManager(), bbManagerAt(), cmdBB(), cmdBBList(), cmdBBRead(), cmdBBScopes(), parseBBScopeFlag(), printBBUsage() (+3 more)
+
+### Community 377 - "Community 377"
+Cohesion: 0.21
+Nodes (9): EffectReceipt, ParseFileTask(), TestFileTaskContractAndGovernancePreservation(), FileTaskSpec, preservesFileTasks(), taskFactory(), TestTaskFactoryBuildsUnpublishedGovernedWork(), TestTaskFactoryFileCapabilityRequiresOwnerAndReadbackContract() (+1 more)
+
+### Community 378 - "Community 378"
+Cohesion: 0.15
+Nodes (12): code:block1 (token absent ──────────────► skip (pr_shepherd_no_token, no_), Config, Files, Fix loop (CI red), GitHub API client, Goal, Non-goals, Placement (per Nico: extend the goap-fusion tree) (+4 more)
+
+### Community 379 - "Community 379"
+Cohesion: 0.15
+Nodes (12): code:go (func TestParseClaudeRateLimitReset(t *testing.T) {), code:go (const claudeResetMargin = 2 * time.Minute), code:go (func isolateClaudeBackoffStore(t *testing.T) {), code:go (type sharedClaudeBackoff struct {), code:go (func saveClaudeBackoffState(bb *Blackboard, until time.Time)), code:go (// actions_superpowers_prod.go), Global Constraints, Shared Claude Rate-Limit Backoff Implementation Plan (+4 more)
+
+### Community 380 - "Community 380"
+Cohesion: 0.15
+Nodes (7): code:block1 (ok  	github.com/nico/go-bt-evolve/cmd/bt-agent	0.106s), code:block2 (ok  github.com/nico/go-bt-evolve/internal/agent   1.539s), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES, Summary
+
+### Community 381 - "Community 381"
 Cohesion: 0.18
-Nodes (4): CategorizedError, ErrorContext, TestJitterStrategy_String(), JitterStrategy
+Nodes (5): code:block1 (/usr/local/go/bin/go test ./cmd/bt-dashboard ./internal/reli), code:block2 (--- FAIL: TestHandleDLQReplay_RequeuesEntryForCrossProcessRe), RED phase complete, RED phase result, Summary
+
+### Community 382 - "Community 382"
+Cohesion: 0.27
+Nodes (4): code:block1 (--- FAIL: TestVerifyScheduledGoapFusionBuildTreeMaterialized), GREEN phase, RED phase, Summary
+
+### Community 383 - "Community 383"
+Cohesion: 0.22
+Nodes (11): code:block1 (/usr/local/go/bin/go test ./internal/evolution ./internal/ga), code:block2 (internal/evolution/multi_objective_test.go:353:15: undefined), code:block3 (--- FAIL: TestValidationGate_ParetoAcceptsRecoveryForSuccess), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES (+3 more)
+
+### Community 384 - "Community 384"
+Cohesion: 0.21
+Nodes (11): code:block1 (/usr/local/go/bin/go test ./internal/engine ./cmd/benchcmp .), code:block2 (--- FAIL: TestPrioritizeGoapGoals_NoImportCycleFalseGoalFrom), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES, RED_COMMAND (+3 more)
+
+### Community 385 - "Community 385"
+Cohesion: 0.18
+Nodes (10): code:block1 (internal/evolution/island_test.go:85:23: im.Stats().Resurrec), code:block2 (--- FAIL: TestEvolveWithExperience_ResurrectsExtinctSpeciali), code:block3 (/usr/local/go/bin/go test ./internal/evolution ./cmd/bt-agen), code:block4 (ok  github.com/nico/go-bt-evolve/internal/evolution  4.429s), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS (+2 more)
+
+### Community 386 - "Community 386"
+Cohesion: 0.21
+Nodes (10): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/security ./c), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/security	4.021s), code:block3 (ok  	github.com/nico/go-bt-evolve/internal/security	4.057s), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES (+2 more)
+
+### Community 387 - "Community 387"
+Cohesion: 0.17
+Nodes (11): code:block1 (/usr/local/go/bin/go test ./internal/a2a ./internal/agentexe), code:block2 (--- FAIL: TestDaemonConfiguresAuctionDelegateHook (0.00s)), code:block3 (/usr/local/go/bin/go test ./internal/a2a ./internal/agentexe), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES (+3 more)
+
+### Community 388 - "Community 388"
+Cohesion: 0.15
+Nodes (12): code:block1 (/usr/local/go/bin/go test ./internal/gardener ./cmd/bt-dashb), code:block2 (--- FAIL: TestRegistry_DomainDescriptionsResolveThroughDescr), FILES_CHANGED, FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES (+4 more)
+
+### Community 389 - "Community 389"
+Cohesion: 0.15
+Nodes (12): code:block1 (/usr/local/go/bin/go test -race ./internal/evolution ./inter), code:block2 (/usr/local/go/bin/go test -race ./internal/evolution ./inter), FILES_CHANGED, FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES (+4 more)
+
+### Community 390 - "Community 390"
+Cohesion: 0.15
+Nodes (7): code:block1 (--- FAIL: TestAllDomainTreeConditionsHaveDescriptions (0.00s), code:block2 (--- FAIL: TestEveryResolverSelectableTreeIsDescribable/godev), FILES_CHANGED, NOTES, RED_COMMAND, RED Phase Result, RED_RESULT
 
 ### Community 391 - "Community 391"
-Cohesion: 0.24
-Nodes (10): Configured(), envEnabled(), IntegrationOptedIn(), OllamaReachable(), SkipIfUnavailable(), TestIntegrationOptedIn(), TestSkipIfUnavailable(), TestSkipUnlessIntegration_SkipsWithoutOptIn() (+2 more)
+Cohesion: 0.15
+Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/cmd/bt-dashboard	0.025s), GREEN phase complete, Summary
 
 ### Community 392 - "Community 392"
-Cohesion: 0.17
-Nodes (10): tickStatusLabel(), observedCommand, DebateTurn, Fellow, Report, ResearchFinding, ReviewComment, Scenario (+2 more)
-
-### Community 393 - "Community 393"
 Cohesion: 0.15
 Nodes (13): Algorithm Engines, code:go (type TreeStore struct { ... }), code:go (func DefaultTree() *SerializableNode           // 17-node ge), code:go (func PitchAgentTree() *SerializableNode), code:go (// ExpertKnowledge: 6 design patterns, 5 anti-patterns, 10 h), code:go (func ContainsWord(s, word string) bool      // case-insensit), code:go (func ApplyMutation(tree *SerializableNode, op string) *Seria), Finance Trees (10) (+5 more)
 
 ### Community 394 - "Community 394"
-Cohesion: 0.15
-Nodes (12): code:block1 (token absent ──────────────► skip (pr_shepherd_no_token, no_), Config, Files, Fix loop (CI red), GitHub API client, Goal, Non-goals, Placement (per Nico: extend the goap-fusion tree) (+4 more)
-
-### Community 395 - "Community 395"
-Cohesion: 0.15
-Nodes (12): code:go (func TestParseClaudeRateLimitReset(t *testing.T) {), code:go (const claudeResetMargin = 2 * time.Minute), code:go (func isolateClaudeBackoffStore(t *testing.T) {), code:go (type sharedClaudeBackoff struct {), code:go (func saveClaudeBackoffState(bb *Blackboard, until time.Time)), code:go (// actions_superpowers_prod.go), Global Constraints, Shared Claude Rate-Limit Backoff Implementation Plan (+4 more)
-
-### Community 396 - "Community 396"
-Cohesion: 0.15
-Nodes (7): code:block1 (ok  	github.com/nico/go-bt-evolve/cmd/bt-agent	0.106s), code:block2 (ok  github.com/nico/go-bt-evolve/internal/agent   1.539s), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES, Summary
-
-### Community 397 - "Community 397"
-Cohesion: 0.15
-Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/cmd/bt-dashboard	0.025s), GREEN phase complete, Summary
-
-### Community 398 - "Community 398"
-Cohesion: 0.27
-Nodes (4): code:block1 (--- FAIL: TestVerifyScheduledGoapFusionBuildTreeMaterialized), GREEN phase, RED phase, Summary
-
-### Community 399 - "Community 399"
-Cohesion: 0.18
-Nodes (5): code:block1 (/usr/local/go/bin/go test ./cmd/bt-dashboard ./internal/reli), code:block2 (--- FAIL: TestHandleDLQReplay_RequeuesEntryForCrossProcessRe), RED phase complete, RED phase result, Summary
-
-### Community 400 - "Community 400"
-Cohesion: 0.22
-Nodes (11): code:block1 (/usr/local/go/bin/go test ./internal/evolution ./internal/ga), code:block2 (internal/evolution/multi_objective_test.go:353:15: undefined), code:block3 (--- FAIL: TestValidationGate_ParetoAcceptsRecoveryForSuccess), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES (+3 more)
-
-### Community 401 - "Community 401"
-Cohesion: 0.21
-Nodes (11): code:block1 (/usr/local/go/bin/go test ./internal/engine ./cmd/benchcmp .), code:block2 (--- FAIL: TestPrioritizeGoapGoals_NoImportCycleFalseGoalFrom), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES, RED_COMMAND (+3 more)
-
-### Community 402 - "Community 402"
-Cohesion: 0.18
-Nodes (10): code:block1 (internal/evolution/island_test.go:85:23: im.Stats().Resurrec), code:block2 (--- FAIL: TestEvolveWithExperience_ResurrectsExtinctSpeciali), code:block3 (/usr/local/go/bin/go test ./internal/evolution ./cmd/bt-agen), code:block4 (ok  github.com/nico/go-bt-evolve/internal/evolution  4.429s), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS (+2 more)
-
-### Community 403 - "Community 403"
-Cohesion: 0.15
-Nodes (7): code:block1 (--- FAIL: TestAllDomainTreeConditionsHaveDescriptions (0.00s), code:block2 (--- FAIL: TestEveryResolverSelectableTreeIsDescribable/godev), FILES_CHANGED, NOTES, RED_COMMAND, RED Phase Result, RED_RESULT
-
-### Community 404 - "Community 404"
-Cohesion: 0.21
-Nodes (10): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/security ./c), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/security	4.021s), code:block3 (ok  	github.com/nico/go-bt-evolve/internal/security	4.057s), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES (+2 more)
-
-### Community 405 - "Community 405"
-Cohesion: 0.17
-Nodes (11): code:block1 (/usr/local/go/bin/go test ./internal/a2a ./internal/agentexe), code:block2 (--- FAIL: TestDaemonConfiguresAuctionDelegateHook (0.00s)), code:block3 (/usr/local/go/bin/go test ./internal/a2a ./internal/agentexe), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES (+3 more)
-
-### Community 406 - "Community 406"
-Cohesion: 0.15
-Nodes (12): code:block1 (/usr/local/go/bin/go test ./internal/gardener ./cmd/bt-dashb), code:block2 (--- FAIL: TestRegistry_DomainDescriptionsResolveThroughDescr), FILES_CHANGED, FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES (+4 more)
-
-### Community 407 - "Community 407"
-Cohesion: 0.15
-Nodes (12): code:block1 (/usr/local/go/bin/go test -race ./internal/evolution ./inter), code:block2 (/usr/local/go/bin/go test -race ./internal/evolution ./inter), FILES_CHANGED, FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES (+4 more)
-
-### Community 408 - "Community 408"
-Cohesion: 0.36
-Nodes (9): fixture(), read(), TestCancellationTerminatesRestoreSubprocess(), TestCorruptCooldownFailsClosed(), TestCronUsesSameCrossProcessCooldown(), TestCrossProcessPolicy(), TestRecheckDeterminesFinalVerdict(), TestRestoreFailuresPreserveProfilesAndCooldown() (+1 more)
-
-### Community 409 - "Community 409"
-Cohesion: 0.21
-Nodes (7): agentNameKey, AuctionWinnerName(), BTAgentExecutor, failureEventMessage(), parseAnnouncement(), TestFailureEventMessage_CarryoverKeepsSentinel(), terminalAuctionTransport
-
-### Community 410 - "Community 410"
 Cohesion: 0.21
 Nodes (5): History, historyStats(), splitLines(), RunRecord, RunStats
 
-### Community 412 - "Community 412"
-Cohesion: 0.21
-Nodes (4): appendLatency(), avgLatency(), nlmMetricsReportAction(), NotebookLMMetrics
+### Community 395 - "Community 395"
+Cohesion: 0.26
+Nodes (10): BuildTaskFromInputs(), ParseInputParams(), TestBuildTaskFromInputs(), TestParseInputParams(), TestValidateInputs_Default(), TestValidateInputs_File(), TestValidateInputs_JSON(), TestValidateInputs_Required() (+2 more)
 
-### Community 413 - "Community 413"
+### Community 396 - "Community 396"
 Cohesion: 0.29
 Nodes (10): MergeResultsBlock(), ParallelFanoutBlock(), TestFanoutBlocks_ReturnFreshValues(), TestMergeResultsBlock_Shape(), TestMergeResultsBlock_Validates(), TestParallelFanoutBlock_ChainAction(), TestParallelFanoutBlock_Children(), TestParallelFanoutBlock_ParallelMetadata() (+2 more)
 
-### Community 414 - "Community 414"
+### Community 397 - "Community 397"
+Cohesion: 0.26
+Nodes (9): TestDebugPhase_DryRunSkipsClaudeAndWritesMarker(), TestDebugPhases_WriteEvidenceFiles(), TestDiscardWorktree_RefusesEmptyPath(), TestDiscardWorktree_RefusesMainRepoPath(), TestDiscardWorktree_RemovesWorktreeAndDeletesBranch(), TestPushBranchAndCreatePR_InvokesGitPushAndGhPr(), withSwappedSuperpowersRunners(), debugTestClaude (+1 more)
+
+### Community 398 - "Community 398"
+Cohesion: 0.21
+Nodes (4): appendLatency(), avgLatency(), nlmMetricsReportAction(), NotebookLMMetrics
+
+### Community 400 - "Community 400"
 Cohesion: 0.35
 Nodes (9): docsyncRunner, syncDriftDocs(), docsyncTestRun(), TestDocDriftSyncFixesDriftViaClaudePass(), TestDocDriftSyncSkipsDryRunAndMissingScript(), TestDocDriftSyncSkipsWhenInSync(), TestDocDriftSyncStillFailingIsReported(), TestVerificationChecksIncludeDocDriftGate() (+1 more)
 
-### Community 419 - "Community 419"
+### Community 401 - "Community 401"
+Cohesion: 0.32
+Nodes (10): impactTests(), registerImpactTools(), TestBTImpactTestsRegistered(), TestBTProgramReviewPreservesHistoryAndRequiresExactRevision(), TestBTResearchStatusUsesCurrentOwnerAndDoesNotClaimImpact(), TestImpactTests_NormalizesAbsoluteSourceUnderRoot(), TestImpactTests_RejectsMissingSource(), TestImpactTests_RejectsSourceOutsideRoot() (+2 more)
+
+### Community 402 - "Community 402"
+Cohesion: 0.21
+Nodes (7): agentNameKey, AuctionWinnerName(), BTAgentExecutor, failureEventMessage(), parseAnnouncement(), TestFailureEventMessage_CarryoverKeepsSentinel(), terminalAuctionTransport
+
+### Community 404 - "Community 404"
+Cohesion: 0.32
+Nodes (10): NotebookLMTree(), findChildByName(), hasNode(), TestNotebookLMTreeIncludesIdempotencyStateActions(), TestNotebookLMTreeIsZeroLLM(), TestNotebookLMTreeRecordsRealPathDuringExecution(), TestNotebookLMTreeRoutesResearchBeforeIngestAndQuery(), TestNotebookLMTreeUsesDeterministicEvidenceGateBeforeSuccess() (+2 more)
+
+### Community 405 - "Community 405"
 Cohesion: 0.17
 Nodes (10): assert, { context }, { context, elements }, fs, nodes, path, second, test (+2 more)
 
-### Community 420 - "Community 420"
+### Community 406 - "Community 406"
 Cohesion: 0.17
 Nodes (11): Agent template, Blackboard outputs, code:yaml (params:), code:bash (export BT_LLM_PROVIDER=openrouter), code:bash (/usr/local/go/bin/go test ./internal/fusion ./internal/llm .), Configuration, Fusion BT Agent, Routing triggers (+3 more)
 
-### Community 421 - "Community 421"
-Cohesion: 0.17
-Nodes (12): ActionFunc / ConditionFunc, Blackboard, Chain Types (ChainAction nodes), code:bash (go doc ./internal/engine), code:go (func BuildTree(serTree *evolution.SerializableNode, bb *Blac), code:go (type ActionFunc = func(ctx *btcore.BTContext[Blackboard]) in), code:go (// BuildTree constructs a go-bt Command from a SerializableN), Execution and registration contracts (+4 more)
-
-### Community 422 - "Community 422"
+### Community 407 - "Community 407"
 Cohesion: 0.17
 Nodes (11): Behavior matrix, code:json ({"until":"2026-07-14T22:44:33Z","set_by":"goap-fusion-loop-r), Design, Fleet-wide store (ADR-003), Goals, Non-goals, Ops, Problem (+3 more)
 
-### Community 423 - "Community 423"
+### Community 408 - "Community 408"
+Cohesion: 0.17
+Nodes (12): code:go (// internal/domains/superpowers_workflow_test.go), code:bash (git add internal/domains/superpowers_workflow.go internal/do), code:bash (git add internal/engine/actions_superpowers_debug.go interna), code:bash (git add internal/engine/bandit_selector.go internal/engine/b), code:bash (git add docs/adr/ADR-010-superpowers-workflow-tree.md docs/a), Known deviations / follow-ups, Part E — Implementation Tasks, Self-Review (writing-plans checklist — executed 2026-07-02) (+4 more)
+
+### Community 409 - "Community 409"
 Cohesion: 0.23
 Nodes (8): code:block1 (internal/evolution/island_test.go:154:6: im.ExpertKnowledge ), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES, RED phase, Summary
 
-### Community 424 - "Community 424"
+### Community 410 - "Community 410"
 Cohesion: 0.23
 Nodes (7): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/evolution	3.746s), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES, RED phase
 
-### Community 425 - "Community 425"
+### Community 411 - "Community 411"
 Cohesion: 0.21
 Nodes (9): code:block1 (/usr/local/go/bin/go test ./internal/evolution -short -count), code:block2 (internal/evolution/learning_test.go:206:3: unknown field Spe), FILES_CHANGED, GREEN phase, NOTES, RED_COMMAND, RED phase, RED_RESULT (+1 more)
 
-### Community 426 - "Community 426"
+### Community 412 - "Community 412"
 Cohesion: 0.23
 Nodes (8): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./cmd/bt-ci-doctor -sho), code:block2 (# github.com/nico/go-bt-evolve/cmd/bt-ci-doctor [github.com/), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES, RED phase
 
-### Community 427 - "Community 427"
+### Community 413 - "Community 413"
 Cohesion: 0.17
 Nodes (11): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/gardener ./c), code:block2 (cmd/bt-gardener/main_test.go:81:16: undefined: wireSelectorO), code:block3 (/usr/local/go/bin/go test ./internal/gardener ./cmd/bt-garde), code:block4 (ok  	github.com/nico/go-bt-evolve/internal/gardener	0.083s), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS (+3 more)
 
-### Community 430 - "Community 430"
-Cohesion: 0.35
-Nodes (9): impactTests(), registerImpactTools(), TestBTImpactTestsRegistered(), TestBTResearchStatusUsesCurrentOwnerAndDoesNotClaimImpact(), TestImpactTests_NormalizesAbsoluteSourceUnderRoot(), TestImpactTests_RejectsMissingSource(), TestImpactTests_RejectsSourceOutsideRoot(), TestImpactTests_ReturnsImpactedTestsForSource() (+1 more)
+### Community 414 - "Community 414"
+Cohesion: 0.17
+Nodes (12): ActionFunc / ConditionFunc, Blackboard, Chain Types (ChainAction nodes), code:bash (go doc ./internal/engine), code:go (func BuildTree(serTree *evolution.SerializableNode, bb *Blac), code:go (type ActionFunc = func(ctx *btcore.BTContext[Blackboard]) in), code:go (// BuildTree constructs a go-bt Command from a SerializableN), Execution and registration contracts (+4 more)
 
-### Community 431 - "Community 431"
+### Community 417 - "Community 417"
+Cohesion: 0.24
+Nodes (7): mergeFeedback(), mergeTreeFeedback(), readCommittedFeedback(), feedbackDelta, feedbackPersistState, feedbackSnapshot, treeFeedback
+
+### Community 418 - "Community 418"
 Cohesion: 0.31
 Nodes (9): extractJSONPayload(), TestValidateOutputs_Empty(), TestValidateOutputs_JSONDirect(), TestValidateOutputs_JSONFence(), TestValidateOutputs_JSONInvalid(), TestValidateOutputs_Markdown(), TestValidateOutputs_NoSpec(), validateOutputJSON() (+1 more)
 
-### Community 432 - "Community 432"
+### Community 419 - "Community 419"
+Cohesion: 0.25
+Nodes (8): TestEstimateQualityPenalizesGenericShortSuccess(), TestEstimateQualityScoresEvidenceRichDeterministicReports(), TestValidateQualitySpec_BlockedPattern(), TestValidateQualitySpec_MinLength(), TestValidateQualitySpec_NilSpecUsesHeuristic(), TestValidateQualitySpec_RequiredSections(), ValidateQualitySpec(), estimateQuality()
+
+### Community 420 - "Community 420"
 Cohesion: 0.18
 Nodes (3): EvolutionMetadata, FitnessRecord, MutationLog
 
-### Community 433 - "Community 433"
+### Community 421 - "Community 421"
 Cohesion: 0.24
 Nodes (5): ParamAction, bindTemplate(), TestBindTemplate_NoPlaceholders(), TestBindTemplate_Simple(), ParamPlannerNode
 
-### Community 434 - "Community 434"
+### Community 422 - "Community 422"
 Cohesion: 0.33
 Nodes (10): runSuperpowersCondCases(), TestConditionsSuperpowers_CheckIndexInRange(), TestConditionsSuperpowers_DesignApproved(), TestConditionsSuperpowers_DesignExists(), TestConditionsSuperpowers_HITLAlreadyApproved(), TestConditionsSuperpowers_IsCreativeTask(), TestConditionsSuperpowers_PlanReady(), TestConditionsSuperpowers_VerificationFailed() (+2 more)
 
-### Community 435 - "Community 435"
-Cohesion: 0.25
-Nodes (4): estimateTokensForTest(), TestBuildBudget_MaxTokens_TripsOnCumulativeUsage(), TestGenerateWithRetry_IncrementsBlackboardTokensUsed(), budgetTokensMockLLM
+### Community 423 - "Community 423"
+Cohesion: 0.18
+Nodes (11): BuildEventDrivenAbort(), TestBuildEventDrivenAbort_BlackboardKeyCondition(), TestBuildEventDrivenAbort_BlackboardKeyNotPresent(), TestBuildEventDrivenAbort_EventChannelAbort(), TestBuildEventDrivenAbort_LegacyEventKey(), TestBuildEventDrivenAbort_NilChainStateInit(), TestBuildEventDrivenAbort_NoAbortNoMessage(), TestBuildEventDrivenAbort_NoChildren() (+3 more)
 
-### Community 436 - "Community 436"
-Cohesion: 0.35
-Nodes (10): newTransactionTestStore(), TestApprovalWaitCancelsDuringLockContention(), TestCorruptLookupIsAnErrorAndDoesNotPublishPartialData(), TestExpiredEscalationWaitReturnsExpired(), TestExpiredRequestCannotBeApprovedBeforePolling(), TestFailedRetentionWriteDoesNotPruneCache(), TestTaskDecisionCannotBypassNewerTerminalAudit(), TestTaskDecisionRetryIsIdempotentAndCannotHideTerminalConflict() (+2 more)
+### Community 426 - "Community 426"
+Cohesion: 0.2
+Nodes (6): repeatChar(), TestHistoryQualityScore_UsesSpecWhenHigher(), TestIsRateLimitCarryover(), TestRunOnce_AuctionAwardAttributesHistoryToWinner(), TestRunOnce_RecordsSLOMetricsOnFailure(), TestRunOnce_RecordsSLOMetricsOnSuccess()
 
-### Community 440 - "Community 440"
+### Community 427 - "Community 427"
 Cohesion: 0.29
 Nodes (8): foreachTaskLoop(), SuperpowersWorkflowTree(), systematicDebugging(), tddTask(), TestSuperpowersWorkflowTree_GrillLoopShape(), TestSuperpowersWorkflowTree_ValidatesAndCoversPhases(), withMatch(), TestSuperpowersWorkflowTree_BuildsAndValidates()
 
-### Community 441 - "Community 441"
+### Community 428 - "Community 428"
+Cohesion: 0.22
+Nodes (7): init(), init(), registerSuperpowersConditions(), TestRegisterCondition_And_GetCondition(), RegisterCondition(), init(), lastRouteSource()
+
+### Community 429 - "Community 429"
 Cohesion: 0.18
 Nodes (10): assert, cleared, context, element, elements, fs, path, root (+2 more)
 
-### Community 442 - "Community 442"
-Cohesion: 0.27
-Nodes (9): initDoormateTab(), loadProfile(), ratePage(), renderBubbles(), renderDoormate(), renderGeneratedPage(), renderProfileTags(), sendPhrase() (+1 more)
-
-### Community 443 - "Community 443"
-Cohesion: 0.18
-Nodes (11): 3.1 Create the bin directory, 3.2 Build the core MCP servers, 3.3 Build the dashboard and gardener, 3.4 Build utility binaries, 3. Build All Binaries (2 min), code:bash (ls -lh bin/bt-*), code:bash (go build -o bin/bt-dashboard ./cmd/bt-dashboard/), code:bash (go build -o bin/benchcmp ./cmd/benchcmp/) (+3 more)
-
-### Community 444 - "Community 444"
+### Community 430 - "Community 430"
 Cohesion: 0.18
 Nodes (11): code:bash (export PATH=$PATH:/usr/local/go/bin), code:bash (# Check if Ollama is running), code:bash (# Find and kill the old process), code:bash (# Run only fast tests (no Ollama)), code:bash (# Verify Go version), Dashboard port already in use, "Failed to build", "go: command not found" (+3 more)
 
-### Community 445 - "Community 445"
+### Community 431 - "Community 431"
 Cohesion: 0.18
-Nodes (11): Catalog, code:go (type Definition struct {), code:go (type Registry struct { ... }), code:go (type Catalog struct { ... }), code:go (type Scheduler struct { ... }), code:go (type History struct { ... }), History, Package: agent (+3 more)
+Nodes (11): 3.1 Create the bin directory, 3.2 Build the core MCP servers, 3.3 Build the dashboard and gardener, 3.4 Build utility binaries, 3. Build All Binaries (2 min), code:bash (ls -lh bin/bt-*), code:bash (go build -o bin/bt-dashboard ./cmd/bt-dashboard/), code:bash (go build -o bin/benchcmp ./cmd/benchcmp/) (+3 more)
 
-### Community 446 - "Community 446"
+### Community 432 - "Community 432"
 Cohesion: 0.18
 Nodes (10): Architecture, Context, Error handling, Infra (`monitoring/`), Instrumentation, Log correlation & cleanup, Logging & Tracing Overhaul — Design, Staging (one commit each) (+2 more)
 
-### Community 447 - "Community 447"
+### Community 433 - "Community 433"
+Cohesion: 0.2
+Nodes (7): TestAgentRouterPreservesResultFromFailedExecutor(), TestClassifyErrorTypedTransportBeatsAuthSubstrings(), TestClassifyErrorTypedTransportBeatsValidationSubstrings(), TestClassifyErrorTypedTransportTimeoutKeepsTimeoutPrecedence(), TestClassifyErrorUntypedBadRequestStaysValidation(), TestClassifyErrorUntypedUnauthorizedStaysAuth(), failingResultExecutor
+
+### Community 434 - "Community 434"
 Cohesion: 0.22
 Nodes (8): code:block1 (internal/evolution/pareto_test.go:341:15: pf.Load undefined ), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/evolution	3.868s), FILES_CHANGED, GREEN phase, NOTES, RED_COMMAND, RED phase, RED_RESULT
 
-### Community 448 - "Community 448"
+### Community 435 - "Community 435"
 Cohesion: 0.24
 Nodes (7): code:block1 (/usr/local/go/bin/go test ./internal/domains -short -count=1), code:block2 (--- FAIL: TestPrefixedDomainIDsAreDescribable/domain:code_re), FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT, Summary
 
-### Community 449 - "Community 449"
+### Community 436 - "Community 436"
 Cohesion: 0.18
 Nodes (6): code:block1 (internal/gardener/evolve_v2_test.go:2497:3: unknown field Lo), code:block2 (# github.com/nico/go-bt-evolve/internal/evolution [test]), FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT — FAIL (intended)
 
-### Community 450 - "Community 450"
+### Community 437 - "Community 437"
 Cohesion: 0.18
 Nodes (4): code:block1 (cmd/bt-dashboard/main_test.go:116:9: got.RequeuedAt undefine), code:block2 (cmd/bt-dashboard/main_test.go:112:16: entries[0].RequeuedAt ), RED phase complete, Summary
 
-### Community 451 - "Community 451"
+### Community 438 - "Community 438"
 Cohesion: 0.18
 Nodes (10): code:block1 (--- FAIL: TestRunTask_PreservesRateLimitSentinelOnFailureCod), code:block2 (/usr/local/go/bin/go test ./internal/engine ./cmd/bt-agent -), code:block3 (ok  	github.com/nico/go-bt-evolve/internal/engine	53.965s), FILES_CHANGED, GREEN phase, NOTES, RED_COMMAND, RED phase (+2 more)
 
-### Community 452 - "Community 452"
+### Community 439 - "Community 439"
 Cohesion: 0.24
 Nodes (9): code:block1 (/usr/local/go/bin/go test ./internal/engine -short -count=1 ), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/engine	56.752s), code:block3 (--- PASS: TestClearSuperpowersPlanState_WipesDurableChargeSt), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES (+1 more)
 
-### Community 453 - "Community 453"
+### Community 440 - "Community 440"
 Cohesion: 0.18
 Nodes (10): FILES_CHANGED, FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES, NOTES, RED_COMMAND (+2 more)
 
-### Community 454 - "Community 454"
+### Community 441 - "Community 441"
 Cohesion: 0.18
 Nodes (10): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/agent ./inte), code:block2 (internal/agent/runner_test.go:133:10: undefined: AuctionWinn), code:block3 (PATH=/usr/local/go/bin:$PATH go test ./internal/agent ./inte), code:block4 (ok  	github.com/nico/go-bt-evolve/internal/agent	3.815s), FILES_CHANGED, GREEN phase, NOTES, RED_COMMAND (+2 more)
 
-### Community 455 - "Community 455"
+### Community 442 - "Community 442"
+Cohesion: 0.18
+Nodes (11): Catalog, code:go (type Definition struct {), code:go (type Registry struct { ... }), code:go (type Catalog struct { ... }), code:go (type Scheduler struct { ... }), code:go (type History struct { ... }), History, Package: agent (+3 more)
+
+### Community 443 - "Community 443"
 Cohesion: 0.2
 Nodes (4): ChildTick, DecisionTrace, TraceStep, TraceStore
 
-### Community 456 - "Community 456"
+### Community 444 - "Community 444"
 Cohesion: 0.29
 Nodes (9): Capability, Edge, blendedSelectionFitness(), coldStartConfidence(), coldStartWeightedFitness(), structuralGate(), Relation, RunSummary (+1 more)
 
-### Community 457 - "Community 457"
+### Community 445 - "Community 445"
 Cohesion: 0.27
-Nodes (8): newCatchupFixture(), TestCycleBreakerSuccess_HealthyOutcomesDoNotTripBreaker(), TestCycleBreakerSuccessTreatsRateLimitCarryoverAsHealthy(), TestReconcileWithRegistry_EmptyRegistryPreservesJobs(), TestSchedule_PreservesCrashRecoveryImmediateRun(), TestSchedule_PreservesMissedNextRunForCatchUp(), TestSchedule_RecomputesNextRunOnScheduleChange(), testError
+Nodes (7): fakeExecutor, fakeLLM, newTestApp(), TestAgentLifecycleCommands(), TestAskIncludesPlatformContext(), TestNaturalLanguageIntentParser(), TestRunTreeCommandDelegatesToExecutor()
 
-### Community 458 - "Community 458"
+### Community 446 - "Community 446"
+Cohesion: 0.36
+Nodes (3): candidateContext(), Auctioneer, winnerBreakerStore
+
+### Community 448 - "Community 448"
 Cohesion: 0.4
 Nodes (9): banditChildKey(), banditLockFor(), banditStatsDir(), banditStatsPath(), banditUCB1Order(), BuildBanditSelector(), recordBanditOutcome(), saveBanditStats() (+1 more)
 
-### Community 459 - "Community 459"
-Cohesion: 0.33
-Nodes (6): GeneratedAgent, Generator, generatedFallbackChainAction(), generatedFallbackChainActionFromStep(), generatedSelfCorrectChainAction(), generatedStepChainAction()
+### Community 449 - "Community 449"
+Cohesion: 0.36
+Nodes (9): TestFusionResearchRoutingConditions(), TestQueryNotebookLMResearchSurfacesOnlyNewVaultNotes(), TestReportNoNewResearchSucceedsWithoutReportWrite(), TestSearchForBTPatternsOnlyReportsUnknownFindings(), TestSearchForBTPatternsQueriesArc42AnchoredResearch(), TestSearchForBTPatternsSurvivesResearchFailure(), TestWithFusionKnowledgeStubsLiveNotebookLMResearch(), withFusionKnowledge() (+1 more)
 
-### Community 461 - "Community 461"
+### Community 450 - "Community 450"
 Cohesion: 0.44
-Nodes (8): isolateProductionExploration(), isolationGit(), isolationRepo(), TestExplorationCLIIsolatedBeforeProbe(), TestExplorationIsolationAliasAndImplementationWorktree(), TestExplorationIsolationCancelledBeforeAgent(), TestExplorationIsolationFailsClosed(), TestExplorationIsolationLifecycle()
+Nodes (9): baselineCmd(), baselinePath(), checkCmd(), main(), printUsage(), resetCmd(), run(), showCmd() (+1 more)
 
-### Community 463 - "Community 463"
+### Community 451 - "Community 451"
+Cohesion: 0.44
+Nodes (9): BuildDecisionTree(), childMatchesDecision(), chooseDecisionBranch(), decisionKey(), decisionValue(), defaultDecisionBranch(), stringifyDecisionValue(), collectBranchLabels() (+1 more)
+
+### Community 452 - "Community 452"
+Cohesion: 0.36
+Nodes (9): NewMetaValidator(), hasMetaIssue(), TestMetaValidator_AcceptsDefaultTree(), TestMetaValidator_DefaultMinCompositeMatchesRealCallerScale(), TestMetaValidator_RejectsBrokenStructure(), TestMetaValidator_RejectsFitnessRegression(), TestMetaValidator_RejectsNilTree(), TestMetaValidator_WarnsOnArchetypeMismatch() (+1 more)
+
+### Community 454 - "Community 454"
 Cohesion: 0.2
 Nodes (9): Block, ChartDataPoint, DiagramEdge, DiagramNode, FeedbackEvent, GeneratedPage, IntentSession, PageSchema (+1 more)
 
-### Community 464 - "Community 464"
-Cohesion: 0.24
-Nodes (7): TestGoapFusionLoopSeedsBeforeResearch(), TestGoapFusionLoopTree_ClaudeReviewFallback(), GoapFusionLoopTree(), rawGoapFusionLoopTree(), TestGoapFusionLoopTreeAppliesInstalledWireHook(), TestGoapFusionLoopWireSeamDefaultsToIdentity(), TestGoapFusionTreesIncludePRShepherd()
+### Community 455 - "Community 455"
+Cohesion: 0.31
+Nodes (8): initDoormateTab(), loadProfile(), ratePage(), renderBubbles(), renderGeneratedPage(), renderProfileTags(), sendPhrase(), toggleBookmark()
 
-### Community 465 - "Community 465"
-Cohesion: 0.24
-Nodes (3): httpStatusText(), TestHTTPStatusText(), OpenAPIGenerator
+### Community 456 - "Community 456"
+Cohesion: 0.33
+Nodes (6): GeneratedAgent, Generator, generatedFallbackChainAction(), generatedFallbackChainActionFromStep(), generatedSelfCorrectChainAction(), generatedStepChainAction()
 
-### Community 466 - "Community 466"
+### Community 457 - "Community 457"
 Cohesion: 0.2
 Nodes (10): 9.1 Run with real Ollama (optional), 9.2 Start the evolution daemon, 9.3 Register with Hermes Agent, 9.4 Explore deeper, 9.5 Run continuous integration locally, 9. Next Steps, code:bash (# Pull the model), code:bash (./bin/bt-gardener &) (+2 more)
 
-### Community 467 - "Community 467"
+### Community 458 - "Community 458"
 Cohesion: 0.2
 Nodes (10): All LLM-dependent services crash immediately, code:bash (# Check current value), code:bash (# 1. Verify the binary works), code:bash (ps aux | grep 'bin/bt-' | awk '{print $2, $9, $NF}' | sort -), code:bash (jq -r '(.candidates[0].operation // (.[0].operation // "none), Duplicate MCP processes, Gateway restart loop (hundreds of restarts), jq `.[0]` fails with exit code 5 on ev_order_mutations (+2 more)
 
-### Community 468 - "Community 468"
+### Community 459 - "Community 459"
 Cohesion: 0.2
 Nodes (10): A2A (port 8686), `bt-agent-cli run`, code:json ({ "agent": "code-reviewer", "task": "Review this function fo), code:json ({ "tree": "domain:code_review", "task": "..." }), code:bash (go run ./cmd/bt-agent-cli/ run code-reviewer --input "Review), Dashboard “Run agent” / pipelines, Direct tree execution (no agent YAML), On-demand: MCP `bt_agent_run` (+2 more)
 
-### Community 469 - "Community 469"
+### Community 460 - "Community 460"
 Cohesion: 0.2
 Nodes (9): Benchmark-model exception, Enforcement and entry points, External-model features, Host deployment, NotebookLM and external-integration correction, 2026-10-01, Observed validation, 2026-10-01, Sol 6.1 inference policy, Upgrade and headless recovery, 2026-10-01 (+1 more)
 
-### Community 470 - "Community 470"
+### Community 461 - "Community 461"
 Cohesion: 0.2
 Nodes (9): 1. Loop resilience — infra failures must not burn milestone attempts, 2. Duplicate work between the two runners — verified non-issue + staggering, 3. Doc-drift check validates the invoking worktree, 4. DLQ replay consumer (finishes program c8094002 ms1–3), 5. Selector telemetry + specialists: writer always on, consumers opt-in, 6. Small fixes, 7. Deployment & reconciliation (ops, after landing), Loop Resilience, Telemetry Wiring, and Fleet Streamlining — Design (+1 more)
 
-### Community 471 - "Community 471"
+### Community 462 - "Community 462"
+Cohesion: 0.2
+Nodes (10): Anti-patterns to reject, Anti-patterns to reject, arc42 Section 8 (Crosscutting Concepts) — Conformance Checklist, arc42 Section 9 (Architecture Decisions) — Conformance Checklist, Do's, Do's, Does NOT belong here (lives elsewhere in arc42), Does NOT belong in section 9 (lives elsewhere in arc42) (+2 more)
+
+### Community 463 - "Community 463"
+Cohesion: 0.2
+Nodes (10): Anti-patterns (don'ts), arc42 Section 4 (Solution Strategy) — Conformance Checklist, arc42 Section 5 (Building Block View) — Conformance Checklist, Belongs elsewhere in arc42, Do's, Does NOT belong here (lives elsewhere in arc42), Don'ts / anti-patterns, Required content (per arc42 template) (+2 more)
+
+### Community 464 - "Community 464"
 Cohesion: 0.2
 Nodes (10): arc42 Section 1 (Introduction and Goals) — Conformance Checklist, arc42 Section 2 (Constraints) — Conformance Checklist, Belongs elsewhere in arc42 (move it out), Do's, Do's (from the official tips), Does NOT belong here (lives elsewhere in arc42), Don'ts / anti-patterns, Don'ts / anti-patterns (+2 more)
 
-### Community 472 - "Community 472"
-Cohesion: 0.2
-Nodes (10): Anti-patterns (don'ts), Anti-patterns to reject, arc42 Section 4 (Solution Strategy) — Conformance Checklist, arc42 Section 6 (Runtime View) — Conformance Checklist, Do's (from official tips), Does NOT belong here (goes elsewhere in arc42), Does NOT belong here (lives elsewhere in arc42), Required content (per arc42 template) (+2 more)
-
-### Community 473 - "Community 473"
-Cohesion: 0.2
-Nodes (10): Anti-patterns / don'ts, Anti-patterns to reject, arc42 Section 11 (Risks & Technical Debt) — Conformance Checklist, arc42 Section 8 (Crosscutting Concepts) — Conformance Checklist, Do's, Do's (from the official tips), Does NOT belong here (lives elsewhere in arc42), Does NOT belong here (lives elsewhere in arc42) (+2 more)
-
-### Community 474 - "Community 474"
+### Community 465 - "Community 465"
 Cohesion: 0.2
 Nodes (10): code:yaml (server:), code:yaml (auth_enabled: false), code:yaml (name: bt-observability), code:yaml (apiVersion: 1), code:yaml (apiVersion: 1), code:json ({), code:make (observability-up:), code:bash (make observability-up && sleep 20) (+2 more)
 
-### Community 475 - "Community 475"
+### Community 466 - "Community 466"
 Cohesion: 0.2
 Nodes (9): code:mermaid (flowchart TD), code:block2 (PersistentMemSequence "SuperpowersWorkflow_Main"          ← ), code:mermaid (flowchart TD), Global Constraints, Part A — Complete Superpowers Workflow Graph, Part B — The Same Graph as a Behavior Tree, Part C — Design Decision Tree, Part D — Grill-Me Record (gap analysis, branch by branch) (+1 more)
 
-### Community 476 - "Community 476"
+### Community 467 - "Community 467"
 Cohesion: 0.33
 Nodes (5): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/gardener	0.104s), code:block2 (internal/gardener/gardener_test.go:108:55: unknown field Cri), GREEN phase, RED phase, Summary
 
-### Community 477 - "Community 477"
+### Community 468 - "Community 468"
 Cohesion: 0.33
 Nodes (4): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/llm -short -), GREEN phase, RED phase, Summary
 
-### Community 478 - "Community 478"
+### Community 469 - "Community 469"
 Cohesion: 0.2
 Nodes (9): code:block1 (/usr/local/go/bin/go test ./internal/gardener -short -count=), code:block2 (expected LocalSearchDelta==0 when ValidationGate rejects the), code:block3 (/usr/local/go/bin/go test ./internal/gardener -short -count=), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES (+1 more)
 
-### Community 479 - "Community 479"
-Cohesion: 0.24
-Nodes (7): code:block1 (PATH=/usr/local/go/bin:$PATH gofmt -l internal/agentexec/wir), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES, RED phase
-
-### Community 480 - "Community 480"
-Cohesion: 0.22
-Nodes (7): code:block1 (/usr/local/go/bin/go test ./cmd/bt-dashboard ./internal/reli), code:block2 (cmd/bt-dashboard/main_test.go:115:16: entries[0].RequeuedAt ), FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT, Summary
-
-### Community 481 - "Community 481"
-Cohesion: 0.22
-Nodes (3): code:block1 (cmd/bt-agent/main_test.go:374:8: undefined: jitteredDriftInt), code:block2 (# github.com/nico/go-bt-evolve/cmd/bt-agent [github.com/nico), Summary
-
-### Community 482 - "Community 482"
-Cohesion: 0.27
-Nodes (6): code:block1 (/usr/local/go/bin/go test ./internal/domains -short -count=1), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES, Summary
-
-### Community 483 - "Community 483"
-Cohesion: 0.22
-Nodes (8): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/gardener	0.126s), FILES_CHANGED, GREEN phase, NOTES, RED_COMMAND, RED phase, RED_RESULT, Summary
-
-### Community 485 - "Community 485"
+### Community 470 - "Community 470"
 Cohesion: 0.31
 Nodes (6): code:block1 (/usr/local/go/bin/go test ./internal/evolution ./internal/ga), FILES_CHANGED, GREEN_COMMANDS, GREEN_COMMANDS / GREEN_RESULTS, GREEN_RESULTS, NOTES
 
-### Community 486 - "Community 486"
-Cohesion: 0.22
-Nodes (8): code:block1 (internal/reliability/reliability_test.go:1288:17: undefined:), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES, RED phase, Summary
+### Community 471 - "Community 471"
+Cohesion: 0.24
+Nodes (7): code:block1 (PATH=/usr/local/go/bin:$PATH gofmt -l internal/agentexec/wir), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES, RED phase
 
-### Community 487 - "Community 487"
-Cohesion: 0.2
-Nodes (9): code:block1 (/usr/local/go/bin/go test ./internal/gardener ./internal/evo), code:block2 (niche "n50|d50|" stores the live tree pointer itself instead), code:block3 (expected CycleMetrics.EliteReseed == true — an earlier cycle), FILES_CHANGED, GREEN phase, NOTES, RED_COMMAND, RED phase (+1 more)
-
-### Community 488 - "Community 488"
+### Community 472 - "Community 472"
 Cohesion: 0.29
 Nodes (6): code:block1 (--- FAIL: TestPrioritizeGoapGoals_ConcurrentWithPersistGoapP), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/reliability	16.21), GREEN phase, RED phase, Summary, Summary
 
-### Community 489 - "Community 489"
-Cohesion: 0.2
-Nodes (7): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/llm	7.495s), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/llm	21.140s), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES, Summary
+### Community 473 - "Community 473"
+Cohesion: 0.27
+Nodes (6): code:block1 (/usr/local/go/bin/go test ./internal/domains -short -count=1), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES, Summary
 
-### Community 490 - "Community 490"
-Cohesion: 0.2
-Nodes (9): code:block1 (/usr/local/go/bin/go test ./internal/security -short -count=), code:block2 (=== RUN   TestRateLimiter_AtCapacityAdmitsNewClient), code:block3 (/usr/local/go/bin/go test ./internal/security -short -count=), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES (+1 more)
-
-### Community 491 - "Community 491"
+### Community 474 - "Community 474"
 Cohesion: 0.22
-Nodes (7): code:block1 (/usr/local/go/bin/go test ./internal/benchmark -short -count), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/benchmark	0.065s), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES, Summary
+Nodes (8): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/gardener	0.126s), FILES_CHANGED, GREEN phase, NOTES, RED_COMMAND, RED phase, RED_RESULT, Summary
 
-### Community 492 - "Community 492"
-Cohesion: 0.2
-Nodes (9): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/reliability ), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/reliability	10.73), code:block3 (ok  	github.com/nico/go-bt-evolve/internal/reliability	10.80), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES (+1 more)
+### Community 476 - "Community 476"
+Cohesion: 0.22
+Nodes (8): code:block1 (internal/reliability/reliability_test.go:1288:17: undefined:), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES, RED phase, Summary
 
-### Community 493 - "Community 493"
+### Community 477 - "Community 477"
+Cohesion: 0.22
+Nodes (3): code:block1 (cmd/bt-agent/main_test.go:374:8: undefined: jitteredDriftInt), code:block2 (# github.com/nico/go-bt-evolve/cmd/bt-agent [github.com/nico), Summary
+
+### Community 478 - "Community 478"
 Cohesion: 0.22
 Nodes (8): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/security ./c), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/security	4.021s), code:block3 (ok  	github.com/nico/go-bt-evolve/internal/security	4.057s), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES, Summary
 
-### Community 494 - "Community 494"
+### Community 479 - "Community 479"
+Cohesion: 0.22
+Nodes (7): code:block1 (/usr/local/go/bin/go test ./cmd/bt-dashboard ./internal/reli), code:block2 (cmd/bt-dashboard/main_test.go:115:16: entries[0].RequeuedAt ), FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT, Summary
+
+### Community 480 - "Community 480"
+Cohesion: 0.2
+Nodes (9): code:block1 (/usr/local/go/bin/go test ./internal/gardener ./internal/evo), code:block2 (niche "n50|d50|" stores the live tree pointer itself instead), code:block3 (expected CycleMetrics.EliteReseed == true — an earlier cycle), FILES_CHANGED, GREEN phase, NOTES, RED_COMMAND, RED phase (+1 more)
+
+### Community 481 - "Community 481"
+Cohesion: 0.2
+Nodes (9): code:block1 (/usr/local/go/bin/go test ./internal/security -short -count=), code:block2 (=== RUN   TestRateLimiter_AtCapacityAdmitsNewClient), code:block3 (/usr/local/go/bin/go test ./internal/security -short -count=), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES (+1 more)
+
+### Community 482 - "Community 482"
+Cohesion: 0.2
+Nodes (7): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/llm	7.495s), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/llm	21.140s), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES, Summary
+
+### Community 483 - "Community 483"
+Cohesion: 0.22
+Nodes (7): code:block1 (/usr/local/go/bin/go test ./internal/benchmark -short -count), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/benchmark	0.065s), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES, Summary
+
+### Community 484 - "Community 484"
+Cohesion: 0.2
+Nodes (9): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/reliability ), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/reliability	10.73), code:block3 (ok  	github.com/nico/go-bt-evolve/internal/reliability	10.80), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES (+1 more)
+
+### Community 485 - "Community 485"
 Cohesion: 0.2
 Nodes (9): code:block1 (--- FAIL: TestAdoptIslandWinner_SkipsWhenQualityGateDisabled), code:block2 (/usr/local/go/bin/go test ./internal/gardener ./cmd/bt-garde), code:block3 (ok  github.com/nico/go-bt-evolve/internal/gardener  0.191s), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES (+1 more)
 
-### Community 495 - "Community 495"
+### Community 486 - "Community 486"
 Cohesion: 0.2
 Nodes (9): code:block1 (/usr/local/go/bin/go test ./internal/evolution -short -count), code:block2 (--- FAIL: TestRefineGated_RejectsWhenGateRefuses (0.00s)), code:block3 (/usr/local/go/bin/go test ./internal/evolution -short -count), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES (+1 more)
 
-### Community 496 - "Community 496"
-Cohesion: 0.22
-Nodes (4): failedCleanupJobStore, orderedCleanupJobStore, TestScheduleAndRemoveReportPersistenceFailure(), TestSchedulerSaveCannotOverwriteLaterScheduleWithStaleSnapshot()
-
-### Community 497 - "Community 497"
+### Community 487 - "Community 487"
 Cohesion: 0.28
 Nodes (5): exportMemoryCategory(), exportPreviousRuns(), minInt(), TestExportPreviousRuns(), TestSeedMemoryToBlackboard_HistoryOffloaded()
 
-### Community 498 - "Community 498"
-Cohesion: 0.36
-Nodes (7): ClarifyGateBlock(), clarifyLeafNames(), clarifyNodeCount(), TestClarifyGateBlock_Branches(), TestClarifyGateBlock_LeafOrder(), TestClarifyGateBlock_NodeCount(), TestClarifyGateBlock_Root()
+### Community 488 - "Community 488"
+Cohesion: 0.31
+Nodes (7): newCatchupFixture(), TestCycleBreakerSuccess_HealthyOutcomesDoNotTripBreaker(), TestCycleBreakerSuccessTreatsRateLimitCarryoverAsHealthy(), TestSchedule_PreservesCrashRecoveryImmediateRun(), TestSchedule_PreservesMissedNextRunForCatchUp(), TestSchedule_RecomputesNextRunOnScheduleChange(), testError
 
-### Community 499 - "Community 499"
-Cohesion: 0.33
-Nodes (7): financeActionCases(), runFinanceAction(), TestBuildDCFModel(), TestBuildLBOModel(), TestFinanceActions_FixedOutputs(), financeActionCase, financeSpyLLM
-
-### Community 500 - "Community 500"
-Cohesion: 0.28
-Nodes (6): TestCompletedPromotionFailureKeepsHealthyEvidenceAndStopsReplay(), TestConcurrentBlackboardOwnerRetainsAllWritersAndPinnedRoot(), TestEntryMetadataCannotMutateCommittedScopeOutsideTransaction(), TestRelatedEntryGroupCommitsTogetherAndHonorsDeadline(), TestRelatedEntryGroupRejectsPartialMutationAndEviction(), NewPersistentManager()
-
-### Community 502 - "Community 502"
-Cohesion: 0.25
-Nodes (3): DocPlanner, DocPlannerWorldState, SectionMapping
-
-### Community 503 - "Community 503"
+### Community 489 - "Community 489"
 Cohesion: 0.22
-Nodes (5): ExecuteWithPolicy(), TestRetryPolicy_ExecuteWithPolicy(), Backoff(), TestBackoff(), RetryPolicy
+Nodes (4): failedCleanupJobStore, orderedCleanupJobStore, TestScheduleAndRemoveReportPersistenceFailure(), TestSchedulerSaveCannotOverwriteLaterScheduleWithStaleSnapshot()
 
-### Community 506 - "Community 506"
-Cohesion: 0.28
-Nodes (6): assertNoExecutePlanStubs(), containsNodeName(), TestGoapFusion_Structure(), SuperpowersPipelineTree(), containsNodeType(), TestSuperpowersPipeline_ProductionContract_NoPlaceholderPath()
+### Community 490 - "Community 490"
+Cohesion: 0.44
+Nodes (7): LoadMutatedTreeOverride(), mutatedTreesDir(), sanitizeTreeID(), SaveMutatedTree(), TestLoadMutatedTreeOverride_CorruptFileReturnsNil(), TestMutatedTreeFilenameSanitized(), TestMutatedTreeOverrideRoundTrip()
 
-### Community 508 - "Community 508"
+### Community 492 - "Community 492"
 Cohesion: 0.22
 Nodes (3): GetReflectionsTool, truncateStr(), RunTaskTool
 
-### Community 509 - "Community 509"
+### Community 493 - "Community 493"
 Cohesion: 0.28
 Nodes (7): Config, EvolvedAgent, buildEvolvedPrompt(), toolDescriptions(), toolNames(), TestBuildEvolvedPrompt(), TestToolDescriptions()
 
-### Community 510 - "Community 510"
+### Community 494 - "Community 494"
+Cohesion: 0.36
+Nodes (7): ClarifyGateBlock(), clarifyLeafNames(), clarifyNodeCount(), TestClarifyGateBlock_Branches(), TestClarifyGateBlock_LeafOrder(), TestClarifyGateBlock_NodeCount(), TestClarifyGateBlock_Root()
+
+### Community 495 - "Community 495"
+Cohesion: 0.22
+Nodes (9): goapFusionImplementationGateWired(), goapFusionPreflightWired(), PrependGoapFusionImplementationGate(), PrependGoapFusionPreflight(), spliceGoapFusionStateHashProducer(), WireGoapFusionLoopTree(), TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionPreflightPrependsToLoopSequence(), TestSuperpowersRuntime_ActionsRegistered_ScheduledGoapFusionWiresLoopTreeIsIdempotent() (+1 more)
+
+### Community 496 - "Community 496"
+Cohesion: 0.33
+Nodes (7): financeActionCases(), runFinanceAction(), TestBuildDCFModel(), TestBuildLBOModel(), TestFinanceActions_FixedOutputs(), financeActionCase, financeSpyLLM
+
+### Community 497 - "Community 497"
+Cohesion: 0.28
+Nodes (9): parseEventSources(), TestFromMap_NonMap(), TestParseEventSources_Empty(), TestParseEventSources_InvalidItemInEvents(), TestParseEventSources_LegacyOnly(), TestParseEventSources_List(), TestParseEventSources_NilMetadata(), TestParseEventSources_NonListRaw() (+1 more)
+
+### Community 498 - "Community 498"
+Cohesion: 0.22
+Nodes (8): TestValAsFloat64_BoolFalse(), TestValAsFloat64_BoolTrue(), TestValAsFloat64_Float64(), TestValAsFloat64_Int(), TestValAsFloat64_Int64(), TestValAsFloat64_Nil(), TestValAsFloat64_String(), valAsFloat64()
+
+### Community 499 - "Community 499"
+Cohesion: 0.36
+Nodes (6): HabitMiner, cosine(), jaccard(), keywordSet(), sortedByCount(), RecurringPattern
+
+### Community 501 - "Community 501"
+Cohesion: 0.25
+Nodes (3): DocPlanner, DocPlannerWorldState, SectionMapping
+
+### Community 504 - "Community 504"
 Cohesion: 0.22
 Nodes (7): api, assert, fs, headers, path, test, vm
 
-### Community 511 - "Community 511"
+### Community 505 - "Community 505"
 Cohesion: 0.22
 Nodes (7): errors, fs, path, request, responses, { test, expect }, url
 
-### Community 512 - "Community 512"
+### Community 506 - "Community 506"
 Cohesion: 0.31
 Nodes (7): init(), modal, num, setAuthenticated(), showLogin(), state, TAB_KEYS
 
-### Community 513 - "Community 513"
-Cohesion: 0.22
-Nodes (8): 7.1 Check the metrics tracker, 7.2 Explore the evolution algorithms, 7.3 View quality gates, 7. Understand Tree Evolution (5 min), code:bash (# If gardener has been running:), code:bash (grep -n "QualityGate\|MinComposite\|MaxRegression\|Consecuti), Go BT Platform — Interactive Tutorial, Tutorial Complete! 🎉
+### Community 507 - "Community 507"
+Cohesion: 0.25
+Nodes (6): ParseGoapStep(), TestGoapConversionPreservesLimitsEdgesAndExactNumbers(), TestGoapStepModelResultsCannotAssertExternalCompletion(), TestGoapStepPersistenceAndGovernancePreserveExactOracle(), GoapCheck, GoapStepSpec
 
-### Community 514 - "Community 514"
+### Community 508 - "Community 508"
 Cohesion: 0.22
 Nodes (9): 8.1 Overview tab, 8.2 ThinkTank tab, 8.3 Company tab, 8.4 Tasks tab, 8.5 Trees tab, 8.6 MindMap tab, 8.7 Evolution tab, 8.8 Chat panel (+1 more)
 
-### Community 515 - "Community 515"
+### Community 509 - "Community 509"
+Cohesion: 0.22
+Nodes (8): 7.1 Check the metrics tracker, 7.2 Explore the evolution algorithms, 7.3 View quality gates, 7. Understand Tree Evolution (5 min), code:bash (# If gardener has been running:), code:bash (grep -n "QualityGate\|MinComposite\|MaxRegression\|Consecuti), Go BT Platform — Interactive Tutorial, Tutorial Complete! 🎉
+
+### Community 510 - "Community 510"
 Cohesion: 0.22
 Nodes (9): code:bash (go run ./cmd/bt-agent-cli/ install-templates   # copy repo a), code:bash (cp ~/.go-bt-evolve/agents/templates/code-reviewer.yaml ~/.go), code:json ({), code:json ({ "from_template": "code-reviewer" }), Creating agents, Option A — Copy a template into the registry, Option B — MCP `bt_agent_create` (custom), Option C — MCP `bt_agent_create` (from template) (+1 more)
 
-### Community 516 - "Community 516"
+### Community 511 - "Community 511"
 Cohesion: 0.22
 Nodes (8): code:bash (/usr/local/go/bin/go test ./internal/domains ./internal/engi), GOAP Fusion Superpowers Bridge Implementation Plan, Task 1: Restore and adapt dual-mode GOAP fusion tree, Task 2: Add Superpowers plan-writing action, Task 3: Add Claude implementation action using the Superpowers plan, Task 4: Harden shell and verification behavior, Task 5: Add regression tests, Task 6: Verified deployment
 
-### Community 517 - "Community 517"
+### Community 512 - "Community 512"
+Cohesion: 0.22
+Nodes (8): 10.1 Quality Tree, 10.2 Quality Scenarios, 10. Quality Requirements, Bounded versioned-evolution evidence, code:text (BT Agent Platform), MCP publication and local-model qualification, Persisted tree recovery evidence, Program completion evidence (Q1/Q2/Q3)
+
+### Community 513 - "Community 513"
 Cohesion: 0.22
 Nodes (9): code:go (func TestSyncArc42SectionsAndReadmeRunsClassifiedSubset(t *t), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), code:go (// syncArc42SectionsAndReadme is the pipeline entry point re), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), code:go (// Keep the architecture documentation in the same commit as), code:go (// Keep the architecture documentation in the same commit as), code:bash (git rm internal/engine/superpowers_arc42.go internal/engine/), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -sho) (+1 more)
 
-### Community 518 - "Community 518"
+### Community 514 - "Community 514"
 Cohesion: 0.22
 Nodes (9): code:bash (grep -rn "ConsoleTracer\|ConfigureOTLPFromEnv\|NewTraceReade), code:bash (git rm internal/tracing/batcher.go internal/tracing/batcher_), code:go (// Package tracing is a thin facade over the OpenTelemetry S), code:go (// ── Tracing ──────────────────────────────────────────────), code:go (// ── Tracing (OTel SDK; no-op unless OTEL_EXPORTER_OTLP_END), code:go (traceCtx := context.Background()), code:go (package tracing), code:bash (git add -A internal/tracing/ cmd/ internal/engine/mcp_server) (+1 more)
 
-### Community 519 - "Community 519"
-Cohesion: 0.22
-Nodes (9): code:bash (git add internal/engine/actions_superpowers_debug.go interna), code:bash (git add internal/engine/bandit_selector.go internal/engine/b), code:bash (git add docs/adr/ADR-010-superpowers-workflow-tree.md docs/a), Known deviations / follow-ups, Part E — Implementation Tasks, Self-Review (writing-plans checklist — executed 2026-07-02), Task 11: Debugging-phase + finish-option actions, Task 12: `BanditSelector` (flag-gated) + stats recorder (+1 more)
-
-### Community 520 - "Community 520"
+### Community 515 - "Community 515"
 Cohesion: 0.36
 Nodes (3): GREEN phase, RED phase, Summary
 
-### Community 521 - "Community 521"
+### Community 516 - "Community 516"
 Cohesion: 0.22
 Nodes (8): code:block1 (/usr/local/go/bin/go test ./internal/gardener ./cmd/bt-garde), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/gardener	0.143s), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES, RED phase
 
-### Community 522 - "Community 522"
+### Community 517 - "Community 517"
 Cohesion: 0.22
 Nodes (8): code:block1 (/usr/local/go/bin/go test ./internal/a2a ./cmd/bt-agent -sho), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/a2a	0.264s), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES, RED phase
 
-### Community 523 - "Community 523"
+### Community 518 - "Community 518"
 Cohesion: 0.31
 Nodes (5): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./cmd/bt-agent -short -), code:block2 (tools_test.go:1607: bt_evolve_pareto must report "benchmark_), GREEN phase, RED phase, Summary
 
-### Community 524 - "Community 524"
+### Community 519 - "Community 519"
 Cohesion: 0.22
 Nodes (8): code:block1 (/usr/local/go/bin/go test ./internal/engine -short -count=1 ), code:block2 (--- FAIL: TestMockLLMResponseLengths (0.00s)), FILES_CHANGED, GREEN phase, NOTES, RED_COMMAND, RED phase, RED_RESULT
 
-### Community 525 - "Community 525"
-Cohesion: 0.22
-Nodes (7): code:block1 (/usr/local/go/bin/go test ./internal/evolution ./internal/ga), code:block2 (internal/evolution/multi_objective_test.go:353:15: undefined), code:block3 (--- FAIL: TestValidationGate_ParetoAcceptsRecoveryForSuccess), FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT
-
-### Community 526 - "Community 526"
+### Community 520 - "Community 520"
 Cohesion: 0.36
 Nodes (6): code:block1 (/usr/local/go/bin/go test ./internal/engine ./cmd/benchcmp .), code:block2 (ok      github.com/nico/go-bt-evolve/internal/engine    29.6), FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT
 
-### Community 527 - "Community 527"
+### Community 521 - "Community 521"
 Cohesion: 0.22
 Nodes (8): code:block1 (/usr/local/go/bin/go test ./internal/reliability ./internal/), code:block2 (ok  github.com/nico/go-bt-evolve/internal/reliability   12.5), FILES_CHANGED, GREEN phase, NOTES, RED_COMMAND, RED phase, RED_RESULT
 
-### Community 528 - "Community 528"
-Cohesion: 0.22
-Nodes (8): code:block1 (/usr/local/go/bin/go test ./cmd/bt-agent -short -count=1 -ti), code:block2 (--- FAIL: TestBTEvolveBottlenecksPersistsEvolvedFitness), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES, RED phase
-
-### Community 529 - "Community 529"
-Cohesion: 0.22
-Nodes (8): code:block1 (/usr/local/go/bin/go test ./cmd/bt-docgen ./internal/benchma), code:block2 (cmd/bt-docgen/main_test.go:473:13: undefined: graphReportPat), FILES_CHANGED, GREEN phase, NOTES, RED_COMMAND, RED phase, RED_RESULT
-
-### Community 530 - "Community 530"
+### Community 522 - "Community 522"
 Cohesion: 0.28
 Nodes (7): code:block1 (--- FAIL: TestMAPElitesPopulation_EvolveMAPElitesCrisisInter), code:block2 (internal/evolution/learning_test.go:90:10: pop.LastMutationR), GREEN phase, RED phase, RED phase complete, RED phase result, Summary
 
-### Community 531 - "Community 531"
+### Community 523 - "Community 523"
+Cohesion: 0.22
+Nodes (8): code:block1 (/usr/local/go/bin/go test ./cmd/bt-agent -short -count=1 -ti), code:block2 (--- FAIL: TestBTEvolveBottlenecksPersistsEvolvedFitness), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES, RED phase
+
+### Community 524 - "Community 524"
+Cohesion: 0.22
+Nodes (8): code:block1 (/usr/local/go/bin/go test ./cmd/bt-docgen ./internal/benchma), code:block2 (cmd/bt-docgen/main_test.go:473:13: undefined: graphReportPat), FILES_CHANGED, GREEN phase, NOTES, RED_COMMAND, RED phase, RED_RESULT
+
+### Community 525 - "Community 525"
 Cohesion: 0.33
 Nodes (6): code:block1 (go test ./internal/domains ./internal/benchmark -short -coun), code:block2 (ok  github.com/nico/go-bt-evolve/internal/domains    5.123s), GREEN phase, RED phase, RED phase complete, Summary
 
-### Community 532 - "Community 532"
+### Community 526 - "Community 526"
 Cohesion: 0.25
 Nodes (7): code:block1 (/usr/local/go/bin/go test ./internal/engine -short -count=1 ), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/engine	56.752s), code:block3 (--- PASS: TestClearSuperpowersPlanState_WipesDurableChargeSt), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
 
-### Community 533 - "Community 533"
+### Community 527 - "Community 527"
+Cohesion: 0.22
+Nodes (7): code:block1 (/usr/local/go/bin/go test ./internal/evolution ./internal/ga), code:block2 (internal/evolution/multi_objective_test.go:353:15: undefined), code:block3 (--- FAIL: TestValidationGate_ParetoAcceptsRecoveryForSuccess), FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT
+
+### Community 528 - "Community 528"
 Cohesion: 0.22
 Nodes (8): code:block1 (/usr/local/go/bin/go test ./internal/reliability -short -cou), code:block2 (# github.com/nico/go-bt-evolve/internal/reliability [.../rel), FILES_CHANGED, GREEN phase, NOTES, RED_COMMAND, RED phase, RED_RESULT
 
-### Community 534 - "Community 534"
+### Community 529 - "Community 529"
 Cohesion: 0.22
 Nodes (8): code:block1 (/usr/local/go/bin/go test -race ./internal/engine ./internal), code:block2 (--- FAIL: TestSaveSLOMetrics_SerializesOnSidecarLock (0.00s)), FILES_CHANGED, GREEN phase, NOTES, RED_COMMAND, RED phase, RED_RESULT
 
-### Community 535 - "Community 535"
+### Community 530 - "Community 530"
 Cohesion: 0.22
 Nodes (8): code:block1 (--- FAIL: TestEvolveMAPElites_SameSeedSameArchive (0.02s)), code:block2 (/usr/local/go/bin/go test ./internal/evolution -short -count), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES, RED phase
 
-### Community 536 - "Community 536"
+### Community 531 - "Community 531"
 Cohesion: 0.22
 Nodes (8): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/fusion -shor), code:block2 (--- FAIL: TestRun_JudgeAndSynthesizeGetOwnTimeoutBudget (0.4), FILES_CHANGED, GREEN phase, NOTES, RED_COMMAND, RED phase, RED_RESULT
 
-### Community 537 - "Community 537"
+### Community 532 - "Community 532"
 Cohesion: 0.22
 Nodes (8): code:block1 (/usr/local/go/bin/go test ./internal/engine -run 'TestStatus), code:block2 (--- FAIL: TestReactiveParallelFoldsAbortedAsFailure/success_), FILES_CHANGED, GREEN phase, NOTES, RED_COMMAND, RED phase, RED_RESULT
 
-### Community 538 - "Community 538"
+### Community 533 - "Community 533"
 Cohesion: 0.54
 Nodes (7): collect_issues(), fix_errcheck(), fix_unused_parameter(), load_lines(), main(), save_lines(), wrap_errcheck_line()
 
-### Community 539 - "Community 539"
-Cohesion: 0.32
-Nodes (5): main(), Command(), helperCommand(), MCPCommand(), BindCommandCancellation()
+### Community 534 - "Community 534"
+Cohesion: 0.43
+Nodes (6): NotebookLMFitness(), RegisterNotebookLMFitness(), TestRegisterNotebookLMFitness_DoesNotAffectOtherTrees(), TestRegisterNotebookLMFitness_WiresIntoKnowledgeGraph(), TestRegisterNotebookLMFitness_WiresIntoRealProductionTree(), NotebookLMRunSummary
 
-### Community 540 - "Community 540"
+### Community 535 - "Community 535"
 Cohesion: 0.5
 Nodes (7): structuralParent(), structuralTestFactory(), TestStructuralCrossover_CachesExtractedTemplates(), TestStructuralCrossover_ChildDoesNotAliasParent(), TestStructuralCrossover_SplicesRealSubtrees(), TestStructuralCrossover_UnregisteredParentsSkipped(), TestStructuralCrossover_ValidationGate()
 
-### Community 541 - "Community 541"
-Cohesion: 0.29
-Nodes (6): Analytics, minInt(), BottleneckEntry, CentralityEntry, ContentionEntry, SelectionPressureEntry
-
-### Community 542 - "Community 542"
-Cohesion: 0.25
-Nodes (3): TestInitEngineDelegate(), InitEngineDelegate(), TaskStateBridge
-
-### Community 544 - "Community 544"
-Cohesion: 0.39
-Nodes (7): TestWrapReliable_HasTimeoutAndFallbacks(), act(), ApplyReliability(), cond(), seqFallback(), WrapReliable(), ReliabilitySpec
-
-### Community 545 - "Community 545"
-Cohesion: 0.29
-Nodes (5): okCommand, panicCommand, init(), TestBuildReactiveParallel_ChildPanicRecoveredAsFailure(), TestRunReactiveParallel_ChildPanicRecoveredAsFailure()
-
-### Community 546 - "Community 546"
-Cohesion: 0.29
-Nodes (6): TestAnalyzeImprovementGaps_NoFabricatedEngineTestBlocker(), Analyzer, extractJSON(), TestExtractJSON(), TreeNode, TreeSpec
-
-### Community 547 - "Community 547"
-Cohesion: 0.43
-Nodes (7): isPkgSelector(), isTmpConcat(), scanPersistencePrimitives(), scanTmpRenames(), TestConcurrentPersistDoesNotLoseEntries(), TestEvolutionDeclaresNoLocalPersistencePrimitives(), TestPersistenceFirstSaveCreatesParentBeforeLock()
-
-### Community 548 - "Community 548"
-Cohesion: 0.25
-Nodes (7): TestBuiltinSWEVerifiedSample_CoverageAndUniqueness(), TestLoadSWEVerified_Errors(), BuiltinSWEVerifiedSample(), LoadSWEVerified(), SWEVerifiedEntry, SWEVerifiedMetrics, SWEVerifiedResult
-
-### Community 549 - "Community 549"
+### Community 536 - "Community 536"
 Cohesion: 0.36
 Nodes (4): isCompressibleContentType(), TestIsCompressibleContentType(), compressionResponseWriter, gzipResponseWriter
 
-### Community 550 - "Community 550"
-Cohesion: 0.25
-Nodes (8): 6.1 Explore the knowledge graph, 6.2 Create a tree programmatically (Go code), 6.3 Register your tree, 6. Create Your First Custom Behavior Tree (10 min), code:bash (# View knowledge graph stats (via API)), code:go (package main), code:bash (go run ./cmd/my-tree/), code:go (// In cmd/bt-agent/main.go, add your tree to the resolveTree)
+### Community 538 - "Community 538"
+Cohesion: 0.29
+Nodes (6): Analytics, minInt(), BottleneckEntry, CentralityEntry, ContentionEntry, SelectionPressureEntry
 
-### Community 551 - "Community 551"
+### Community 539 - "Community 539"
+Cohesion: 0.25
+Nodes (3): TestInitEngineDelegate(), InitEngineDelegate(), TaskStateBridge
+
+### Community 541 - "Community 541"
+Cohesion: 0.29
+Nodes (5): okCommand, panicCommand, init(), TestBuildReactiveParallel_ChildPanicRecoveredAsFailure(), TestRunReactiveParallel_ChildPanicRecoveredAsFailure()
+
+### Community 542 - "Community 542"
+Cohesion: 0.25
+Nodes (4): errorHandlerConditionFor(), isParameterizedErrorGuard(), TestErrorHandlerConditionFor(), tracedCondition()
+
+### Community 544 - "Community 544"
+Cohesion: 0.25
+Nodes (7): TestBuiltinSWEVerifiedSample_CoverageAndUniqueness(), TestLoadSWEVerified_Errors(), BuiltinSWEVerifiedSample(), LoadSWEVerified(), SWEVerifiedEntry, SWEVerifiedMetrics, SWEVerifiedResult
+
+### Community 545 - "Community 545"
+Cohesion: 0.29
+Nodes (6): TestAnalyzeImprovementGaps_NoFabricatedEngineTestBlocker(), Analyzer, extractJSON(), TestExtractJSON(), TreeNode, TreeSpec
+
+### Community 546 - "Community 546"
 Cohesion: 0.25
 Nodes (8): 2.1 Fast test suite (no LLM needed), 2.2 Coverage snapshot, 2.3 Check for common issues, 2. Run Tests (3 min), code:bash (go test -short -count=1 -timeout 60s ./...), code:block5 (ok  	github.com/nico/go-bt-evolve/internal/engine	0.123s), code:bash (go test -short -count=1 -coverprofile=/tmp/bt-coverage.out .), code:bash (go vet ./...)
 
-### Community 552 - "Community 552"
+### Community 547 - "Community 547"
+Cohesion: 0.25
+Nodes (8): 6.1 Explore the knowledge graph, 6.2 Create a tree programmatically (Go code), 6.3 Register your tree, 6. Create Your First Custom Behavior Tree (10 min), code:bash (# View knowledge graph stats (via API)), code:go (package main), code:bash (go run ./cmd/my-tree/), code:go (// In cmd/bt-agent/main.go, add your tree to the resolveTree)
+
+### Community 548 - "Community 548"
 Cohesion: 0.25
 Nodes (7): BT Platform Troubleshooting Guide, code:bash (# Is Ollama running?), Condition & Routing Issues, Domain tree silently fails (no LLM calls), Keyword overlap causing misrouting, Quick Diagnostics, See Also
 
-### Community 553 - "Community 553"
+### Community 549 - "Community 549"
 Cohesion: 0.25
 Nodes (7): arc42 goal anchoring (commit 604b1e4), Chronic runner fixes, Landing procedure, NotebookLM corpus hygiene, Research Process Overhaul — 2026-07-08, Research quality findings (review that motivated the overhaul), The runaway-backstop deadlock
 
-### Community 554 - "Community 554"
+### Community 550 - "Community 550"
 Cohesion: 0.25
 Nodes (8): Agent runs but quality always low, code:bash (# Verify tree ID in agent YAML), LLM errors on run, “no tree found for agent X”, Pipeline not found, Scheduled agent never runs, “template not found” on create, Troubleshooting
 
-### Community 555 - "Community 555"
+### Community 551 - "Community 551"
 Cohesion: 0.25
 Nodes (7): CI mapping, Environment, Gosec excludes, Implementation checklist (branch `cursor/reusable-tree-blocks-c122`), Quick reference, Security and linting — local checks vs CI, Tool versions
 
-### Community 556 - "Community 556"
+### Community 552 - "Community 552"
 Cohesion: 0.25
 Nodes (8): code:go (type Tool interface {), code:text (Thought: ...), code:text (Final Answer: ...), code:go (func TestToolLoop_StopsAtMaxToolCalls(t *testing.T)), code:text (Web tools unavailable in this run; state uncertainty explici), code:bash (go test ./internal/fusion -run 'TestToolLoop|TestRunPanel|Te), code:bash (git add internal/fusion/tools.go internal/fusion/tools_test.), Task 5: Add Optional Web Search / Fetch Tool Loop
 
-### Community 557 - "Community 557"
-Cohesion: 0.25
-Nodes (7): 10.1 Quality Tree, 10.2 Quality Scenarios, 10. Quality Requirements, Bounded versioned-evolution evidence, code:text (BT Agent Platform), MCP publication and local-model qualification, Persisted tree recovery evidence
-
-### Community 558 - "Community 558"
+### Community 553 - "Community 553"
 Cohesion: 0.25
 Nodes (8): code:go (package domains), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/domains/ -ru), code:go (package domains), code:go ("arc42:docsync":             Arc42DocsyncTree(),), code:go ("arc42:docsync":             "Per-section arc42 + README doc), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/domains/ -co), code:bash (PATH=/usr/local/go/bin:$PATH make check-quick), Task 19: `arc42:docsync` tree + Commit 2
 
-### Community 559 - "Community 559"
+### Community 554 - "Community 554"
 Cohesion: 0.25
 Nodes (7): code:go (func (tt *TranspositionTable) Save() error {), code:go (func exportSLOMetrics(path string, sloData map[string]float6), code:go (sloData := CollectAgentSLOs(g.cfg.ValidationGate.EvidencePat), code:go (// KanbanAndHermesDomainTrees returns the kanban workflow an), Task 1: Fix `TranspositionTable.Save` to delegate to `util.SaveJSONAtomic`, Task 2: Extract and fix the gardener's SLO-metrics export to use `util.SaveJSONAtomic`, Task 3: Give the kanban and hermes-evolve trees the same smoke-test coverage as `AllDomainTrees()`
 
-### Community 560 - "Community 560"
+### Community 555 - "Community 555"
 Cohesion: 0.29
 Nodes (6): FILES_CHANGED, GREEN phase, NOTES, RED_COMMAND, RED phase, RED_RESULT
 
-### Community 561 - "Community 561"
+### Community 556 - "Community 556"
 Cohesion: 0.36
 Nodes (5): code:block1 (/usr/local/go/bin/go test ./cmd/bt-agent ./internal/knowledg), GREEN phase, RED phase, RED Phase Result, Summary
 
-### Community 564 - "Community 564"
+### Community 559 - "Community 559"
 Cohesion: 0.43
 Nodes (4): code:block1 (--- FAIL: TestRunTask_TerminalBackstopFlipsOutcome (0.00s)), GREEN phase, RED phase, Summary
 
-### Community 565 - "Community 565"
+### Community 560 - "Community 560"
 Cohesion: 0.39
 Nodes (5): code:block1 (--- FAIL: TestEvolveTreeV2_WritesPreMutationSnapshot (0.00s)), code:block2 (gofmt -l internal/gardener/evolve_v2.go), GREEN phase, RED phase, Summary
 
-### Community 566 - "Community 566"
+### Community 561 - "Community 561"
 Cohesion: 0.25
 Nodes (7): code:block1 (internal/domains/domains_test.go:2425:26: undefined: Resolve), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES, RED phase
 
-### Community 568 - "Community 568"
+### Community 563 - "Community 563"
 Cohesion: 0.29
 Nodes (6): FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES, RED phase
 
-### Community 569 - "Community 569"
+### Community 564 - "Community 564"
 Cohesion: 0.25
 Nodes (7): FILES_CHANGED, GREEN phase, NOTES, RED_COMMAND, RED phase, RED_RESULT, Summary
 
-### Community 570 - "Community 570"
+### Community 565 - "Community 565"
 Cohesion: 0.32
 Nodes (5): code:block1 (ok  	github.com/nico/go-bt-evolve/cmd/bt-ci-doctor	0.009s), code:block2 (ok  	github.com/nico/go-bt-evolve/cmd/bt-ci-doctor	0.009s), GREEN phase, RED phase, Summary
 
-### Community 571 - "Community 571"
+### Community 566 - "Community 566"
 Cohesion: 0.32
 Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/evolution -short -count), code:block2 (# github.com/nico/go-bt-evolve/internal/evolution [build fai), GREEN phase, RED phase, Summary
 
-### Community 572 - "Community 572"
+### Community 567 - "Community 567"
 Cohesion: 0.25
 Nodes (7): code:block1 (PATH=/usr/local/go/bin:$PATH go build ./...), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES, RED phase
 
-### Community 573 - "Community 573"
+### Community 568 - "Community 568"
 Cohesion: 0.25
 Nodes (7): code:block1 (internal/evolution/learning_test.go:139:33: NewExpertKnowled), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES, RED phase
 
-### Community 574 - "Community 574"
+### Community 569 - "Community 569"
 Cohesion: 0.25
 Nodes (6): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/knowledge	0.091s), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/knowledge	0.085s), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
 
-### Community 575 - "Community 575"
+### Community 570 - "Community 570"
 Cohesion: 0.25
 Nodes (7): code:block1 (/usr/local/go/bin/go test ./internal/gardener ./internal/evo), code:block2 (niche "n50|d50|" stores the live tree pointer itself instead), code:block3 (expected CycleMetrics.EliteReseed == true — an earlier cycle), FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT
 
-### Community 576 - "Community 576"
+### Community 571 - "Community 571"
 Cohesion: 0.25
 Nodes (7): code:block1 (/usr/local/go/bin/go test ./cmd/benchcmp ./cmd/bt-dashboard ), code:block2 (--- FAIL: TestNoCommittedCommandBinaries (0.00s)), code:block3 (/usr/local/go/bin/go test ./cmd/benchcmp ./cmd/bt-dashboard ), code:block4 (ok  github.com/nico/go-bt-evolve/cmd/benchcmp        0.014s), GREEN phase, RED phase, Summary
 
-### Community 577 - "Community 577"
+### Community 572 - "Community 572"
 Cohesion: 0.25
 Nodes (7): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./cmd/bt-agent -run 'Te), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES, RED phase
 
-### Community 579 - "Community 579"
-Cohesion: 0.25
-Nodes (7): FILES_CHANGED, GREEN phase, NOTES, RED_COMMAND, RED phase, RED_RESULT, Summary
-
-### Community 580 - "Community 580"
-Cohesion: 0.25
-Nodes (7): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/reliability ), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/reliability	10.73), code:block3 (ok  	github.com/nico/go-bt-evolve/internal/reliability	10.80), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
-
-### Community 581 - "Community 581"
-Cohesion: 0.29
-Nodes (6): code:block1 (internal/evolution/island_test.go:146:6: im.Expert undefined), code:block2 (/usr/local/go/bin/go test ./internal/evolution -short -count), code:block3 (ok  github.com/nico/go-bt-evolve/internal/evolution  3.6-3.7), GREEN phase, RED phase, Summary
-
-### Community 582 - "Community 582"
-Cohesion: 0.25
-Nodes (7): code:block1 (PATH=/usr/local/go/bin:$PATH gofmt -l internal/knowledge/fee), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES, RED phase
-
-### Community 583 - "Community 583"
-Cohesion: 0.25
-Nodes (6): code:block1 (/usr/local/go/bin/go test ./internal/evolution -short -count), code:block2 (internal/evolution/learning_test.go:206:3: unknown field Spe), FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT
-
-### Community 584 - "Community 584"
-Cohesion: 0.25
-Nodes (7): code:block1 (/usr/local/go/bin/go test -race ./internal/util -short -coun), code:block2 (# github.com/nico/go-bt-evolve/internal/util [github.com/nic), code:block3 (save error = commit .../fixture.json: rename .../fixture.jso), FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT
-
-### Community 585 - "Community 585"
-Cohesion: 0.25
-Nodes (7): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/domains -sho), FILES_CHANGED, GREEN phase, NOTES, RED_COMMAND, RED phase, RED_RESULT
-
-### Community 586 - "Community 586"
-Cohesion: 0.39
-Nodes (4): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/domains	5.143s), GREEN phase, RED phase, Summary
-
-### Community 587 - "Community 587"
-Cohesion: 0.25
-Nodes (7): code:block1 (/usr/local/go/bin/go test ./internal/engine -short -count=1 ), code:block2 (--- FAIL: TestBuildCompositeChildren_GuardEvaluatedAtRunTime), code:go (if cond := guardConditionForChild(node.Edges, i); cond != ""), FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT
-
-### Community 588 - "Community 588"
-Cohesion: 0.25
-Nodes (7): code:block1 (internal/agent/webhook_publisher_test.go:650:16: pub.breaker), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES, RED phase
-
-### Community 589 - "Community 589"
-Cohesion: 0.25
-Nodes (7): code:block1 (--- PASS: TestExecutionRouterDegradesToScheduledAnalysisOnRe), FILES_CHANGED, NOTES, RED_COMMAND, RED Phase Report, RED_RESULT, What I verified
-
-### Community 590 - "Community 590"
+### Community 574 - "Community 574"
 Cohesion: 0.36
 Nodes (6): code:block1 (/usr/local/go/bin/go test -race ./internal/blackboard -short), code:block2 (--- FAIL: TestReviewBlackboardPeerFileLockDoesNotStallRunSco), FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT
 
-### Community 593 - "Community 593"
+### Community 575 - "Community 575"
+Cohesion: 0.25
+Nodes (7): FILES_CHANGED, GREEN phase, NOTES, RED_COMMAND, RED phase, RED_RESULT, Summary
+
+### Community 576 - "Community 576"
+Cohesion: 0.25
+Nodes (7): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/reliability ), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/reliability	10.73), code:block3 (ok  	github.com/nico/go-bt-evolve/internal/reliability	10.80), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
+
+### Community 577 - "Community 577"
+Cohesion: 0.29
+Nodes (6): code:block1 (internal/evolution/island_test.go:146:6: im.Expert undefined), code:block2 (/usr/local/go/bin/go test ./internal/evolution -short -count), code:block3 (ok  github.com/nico/go-bt-evolve/internal/evolution  3.6-3.7), GREEN phase, RED phase, Summary
+
+### Community 578 - "Community 578"
+Cohesion: 0.25
+Nodes (7): code:block1 (PATH=/usr/local/go/bin:$PATH gofmt -l internal/knowledge/fee), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES, RED phase
+
+### Community 579 - "Community 579"
+Cohesion: 0.25
+Nodes (6): code:block1 (/usr/local/go/bin/go test ./internal/evolution -short -count), code:block2 (internal/evolution/learning_test.go:206:3: unknown field Spe), FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT
+
+### Community 580 - "Community 580"
+Cohesion: 0.25
+Nodes (7): code:block1 (/usr/local/go/bin/go test -race ./internal/util -short -coun), code:block2 (# github.com/nico/go-bt-evolve/internal/util [github.com/nic), code:block3 (save error = commit .../fixture.json: rename .../fixture.jso), FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT
+
+### Community 581 - "Community 581"
+Cohesion: 0.25
+Nodes (7): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/domains -sho), FILES_CHANGED, GREEN phase, NOTES, RED_COMMAND, RED phase, RED_RESULT
+
+### Community 582 - "Community 582"
+Cohesion: 0.39
+Nodes (4): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/domains	5.143s), GREEN phase, RED phase, Summary
+
+### Community 583 - "Community 583"
+Cohesion: 0.25
+Nodes (7): code:block1 (/usr/local/go/bin/go test ./internal/engine -short -count=1 ), code:block2 (--- FAIL: TestBuildCompositeChildren_GuardEvaluatedAtRunTime), code:go (if cond := guardConditionForChild(node.Edges, i); cond != ""), FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT
+
+### Community 584 - "Community 584"
+Cohesion: 0.25
+Nodes (7): code:block1 (internal/agent/webhook_publisher_test.go:650:16: pub.breaker), FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES, RED phase
+
+### Community 585 - "Community 585"
+Cohesion: 0.25
+Nodes (7): code:block1 (--- PASS: TestExecutionRouterDegradesToScheduledAnalysisOnRe), FILES_CHANGED, NOTES, RED_COMMAND, RED Phase Report, RED_RESULT, What I verified
+
+### Community 588 - "Community 588"
 Cohesion: 0.48
 Nodes (5): TestIdleGate_FirstCycleAlwaysRuns(), TestIdleGate_ForcesACycleAfterTheIdleCeiling(), TestIdleGate_RunsAgainWhenNewReflectionDataArrives(), TestIdleGate_SkipsWhenNoNewReflectionData(), writeReflection()
 
+### Community 589 - "Community 589"
+Cohesion: 0.67
+Nodes (6): distinctOperations(), drawMutations(), isolateBlockMutator(), TestEvolutionRand_DefaultIsNonDeterministic(), TestEvolutionRand_RestoreIsIdempotent(), TestEvolutionRand_SeededIsReproducible()
+
+### Community 591 - "Community 591"
+Cohesion: 0.48
+Nodes (6): act(), ApplyReliability(), cond(), seqFallback(), WrapReliable(), ReliabilitySpec
+
+### Community 593 - "Community 593"
+Cohesion: 0.43
+Nodes (5): TestBuildRateLimit_ThrottlesSecondTick(), BuildRateLimit(), getRateLimiter(), ResetRateLimiters(), rateLimiter
+
 ### Community 594 - "Community 594"
-Cohesion: 0.57
-Nodes (5): degeneratePopulation(), runWithoutPanic(), TestEvolve_DegeneratePopulations(), TestEvolveWithExperience_DegeneratePopulations(), TestMemeticEvolve_DegeneratePopulations()
+Cohesion: 0.67
+Nodes (6): runArc42Seeder(), TestArc42SeederRejectsProposalNotNamingGoal(), TestArc42SeederReportsWhenGoalsUnavailable(), TestArc42SeederSeedsGoalTargetedProgram(), TestArc42SeederSkipsWhenProgramActive(), withSeederEnv()
 
-### Community 603 - "Community 603"
-Cohesion: 0.38
-Nodes (4): docChangeContextFromBlackboard(), init(), registerArc42SyncNode(), TestDocChangeContextFromBlackboardFallsBackToGit()
+### Community 604 - "Community 604"
+Cohesion: 0.52
+Nodes (6): assertRouteConds(), evalCond(), TestRouteConditions_ExactFallback(), TestRouteConditions_FellBackToDefault(), TestRouteConditions_ModelResolved(), TestRouteConditions_NoRouting()
 
-### Community 607 - "Community 607"
+### Community 605 - "Community 605"
 Cohesion: 0.57
 Nodes (5): act(), cond(), seq(), TestValidateErrorHandlerProposal_RefusesUnrecoverableCategories(), TestValidateErrorHandlerProposal_RejectsPurelyDeclarativeRecovery()
 
-### Community 610 - "Community 610"
+### Community 606 - "Community 606"
 Cohesion: 0.29
-Nodes (7): 1.1 Clone and enter the repo, 1.2 Verify Go version, 1.3 Download dependencies, 1. Setup (2 min), code:bash (git clone https://github.com/nico/go-bt-evolve.git), code:bash (go version), code:bash (go mod download)
+Nodes (5): assert, fs, path, test, vm
+
+### Community 607 - "Community 607"
+Cohesion: 0.38
+Nodes (4): docChangeContextFromBlackboard(), init(), registerArc42SyncNode(), TestDocChangeContextFromBlackboardFallsBackToGit()
 
 ### Community 611 - "Community 611"
 Cohesion: 0.29
-Nodes (7): 5.1 Explore available trees, 5.2 Run a task through the GoDev tree, 5.3 Try different task types, 5. Execute Tasks Through Behavior Trees (5 min), code:bash (# List all registered trees), code:bash (# Via mcporter (if installed):), code:bash (# Research task → deep_research tree)
+Nodes (7): 4.1 Start the server, 4.2 Verify it's running, 4.3 Explore the API, 4. Start the Dashboard (3 min), code:bash (export BT_API_KEY="$(openssl rand -hex 32)"), code:bash (curl -s http://localhost:9800/api/health | head -c 200), code:bash (# Platform summary)
 
 ### Community 612 - "Community 612"
 Cohesion: 0.29
-Nodes (7): 4.1 Start the server, 4.2 Verify it's running, 4.3 Explore the API, 4. Start the Dashboard (3 min), code:bash (export BT_API_KEY="$(openssl rand -hex 32)"), code:bash (curl -s http://localhost:9800/api/health | head -c 200), code:bash (# Platform summary)
+Nodes (7): 5.1 Explore available trees, 5.2 Run a task through the GoDev tree, 5.3 Try different task types, 5. Execute Tasks Through Behavior Trees (5 min), code:bash (# List all registered trees), code:bash (# Via mcporter (if installed):), code:bash (# Research task → deep_research tree)
 
 ### Community 613 - "Community 613"
 Cohesion: 0.29
-Nodes (7): code:bash (# Reset tree to default), code:go (ss := d.Stats[selectorName]), Decision tree optimizer crashes with SIGSEGV, Evolution & Gardener Issues, Gardener applies 0 mutations per cycle, Mutation death spiral (97.3% regression rate), Transposition Table always returns 0 entries
+Nodes (7): 1.1 Clone and enter the repo, 1.2 Verify Go version, 1.3 Download dependencies, 1. Setup (2 min), code:bash (git clone https://github.com/nico/go-bt-evolve.git), code:bash (go version), code:bash (go mod download)
 
 ### Community 614 - "Community 614"
 Cohesion: 0.29
-Nodes (7): Background test output flooded by zsh init, code:bash (go test -short -count=1 -timeout 60s ./...), code:bash (go test -count=1 -timeout 1200s ./...), code:bash (exec bash -c 'cd ~/go-bt-evolve && go test -v -run "TestName), Empty tool output = success, not error, Ollama-dependent tests timeout, Test & Benchmark Issues
+Nodes (7): code:bash (# Reset tree to default), code:go (ss := d.Stats[selectorName]), Decision tree optimizer crashes with SIGSEGV, Evolution & Gardener Issues, Gardener applies 0 mutations per cycle, Mutation death spiral (97.3% regression rate), Transposition Table always returns 0 entries
 
 ### Community 615 - "Community 615"
 Cohesion: 0.29
-Nodes (7): CLI `bt-agent-cli schedule`, code:json ({ "agent": "system-monitor", "schedule": "*/5 * * * *", "tim), code:bash (go run ./cmd/bt-agent-cli/ schedule system-monitor --every "), MCP `bt_agent_schedule`, Schedule syntax, Scheduler behavior, Scheduling
+Nodes (7): Background test output flooded by zsh init, code:bash (go test -short -count=1 -timeout 60s ./...), code:bash (go test -count=1 -timeout 1200s ./...), code:bash (exec bash -c 'cd ~/go-bt-evolve && go test -v -run "TestName), Empty tool output = success, not error, Ollama-dependent tests timeout, Test & Benchmark Issues
 
 ### Community 616 - "Community 616"
 Cohesion: 0.29
-Nodes (7): code:bash (AGENT_HOME="${BT_AGENT_HOME:-$HOME/.go-bt-evolve}"), code:powershell ($AgentHome = if ($env:BT_AGENT_HOME) { $env:BT_AGENT_HOME } ), code:bash (# Terminal 1 — MCP server + scheduler + A2A (port 8686)), First-time setup, Linux / macOS, Start the runtime, Windows (PowerShell)
+Nodes (7): CLI `bt-agent-cli schedule`, code:json ({ "agent": "system-monitor", "schedule": "*/5 * * * *", "tim), code:bash (go run ./cmd/bt-agent-cli/ schedule system-monitor --every "), MCP `bt_agent_schedule`, Schedule syntax, Scheduler behavior, Scheduling
 
 ### Community 617 - "Community 617"
 Cohesion: 0.29
-Nodes (6): Final-head directory permission correction, Fixture scope and recovery, GitHub and operational qualification, Goals and prioritized limitations, Initial implementation snapshot and settled verification, Target-owned restart control — 2026-10-01
+Nodes (7): code:bash (AGENT_HOME="${BT_AGENT_HOME:-$HOME/.go-bt-evolve}"), code:powershell ($AgentHome = if ($env:BT_AGENT_HOME) { $env:BT_AGENT_HOME } ), code:bash (# Terminal 1 — MCP server + scheduler + A2A (port 8686)), First-time setup, Linux / macOS, Start the runtime, Windows (PowerShell)
 
 ### Community 618 - "Community 618"
 Cohesion: 0.29
-Nodes (7): code:go (type OpenAICompatConfig struct {), code:go (OpenRouterHost  string `json:"openrouter_host" env:"OPENROUT), code:bash (go test ./internal/llm -run 'TestOpenAICompat|TestNewProvide), code:bash (git add internal/llm/openai_compat.go internal/llm/openai_co), code:go (func TestOpenAICompat_Generate_SendsChatCompletion(t *testin), code:json ({), Task 2: Add OpenRouter/OpenAI-Compatible Model Client
+Nodes (6): Final-head directory permission correction, Fixture scope and recovery, GitHub and operational qualification, Goals and prioritized limitations, Initial implementation snapshot and settled verification, Target-owned restart control — 2026-10-01
 
 ### Community 619 - "Community 619"
 Cohesion: 0.29
-Nodes (7): code:go (func TestConfig_DefaultsQualityPreset(t *testing.T)), code:bash (cd /home/nico/go-bt-evolve), code:go (func DefaultConfig() Config), code:go (var QualityPreset = []string{), code:bash (go test ./internal/fusion -run TestConfig -count=1), code:bash (git add internal/fusion/config.go internal/fusion/config_tes), Task 1: Add Fusion Config Validation
+Nodes (7): code:go (func TestJudge_ParsesStructuredJSON(t *testing.T)), code:text (You are the Fusion judge. Compare panel responses; do not me), code:go (func Judge(ctx context.Context, caller ModelCaller, cfg Conf), code:go (func parseAnalysisJSON(raw string) (Analysis, error)), code:bash (go test ./internal/fusion -run 'TestJudge|TestParseAnalysis'), code:bash (git add internal/fusion/judge.go internal/fusion/judge_test.), Task 4: Implement Judge Structured Analysis
 
 ### Community 620 - "Community 620"
 Cohesion: 0.29
-Nodes (7): code:go (func TestJudge_ParsesStructuredJSON(t *testing.T)), code:text (You are the Fusion judge. Compare panel responses; do not me), code:go (func Judge(ctx context.Context, caller ModelCaller, cfg Conf), code:go (func parseAnalysisJSON(raw string) (Analysis, error)), code:bash (go test ./internal/fusion -run 'TestJudge|TestParseAnalysis'), code:bash (git add internal/fusion/judge.go internal/fusion/judge_test.), Task 4: Implement Judge Structured Analysis
+Nodes (7): code:go (func TestConfig_DefaultsQualityPreset(t *testing.T)), code:bash (cd /home/nico/go-bt-evolve), code:go (func DefaultConfig() Config), code:go (var QualityPreset = []string{), code:bash (go test ./internal/fusion -run TestConfig -count=1), code:bash (git add internal/fusion/config.go internal/fusion/config_tes), Task 1: Add Fusion Config Validation
 
 ### Community 621 - "Community 621"
 Cohesion: 0.29
-Nodes (6): arc42 Conformance Checklists (companion to 2026-07-16-arc42-docs-consolidation-design.md), arc42 Section 7 (Deployment View) — Conformance Checklist, Do's (from the arc42 tips), Does NOT belong here (lives elsewhere in arc42), Don'ts / anti-patterns, Required content & structure
+Nodes (7): code:go (type OpenAICompatConfig struct {), code:go (OpenRouterHost  string `json:"openrouter_host" env:"OPENROUT), code:bash (go test ./internal/llm -run 'TestOpenAICompat|TestNewProvide), code:bash (git add internal/llm/openai_compat.go internal/llm/openai_co), code:go (func TestOpenAICompat_Generate_SendsChatCompletion(t *testin), code:json ({), Task 2: Add OpenRouter/OpenAI-Compatible Model Client
 
 ### Community 622 - "Community 622"
 Cohesion: 0.29
-Nodes (6): GOAP Runner: honest outcome signal, commit auto-fix, and build stamping, Item 1 — Honest outcome labels + authoritative quality, Item 2 — VCS build stamping (fix inert drift detection), Item 3 — Commit auto-fix loop (up to 10 Claude attempts), Out of scope, Verification
+Nodes (6): Anti-patterns / don'ts, arc42 Conformance Checklists (companion to 2026-07-16-arc42-docs-consolidation-design.md), arc42 Section 3 (Context and Scope) — Conformance Checklist, Do's, Does NOT belong here (lives elsewhere in arc42), Required content & structure
 
 ### Community 623 - "Community 623"
 Cohesion: 0.29
-Nodes (7): code:bash (PATH=/usr/local/go/bin:$PATH go get \), code:go (package engine), code:go (package engine), code:go (var extraHandlers []slog.Handler), code:go (logShutdown := engine.InitLogExport("bt-agent")), code:bash (git add internal/engine/log_correlation.go internal/engine/l), Task 4: Log correlation — trace-aware slog handler + OTLP log bridge
+Nodes (6): GOAP Runner: honest outcome signal, commit auto-fix, and build stamping, Item 1 — Honest outcome labels + authoritative quality, Item 2 — VCS build stamping (fix inert drift detection), Item 3 — Commit auto-fix loop (up to 10 Claude attempts), Out of scope, Verification
 
 ### Community 624 - "Community 624"
 Cohesion: 0.29
 Nodes (6): code:go (engine.Init()), code:bash (git add internal/ cmd/), Global Constraints, Logging & Tracing Overhaul Implementation Plan, Self-Review Notes, Task 9: Migrate raw log.Printf files to structured logging
 
 ### Community 625 - "Community 625"
+Cohesion: 0.29
+Nodes (7): code:bash (PATH=/usr/local/go/bin:$PATH go get \), code:go (package engine), code:go (package engine), code:go (var extraHandlers []slog.Handler), code:go (logShutdown := engine.InitLogExport("bt-agent")), code:bash (git add internal/engine/log_correlation.go internal/engine/l), Task 4: Log correlation — trace-aware slog handler + OTLP log bridge
+
+### Community 626 - "Community 626"
 Cohesion: 0.38
 Nodes (7): code:block1 (/usr/local/go/bin/go test ./internal/engine -count=1 -run Te), code:block2 (--- FAIL: TestSuperpowersRuntime_ActionsRegistered_Scheduled), RED_COMMAND, RED Phase Complete, RED Phase Report, RED Phase Result, RED_RESULT
 
-### Community 627 - "Community 627"
+### Community 628 - "Community 628"
 Cohesion: 0.38
 Nodes (4): code:sh (/usr/local/go/bin/go test ./internal/engine -short -count=1 ), code:sh (-run 'Test.*(Superpowers|RateLimitFailover|Delegation|Claude), GREEN phase, RED phase
 
-### Community 628 - "Community 628"
+### Community 629 - "Community 629"
+Cohesion: 0.29
+Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/domains -short -count=1), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
+
+### Community 630 - "Community 630"
 Cohesion: 0.29
 Nodes (6): code:block1 (/usr/local/go/bin/go test ./internal/gardener ./cmd/bt-garde), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/gardener	0.143s), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
 
-### Community 629 - "Community 629"
+### Community 631 - "Community 631"
 Cohesion: 0.38
 Nodes (4): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/evolution	3.445s), GREEN phase, RED phase, Summary
 
-### Community 631 - "Community 631"
+### Community 633 - "Community 633"
 Cohesion: 0.43
 Nodes (3): GREEN phase, RED phase, Summary
 
-### Community 632 - "Community 632"
+### Community 634 - "Community 634"
 Cohesion: 0.43
 Nodes (3): code:block1 (/usr/local/go/bin/go test ./internal/engine -short -count=1 ), GREEN phase, RED phase
 
-### Community 633 - "Community 633"
+### Community 635 - "Community 635"
 Cohesion: 0.43
 Nodes (4): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/a2a -short -), GREEN phase, RED phase, Summary
 
-### Community 634 - "Community 634"
+### Community 636 - "Community 636"
 Cohesion: 0.29
 Nodes (6): code:block1 (/usr/local/go/bin/go test ./internal/a2a ./cmd/bt-agent -sho), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/a2a	0.264s), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
 
-### Community 635 - "Community 635"
+### Community 637 - "Community 637"
 Cohesion: 0.57
 Nodes (4): FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
 
-### Community 636 - "Community 636"
+### Community 638 - "Community 638"
 Cohesion: 0.38
 Nodes (4): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/gardener	0.094s), code:block2 (--- PASS: TestRegistry_RollbackTree (0.01s)), GREEN phase, RED phase
 
-### Community 637 - "Community 637"
+### Community 639 - "Community 639"
 Cohesion: 0.43
 Nodes (4): code:block1 (ok  	github.com/nico/go-bt-evolve/cmd/bt-gardener	0.068s), code:block2 (# github.com/nico/go-bt-evolve/cmd/bt-gardener [github.com/n), GREEN phase, RED phase
 
-### Community 638 - "Community 638"
-Cohesion: 0.29
-Nodes (6): code:block1 (/usr/local/go/bin/go test ./internal/engine -short -count=1 ), code:block2 (--- FAIL: TestMockLLMResponseLengths (0.00s)), FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT
-
-### Community 639 - "Community 639"
-Cohesion: 0.29
-Nodes (6): code:block1 (/usr/local/go/bin/go test ./internal/domains -short -count=1), code:block2 (=== RUN 1 ===  ok  github.com/nico/go-bt-evolve/internal/dom), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
-
 ### Community 640 - "Community 640"
-Cohesion: 0.29
-Nodes (6): FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES, RED phase
-
-### Community 641 - "Community 641"
-Cohesion: 0.29
-Nodes (6): code:block1 (/usr/local/go/bin/go test ./internal/engine -short -count=1 ), code:block2 (structure cycle must leave last-reviewed SHA unchanged: got ), GREEN phase, RED phase, RED phase result, Summary
-
-### Community 643 - "Community 643"
-Cohesion: 0.29
-Nodes (6): code:block1 (/usr/local/go/bin/go test ./internal/evolution ./cmd/bt-agen), code:block2 (ok  github.com/nico/go-bt-evolve/internal/evolution  4.429s), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
-
-### Community 644 - "Community 644"
-Cohesion: 0.29
-Nodes (6): code:block1 (/usr/local/go/bin/go test ./internal/gardener ./cmd/bt-garde), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/gardener	0.083s), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
-
-### Community 645 - "Community 645"
-Cohesion: 0.38
-Nodes (5): code:block1 (internal/agent/webhook_publisher_test.go:363:13: pub.DLQ und), code:block2 (ok  github.com/nico/go-bt-evolve/internal/agent   3.557s), GREEN phase, RED phase, Summary
-
-### Community 646 - "Community 646"
-Cohesion: 0.29
-Nodes (6): FILES_CHANGED, GREEN phase, NOTES, RED_COMMAND, RED phase, RED_RESULT
-
-### Community 647 - "Community 647"
-Cohesion: 0.33
-Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/knowledge ./cmd/bt-agen), code:block2 (internal/knowledge/analytics_test.go:179:5: kg.ExpectedDomai), GREEN phase, RED phase, Summary
-
-### Community 648 - "Community 648"
-Cohesion: 0.33
-Nodes (5): code:go (for _, dep := range sm.DependsOn {), code:block2 (PATH=/usr/local/go/bin:$PATH go test ./cmd/bt-evaluator ./in), code:block3 (ok  	github.com/nico/go-bt-evolve/cmd/bt-evaluator	0.026s), GREEN phase, RED phase
-
-### Community 649 - "Community 649"
-Cohesion: 0.29
-Nodes (6): code:block1 (/usr/local/go/bin/go test ./internal/gardener ./cmd/bt-dashb), code:block2 (--- FAIL: TestRegistry_DomainDescriptionsResolveThroughDescr), FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT
-
-### Community 650 - "Community 650"
-Cohesion: 0.38
-Nodes (5): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/dashboard	0.841s), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/agent	2.636s), GREEN phase, RED phase, Summary
-
-### Community 651 - "Community 651"
-Cohesion: 0.33
-Nodes (5): code:block1 (--- FAIL: TestMetricsTracker_SaveAggregatesDeepSearchCoverag), code:block2 (/usr/local/go/bin/go test ./internal/gardener -short -count=), code:block3 (ok  	github.com/nico/go-bt-evolve/internal/gardener	0.114s), GREEN phase, RED phase
-
-### Community 652 - "Community 652"
-Cohesion: 0.38
-Nodes (4): code:block1 (/usr/local/go/bin/go test ./cmd/bt-agent -short -count=1 -ti), code:block2 (--- FAIL: TestBTEvolveIslandDomainsModeAttributesFitnessPerD), GREEN phase, RED phase
-
-### Community 653 - "Community 653"
-Cohesion: 0.29
-Nodes (6): code:block1 (/usr/local/go/bin/go test ./cmd/bt-docgen ./internal/benchma), code:block2 (cmd/bt-docgen/main_test.go:473:13: undefined: graphReportPat), FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT
-
-### Community 654 - "Community 654"
 Cohesion: 0.38
 Nodes (5): code:block1 (cmd/bt-agent/feedback_tools_test.go:547:10: undefined: perso), code:block2 (ok  	github.com/nico/go-bt-evolve/cmd/bt-agent	1.356s), GREEN phase, RED phase, Summary
 
-### Community 655 - "Community 655"
+### Community 641 - "Community 641"
 Cohesion: 0.33
 Nodes (5): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./cmd/bt-agent ./intern), code:block2 (ok  	github.com/nico/go-bt-evolve/cmd/bt-agent	1.442s), GREEN phase, RED phase, Summary
 
-### Community 656 - "Community 656"
-Cohesion: 0.33
-Nodes (5): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/engine -shor), code:block2 (internal/engine/actions_goap_fusion_test.go:420:2: cannot as), GREEN phase, RED phase, Summary
+### Community 642 - "Community 642"
+Cohesion: 0.29
+Nodes (6): code:block1 (/usr/local/go/bin/go test ./internal/engine -short -count=1 ), code:block2 (--- FAIL: TestMockLLMResponseLengths (0.00s)), FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT
 
-### Community 657 - "Community 657"
-Cohesion: 0.43
-Nodes (4): code:block1 (--- FAIL: TestRunTask_NilChainStateDoesNotPanic (0.00s)), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/a2a	0.278s), GREEN phase, RED phase
+### Community 643 - "Community 643"
+Cohesion: 0.29
+Nodes (6): code:block1 (/usr/local/go/bin/go test ./internal/domains -short -count=1), code:block2 (=== RUN 1 ===  ok  github.com/nico/go-bt-evolve/internal/dom), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
 
-### Community 658 - "Community 658"
-Cohesion: 0.33
-Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/gardener -short -count=), code:block2 (internal/gardener/evolve_v2_test.go:813:4: unknown field Sel), GREEN phase, RED phase, Summary
-
-### Community 659 - "Community 659"
+### Community 644 - "Community 644"
 Cohesion: 0.29
 Nodes (6): FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES, RED phase
 
+### Community 645 - "Community 645"
+Cohesion: 0.29
+Nodes (6): code:block1 (/usr/local/go/bin/go test ./internal/engine -short -count=1 ), code:block2 (structure cycle must leave last-reviewed SHA unchanged: got ), GREEN phase, RED phase, RED phase result, Summary
+
+### Community 647 - "Community 647"
+Cohesion: 0.29
+Nodes (6): code:block1 (/usr/local/go/bin/go test ./internal/evolution ./cmd/bt-agen), code:block2 (ok  github.com/nico/go-bt-evolve/internal/evolution  4.429s), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
+
+### Community 648 - "Community 648"
+Cohesion: 0.29
+Nodes (6): code:block1 (/usr/local/go/bin/go test ./internal/gardener ./cmd/bt-garde), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/gardener	0.083s), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
+
+### Community 649 - "Community 649"
+Cohesion: 0.29
+Nodes (6): FILES_CHANGED, GREEN phase, NOTES, RED_COMMAND, RED phase, RED_RESULT
+
+### Community 650 - "Community 650"
+Cohesion: 0.33
+Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/knowledge ./cmd/bt-agen), code:block2 (internal/knowledge/analytics_test.go:179:5: kg.ExpectedDomai), GREEN phase, RED phase, Summary
+
+### Community 651 - "Community 651"
+Cohesion: 0.43
+Nodes (3): code:block1 (panic: onRotate exploded), GREEN phase, RED phase
+
+### Community 652 - "Community 652"
+Cohesion: 0.33
+Nodes (5): code:go (for _, dep := range sm.DependsOn {), code:block2 (PATH=/usr/local/go/bin:$PATH go test ./cmd/bt-evaluator ./in), code:block3 (ok  	github.com/nico/go-bt-evolve/cmd/bt-evaluator	0.026s), GREEN phase, RED phase
+
+### Community 653 - "Community 653"
+Cohesion: 0.29
+Nodes (6): code:block1 (/usr/local/go/bin/go test ./internal/gardener ./cmd/bt-dashb), code:block2 (--- FAIL: TestRegistry_DomainDescriptionsResolveThroughDescr), FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT
+
+### Community 654 - "Community 654"
+Cohesion: 0.38
+Nodes (5): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/dashboard	0.841s), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/agent	2.636s), GREEN phase, RED phase, Summary
+
+### Community 655 - "Community 655"
+Cohesion: 0.33
+Nodes (5): code:block1 (--- FAIL: TestMetricsTracker_SaveAggregatesDeepSearchCoverag), code:block2 (/usr/local/go/bin/go test ./internal/gardener -short -count=), code:block3 (ok  	github.com/nico/go-bt-evolve/internal/gardener	0.114s), GREEN phase, RED phase
+
+### Community 656 - "Community 656"
+Cohesion: 0.29
+Nodes (6): code:block1 (/usr/local/go/bin/go test ./cmd/bt-docgen ./internal/benchma), code:block2 (cmd/bt-docgen/main_test.go:473:13: undefined: graphReportPat), FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT
+
+### Community 657 - "Community 657"
+Cohesion: 0.33
+Nodes (5): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/engine -shor), code:block2 (internal/engine/actions_goap_fusion_test.go:420:2: cannot as), GREEN phase, RED phase, Summary
+
+### Community 658 - "Community 658"
+Cohesion: 0.43
+Nodes (4): code:block1 (--- FAIL: TestRunTask_NilChainStateDoesNotPanic (0.00s)), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/a2a	0.278s), GREEN phase, RED phase
+
+### Community 659 - "Community 659"
+Cohesion: 0.38
+Nodes (4): code:block1 (/usr/local/go/bin/go test ./cmd/bt-agent -short -count=1 -ti), code:block2 (--- FAIL: TestBTEvolveIslandDomainsModeAttributesFitnessPerD), GREEN phase, RED phase
+
 ### Community 660 - "Community 660"
 Cohesion: 0.33
-Nodes (5): code:block1 (--- FAIL: TestDetectPath_DataPipelineKeywordFallback), code:block2 (--- FAIL: TestDetectPath_SecurityKeywordFallback/sql_injecti), GREEN phase, RED phase, Summary
+Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/gardener -short -count=), code:block2 (internal/gardener/evolve_v2_test.go:813:4: unknown field Sel), GREEN phase, RED phase, Summary
 
 ### Community 661 - "Community 661"
 Cohesion: 0.29
 Nodes (6): FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES, RED phase
 
 ### Community 662 - "Community 662"
-Cohesion: 0.29
-Nodes (6): code:block1 (/usr/local/go/bin/go test ./internal/security -short -count=), code:block2 (--- FAIL: TestRotateKey_ReplacementDoesNotSilentlyExpire (0.), FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT
+Cohesion: 0.33
+Nodes (5): code:block1 (--- FAIL: TestDetectPath_DataPipelineKeywordFallback), code:block2 (--- FAIL: TestDetectPath_SecurityKeywordFallback/sql_injecti), GREEN phase, RED phase, Summary
 
 ### Community 663 - "Community 663"
 Cohesion: 0.29
-Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/domains -short -count=1), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
+Nodes (6): FILES_CHANGED, GREEN_COMMANDS, GREEN phase, GREEN_RESULTS, NOTES, RED phase
 
 ### Community 664 - "Community 664"
 Cohesion: 0.29
-Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/engine -short -count=1 ), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
+Nodes (6): code:block1 (/usr/local/go/bin/go test ./internal/security -short -count=), code:block2 (--- FAIL: TestRotateKey_ReplacementDoesNotSilentlyExpire (0.), FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT
 
 ### Community 665 - "Community 665"
-Cohesion: 0.43
-Nodes (3): code:block1 (panic: onRotate exploded), GREEN phase, RED phase
-
-### Community 666 - "Community 666"
 Cohesion: 0.29
 Nodes (6): code:block1 (/usr/local/go/bin/go test ./internal/gardener ./cmd/bt-garde), code:block2 (ok  github.com/nico/go-bt-evolve/internal/gardener  0.191s), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
 
-### Community 667 - "Community 667"
+### Community 666 - "Community 666"
 Cohesion: 0.29
 Nodes (6): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/agentexec ./), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/agentexec	0.018s), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
+
+### Community 667 - "Community 667"
+Cohesion: 0.38
+Nodes (5): code:block1 (internal/agent/webhook_publisher_test.go:363:13: pub.DLQ und), code:block2 (ok  github.com/nico/go-bt-evolve/internal/agent   3.557s), GREEN phase, RED phase, Summary
 
 ### Community 668 - "Community 668"
 Cohesion: 0.29
@@ -6296,519 +6292,519 @@ Nodes (6): code:block1 (/usr/local/go/bin/go test ./internal/engine -run 'TestBu
 
 ### Community 674 - "Community 674"
 Cohesion: 0.29
-Nodes (6): code:block1 (/usr/local/go/bin/go test ./internal/agent ./internal/a2a -s), code:block2 (--- FAIL: TestAgentCircuitBreakerStore_SaveLocksReadModifyWr), FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT
+Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/engine -short -count=1 ), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
 
 ### Community 675 - "Community 675"
 Cohesion: 0.29
-Nodes (6): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/agent ./inte), code:block2 (internal/agent/runner_test.go:133:10: undefined: AuctionWinn), FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT
+Nodes (6): code:block1 (/usr/local/go/bin/go test ./internal/agent ./internal/a2a -s), code:block2 (--- FAIL: TestAgentCircuitBreakerStore_SaveLocksReadModifyWr), FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT
 
 ### Community 676 - "Community 676"
-Cohesion: 0.47
-Nodes (6): FileRead(), TestFileRead_EmptyFile(), TestFileRead_NotFound(), TestFileRead_Success(), TestFileRead_Truncated(), writeFile()
+Cohesion: 0.29
+Nodes (6): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/agent ./inte), code:block2 (internal/agent/runner_test.go:133:10: undefined: AuctionWinn), FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT
 
 ### Community 678 - "Community 678"
 Cohesion: 0.47
 Nodes (4): cmdStatus(), programStatusLines(), TestProgramStatusLines_AllDone(), TestProgramStatusLines_MidProgress()
 
 ### Community 679 - "Community 679"
-Cohesion: 0.53
-Nodes (5): init(), registerSuperpowersDebugActions(), superpowersDebugPhase(), superpowersDebugPhaseAction(), debugPhaseSpec
-
-### Community 680 - "Community 680"
-Cohesion: 0.33
-Nodes (5): Entry, Limits, Scope, ScopeKind, DefaultLimits()
-
-### Community 681 - "Community 681"
-Cohesion: 0.47
-Nodes (3): TestServer_Run_MixedToolConcurrentCallsDoNotRaceOnSharedBlackboard(), TestServer_ToolPanicRecovery(), mixedToolSharedLeaf
-
-### Community 682 - "Community 682"
-Cohesion: 0.4
-Nodes (4): prepareTreeForBuild(), TestBuildAndValidate_SubTreeRefRequiresExpander(), TestPrepareTreeForBuild_NoRefs(), treeHasSubTreeRefs()
-
-### Community 683 - "Community 683"
-Cohesion: 0.33
-Nodes (3): errorHandlerConditionFor(), isParameterizedErrorGuard(), TestErrorHandlerConditionFor()
-
-### Community 684 - "Community 684"
-Cohesion: 0.6
-Nodes (5): addProgram(), TestActive_PrefersRealWorkOverFiller(), TestActive_SelfFixStillOutranksEverything(), TestActiveExcludingFiller_CoverageAloneDoesNotBlockSeeding(), TestActiveExcludingFiller_RealProgramStillBlocksSeeding()
-
-### Community 685 - "Community 685"
-Cohesion: 0.33
-Nodes (3): PriorityTaskQueue, Queue, QueueError
-
-### Community 686 - "Community 686"
 Cohesion: 0.33
 Nodes (4): CompanyState, Decision, QuarterResult, SprintResult
 
+### Community 680 - "Community 680"
+Cohesion: 0.6
+Nodes (5): isolateNlmTransport(), TestNlmDeadlineIncludesRetryBackoff(), TestNlmGenerationAllowedUnderSolPolicyWithoutReplay(), TestNlmOpenCircuitReturnsImmediately(), TestNlmPreservesCompleteJSONAndRejectsErrorResponses()
+
+### Community 681 - "Community 681"
+Cohesion: 0.47
+Nodes (5): evaluateEventPredicate(), evaluatePredicate(), eventMatches(), toFloat(), EventSource
+
+### Community 682 - "Community 682"
+Cohesion: 0.47
+Nodes (3): TestServer_Run_MixedToolConcurrentCallsDoNotRaceOnSharedBlackboard(), TestServer_ToolPanicRecovery(), mixedToolSharedLeaf
+
+### Community 683 - "Community 683"
+Cohesion: 0.6
+Nodes (5): addProgram(), TestActive_PrefersRealWorkOverFiller(), TestActive_SelfFixStillOutranksEverything(), TestActiveExcludingFiller_CoverageAloneDoesNotBlockSeeding(), TestActiveExcludingFiller_RealProgramStillBlocksSeeding()
+
+### Community 684 - "Community 684"
+Cohesion: 0.47
+Nodes (4): TestVerifyNotebookLMEvidenceAcceptsRealNotebookPayload(), TestVerifyNotebookLMEvidenceRejectsEmptyOrUngroundedSuccess(), TestVerifyNotebookLMEvidenceRejectsFabricatedOutput(), verifyNotebookLMEvidenceAction()
+
+### Community 685 - "Community 685"
+Cohesion: 0.53
+Nodes (5): init(), registerSuperpowersDebugActions(), superpowersDebugPhase(), superpowersDebugPhaseAction(), debugPhaseSpec
+
+### Community 686 - "Community 686"
+Cohesion: 0.33
+Nodes (3): PriorityTaskQueue, Queue, QueueError
+
 ### Community 687 - "Community 687"
+Cohesion: 0.33
+Nodes (5): Entry, Limits, Scope, ScopeKind, DefaultLimits()
+
+### Community 688 - "Community 688"
+Cohesion: 0.47
+Nodes (4): NotebookLMConsumerTree(), consumerChainPrompts(), TestNotebookLMConsumerTreeDoesNotWatchRetiredGlobOrOwnOutput(), TestNotebookLMConsumerTreeWatchesCurrentResearchNaming()
+
+### Community 689 - "Community 689"
 Cohesion: 0.47
 Nodes (4): noRunnerHome(), repoRoot(), TestRun_JSONOutput(), TestRun_TextOutput()
 
-### Community 688 - "Community 688"
+### Community 690 - "Community 690"
 Cohesion: 0.53
 Nodes (4): handleBlackboard(), handleBlackboardScopes(), parseBlackboardScope(), scopeError
 
-### Community 689 - "Community 689"
+### Community 691 - "Community 691"
 Cohesion: 0.53
 Nodes (5): pollLiveData(), renderCategories(), renderOverview(), renderSystemStatus(), updateOverviewStats()
 
-### Community 690 - "Community 690"
+### Community 692 - "Community 692"
 Cohesion: 0.33
 Nodes (6): code:bash (# Audit all ChainAction nodes for low max_tokens), Empty outcome with no error, OOM kill (exit 137), Runtime Issues, Tree reports "success" but produces garbage output, Tree times out at 600s without completing
 
-### Community 691 - "Community 691"
+### Community 693 - "Community 693"
 Cohesion: 0.33
 Nodes (5): Agent names and files, code:sh (# Loopback listeners), Compatibility impact, HTTP authentication and agent storage migration, Launch settings
 
-### Community 692 - "Community 692"
+### Community 694 - "Community 694"
 Cohesion: 0.33
 Nodes (6): Blackboard (context offloading), Chain templates, code:bash (go run ./cmd/bt-agent-cli/ bb list --scope agent --id code-r), Dashboard API, MCP tools, ReAct tools (in `agent:` chains)
 
-### Community 693 - "Community 693"
+### Community 695 - "Community 695"
 Cohesion: 0.33
 Nodes (5): Exact snapshot and checks, GitHub acceptance, Goal status and next work, Operational evidence and its limits, Stable arc42 checkpoint — 2026-10-01
 
-### Community 694 - "Community 694"
+### Community 696 - "Community 696"
 Cohesion: 0.33
 Nodes (5): Commands and outcomes, Exact snapshot, GitHub and operational limits, Goal status and next work, Sprint admission checkpoint — 2026-10-01
 
-### Community 695 - "Community 695"
-Cohesion: 0.33
-Nodes (6): code:bash (graphify query "where are built-in agent trees registered an), code:text (search_files("allPlatformTrees|ResolveAgentName|AgentDefinit), code:go (func TestFusionAgent_Listed(t *testing.T)), code:bash (go test ./... -run 'TestFusionAgent|TestFusionDeliberationTr), code:bash (git add <registration files>), Task 11: Add Agent Template / CLI Registration
-
-### Community 696 - "Community 696"
-Cohesion: 0.33
-Nodes (6): code:go (const ChainFusion ChainKind = "fusion"), code:go (case ChainFusion:), code:go (func TestExecFusion_StoresAnalysisAndResponses(t *testing.T)), code:bash (go test ./internal/fusion -count=1), code:bash (git add internal/engine/chains.go internal/engine/chains_fus), Task 8: Add ChainKind `fusion` to BT Engine
-
 ### Community 697 - "Community 697"
-Cohesion: 0.33
-Nodes (6): code:go (func shouldUseFusionCond(b *Blackboard) bool), code:go (RegisterCondition("ShouldUseFusion", shouldUseFusionCond)), code:go (func TestShouldUseFusion_ResearchPrompt(t *testing.T)), code:bash (go test ./internal/engine -run 'TestShouldUseFusion|TestForc), code:bash (git add internal/engine/fusion_conditions.go internal/engine), Task 9: Add Fusion Routing Conditions
-
-### Community 698 - "Community 698"
 Cohesion: 0.33
 Nodes (6): code:go (type ModelCaller interface {), code:go (func TestRunPanel_RunsModelsConcurrently(t *testing.T)), code:go (func RunPanel(ctx context.Context, caller ModelCaller, cfg C), code:bash (go test ./internal/fusion -run TestRunPanel -count=1), code:bash (git add internal/fusion/panel.go internal/fusion/panel_test.), Task 3: Implement Parallel Panel Runner
 
+### Community 698 - "Community 698"
+Cohesion: 0.33
+Nodes (6): code:bash (graphify query "where are built-in agent trees registered an), code:text (search_files("allPlatformTrees|ResolveAgentName|AgentDefinit), code:go (func TestFusionAgent_Listed(t *testing.T)), code:bash (go test ./... -run 'TestFusionAgent|TestFusionDeliberationTr), code:bash (git add <registration files>), Task 11: Add Agent Template / CLI Registration
+
 ### Community 699 - "Community 699"
 Cohesion: 0.33
-Nodes (5): arc42 basis, BT platform architecture, code:bash (python3 -B scripts/test_check_arc42.py), How to interpret claims, Maintenance and verification
+Nodes (6): code:go (func shouldUseFusionCond(b *Blackboard) bool), code:go (RegisterCondition("ShouldUseFusion", shouldUseFusionCond)), code:go (func TestShouldUseFusion_ResearchPrompt(t *testing.T)), code:bash (go test ./internal/engine -run 'TestShouldUseFusion|TestForc), code:bash (git add internal/engine/fusion_conditions.go internal/engine), Task 9: Add Fusion Routing Conditions
 
 ### Community 700 - "Community 700"
 Cohesion: 0.33
-Nodes (6): Anti-patterns (don'ts), Current-state maintenance contract, Does NOT belong here (lives elsewhere in arc42), Required content (per arc42 template), Section 4 — Solution Strategy, Structure & style (do's)
+Nodes (6): code:go (const ChainFusion ChainKind = "fusion"), code:go (case ChainFusion:), code:go (func TestExecFusion_StoresAnalysisAndResponses(t *testing.T)), code:bash (go test ./internal/fusion -count=1), code:bash (git add internal/engine/chains.go internal/engine/chains_fus), Task 8: Add ChainKind `fusion` to BT Engine
 
 ### Community 701 - "Community 701"
 Cohesion: 0.33
-Nodes (6): Current-state maintenance contract, Do's (from the official tips), Does NOT belong here (lives elsewhere in arc42), Don'ts / anti-patterns, Required content & structure, Section 2 — Architecture Constraints
+Nodes (5): arc42 basis, BT platform architecture, code:bash (python3 -B scripts/test_check_arc42.py), How to interpret claims, Maintenance and verification
 
 ### Community 702 - "Community 702"
 Cohesion: 0.33
-Nodes (6): Anti-patterns / don'ts, Current-state maintenance contract, Do's, Does NOT belong here (lives elsewhere in arc42), Required content & structure, Section 3 — Context and Scope
+Nodes (6): Anti-patterns to reject, Current-state maintenance contract, Do's, Does NOT belong in section 9 (lives elsewhere in arc42), Required content & structure, Section 9 — Architecture Decisions
 
 ### Community 703 - "Community 703"
 Cohesion: 0.33
-Nodes (6): Current-state maintenance contract, Do's (from the arc42 tips), Does NOT belong here (lives elsewhere in arc42), Don'ts / anti-patterns, Required content & structure, Section 7 — Deployment View
+Nodes (6): Belongs elsewhere in arc42 (move it out), Current-state maintenance contract, Do's, Don'ts / anti-patterns, Required structure (arc42 template), Section 1 — Introduction and Goals
 
 ### Community 704 - "Community 704"
 Cohesion: 0.33
-Nodes (6): Belongs elsewhere in arc42 (move it out), Current-state maintenance contract, Do's, Don'ts / anti-patterns, Required structure (arc42 template), Section 1 — Introduction and Goals
+Nodes (6): Anti-patterns to reject, Current-state maintenance contract, Do's, Does NOT belong here (lives elsewhere in arc42), Required content & structure, Section 8 — Crosscutting Concepts
 
 ### Community 705 - "Community 705"
 Cohesion: 0.33
-Nodes (6): Belongs elsewhere in arc42, Current-state maintenance contract, Do's, Don'ts / anti-patterns, Required content & structure, Section 5 — Building Block View
+Nodes (6): Current-state maintenance contract, Do's (from the official tips), Does NOT belong here (lives elsewhere in arc42), Don'ts / anti-patterns, Required content & structure, Section 2 — Architecture Constraints
 
 ### Community 706 - "Community 706"
 Cohesion: 0.33
-Nodes (6): Belongs elsewhere in arc42, Current-state maintenance contract, Do's (from the official tips), Don'ts / anti-patterns, Required content & structure, Section 10 — Quality Requirements
+Nodes (6): Anti-patterns / don'ts, Current-state maintenance contract, Do's, Does NOT belong here (lives elsewhere in arc42), Required content & structure, Section 3 — Context and Scope
 
 ### Community 707 - "Community 707"
 Cohesion: 0.33
-Nodes (6): Current-state maintenance contract, Do's (from official tips), Does NOT belong here (lives elsewhere in arc42), Don'ts / anti-patterns (tips warn against), Required content & structure, Section 12 — Glossary
+Nodes (6): Current-state maintenance contract, Do's (from the arc42 tips), Does NOT belong here (lives elsewhere in arc42), Don'ts / anti-patterns, Required content & structure, Section 7 — Deployment View
 
 ### Community 708 - "Community 708"
 Cohesion: 0.33
-Nodes (6): Anti-patterns to reject, Current-state maintenance contract, Do's (from official tips), Does NOT belong here (goes elsewhere in arc42), Required content & structure, Section 6 — Runtime View
+Nodes (6): Anti-patterns (don'ts), Current-state maintenance contract, Does NOT belong here (lives elsewhere in arc42), Required content (per arc42 template), Section 4 — Solution Strategy, Structure & style (do's)
 
 ### Community 709 - "Community 709"
 Cohesion: 0.33
-Nodes (6): Anti-patterns / don'ts, Current-state maintenance contract, Do's (from the official tips), Does NOT belong here (lives elsewhere in arc42), Required content & structure, Section 11 — Risks and Technical Debt
+Nodes (6): Anti-patterns to reject, Current-state maintenance contract, Do's (from official tips), Does NOT belong here (goes elsewhere in arc42), Required content & structure, Section 6 — Runtime View
 
 ### Community 710 - "Community 710"
 Cohesion: 0.33
-Nodes (6): Anti-patterns to reject, Current-state maintenance contract, Do's, Does NOT belong here (lives elsewhere in arc42), Required content & structure, Section 8 — Crosscutting Concepts
+Nodes (6): Belongs elsewhere in arc42, Current-state maintenance contract, Do's, Don'ts / anti-patterns, Required content & structure, Section 5 — Building Block View
 
 ### Community 711 - "Community 711"
 Cohesion: 0.33
-Nodes (6): Anti-patterns to reject, Current-state maintenance contract, Do's, Does NOT belong in section 9 (lives elsewhere in arc42), Required content & structure, Section 9 — Architecture Decisions
+Nodes (6): Belongs elsewhere in arc42, Current-state maintenance contract, Do's (from the official tips), Don'ts / anti-patterns, Required content & structure, Section 10 — Quality Requirements
 
 ### Community 712 - "Community 712"
 Cohesion: 0.33
-Nodes (5): code:sh (go test -race ./internal/agent ./cmd/bt-agent -count=1), Guarantees, Scheduler head-of-line blocking fix, Scope relative to the throughput plan, Verification
+Nodes (6): Current-state maintenance contract, Do's (from official tips), Does NOT belong here (lives elsewhere in arc42), Don'ts / anti-patterns (tips warn against), Required content & structure, Section 12 — Glossary
 
 ### Community 713 - "Community 713"
 Cohesion: 0.33
-Nodes (6): code:go (package engine), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), code:go (package engine), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), Task 18: The 13 registered nodes — TDD
+Nodes (6): Anti-patterns / don'ts, Current-state maintenance contract, Do's (from the official tips), Does NOT belong here (lives elsewhere in arc42), Required content & structure, Section 11 — Risks and Technical Debt
 
 ### Community 714 - "Community 714"
 Cohesion: 0.33
-Nodes (6): code:go (package engine), code:go (Logger *slog.Logger `json:"-"` // run-scoped logger (run_id/), code:go (// Log returns the run-scoped logger when bound, else the gl), code:go (bb.Logger = engine.L().With("run_id", runID, "agent", agentN), code:bash (git add internal/engine/tree.go internal/engine/blackboard_l), Task 5: Run-scoped logger on the Blackboard
+Nodes (5): code:sh (go test -race ./internal/agent ./cmd/bt-agent -count=1), Guarantees, Scheduler head-of-line blocking fix, Scope relative to the throughput plan, Verification
 
 ### Community 715 - "Community 715"
 Cohesion: 0.33
-Nodes (6): code:go (package agent), code:go (runCtx := ctx), code:go (_, whSpan := tracing.StartSpan(runCtx.Context, "agent.webhoo), code:go (if err != nil {), code:bash (git add internal/agent/ cmd/bt-agent/main.go), Task 7: Run root span + scheduler webhook span
+Nodes (6): code:go (package engine), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), code:go (package engine), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), Task 18: The 13 registered nodes — TDD
 
 ### Community 716 - "Community 716"
 Cohesion: 0.33
-Nodes (6): code:bash (grep -rn "bt-otlp-collector\|otlp-collector\|BT_OTLP_COLLECT), code:bash (git rm -r cmd/bt-otlp-collector), code:markdown (### Added), code:bash (make observability-up && sleep 20), code:bash (make check-full), Task 10: Remove bt-otlp-collector, changelog, end-to-end verification
+Nodes (6): code:go (package engine), code:go (Logger *slog.Logger `json:"-"` // run-scoped logger (run_id/), code:go (// Log returns the run-scoped logger when bound, else the gl), code:go (bb.Logger = engine.L().With("run_id", runID, "agent", agentN), code:bash (git add internal/engine/tree.go internal/engine/blackboard_l), Task 5: Run-scoped logger on the Blackboard
 
 ### Community 717 - "Community 717"
 Cohesion: 0.33
-Nodes (6): code:go (func TestPersistentMemSequence_ResumesFromPersistedCursor(t ), code:go (// internal/engine/persistent_mem_sequence.go), code:go (case "PersistentMemSequence":), code:go (case "MemSelector", "PersistentMemSequence", "ForEachTask":), code:bash (git add internal/engine/persistent_mem_sequence.go internal/), Task 3: `PersistentMemSequence` composite + unique-name validation
+Nodes (6): code:go (package agent), code:go (runCtx := ctx), code:go (_, whSpan := tracing.StartSpan(runCtx.Context, "agent.webhoo), code:go (if err != nil {), code:bash (git add internal/agent/ cmd/bt-agent/main.go), Task 7: Run root span + scheduler webhook span
 
 ### Community 718 - "Community 718"
 Cohesion: 0.33
-Nodes (6): code:go (// internal/engine/foreach_task_test.go), code:go (// internal/engine/foreach_task.go), code:go (func superpowersTaskRed(ctx context.Context, run *Superpower), code:go (RegisterCondition("PlanHasIndependentTasks", func(bb *Blackb), code:bash (git add internal/engine/foreach_task.go internal/engine/fore), Task 6: `ForEachTask` composite + TDD phase-split actions + `PlanHasIndependentTasks`
+Nodes (6): code:bash (grep -rn "bt-otlp-collector\|otlp-collector\|BT_OTLP_COLLECT), code:bash (git rm -r cmd/bt-otlp-collector), code:markdown (### Added), code:bash (make observability-up && sleep 20), code:bash (make check-full), Task 10: Remove bt-otlp-collector, changelog, end-to-end verification
 
 ### Community 719 - "Community 719"
 Cohesion: 0.33
 Nodes (6): code:go (// internal/engine/chain_state_util_test.go), code:go (// internal/engine/mem_nodes_test.go), code:go (// internal/engine/chain_state_util.go), code:go (case "MemSequence":), code:bash (git add internal/engine/chain_state_util.go internal/engine/), Task 1: `chainStateInt` helper + expose `MemSequence` node type
 
+### Community 720 - "Community 720"
+Cohesion: 0.33
+Nodes (6): code:go (// internal/engine/foreach_task_test.go), code:go (// internal/engine/foreach_task.go), code:go (func superpowersTaskRed(ctx context.Context, run *Superpower), code:go (RegisterCondition("PlanHasIndependentTasks", func(bb *Blackb), code:bash (git add internal/engine/foreach_task.go internal/engine/fore), Task 6: `ForEachTask` composite + TDD phase-split actions + `PlanHasIndependentTasks`
+
 ### Community 721 - "Community 721"
 Cohesion: 0.33
-Nodes (5): code:block1 (/usr/local/go/bin/go test ./cmd/bt-agent-cli ./cmd/bt-agent ), code:block2 (--- FAIL: TestParseBBScopeFlagTrimsID (0.00s)), code:block3 (ok  	github.com/nico/go-bt-evolve/cmd/bt-agent-cli	0.013s), GREEN phase, RED phase
+Nodes (6): code:go (func TestPersistentMemSequence_ResumesFromPersistedCursor(t ), code:go (// internal/engine/persistent_mem_sequence.go), code:go (case "PersistentMemSequence":), code:go (case "MemSelector", "PersistentMemSequence", "ForEachTask":), code:bash (git add internal/engine/persistent_mem_sequence.go internal/), Task 3: `PersistentMemSequence` composite + unique-name validation
 
-### Community 723 - "Community 723"
-Cohesion: 0.47
-Nodes (4): code:block1 (internal/knowledge/embeddings_test.go:175:10: undefined: emb), GREEN phase, RED phase, Summary
-
-### Community 724 - "Community 724"
-Cohesion: 0.33
-Nodes (5): code:block1 (tasks_test.go:99: Approved()[0].ID = "low-early", want "crit), code:block2 (PATH=/usr/local/go/bin:$PATH go test ./internal/dashboard ./), code:block3 (ok  	github.com/nico/go-bt-evolve/internal/dashboard	0.641s), GREEN phase, RED phase
-
-### Community 725 - "Community 725"
-Cohesion: 0.33
-Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/gardener -short -count=), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
-
-### Community 726 - "Community 726"
-Cohesion: 0.33
-Nodes (5): code:block1 (PATH=/usr/local/go/bin:$PATH gofmt -l internal/agentexec/wir), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
-
-### Community 727 - "Community 727"
-Cohesion: 0.4
-Nodes (4): code:block1 (--- FAIL: TestBTEvolveBottlenecksBiasesRetrievalOnLastFailur), GREEN phase, RED phase, Summary
-
-### Community 729 - "Community 729"
-Cohesion: 0.4
-Nodes (4): code:block1 (circuit breaker did not short-circuit: subprocess was launch), GREEN phase, RED phase, Summary
-
-### Community 730 - "Community 730"
-Cohesion: 0.4
-Nodes (4): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./cmd/bt-dashboard -sho), GREEN phase, RED phase, Summary
-
-### Community 731 - "Community 731"
-Cohesion: 0.4
-Nodes (4): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/evolution -s), code:block2 (# github.com/nico/go-bt-evolve/internal/evolution [github.co), GREEN phase, RED phase
-
-### Community 732 - "Community 732"
-Cohesion: 0.53
-Nodes (4): FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
-
-### Community 733 - "Community 733"
-Cohesion: 0.33
-Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/domains -short -count=1), FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT
-
-### Community 734 - "Community 734"
-Cohesion: 0.33
-Nodes (5): code:block1 (--- FAIL: TestRunTask_PreservesRateLimitSentinelOnFailureCod), FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT
-
-### Community 735 - "Community 735"
-Cohesion: 0.4
-Nodes (4): code:block1 (tools_test.go:3074: bt_evolve_qlearning response must surfac), GREEN phase, RED phase, Summary
-
-### Community 736 - "Community 736"
-Cohesion: 0.33
-Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/gardener ./internal/evo), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
-
-### Community 737 - "Community 737"
-Cohesion: 0.4
-Nodes (4): code:block1 (/usr/local/go/bin/go test ./internal/engine -short -count=1 ), GREEN phase, Outcome, RED phase
-
-### Community 738 - "Community 738"
-Cohesion: 0.33
-Nodes (5): code:block1 (PATH=/usr/local/go/bin:$PATH go build ./...), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
-
-### Community 739 - "Community 739"
-Cohesion: 0.33
-Nodes (5): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/blocks ./int), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/blocks	0.042s), GREEN phase, RED phase, Summary
-
-### Community 740 - "Community 740"
-Cohesion: 0.4
-Nodes (4): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/agent	3.530s), GREEN phase, RED phase, Summary
-
-### Community 741 - "Community 741"
-Cohesion: 0.33
-Nodes (4): code:block1 (--- FAIL: TestMAPElitesPopulation_EvolveMAPElitesCrisisInter), code:block2 (internal/evolution/learning_test.go:90:10: pop.LastMutationR), RED phase complete, RED phase result
-
-### Community 742 - "Community 742"
-Cohesion: 0.4
-Nodes (4): code:block1 (cmd/bt-dashboard/main_test.go:19:15: undefined: dashTaskQueu), GREEN phase, RED phase, Summary
-
-### Community 743 - "Community 743"
-Cohesion: 0.4
-Nodes (4): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/security ./c), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/security	4.185s), GREEN phase, RED phase
-
-### Community 744 - "Community 744"
-Cohesion: 0.4
-Nodes (4): code:block1 (/usr/local/go/bin/go test ./internal/evolution -short -count), code:block2 (internal/evolution/learning_test.go:286:14: pop.HealthSnapsh), GREEN phase, RED phase
-
-### Community 745 - "Community 745"
-Cohesion: 0.33
-Nodes (5): code:block1 (--- FAIL: TestRunTaskResult_RateLimitCarryoverOutcome_DoesNo), code:block2 (PATH=/usr/local/go/bin:$PATH go test ./internal/dashboard ./), code:block3 (ok  	github.com/nico/go-bt-evolve/internal/dashboard	0.882s), GREEN phase, RED phase
-
-### Community 746 - "Community 746"
-Cohesion: 0.33
-Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/domains -short -count=1), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
-
-### Community 747 - "Community 747"
-Cohesion: 0.33
-Nodes (5): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./cmd/bt-agent -run 'Te), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
-
-### Community 748 - "Community 748"
-Cohesion: 0.4
-Nodes (4): code:block1 (--- FAIL: TestStringMatch_FitnessBreaksKeywordTie), GREEN phase, RED phase, Summary
-
-### Community 749 - "Community 749"
-Cohesion: 0.33
-Nodes (5): code:block1 (/usr/local/go/bin/go test ./cmd/bt-gardener ./internal/agent), code:block2 (ok  	github.com/nico/go-bt-evolve/cmd/bt-gardener	0.520s), GREEN phase, RED phase, Summary
-
-### Community 750 - "Community 750"
-Cohesion: 0.33
-Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/security -short -count=), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
-
-### Community 751 - "Community 751"
-Cohesion: 0.4
-Nodes (4): GREEN phase, RED phase, Summary, Summary
-
-### Community 753 - "Community 753"
-Cohesion: 0.4
-Nodes (4): code:block1 (--- FAIL: TestPrioritizeGoapGoals_StampsResearchGoalDurably ), GREEN phase, RED phase, Summary
-
-### Community 754 - "Community 754"
-Cohesion: 0.47
-Nodes (4): code:block1 (--- FAIL: TestBuildGardenerConfig_TranspositionTableWired (0), code:block2 (ok  	github.com/nico/go-bt-evolve/cmd/bt-gardener	0.208s), GREEN phase, RED phase
-
-### Community 755 - "Community 755"
-Cohesion: 0.4
-Nodes (4): code:block1 (/usr/local/go/bin/go fmt ./internal/knowledge/... ./cmd/bt-a), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/knowledge	0.126s), GREEN phase, RED phase
-
-### Community 756 - "Community 756"
-Cohesion: 0.33
-Nodes (5): code:block1 (/usr/local/go/bin/go test -race ./internal/blackboard -short), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
-
-### Community 757 - "Community 757"
-Cohesion: 0.33
-Nodes (5): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/gardener -sh), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/gardener	0.108s), GREEN phase, RED phase, Summary
-
-### Community 758 - "Community 758"
-Cohesion: 0.47
-Nodes (4): code:block1 (--- FAIL: TestBTDelegateToTreeHoldsBBMu (0.00s)), GREEN phase, RED phase, Summary
-
-### Community 759 - "Community 759"
-Cohesion: 0.4
-Nodes (4): code:block1 (--- FAIL: TestBTUseGoTreeHoldsBBMu (0.00s)), GREEN phase, RED phase, Summary
-
-### Community 760 - "Community 760"
+### Community 722 - "Community 722"
 Cohesion: 0.47
 Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/evolution	4.403s), GREEN phase, RED phase
 
-### Community 761 - "Community 761"
+### Community 723 - "Community 723"
 Cohesion: 0.33
-Nodes (5): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/gardener ./c), GREEN phase, RED phase, Summary, Summary
+Nodes (5): code:block1 (/usr/local/go/bin/go test ./cmd/bt-agent-cli ./cmd/bt-agent ), code:block2 (--- FAIL: TestParseBBScopeFlagTrimsID (0.00s)), code:block3 (ok  	github.com/nico/go-bt-evolve/cmd/bt-agent-cli	0.013s), GREEN phase, RED phase
 
-### Community 762 - "Community 762"
+### Community 725 - "Community 725"
+Cohesion: 0.47
+Nodes (4): code:block1 (internal/knowledge/embeddings_test.go:175:10: undefined: emb), GREEN phase, RED phase, Summary
+
+### Community 726 - "Community 726"
 Cohesion: 0.33
-Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/agentexec ./cmd/bt-agen), code:block2 (internal/agentexec/dynamic_resolver_test.go:131:12: undefine), GREEN phase, RED phase, Summary
+Nodes (5): code:block1 (tasks_test.go:99: Approved()[0].ID = "low-early", want "crit), code:block2 (PATH=/usr/local/go/bin:$PATH go test ./internal/dashboard ./), code:block3 (ok  	github.com/nico/go-bt-evolve/internal/dashboard	0.641s), GREEN phase, RED phase
 
-### Community 763 - "Community 763"
+### Community 727 - "Community 727"
 Cohesion: 0.33
-Nodes (5): code:block1 (result = -1, want SUCCESS(1): a trailing no-plan failure mus), GREEN phase, RED phase, RED phase complete, Summary
+Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/gardener -short -count=), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
 
-### Community 764 - "Community 764"
+### Community 728 - "Community 728"
 Cohesion: 0.33
-Nodes (5): code:block1 (PATH=/usr/local/go/bin:$PATH gofmt -l internal/knowledge/fee), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
+Nodes (5): code:block1 (PATH=/usr/local/go/bin:$PATH gofmt -l internal/agentexec/wir), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
 
-### Community 765 - "Community 765"
-Cohesion: 0.33
-Nodes (3): code:block1 (go test ./internal/domains ./internal/benchmark -short -coun), code:block2 (ok  github.com/nico/go-bt-evolve/internal/domains    5.123s), Summary
-
-### Community 766 - "Community 766"
-Cohesion: 0.33
-Nodes (3): code:go (func fitnessScoreFromBB(outcome string, qualityScore float64), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/blocks	0.071s), Investigation Result: Milestone already satisfied
-
-### Community 767 - "Community 767"
-Cohesion: 0.33
-Nodes (5): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/evolution ./), code:block2 (ok    github.com/nico/go-bt-evolve/internal/evolution      3), code:block3 (ok  	github.com/nico/go-bt-evolve/internal/evolution	3.895s), GREEN phase, RED phase
-
-### Community 768 - "Community 768"
-Cohesion: 0.33
-Nodes (5): code:block1 (/usr/local/go/bin/go test -race ./internal/util -short -coun), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
-
-### Community 769 - "Community 769"
-Cohesion: 0.33
-Nodes (5): code:block1 (/usr/local/go/bin/go test -race ./internal/evolution ./inter), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
-
-### Community 770 - "Community 770"
-Cohesion: 0.33
-Nodes (5): code:block1 (/usr/local/go/bin/go test -race ./internal/evolution ./inter), FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT
-
-### Community 771 - "Community 771"
-Cohesion: 0.33
-Nodes (5): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/domains -sho), FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT
-
-### Community 772 - "Community 772"
+### Community 729 - "Community 729"
 Cohesion: 0.4
-Nodes (4): code:block1 (--- FAIL: TestBTEvolveSelectorsRegisteredAndReordersFromDura), GREEN phase, RED phase, Summary
+Nodes (4): code:block1 (--- FAIL: TestBTEvolveBottlenecksBiasesRetrievalOnLastFailur), GREEN phase, RED phase, Summary
 
-### Community 773 - "Community 773"
-Cohesion: 0.33
-Nodes (5): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/dashboard ./), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/dashboard	0.837s), GREEN phase, RED phase, Summary
-
-### Community 774 - "Community 774"
-Cohesion: 0.33
-Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/domains ./internal/engi), code:block2 (--- FAIL: TestAuctionDemoTreeHasNoSilentNoOps), GREEN phase, RED phase, Summary
-
-### Community 775 - "Community 775"
-Cohesion: 0.33
-Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/a2a ./internal/agentexe), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
-
-### Community 776 - "Community 776"
-Cohesion: 0.33
-Nodes (5): code:block1 (learned Selector ordering not applied from the real producti), code:block2 (PATH=/usr/local/go/bin:$PATH go build ./...), GREEN phase, RED phase, Summary
-
-### Community 777 - "Community 777"
-Cohesion: 0.33
-Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/a2a -short -count=1 -ti), GREEN phase, RED phase, Summary, Summary
-
-### Community 778 - "Community 778"
-Cohesion: 0.33
-Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/benchmark -run TestScor), code:block2 (--- PASS: TestScoreMutation_PruneRoutingCondition_BreaksPath), GREEN phase, RED phase, Summary
-
-### Community 779 - "Community 779"
+### Community 731 - "Community 731"
 Cohesion: 0.4
-Nodes (4): code:block1 (# github.com/nico/go-bt-evolve/internal/agent [github.com/ni), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/agent	2.567s), GREEN phase, RED phase
+Nodes (4): code:block1 (/usr/local/go/bin/go test ./internal/engine -short -count=1 ), GREEN phase, Outcome, RED phase
 
-### Community 780 - "Community 780"
+### Community 733 - "Community 733"
+Cohesion: 0.53
+Nodes (4): FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
+
+### Community 734 - "Community 734"
+Cohesion: 0.4
+Nodes (4): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./cmd/bt-dashboard -sho), GREEN phase, RED phase, Summary
+
+### Community 736 - "Community 736"
+Cohesion: 0.4
+Nodes (4): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/evolution -s), code:block2 (# github.com/nico/go-bt-evolve/internal/evolution [github.co), GREEN phase, RED phase
+
+### Community 737 - "Community 737"
 Cohesion: 0.33
-Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/engine -short -count=1 ), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/engine	45.347s), GREEN phase, RED phase, Summary
+Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/domains -short -count=1), FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT
 
-### Community 781 - "Community 781"
+### Community 738 - "Community 738"
 Cohesion: 0.33
-Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/knowledge -short -count), code:block2 (traces_test.go:298: unknown field ParentName in struct liter), GREEN phase, RED phase, Summary
+Nodes (5): code:block1 (--- FAIL: TestRunTask_PreservesRateLimitSentinelOnFailureCod), FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT
 
-### Community 782 - "Community 782"
+### Community 739 - "Community 739"
+Cohesion: 0.4
+Nodes (4): code:block1 (tools_test.go:3074: bt_evolve_qlearning response must surfac), GREEN phase, RED phase, Summary
+
+### Community 740 - "Community 740"
+Cohesion: 0.33
+Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/gardener ./internal/evo), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
+
+### Community 741 - "Community 741"
+Cohesion: 0.33
+Nodes (5): code:block1 (PATH=/usr/local/go/bin:$PATH go build ./...), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
+
+### Community 742 - "Community 742"
+Cohesion: 0.33
+Nodes (5): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/blocks ./int), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/blocks	0.042s), GREEN phase, RED phase, Summary
+
+### Community 743 - "Community 743"
+Cohesion: 0.4
+Nodes (4): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/agent	3.530s), GREEN phase, RED phase, Summary
+
+### Community 744 - "Community 744"
+Cohesion: 0.4
+Nodes (4): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/security ./c), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/security	4.185s), GREEN phase, RED phase
+
+### Community 745 - "Community 745"
+Cohesion: 0.4
+Nodes (4): code:block1 (/usr/local/go/bin/go test ./internal/evolution -short -count), code:block2 (internal/evolution/learning_test.go:286:14: pop.HealthSnapsh), GREEN phase, RED phase
+
+### Community 746 - "Community 746"
+Cohesion: 0.33
+Nodes (5): code:block1 (--- FAIL: TestRunTaskResult_RateLimitCarryoverOutcome_DoesNo), code:block2 (PATH=/usr/local/go/bin:$PATH go test ./internal/dashboard ./), code:block3 (ok  	github.com/nico/go-bt-evolve/internal/dashboard	0.882s), GREEN phase, RED phase
+
+### Community 747 - "Community 747"
+Cohesion: 0.33
+Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/domains -short -count=1), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
+
+### Community 748 - "Community 748"
+Cohesion: 0.33
+Nodes (5): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./cmd/bt-agent -run 'Te), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
+
+### Community 749 - "Community 749"
+Cohesion: 0.4
+Nodes (4): code:block1 (--- FAIL: TestStringMatch_FitnessBreaksKeywordTie), GREEN phase, RED phase, Summary
+
+### Community 750 - "Community 750"
+Cohesion: 0.33
+Nodes (5): code:block1 (/usr/local/go/bin/go test ./cmd/bt-gardener ./internal/agent), code:block2 (ok  	github.com/nico/go-bt-evolve/cmd/bt-gardener	0.520s), GREEN phase, RED phase, Summary
+
+### Community 751 - "Community 751"
 Cohesion: 0.33
 Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/security -short -count=), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
 
+### Community 752 - "Community 752"
+Cohesion: 0.4
+Nodes (4): code:block1 (cmd/bt-dashboard/main_test.go:19:15: undefined: dashTaskQueu), GREEN phase, RED phase, Summary
+
+### Community 753 - "Community 753"
+Cohesion: 0.4
+Nodes (4): GREEN phase, RED phase, Summary, Summary
+
+### Community 754 - "Community 754"
+Cohesion: 0.4
+Nodes (4): code:block1 (--- FAIL: TestPrioritizeGoapGoals_StampsResearchGoalDurably ), GREEN phase, RED phase, Summary
+
+### Community 755 - "Community 755"
+Cohesion: 0.47
+Nodes (4): code:block1 (--- FAIL: TestBuildGardenerConfig_TranspositionTableWired (0), code:block2 (ok  	github.com/nico/go-bt-evolve/cmd/bt-gardener	0.208s), GREEN phase, RED phase
+
+### Community 756 - "Community 756"
+Cohesion: 0.4
+Nodes (4): code:block1 (circuit breaker did not short-circuit: subprocess was launch), GREEN phase, RED phase, Summary
+
+### Community 757 - "Community 757"
+Cohesion: 0.4
+Nodes (4): code:block1 (/usr/local/go/bin/go fmt ./internal/knowledge/... ./cmd/bt-a), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/knowledge	0.126s), GREEN phase, RED phase
+
+### Community 758 - "Community 758"
+Cohesion: 0.33
+Nodes (5): code:block1 (/usr/local/go/bin/go test -race ./internal/blackboard -short), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
+
+### Community 759 - "Community 759"
+Cohesion: 0.33
+Nodes (5): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/gardener -sh), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/gardener	0.108s), GREEN phase, RED phase, Summary
+
+### Community 760 - "Community 760"
+Cohesion: 0.47
+Nodes (4): code:block1 (--- FAIL: TestBTDelegateToTreeHoldsBBMu (0.00s)), GREEN phase, RED phase, Summary
+
+### Community 761 - "Community 761"
+Cohesion: 0.4
+Nodes (4): code:block1 (--- FAIL: TestBTUseGoTreeHoldsBBMu (0.00s)), GREEN phase, RED phase, Summary
+
+### Community 762 - "Community 762"
+Cohesion: 0.33
+Nodes (5): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/gardener ./c), GREEN phase, RED phase, Summary, Summary
+
+### Community 763 - "Community 763"
+Cohesion: 0.33
+Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/agentexec ./cmd/bt-agen), code:block2 (internal/agentexec/dynamic_resolver_test.go:131:12: undefine), GREEN phase, RED phase, Summary
+
+### Community 764 - "Community 764"
+Cohesion: 0.33
+Nodes (5): code:block1 (result = -1, want SUCCESS(1): a trailing no-plan failure mus), GREEN phase, RED phase, RED phase complete, Summary
+
+### Community 765 - "Community 765"
+Cohesion: 0.33
+Nodes (5): code:block1 (PATH=/usr/local/go/bin:$PATH gofmt -l internal/knowledge/fee), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
+
+### Community 766 - "Community 766"
+Cohesion: 0.33
+Nodes (4): code:block1 (--- FAIL: TestMAPElitesPopulation_EvolveMAPElitesCrisisInter), code:block2 (internal/evolution/learning_test.go:90:10: pop.LastMutationR), RED phase complete, RED phase result
+
+### Community 767 - "Community 767"
+Cohesion: 0.33
+Nodes (3): code:block1 (go test ./internal/domains ./internal/benchmark -short -coun), code:block2 (ok  github.com/nico/go-bt-evolve/internal/domains    5.123s), Summary
+
+### Community 768 - "Community 768"
+Cohesion: 0.33
+Nodes (3): code:go (func fitnessScoreFromBB(outcome string, qualityScore float64), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/blocks	0.071s), Investigation Result: Milestone already satisfied
+
+### Community 769 - "Community 769"
+Cohesion: 0.33
+Nodes (5): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/evolution ./), code:block2 (ok    github.com/nico/go-bt-evolve/internal/evolution      3), code:block3 (ok  	github.com/nico/go-bt-evolve/internal/evolution	3.895s), GREEN phase, RED phase
+
+### Community 770 - "Community 770"
+Cohesion: 0.33
+Nodes (5): code:block1 (/usr/local/go/bin/go test -race ./internal/util -short -coun), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
+
+### Community 771 - "Community 771"
+Cohesion: 0.33
+Nodes (5): code:block1 (/usr/local/go/bin/go test -race ./internal/evolution ./inter), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
+
+### Community 772 - "Community 772"
+Cohesion: 0.33
+Nodes (5): code:block1 (/usr/local/go/bin/go test -race ./internal/evolution ./inter), FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT
+
+### Community 773 - "Community 773"
+Cohesion: 0.33
+Nodes (5): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/domains -sho), FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT
+
+### Community 774 - "Community 774"
+Cohesion: 0.4
+Nodes (4): code:block1 (--- FAIL: TestBTEvolveSelectorsRegisteredAndReordersFromDura), GREEN phase, RED phase, Summary
+
+### Community 775 - "Community 775"
+Cohesion: 0.33
+Nodes (5): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/dashboard ./), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/dashboard	0.837s), GREEN phase, RED phase, Summary
+
+### Community 776 - "Community 776"
+Cohesion: 0.33
+Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/domains ./internal/engi), code:block2 (--- FAIL: TestAuctionDemoTreeHasNoSilentNoOps), GREEN phase, RED phase, Summary
+
+### Community 777 - "Community 777"
+Cohesion: 0.33
+Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/a2a ./internal/agentexe), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
+
+### Community 778 - "Community 778"
+Cohesion: 0.33
+Nodes (5): code:block1 (learned Selector ordering not applied from the real producti), code:block2 (PATH=/usr/local/go/bin:$PATH go build ./...), GREEN phase, RED phase, Summary
+
+### Community 779 - "Community 779"
+Cohesion: 0.33
+Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/a2a -short -count=1 -ti), GREEN phase, RED phase, Summary, Summary
+
+### Community 780 - "Community 780"
+Cohesion: 0.33
+Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/benchmark -run TestScor), code:block2 (--- PASS: TestScoreMutation_PruneRoutingCondition_BreaksPath), GREEN phase, RED phase, Summary
+
+### Community 781 - "Community 781"
+Cohesion: 0.4
+Nodes (4): code:block1 (# github.com/nico/go-bt-evolve/internal/agent [github.com/ni), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/agent	2.567s), GREEN phase, RED phase
+
+### Community 782 - "Community 782"
+Cohesion: 0.33
+Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/engine -short -count=1 ), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/engine	45.347s), GREEN phase, RED phase, Summary
+
 ### Community 783 - "Community 783"
 Cohesion: 0.33
-Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/engine -short -count=1 ), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
+Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/knowledge -short -count), code:block2 (traces_test.go:298: unknown field ParentName in struct liter), GREEN phase, RED phase, Summary
 
 ### Community 784 - "Community 784"
 Cohesion: 0.33
-Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/knowledge ./cmd/bt-agen), code:block2 (analytics_test.go:328:11: entry.LastFailureTask undefined (t), GREEN phase, RED phase, Summary
+Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/security -short -count=), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
 
 ### Community 785 - "Community 785"
 Cohesion: 0.33
-Nodes (5): code:block1 (GetTask on a follow-up request to the same agent endpoint fa), GREEN phase, RED phase, Summary, Summary
+Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/engine -short -count=1 ), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
 
 ### Community 786 - "Community 786"
 Cohesion: 0.33
-Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/engine -short -count=1 ), code:block2 (VerifyRed rejected valid scoped RED evidence: RED command un), GREEN phase, RED phase, Summary
+Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/knowledge ./cmd/bt-agen), code:block2 (analytics_test.go:328:11: entry.LastFailureTask undefined (t), GREEN phase, RED phase, Summary
 
 ### Community 787 - "Community 787"
 Cohesion: 0.33
-Nodes (5): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/agent ./inte), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/agent	3.785s), GREEN phase, RED phase, Summary
+Nodes (5): code:block1 (GetTask on a follow-up request to the same agent endpoint fa), GREEN phase, RED phase, Summary, Summary
 
 ### Community 788 - "Community 788"
 Cohesion: 0.33
-Nodes (5): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/knowledge -s), FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT
+Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/engine -short -count=1 ), code:block2 (VerifyRed rejected valid scoped RED evidence: RED command un), GREEN phase, RED phase, Summary
 
 ### Community 789 - "Community 789"
 Cohesion: 0.33
-Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/evolution -short -count), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
+Nodes (5): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/agent ./inte), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/agent	3.785s), GREEN phase, RED phase, Summary
 
 ### Community 790 - "Community 790"
 Cohesion: 0.33
-Nodes (5): code:block1 (--- FAIL: TestA2AHandoffBlock_BuildAndValidate (0.00s)), code:block2 (PATH=/usr/local/go/bin:$PATH go test ./internal/blocks ./int), code:block3 (ok  	github.com/nico/go-bt-evolve/internal/blocks	0.032s), GREEN phase, RED phase
+Nodes (5): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/knowledge -s), FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT
 
 ### Community 791 - "Community 791"
 Cohesion: 0.33
-Nodes (5): code:block1 (--- FAIL: TestActionsGoapFusionTestFile_ChargeRaceCommentNot), code:block2 (/usr/local/go/bin/go test -race ./internal/engine -short -co), GREEN phase, RED phase, Summary
+Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/evolution -short -count), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
 
 ### Community 792 - "Community 792"
 Cohesion: 0.33
-Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/engine -run 'TestBuildR), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
+Nodes (5): code:block1 (--- FAIL: TestA2AHandoffBlock_BuildAndValidate (0.00s)), code:block2 (PATH=/usr/local/go/bin:$PATH go test ./internal/blocks ./int), code:block3 (ok  	github.com/nico/go-bt-evolve/internal/blocks	0.032s), GREEN phase, RED phase
 
 ### Community 793 - "Community 793"
 Cohesion: 0.33
-Nodes (5): code:block1 (expected 1 for StandardActions + build-a-widget goal, got -1), GREEN phase, RED phase, RED phase result, Summary
+Nodes (5): code:block1 (--- FAIL: TestActionsGoapFusionTestFile_ChargeRaceCommentNot), code:block2 (/usr/local/go/bin/go test -race ./internal/engine -short -co), GREEN phase, RED phase, Summary
 
 ### Community 794 - "Community 794"
 Cohesion: 0.33
-Nodes (5): code:block1 (--- FAIL: TestHandleAnalyze_TaskIDsUniqueAcrossAnalyses (0.0), code:block2 (PATH=/usr/local/go/bin:$PATH go test ./cmd/bt-dashboard ./in), GREEN phase, RED phase, Summary
+Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/engine -run 'TestBuildR), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
 
 ### Community 795 - "Community 795"
 Cohesion: 0.33
-Nodes (5): code:block1 (ollama_test.go:41: expected Generate to succeed after one ji), FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT
+Nodes (5): code:block1 (expected 1 for StandardActions + build-a-widget goal, got -1), GREEN phase, RED phase, RED phase result, Summary
 
 ### Community 796 - "Community 796"
 Cohesion: 0.33
-Nodes (5): code:block1 (/usr/local/go/bin/go test ./cmd/bt-agent -short -count=1 -ti), code:block2 (--- FAIL: TestEvolveToolsSurfacePopulationHealthSnapshot (0.), GREEN phase, RED phase, RED phase result
+Nodes (5): code:block1 (--- FAIL: TestHandleAnalyze_TaskIDsUniqueAcrossAnalyses (0.0), code:block2 (PATH=/usr/local/go/bin:$PATH go test ./cmd/bt-dashboard ./in), GREEN phase, RED phase, Summary
 
 ### Community 797 - "Community 797"
 Cohesion: 0.33
-Nodes (5): code:block1 (internal/evolution/pareto_test.go:341:15: pf.Load undefined ), FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT
+Nodes (5): code:block1 (ollama_test.go:41: expected Generate to succeed after one ji), FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT
 
 ### Community 798 - "Community 798"
 Cohesion: 0.33
-Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/agent ./internal/a2a -s), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
+Nodes (5): code:block1 (/usr/local/go/bin/go test ./cmd/bt-agent -short -count=1 -ti), code:block2 (--- FAIL: TestEvolveToolsSurfacePopulationHealthSnapshot (0.), GREEN phase, RED phase, RED phase result
 
 ### Community 799 - "Community 799"
 Cohesion: 0.33
-Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/evolution -short -count), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
+Nodes (5): code:block1 (internal/evolution/pareto_test.go:341:15: pf.Load undefined ), FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT
+
+### Community 800 - "Community 800"
+Cohesion: 0.33
+Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/agent ./internal/a2a -s), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
 
 ### Community 801 - "Community 801"
-Cohesion: 0.4
-Nodes (5): ShellExec(), TestShellExec_Failure(), TestShellExec_NoOutput(), TestShellExec_StderrOnly(), TestShellExec_Success()
+Cohesion: 0.33
+Nodes (5): code:block1 (/usr/local/go/bin/go test ./internal/evolution -short -count), FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
 
-### Community 802 - "Community 802"
-Cohesion: 0.6
-Nodes (4): existingBrowserRestore(), restoreWithCommand(), sameCDPHost(), cdpPage
-
-### Community 804 - "Community 804"
+### Community 803 - "Community 803"
 Cohesion: 0.6
 Nodes (3): parseDocGo(), TestDocGoPackageClause(), TestDocGoPackageCommentMentions()
 
-### Community 808 - "Community 808"
+### Community 806 - "Community 806"
+Cohesion: 0.5
+Nodes (3): A2AHandoffBlock(), TestA2AHandoffBlock_BuildAndValidate(), TestA2AHandoffBlock_Structure()
+
+### Community 807 - "Community 807"
+Cohesion: 0.5
+Nodes (3): DelegateBlock(), TestDelegateBlock_BuildAndValidate(), TestDelegateBlock_Structure()
+
+### Community 809 - "Community 809"
 Cohesion: 0.7
 Nodes (4): runHealthAction(), TestAssessNotebookLMPipelineHealth(), withSynthesesDir(), writeSynthesis()
 
-### Community 810 - "Community 810"
+### Community 812 - "Community 812"
 Cohesion: 0.6
 Nodes (3): findChildTick(), registerTickTestAction(), TestRunRecordsTerminalChildTicksWithParents()
 
-### Community 812 - "Community 812"
-Cohesion: 0.4
-Nodes (3): Bidder, RoutingStrategy, TestRoutingStrategy_String()
-
-### Community 817 - "Community 817"
+### Community 818 - "Community 818"
 Cohesion: 0.5
 Nodes (3): addChatMsg(), agentNames, sendChat()
-
-### Community 818 - "Community 818"
-Cohesion: 0.4
-Nodes (5): code:bash (# Check if dashboard is alive), code:bash (# Step 1: Build), Dashboard Issues, Empty API responses, pkill kills the build process
 
 ### Community 819 - "Community 819"
 Cohesion: 0.4
@@ -6820,23 +6816,23 @@ Nodes (5): Build & Compilation, code:bash (export PATH=$PATH:/usr/local/go/bin),
 
 ### Community 821 - "Community 821"
 Cohesion: 0.4
-Nodes (5): code:go (type Server struct { ... }), code:go (func NewServer(name, version string) *Server), Functions, Package: mcp, Types
+Nodes (5): code:bash (# Check if dashboard is alive), code:bash (# Step 1: Build), Dashboard Issues, Empty API responses, pkill kills the build process
 
 ### Community 822 - "Community 822"
 Cohesion: 0.4
-Nodes (5): code:go (type Config struct {), code:go (func Load() (*Config, error)                // priority: def), Functions, Package: config, Types
+Nodes (4): Process restart recovery checkpoint, Remaining limits, Snapshot and checks, What crossed the process boundary
 
 ### Community 823 - "Community 823"
 Cohesion: 0.4
-Nodes (4): Process restart recovery checkpoint, Remaining limits, Snapshot and checks, What crossed the process boundary
+Nodes (4): Actual hosted scanner correction, Durable DLQ restart recovery — 2026-10-01, Operational evidence and limitations, Snapshot and verification scope
 
 ### Community 824 - "Community 824"
 Cohesion: 0.4
-Nodes (4): Actual hosted scanner correction, Durable DLQ restart recovery — 2026-10-01, Operational evidence and limitations, Snapshot and verification scope
+Nodes (4): Dashboard restart ownership checkpoint — 2026-10-01, GitHub and clean artifact qualification, Remaining acceptance, Snapshot and verification
 
 ### Community 825 - "Community 825"
 Cohesion: 0.4
-Nodes (4): Dashboard restart ownership checkpoint — 2026-10-01, GitHub and clean artifact qualification, Remaining acceptance, Snapshot and verification
+Nodes (5): code:go (func FusionDeliberationTree() *SerializableNode {), code:go (func TestFusionDeliberationTree_Validates(t *testing.T)), code:bash (go test ./internal/evolution -run TestFusionDeliberationTree), code:bash (git add internal/evolution/fusion_trees.go internal/evolutio), Task 10: Add Fusion BT Tree
 
 ### Community 826 - "Community 826"
 Cohesion: 0.4
@@ -6844,7 +6840,7 @@ Nodes (5): code:go (bb.ChainState["fusion_status"] = result.Status), code:go (fu
 
 ### Community 827 - "Community 827"
 Cohesion: 0.4
-Nodes (5): code:go (func Run(ctx context.Context, caller ModelCaller, cfg Config), code:go (func TestRun_EndToEnd(t *testing.T)), code:bash (go test ./internal/fusion -count=1), code:bash (git add internal/fusion/run.go internal/fusion/run_test.go), Task 7: Add End-to-End Fusion Runner
+Nodes (5): code:go (if os.Getenv("OPENROUTER_API_KEY") == "" || os.Getenv("BT_TE), code:text (~google/gemini-flash-latest), code:bash (BT_TEST_REAL_FUSION=1 OPENROUTER_API_KEY=$OPENROUTER_API_KEY), code:bash (git add internal/fusion/openrouter_integration_test.go), Task 14: Add Real-API Smoke Test Behind Env Gate
 
 ### Community 828 - "Community 828"
 Cohesion: 0.4
@@ -6852,63 +6848,63 @@ Nodes (5): code:go (func TestSynthesize_UsesAnalysisAndResponses(t *testing.T)),
 
 ### Community 829 - "Community 829"
 Cohesion: 0.4
-Nodes (5): code:go (if os.Getenv("OPENROUTER_API_KEY") == "" || os.Getenv("BT_TE), code:text (~google/gemini-flash-latest), code:bash (BT_TEST_REAL_FUSION=1 OPENROUTER_API_KEY=$OPENROUTER_API_KEY), code:bash (git add internal/fusion/openrouter_integration_test.go), Task 14: Add Real-API Smoke Test Behind Env Gate
+Nodes (5): code:go (func Run(ctx context.Context, caller ModelCaller, cfg Config), code:go (func TestRun_EndToEnd(t *testing.T)), code:bash (go test ./internal/fusion -count=1), code:bash (git add internal/fusion/run.go internal/fusion/run_test.go), Task 7: Add End-to-End Fusion Runner
 
 ### Community 830 - "Community 830"
 Cohesion: 0.4
-Nodes (5): code:go (func FusionDeliberationTree() *SerializableNode {), code:go (func TestFusionDeliberationTree_Validates(t *testing.T)), code:bash (go test ./internal/evolution -run TestFusionDeliberationTree), code:bash (git add internal/evolution/fusion_trees.go internal/evolutio), Task 10: Add Fusion BT Tree
+Nodes (5): code:text (Compare the strongest arguments for and against carbon taxes), code:go (cmd := engine.BuildTree(evolution.FusionDeliberationTree(), ), code:bash (go test ./internal/evolution -run TestFusionDeliberation_End), code:bash (git add internal/evolution/fusion_integration_test.go), Task 13: Add End-to-End Fake-LLM BT Test
 
 ### Community 831 - "Community 831"
 Cohesion: 0.4
-Nodes (5): code:text (Compare the strongest arguments for and against carbon taxes), code:go (cmd := engine.BuildTree(evolution.FusionDeliberationTree(), ), code:bash (go test ./internal/evolution -run TestFusionDeliberation_End), code:bash (git add internal/evolution/fusion_integration_test.go), Task 13: Add End-to-End Fake-LLM BT Test
+Nodes (5): code:bash (timeout 180 /tmp/bt-agent-cli run superpowers-prod-runner \), code:bash (BT_HITL_AUTO_APPROVE=false timeout 180 /tmp/bt-agent-cli run), code:bash (timeout 120 /tmp/bt-agent-cli run goap-fusion-runner \), code:bash (BT_HITL_AUTO_APPROVE=false timeout 180 /tmp/bt-agent-cli run), Task 17: Live verification matrix
 
 ### Community 832 - "Community 832"
 Cohesion: 0.4
-Nodes (5): code:bash (timeout 180 /tmp/bt-agent-cli run superpowers-prod-runner \), code:bash (BT_HITL_AUTO_APPROVE=false timeout 180 /tmp/bt-agent-cli run), code:bash (timeout 120 /tmp/bt-agent-cli run goap-fusion-runner \), code:bash (BT_HITL_AUTO_APPROVE=false timeout 180 /tmp/bt-agent-cli run), Task 17: Live verification matrix
+Nodes (4): 3.1 Business Context, 3.2 Technical Context, 3. Context and Scope, code:mermaid (flowchart LR)
 
 ### Community 833 - "Community 833"
 Cohesion: 0.4
-Nodes (4): 3.1 Business Context, 3.2 Technical Context, 3. Context and Scope, code:mermaid (flowchart LR)
+Nodes (4): 1.1 Requirements Overview, 1.2 Quality Goals, 1.3 Stakeholders, 1. Introduction and Goals
 
 ### Community 834 - "Community 834"
 Cohesion: 0.4
-Nodes (4): 1.1 Requirements Overview, 1.2 Quality Goals, 1.3 Stakeholders, 1. Introduction and Goals
+Nodes (4): 2. Architecture Constraints, Conventions, Organizational Constraints, Technical Constraints
 
 ### Community 835 - "Community 835"
 Cohesion: 0.4
-Nodes (4): 2. Architecture Constraints, Conventions, Organizational Constraints, Technical Constraints
+Nodes (5): arc42 Section 10 (Quality Requirements) — Conformance Checklist, Belongs elsewhere in arc42, Do's (from the official tips), Don'ts / anti-patterns, Required content & structure
 
 ### Community 836 - "Community 836"
 Cohesion: 0.4
-Nodes (5): arc42 Section 10 (Quality Requirements) — Conformance Checklist, Belongs elsewhere in arc42, Do's (from the official tips), Don'ts / anti-patterns, Required content & structure
+Nodes (5): arc42 Section 12 (Glossary) — Conformance Checklist, Do's (from official tips), Does NOT belong here (lives elsewhere in arc42), Don'ts / anti-patterns (tips warn against), Required content & structure
 
 ### Community 837 - "Community 837"
 Cohesion: 0.4
-Nodes (5): Anti-patterns to reject, arc42 Section 9 (Architecture Decisions) — Conformance Checklist, Do's, Does NOT belong in section 9 (lives elsewhere in arc42), Required content & structure
+Nodes (5): arc42 Section 7 (Deployment View) — Conformance Checklist, Do's (from the arc42 tips), Does NOT belong here (lives elsewhere in arc42), Don'ts / anti-patterns, Required content & structure
 
 ### Community 838 - "Community 838"
 Cohesion: 0.4
-Nodes (5): arc42 Section 5 (Building Block View) — Conformance Checklist, Belongs elsewhere in arc42, Do's, Don'ts / anti-patterns, Required content & structure
+Nodes (5): Anti-patterns to reject, arc42 Section 6 (Runtime View) — Conformance Checklist, Do's (from official tips), Does NOT belong here (goes elsewhere in arc42), Required content & structure
 
 ### Community 839 - "Community 839"
 Cohesion: 0.4
-Nodes (5): arc42 Section 12 (Glossary) — Conformance Checklist, Do's (from official tips), Does NOT belong here (lives elsewhere in arc42), Don'ts / anti-patterns (tips warn against), Required content & structure
+Nodes (5): Anti-patterns / don'ts, arc42 Section 11 (Risks & Technical Debt) — Conformance Checklist, Do's (from the official tips), Does NOT belong here (lives elsewhere in arc42), Required content & structure
 
 ### Community 840 - "Community 840"
 Cohesion: 0.4
-Nodes (5): Anti-patterns / don'ts, arc42 Section 3 (Context and Scope) — Conformance Checklist, Do's, Does NOT belong here (lives elsewhere in arc42), Required content & structure
+Nodes (5): code:go (package engine), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), code:go (package engine), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), Task 15: Guideline slicer — TDD
 
 ### Community 841 - "Community 841"
 Cohesion: 0.4
-Nodes (5): code:go (var arc42GoalsDocPaths = []string{), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), code:go (RegisterAction("ReadADRs", func(ctx *btcore.BTContext[Blackb), code:bash (PATH=/usr/local/go/bin:$PATH go build ./...), Task 11: Code repoints (goals reader, ReadADRs, tree prompts, bt-docgen)
+Nodes (5): code:go (func TestClassifyAffectedArc42Sections(t *testing.T) {), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), code:go (// arc42ClassifierTimeout bounds the cheap which-sections-ch), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), Task 20: Classifier prefilter — TDD
 
 ### Community 842 - "Community 842"
 Cohesion: 0.4
-Nodes (5): code:go (package engine), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), code:go (package engine), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), Task 14: Section manifest (`arc42_sections.go`) — TDD
+Nodes (5): code:go (type arc42SyncFakeClaude struct {), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), code:go (// docChangeContext describes the change a documentation pas), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), Task 16: `docChangeContext` + `syncArc42Section` — TDD
 
 ### Community 843 - "Community 843"
 Cohesion: 0.4
-Nodes (5): code:go (type arc42SyncFakeClaude struct {), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), code:go (// docChangeContext describes the change a documentation pas), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), Task 16: `docChangeContext` + `syncArc42Section` — TDD
+Nodes (5): code:go (var arc42GoalsDocPaths = []string{), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), code:go (RegisterAction("ReadADRs", func(ctx *btcore.BTContext[Blackb), code:bash (PATH=/usr/local/go/bin:$PATH go build ./...), Task 11: Code repoints (goals reader, ReadADRs, tree prompts, bt-docgen)
 
 ### Community 844 - "Community 844"
 Cohesion: 0.4
@@ -6916,11 +6912,11 @@ Nodes (5): code:go (func TestSyncReadmeUpdates(t *testing.T) {), code:bash (PATH
 
 ### Community 845 - "Community 845"
 Cohesion: 0.4
-Nodes (5): code:go (func TestClassifyAffectedArc42Sections(t *testing.T) {), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), code:go (// arc42ClassifierTimeout bounds the cheap which-sections-ch), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), Task 20: Classifier prefilter — TDD
+Nodes (5): code:go (package engine), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), code:go (package engine), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), Task 14: Section manifest (`arc42_sections.go`) — TDD
 
 ### Community 846 - "Community 846"
 Cohesion: 0.4
-Nodes (5): code:go (package engine), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), code:go (package engine), code:bash (PATH=/usr/local/go/bin:$PATH go test ./internal/engine/ -run), Task 15: Guideline slicer — TDD
+Nodes (5): code:bash (PATH=/usr/local/go/bin:$PATH go get \), code:go (package tracing), code:go (package tracing), code:bash (git add go.mod go.sum internal/tracing/otel.go internal/trac), Task 2: OTel SDK trace facade in internal/tracing
 
 ### Community 847 - "Community 847"
 Cohesion: 0.4
@@ -6928,15 +6924,15 @@ Nodes (5): code:go (package llm), code:go (package llm), code:go (llmForRun = ll
 
 ### Community 848 - "Community 848"
 Cohesion: 0.4
-Nodes (5): code:bash (PATH=/usr/local/go/bin:$PATH go get \), code:go (package tracing), code:go (package tracing), code:bash (git add go.mod go.sum internal/tracing/otel.go internal/trac), Task 2: OTel SDK trace facade in internal/tracing
+Nodes (5): code:go (// internal/engine/mem_selector.go), code:go (case "MemSelector":), code:bash (git add internal/engine/mem_selector.go internal/engine/mem_), code:go (func TestMemSelector_ResumesAtRunningChildAndSkipsFailed(t *), Task 2: `MemSelector` composite (blackboard-keyed)
 
 ### Community 849 - "Community 849"
 Cohesion: 0.4
-Nodes (5): code:go (// internal/engine/mem_selector.go), code:go (case "MemSelector":), code:bash (git add internal/engine/mem_selector.go internal/engine/mem_), code:go (func TestMemSelector_ResumesAtRunningChildAndSkipsFailed(t *), Task 2: `MemSelector` composite (blackboard-keyed)
+Nodes (4): 1.1 Requirements Overview, 1.2 Quality Goals, 1.3 Stakeholders, 1. Introduction and Goals
 
 ### Community 850 - "Community 850"
 Cohesion: 0.4
-Nodes (4): 1.1 Requirements Overview, 1.2 Quality Goals, 1.3 Stakeholders, 1. Introduction and Goals
+Nodes (3): Bidder, RoutingStrategy, TestRoutingStrategy_String()
 
 ### Community 851 - "Community 851"
 Cohesion: 0.4
@@ -10134,9 +10130,13 @@ Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 Cohesion: 0.4
 Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
-### Community 1651 - "Community 1651"
+### Community 1650 - "Community 1650"
 Cohesion: 0.4
 Nodes (4): code:block1 (scheduler_test.go:810: failure_reason = "agent outcome: fail), GREEN phase, RED phase, Summary
+
+### Community 1651 - "Community 1651"
+Cohesion: 0.4
+Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 1652 - "Community 1652"
 Cohesion: 0.4
@@ -10164,25 +10164,21 @@ Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 1658 - "Community 1658"
 Cohesion: 0.4
-Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
+Nodes (4): code:block1 (internal/knowledge/graph_test.go:47:10: tree.StructuralFitne), GREEN phase, RED phase, Summary
 
 ### Community 1659 - "Community 1659"
 Cohesion: 0.4
-Nodes (4): code:block1 (internal/knowledge/graph_test.go:47:10: tree.StructuralFitne), GREEN phase, RED phase, Summary
+Nodes (4): code:block1 (/usr/local/go/bin/go test ./internal/knowledge -short -count), code:block2 (internal/knowledge/feedback_test.go:250:10: tree.EvolvedCoun), GREEN phase, RED phase
 
 ### Community 1660 - "Community 1660"
 Cohesion: 0.4
-Nodes (4): code:block1 (/usr/local/go/bin/go test ./internal/knowledge -short -count), code:block2 (internal/knowledge/feedback_test.go:250:10: tree.EvolvedCoun), GREEN phase, RED phase
+Nodes (4): code:block1 (/usr/local/go/bin/go test ./internal/knowledge -short -count), code:block2 (--- FAIL: TestFactory_SelectParentsExcludesCategoryAliasKeys), GREEN phase, RED phase
 
 ### Community 1661 - "Community 1661"
 Cohesion: 0.4
-Nodes (4): code:block1 (/usr/local/go/bin/go test ./internal/knowledge -short -count), code:block2 (--- FAIL: TestFactory_SelectParentsExcludesCategoryAliasKeys), GREEN phase, RED phase
-
-### Community 1662 - "Community 1662"
-Cohesion: 0.4
 Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
-### Community 1663 - "Community 1663"
+### Community 1662 - "Community 1662"
 Cohesion: 0.4
 Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
@@ -10362,10 +10358,6 @@ Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 Cohesion: 0.4
 Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
-### Community 1710 - "Community 1710"
-Cohesion: 0.4
-Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
-
 ### Community 1711 - "Community 1711"
 Cohesion: 0.4
 Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
@@ -10399,12 +10391,12 @@ Cohesion: 0.4
 Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 1719 - "Community 1719"
-Cohesion: 0.5
-Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/cmd/bt-agent	0.229s), GREEN phase, RED phase
-
-### Community 1720 - "Community 1720"
 Cohesion: 0.4
 Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
+
+### Community 1720 - "Community 1720"
+Cohesion: 0.5
+Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/cmd/bt-agent	0.229s), GREEN phase, RED phase
 
 ### Community 1721 - "Community 1721"
 Cohesion: 0.4
@@ -10444,23 +10436,23 @@ Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 1730 - "Community 1730"
 Cohesion: 0.4
-Nodes (4): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./cmd/bt-agent -short -), code:block2 (cmd/bt-agent/wiring_test.go:195:9: undefined: experienceBank), GREEN phase, RED phase
+Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 1731 - "Community 1731"
 Cohesion: 0.4
-Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
+Nodes (4): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./cmd/bt-agent -short -), code:block2 (cmd/bt-agent/wiring_test.go:195:9: undefined: experienceBank), GREEN phase, RED phase
 
 ### Community 1732 - "Community 1732"
 Cohesion: 0.4
-Nodes (4): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./cmd/bt-agent-cli -sho), code:block2 (# github.com/nico/go-bt-evolve/cmd/bt-agent-cli [github.com/), GREEN phase, RED phase
+Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 1733 - "Community 1733"
 Cohesion: 0.4
-Nodes (4): code:block1 (--- FAIL: TestPersistEvolvedWinner_ConcurrentCallsStayConsis), GREEN phase, RED phase, Summary
+Nodes (4): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./cmd/bt-agent-cli -sho), code:block2 (# github.com/nico/go-bt-evolve/cmd/bt-agent-cli [github.com/), GREEN phase, RED phase
 
 ### Community 1734 - "Community 1734"
 Cohesion: 0.4
-Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
+Nodes (4): code:block1 (--- FAIL: TestPersistEvolvedWinner_ConcurrentCallsStayConsis), GREEN phase, RED phase, Summary
 
 ### Community 1735 - "Community 1735"
 Cohesion: 0.4
@@ -10482,7 +10474,7 @@ Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 Cohesion: 0.4
 Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
-### Community 1741 - "Community 1741"
+### Community 1740 - "Community 1740"
 Cohesion: 0.4
 Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
@@ -10499,24 +10491,24 @@ Cohesion: 0.4
 Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 1745 - "Community 1745"
-Cohesion: 0.5
-Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/gardener	0.110s), GREEN phase, RED phase
+Cohesion: 0.4
+Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 1746 - "Community 1746"
 Cohesion: 0.5
-Nodes (3): GREEN phase, RED phase, Summary
+Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/gardener	0.110s), GREEN phase, RED phase
 
 ### Community 1747 - "Community 1747"
-Cohesion: 0.4
-Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
+Cohesion: 0.5
+Nodes (3): GREEN phase, RED phase, Summary
 
 ### Community 1748 - "Community 1748"
 Cohesion: 0.4
-Nodes (4): code:block1 (/usr/local/go/bin/go test ./internal/gardener ./cmd/bt-garde), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/gardener	0.098s), GREEN phase, RED phase
+Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 1749 - "Community 1749"
 Cohesion: 0.4
-Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
+Nodes (4): code:block1 (/usr/local/go/bin/go test ./internal/gardener ./cmd/bt-garde), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/gardener	0.098s), GREEN phase, RED phase
 
 ### Community 1750 - "Community 1750"
 Cohesion: 0.4
@@ -10527,28 +10519,28 @@ Cohesion: 0.4
 Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 1752 - "Community 1752"
+Cohesion: 0.4
+Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
+
+### Community 1753 - "Community 1753"
 Cohesion: 0.5
 Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/cmd/bt-dashboard	0.219s), GREEN phase, RED phase
 
-### Community 1753 - "Community 1753"
+### Community 1754 - "Community 1754"
 Cohesion: 0.4
 Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
-### Community 1754 - "Community 1754"
+### Community 1755 - "Community 1755"
 Cohesion: 0.4
 Nodes (4): FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT
 
-### Community 1756 - "Community 1756"
-Cohesion: 0.4
-Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
-
 ### Community 1757 - "Community 1757"
 Cohesion: 0.4
-Nodes (4): FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
+Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 1758 - "Community 1758"
 Cohesion: 0.4
-Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
+Nodes (4): FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
 
 ### Community 1759 - "Community 1759"
 Cohesion: 0.4
@@ -10560,11 +10552,11 @@ Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 1761 - "Community 1761"
 Cohesion: 0.4
-Nodes (4): code:block1 (/usr/local/go/bin/go test ./internal/knowledge -short -count), GREEN phase, RED phase, RED phase result
+Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 1762 - "Community 1762"
 Cohesion: 0.4
-Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
+Nodes (4): code:block1 (/usr/local/go/bin/go test ./internal/knowledge -short -count), GREEN phase, RED phase, RED phase result
 
 ### Community 1763 - "Community 1763"
 Cohesion: 0.4
@@ -10576,27 +10568,27 @@ Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 1765 - "Community 1765"
 Cohesion: 0.4
-Nodes (4): code:block1 (/usr/local/go/bin/go test ./internal/engine -short -count=1 ), code:block2 (--- FAIL: TestPublishGoapFusionStateHash_ResultReflectsDurab), GREEN phase, RED phase
+Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 1766 - "Community 1766"
 Cohesion: 0.4
-Nodes (4): FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
+Nodes (4): code:block1 (/usr/local/go/bin/go test ./internal/engine -short -count=1 ), code:block2 (--- FAIL: TestPublishGoapFusionStateHash_ResultReflectsDurab), GREEN phase, RED phase
 
 ### Community 1767 - "Community 1767"
 Cohesion: 0.4
-Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
+Nodes (4): FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
 
 ### Community 1768 - "Community 1768"
 Cohesion: 0.4
-Nodes (4): code:block1 (/usr/local/go/bin/go test ./internal/engine -short -count=1 ), code:block2 (--- FAIL: TestAppendGoapResearchGoalsKeepsGoalGapPairsAligne), GREEN phase, RED phase
+Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 1769 - "Community 1769"
 Cohesion: 0.4
-Nodes (4): code:block1 (--- FAIL: TestCompleteGoapProgramMilestoneSkipsRunThatMissed), GREEN phase, RED phase, Summary
+Nodes (4): code:block1 (/usr/local/go/bin/go test ./internal/engine -short -count=1 ), code:block2 (--- FAIL: TestAppendGoapResearchGoalsKeepsGoalGapPairsAligne), GREEN phase, RED phase
 
 ### Community 1770 - "Community 1770"
 Cohesion: 0.4
-Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
+Nodes (4): code:block1 (--- FAIL: TestCompleteGoapProgramMilestoneSkipsRunThatMissed), GREEN phase, RED phase, Summary
 
 ### Community 1771 - "Community 1771"
 Cohesion: 0.4
@@ -10604,13 +10596,17 @@ Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 1772 - "Community 1772"
 Cohesion: 0.4
-Nodes (4): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./cmd/bt-agent -short -), code:block2 (--- FAIL: TestDLQReplayWaitReportsFailureOutcome (0.01s)), GREEN phase, RED phase
+Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 1773 - "Community 1773"
 Cohesion: 0.4
-Nodes (4): code:block1 (internal/reliability/reliability_test.go:236:16: entries[0].), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/reliability	10.02), GREEN phase, RED phase
+Nodes (4): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./cmd/bt-agent -short -), code:block2 (--- FAIL: TestDLQReplayWaitReportsFailureOutcome (0.01s)), GREEN phase, RED phase
 
 ### Community 1774 - "Community 1774"
+Cohesion: 0.4
+Nodes (4): code:block1 (internal/reliability/reliability_test.go:236:16: entries[0].), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/reliability	10.02), GREEN phase, RED phase
+
+### Community 1775 - "Community 1775"
 Cohesion: 0.4
 Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
@@ -10868,7 +10864,7 @@ Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 1841 - "Community 1841"
 Cohesion: 0.4
-Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/dashboard	0.841s), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/agent	2.636s), Summary
+Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 1842 - "Community 1842"
 Cohesion: 0.4
@@ -10884,11 +10880,11 @@ Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 1845 - "Community 1845"
 Cohesion: 0.4
-Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
+Nodes (4): code:block1 (--- FAIL: TestBrainstormRejectedWhenRunOmitsShort (0.00s)), GREEN phase, RED phase, Summary
 
 ### Community 1846 - "Community 1846"
 Cohesion: 0.4
-Nodes (4): code:block1 (--- FAIL: TestBrainstormRejectedWhenRunOmitsShort (0.00s)), GREEN phase, RED phase, Summary
+Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 1847 - "Community 1847"
 Cohesion: 0.4
@@ -10911,68 +10907,68 @@ Cohesion: 0.4
 Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 1852 - "Community 1852"
-Cohesion: 0.4
-Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
-
-### Community 1853 - "Community 1853"
 Cohesion: 0.5
 Nodes (3): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./cmd/bt-ci-doctor -sho), code:block2 (# github.com/nico/go-bt-evolve/cmd/bt-ci-doctor [github.com/), RED phase complete
 
-### Community 1854 - "Community 1854"
+### Community 1853 - "Community 1853"
 Cohesion: 0.4
 Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
-### Community 1855 - "Community 1855"
+### Community 1854 - "Community 1854"
 Cohesion: 0.4
 Nodes (4): code:block1 (internal/knowledge/feedback_test.go:247:5: kg.RecordEvolvedF), GREEN phase, RED phase, Summary
 
-### Community 1856 - "Community 1856"
+### Community 1855 - "Community 1855"
 Cohesion: 0.4
 Nodes (4): FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
 
-### Community 1857 - "Community 1857"
+### Community 1856 - "Community 1856"
 Cohesion: 0.4
 Nodes (4): code:block1 (--- FAIL: TestHandleAgentExecute_RoutesThroughAgentRouter (0), code:block2 (ok  	github.com/nico/go-bt-evolve/cmd/bt-dashboard	0.021s), GREEN phase, RED phase
 
-### Community 1858 - "Community 1858"
+### Community 1857 - "Community 1857"
 Cohesion: 0.4
 Nodes (4): GREEN phase, RED phase, Verification, What was implemented
 
-### Community 1859 - "Community 1859"
+### Community 1858 - "Community 1858"
 Cohesion: 0.4
 Nodes (4): code:block1 (--- FAIL: TestGoapFusionStateHashes_PersistAcrossRuns (0.00s), GREEN phase, RED phase, Summary
+
+### Community 1859 - "Community 1859"
+Cohesion: 0.4
+Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 1860 - "Community 1860"
 Cohesion: 0.4
 Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 1861 - "Community 1861"
-Cohesion: 0.4
-Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
-
-### Community 1862 - "Community 1862"
 Cohesion: 0.5
 Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/fusion	1.130s), GREEN phase, RED phase
 
-### Community 1863 - "Community 1863"
+### Community 1862 - "Community 1862"
 Cohesion: 0.4
 Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
-### Community 1864 - "Community 1864"
+### Community 1863 - "Community 1863"
 Cohesion: 0.4
 Nodes (4): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/reliability ), code:block2 (ok  github.com/nico/go-bt-evolve/internal/reliability   10.7), GREEN phase, RED phase
 
-### Community 1865 - "Community 1865"
+### Community 1864 - "Community 1864"
 Cohesion: 0.4
 Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
-### Community 1866 - "Community 1866"
+### Community 1865 - "Community 1865"
 Cohesion: 0.5
 Nodes (3): code:block1 (/usr/local/go/bin/go test ./internal/knowledge -short -count), GREEN phase, RED phase
 
-### Community 1867 - "Community 1867"
+### Community 1866 - "Community 1866"
 Cohesion: 0.4
 Nodes (4): code:block1 (/usr/local/go/bin/go test ./cmd/benchcmp ./cmd/bt-agent -sho), code:block2 (--- FAIL: TestNoCommittedRootBinaries (0.02s)), GREEN phase, RED phase
+
+### Community 1867 - "Community 1867"
+Cohesion: 0.4
+Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 1868 - "Community 1868"
 Cohesion: 0.4
@@ -10998,7 +10994,7 @@ Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 Cohesion: 0.4
 Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
-### Community 1874 - "Community 1874"
+### Community 1875 - "Community 1875"
 Cohesion: 0.4
 Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
@@ -11007,10 +11003,6 @@ Cohesion: 0.4
 Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 1877 - "Community 1877"
-Cohesion: 0.4
-Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
-
-### Community 1878 - "Community 1878"
 Cohesion: 0.4
 Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
@@ -11306,6 +11298,10 @@ Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 Cohesion: 0.4
 Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
+### Community 1953 - "Community 1953"
+Cohesion: 0.4
+Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
+
 ### Community 1954 - "Community 1954"
 Cohesion: 0.4
 Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
@@ -11316,11 +11312,11 @@ Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 1956 - "Community 1956"
 Cohesion: 0.4
-Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
+Nodes (4): FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
 
 ### Community 1957 - "Community 1957"
 Cohesion: 0.4
-Nodes (4): FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
+Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 1958 - "Community 1958"
 Cohesion: 0.4
@@ -11332,11 +11328,11 @@ Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 1960 - "Community 1960"
 Cohesion: 0.4
-Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
+Nodes (4): code:block1 (--- FAIL: TestGardenerRunCycleTool_CallAppliesLearnedSelecto), GREEN phase, RED phase, Summary
 
 ### Community 1961 - "Community 1961"
 Cohesion: 0.4
-Nodes (4): code:block1 (--- FAIL: TestGardenerRunCycleTool_CallAppliesLearnedSelecto), GREEN phase, RED phase, Summary
+Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 1962 - "Community 1962"
 Cohesion: 0.4
@@ -11348,11 +11344,11 @@ Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 1964 - "Community 1964"
 Cohesion: 0.4
-Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
+Nodes (4): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/agentexec ./), GREEN phase, RED phase, Summary
 
 ### Community 1965 - "Community 1965"
 Cohesion: 0.4
-Nodes (4): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/agentexec ./), GREEN phase, RED phase, Summary
+Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 1966 - "Community 1966"
 Cohesion: 0.4
@@ -11384,23 +11380,23 @@ Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 1973 - "Community 1973"
 Cohesion: 0.4
-Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
+Nodes (4): code:block1 (internal/engine/actions_superpowers_prod_test.go:564:2: unde), Final report, GREEN phase, RED phase
 
 ### Community 1974 - "Community 1974"
 Cohesion: 0.4
-Nodes (4): code:block1 (internal/engine/actions_superpowers_prod_test.go:564:2: unde), Final report, GREEN phase, RED phase
+Nodes (4): FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
 
 ### Community 1975 - "Community 1975"
 Cohesion: 0.4
-Nodes (4): FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
+Nodes (4): FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT
 
 ### Community 1976 - "Community 1976"
 Cohesion: 0.4
-Nodes (4): FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT
+Nodes (4): code:block1 (/usr/local/go/bin/go test ./internal/engine -short -count=1 ), code:block2 (--- FAIL: TestAnalyzeImprovementGaps_NoFabricatedEngineTestB), GREEN phase, RED phase
 
 ### Community 1977 - "Community 1977"
 Cohesion: 0.4
-Nodes (4): code:block1 (/usr/local/go/bin/go test ./internal/engine -short -count=1 ), code:block2 (--- FAIL: TestAnalyzeImprovementGaps_NoFabricatedEngineTestB), GREEN phase, RED phase
+Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 1978 - "Community 1978"
 Cohesion: 0.4
@@ -11408,11 +11404,11 @@ Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 1979 - "Community 1979"
 Cohesion: 0.4
-Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
+Nodes (4): GREEN phase, RED phase, Summary, Summary
 
 ### Community 1980 - "Community 1980"
 Cohesion: 0.4
-Nodes (4): GREEN phase, RED phase, Summary, Summary
+Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 1981 - "Community 1981"
 Cohesion: 0.4
@@ -11452,11 +11448,11 @@ Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 1990 - "Community 1990"
 Cohesion: 0.4
-Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
+Nodes (4): code:block1 (/usr/local/go/bin/go test ./internal/a2a -short -count=1 -ti), code:block2 (--- FAIL: TestTaskStateBridge_A2AToBT (0.00s)), GREEN phase, RED phase
 
 ### Community 1991 - "Community 1991"
 Cohesion: 0.4
-Nodes (4): code:block1 (/usr/local/go/bin/go test ./internal/a2a -short -count=1 -ti), code:block2 (--- FAIL: TestTaskStateBridge_A2AToBT (0.00s)), GREEN phase, RED phase
+Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 1992 - "Community 1992"
 Cohesion: 0.4
@@ -11484,11 +11480,11 @@ Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 1998 - "Community 1998"
 Cohesion: 0.4
-Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
+Nodes (4): code:block1 (/usr/local/go/bin/go test ./internal/knowledge ./internal/do), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/knowledge	18.133s), GREEN phase, RED phase
 
 ### Community 1999 - "Community 1999"
 Cohesion: 0.4
-Nodes (4): code:block1 (/usr/local/go/bin/go test ./internal/knowledge ./internal/do), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/knowledge	18.133s), GREEN phase, RED phase
+Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 2000 - "Community 2000"
 Cohesion: 0.4
@@ -11516,11 +11512,11 @@ Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 2006 - "Community 2006"
 Cohesion: 0.4
-Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
+Nodes (4): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/engine -run ), code:block2 (--- PASS: TestScheduledRuntime_ResumedTickChargesGoalOnGenui), GREEN phase, RED phase
 
 ### Community 2007 - "Community 2007"
 Cohesion: 0.4
-Nodes (4): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/engine -run ), code:block2 (--- PASS: TestScheduledRuntime_ResumedTickChargesGoalOnGenui), GREEN phase, RED phase
+Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 2008 - "Community 2008"
 Cohesion: 0.4
@@ -11548,15 +11544,15 @@ Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 2014 - "Community 2014"
 Cohesion: 0.4
-Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
+Nodes (4): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/engine ./cmd), GREEN phase, RED phase, Summary
 
 ### Community 2015 - "Community 2015"
 Cohesion: 0.4
-Nodes (4): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/engine ./cmd), GREEN phase, RED phase, Summary
+Nodes (4): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/domains	5.104s), code:block2 (--- PASS: TestGoapPlanningRunsRealGOAPPlannerFirst (0.00s)), GREEN phase, RED phase
 
 ### Community 2016 - "Community 2016"
 Cohesion: 0.4
-Nodes (4): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/domains	5.104s), code:block2 (--- PASS: TestGoapPlanningRunsRealGOAPPlannerFirst (0.00s)), GREEN phase, RED phase
+Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 2017 - "Community 2017"
 Cohesion: 0.4
@@ -11564,11 +11560,11 @@ Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 2018 - "Community 2018"
 Cohesion: 0.4
-Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
+Nodes (4): FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT
 
 ### Community 2019 - "Community 2019"
 Cohesion: 0.4
-Nodes (4): FILES_CHANGED, NOTES, RED_COMMAND, RED_RESULT
+Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 2020 - "Community 2020"
 Cohesion: 0.4
@@ -11580,11 +11576,11 @@ Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 2022 - "Community 2022"
 Cohesion: 0.4
-Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
+Nodes (4): GREEN phase, RED phase, RED phase complete, Summary
 
 ### Community 2023 - "Community 2023"
 Cohesion: 0.4
-Nodes (4): GREEN phase, RED phase, RED phase complete, Summary
+Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 2024 - "Community 2024"
 Cohesion: 0.4
@@ -11608,23 +11604,23 @@ Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 2029 - "Community 2029"
 Cohesion: 0.4
-Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
+Nodes (4): FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
 
 ### Community 2030 - "Community 2030"
 Cohesion: 0.4
-Nodes (4): FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
+Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 2031 - "Community 2031"
 Cohesion: 0.4
-Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
+Nodes (4): code:block1 (internal/engine/mcp_server_test.go:18:10: srv.HasTool undefi), GREEN phase, RED phase, RED phase complete
 
 ### Community 2032 - "Community 2032"
 Cohesion: 0.4
-Nodes (4): code:block1 (internal/engine/mcp_server_test.go:18:10: srv.HasTool undefi), GREEN phase, RED phase, RED phase complete
+Nodes (4): FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
 
 ### Community 2033 - "Community 2033"
 Cohesion: 0.4
-Nodes (4): FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
+Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 2034 - "Community 2034"
 Cohesion: 0.4
@@ -11632,11 +11628,11 @@ Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 2035 - "Community 2035"
 Cohesion: 0.4
-Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
+Nodes (4): code:block1 (/usr/local/go/bin/go test ./internal/gardener ./cmd/bt-agent), GREEN phase, RED phase, Summary
 
 ### Community 2036 - "Community 2036"
 Cohesion: 0.4
-Nodes (4): code:block1 (/usr/local/go/bin/go test ./internal/gardener ./cmd/bt-agent), GREEN phase, RED phase, Summary
+Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 2037 - "Community 2037"
 Cohesion: 0.4
@@ -11656,11 +11652,11 @@ Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 2041 - "Community 2041"
 Cohesion: 0.4
-Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
+Nodes (4): FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
 
 ### Community 2042 - "Community 2042"
 Cohesion: 0.4
-Nodes (4): FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
+Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 2043 - "Community 2043"
 Cohesion: 0.4
@@ -11680,11 +11676,11 @@ Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 2047 - "Community 2047"
 Cohesion: 0.4
-Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
+Nodes (4): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/benchmark -r), GREEN phase, RED phase, Summary
 
 ### Community 2048 - "Community 2048"
 Cohesion: 0.4
-Nodes (4): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/benchmark -r), GREEN phase, RED phase, Summary
+Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 2049 - "Community 2049"
 Cohesion: 0.4
@@ -11692,23 +11688,23 @@ Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 2050 - "Community 2050"
 Cohesion: 0.4
-Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
+Nodes (4): FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
 
 ### Community 2051 - "Community 2051"
 Cohesion: 0.4
-Nodes (4): FILES_CHANGED, GREEN_COMMANDS, GREEN_RESULTS, NOTES
+Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 2052 - "Community 2052"
 Cohesion: 0.4
-Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
+Nodes (4): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./cmd/bt-dashboard -sho), code:block2 (--- FAIL: TestHandleAnalyze_UsesWorkflowForTaskDerivation (0), GREEN phase, RED phase
 
 ### Community 2053 - "Community 2053"
 Cohesion: 0.4
-Nodes (4): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./cmd/bt-dashboard -sho), code:block2 (--- FAIL: TestHandleAnalyze_UsesWorkflowForTaskDerivation (0), GREEN phase, RED phase
+Nodes (4): code:block1 (/usr/local/go/bin/go test ./cmd/bt-dashboard ./cmd/bt-agent ), code:block2 (ok  	github.com/nico/go-bt-evolve/cmd/bt-dashboard	0.070s), GREEN phase, RED phase
 
 ### Community 2054 - "Community 2054"
 Cohesion: 0.4
-Nodes (4): code:block1 (/usr/local/go/bin/go test ./cmd/bt-dashboard ./cmd/bt-agent ), code:block2 (ok  	github.com/nico/go-bt-evolve/cmd/bt-dashboard	0.070s), GREEN phase, RED phase
+Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 2055 - "Community 2055"
 Cohesion: 0.4
@@ -11716,7 +11712,7 @@ Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
 ### Community 2056 - "Community 2056"
 Cohesion: 0.4
-Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
+Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/dashboard	0.841s), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/agent	2.636s), Summary
 
 ### Community 2057 - "Community 2057"
 Cohesion: 0.4
@@ -12366,573 +12362,569 @@ Nodes (4): code:block1 (PATH=/usr/local/go/bin:$PATH go test -race ./internal/da
 Cohesion: 0.4
 Nodes (4): Changed Files, Superpowers Finish Report, Tasks, Verification
 
-### Community 2224 - "Community 2224"
-Cohesion: 0.83
-Nodes (3): init(), registerAuctionDelegateNode(), registerIsAuctionTaskCondition()
+### Community 2219 - "Community 2219"
+Cohesion: 0.4
+Nodes (5): code:go (type Server struct { ... }), code:go (func NewServer(name, version string) *Server), Functions, Package: mcp, Types
 
-### Community 2234 - "Community 2234"
+### Community 2220 - "Community 2220"
+Cohesion: 0.4
+Nodes (5): code:go (type Config struct {), code:go (func Load() (*Config, error)                // priority: def), Functions, Package: config, Types
+
+### Community 2236 - "Community 2236"
 Cohesion: 0.67
 Nodes (3): code:sh (go test -race -short ./internal/notebooklmauth ./internal/en), MCP and keepalive, Unattended NotebookLM authentication
 
-### Community 2235 - "Community 2235"
+### Community 2237 - "Community 2237"
 Cohesion: 0.5
 Nodes (4): Boolean `false` in config file is ignored, code:bash (# Check the file exists), Config file not found, Configuration Issues
 
-### Community 2236 - "Community 2236"
+### Community 2238 - "Community 2238"
 Cohesion: 0.5
 Nodes (4): API key not working on dashboard, code:bash (# Check if BT_API_KEY is set), MCP rate limit exceeded, Security Issues
 
-### Community 2237 - "Community 2237"
+### Community 2239 - "Community 2239"
 Cohesion: 0.5
 Nodes (4): code:go (type SuperpowersTaskExecutor struct {), code:text (FILES_CHANGED:), code:bash (git status --short --untracked-files=all), Task 9: Production task execution with Claude Code + TDD
 
-### Community 2238 - "Community 2238"
+### Community 2240 - "Community 2240"
 Cohesion: 0.5
 Nodes (4): code:bash (/usr/local/go/bin/gofmt -w \), code:bash (systemctl --user stop bt-agent), code:bash (graphify update .), Task 16: Verified-patching deployment
 
-### Community 2239 - "Community 2239"
+### Community 2241 - "Community 2241"
 Cohesion: 0.5
 Nodes (4): code:go (package domains), code:go (package engine), code:bash (/usr/local/go/bin/go test ./internal/domains ./internal/engi), Task 1: Lock current stub behavior with failing tests
 
-### Community 2240 - "Community 2240"
+### Community 2242 - "Community 2242"
 Cohesion: 0.5
 Nodes (3): 4. Solution Strategy, Key Technology Decisions, Quality Goals → Solution Approaches
 
-### Community 2241 - "Community 2241"
+### Community 2243 - "Community 2243"
 Cohesion: 0.5
 Nodes (3): 11. Risks and Technical Debt, Known Technical Debt, Prioritized Risk Table
 
-### Community 2242 - "Community 2242"
-Cohesion: 0.5
-Nodes (4): code:bash (grep -rn 'assemble' internal/goap/), code:bash (grep -rn 'SaveDocument\|CollectAllSections\|GenerateTOC\|All), code:bash (PATH=/usr/local/go/bin:$PATH make test), Task 22: Assembly retirement + Commit 4
-
-### Community 2243 - "Community 2243"
+### Community 2244 - "Community 2244"
 Cohesion: 0.5
 Nodes (4): code:bash (grep -E '^### ADR-[0-9]+' docs/arc42/09-decisions.md | sed '), code:bash (H=$(grep -cE '^### ADR-[0-9]+' docs/arc42/09-decisions.md)), code:bash (for n in 001 002 003 004 005 006 007; do), Task 6: Merge §9 (canonical ADR log + docs/adr fold-in)
 
-### Community 2244 - "Community 2244"
-Cohesion: 0.5
-Nodes (4): code:go (package engine), code:go (// RegisterAction adds an action to the global registry, wra), code:bash (git add internal/engine/registry.go internal/engine/registry), Task 6: Per-node spans at the registry seam
-
 ### Community 2245 - "Community 2245"
 Cohesion: 0.5
-Nodes (4): code:go (// internal/engine/superpowers_grill_test.go), code:go (// internal/engine/superpowers_grill.go), code:bash (git add internal/engine/superpowers_grill.go internal/engine), Task 9: `GrillDesignArtifact` action (NotebookLM-answered design interrogation with graded fallback)
+Nodes (4): code:bash (grep -rn 'assemble' internal/goap/), code:bash (grep -rn 'SaveDocument\|CollectAllSections\|GenerateTOC\|All), code:bash (PATH=/usr/local/go/bin:$PATH make test), Task 22: Assembly retirement + Commit 4
 
 ### Community 2246 - "Community 2246"
 Cohesion: 0.5
-Nodes (4): code:go (// internal/engine/classify_task_kind_test.go), code:go (RegisterAction("ClassifyTaskKind", func(ctx *btcore.BTContex), code:bash (git add internal/engine/actions_superpowers_prod.go internal), Task 8: `ClassifyTaskKind` action (skill-dispatch router input)
+Nodes (4): code:go (package engine), code:go (// RegisterAction adds an action to the global registry, wra), code:bash (git add internal/engine/registry.go internal/engine/registry), Task 6: Per-node spans at the registry seam
 
 ### Community 2247 - "Community 2247"
 Cohesion: 0.5
-Nodes (4): code:go (// internal/engine/review_cycle_test.go), code:go (// internal/engine/review_cycle.go), code:bash (git add internal/engine/review_cycle.go internal/engine/revi), Task 7: `ReviewCycle` decorator
+Nodes (4): code:go (// internal/engine/semaphore_guard_test.go), code:go (// internal/engine/semaphore_guard.go), code:bash (git add internal/engine/semaphore_guard.go internal/engine/s), Task 5: `SemaphoreGuard` decorator
 
 ### Community 2248 - "Community 2248"
 Cohesion: 0.5
-Nodes (4): code:go (// internal/engine/semaphore_guard_test.go), code:go (// internal/engine/semaphore_guard.go), code:bash (git add internal/engine/semaphore_guard.go internal/engine/s), Task 5: `SemaphoreGuard` decorator
+Nodes (4): code:go (// internal/engine/superpowers_grill_test.go), code:go (// internal/engine/superpowers_grill.go), code:bash (git add internal/engine/superpowers_grill.go internal/engine), Task 9: `GrillDesignArtifact` action (NotebookLM-answered design interrogation with graded fallback)
 
 ### Community 2249 - "Community 2249"
 Cohesion: 0.5
-Nodes (4): code:go (// internal/engine/cached_condition_test.go), code:go (// internal/engine/cached_condition.go), code:bash (git add internal/engine/cached_condition.go internal/engine/), Task 4: `CachedCondition` decorator
+Nodes (4): code:go (// internal/engine/review_cycle_test.go), code:go (// internal/engine/review_cycle.go), code:bash (git add internal/engine/review_cycle.go internal/engine/revi), Task 7: `ReviewCycle` decorator
 
 ### Community 2250 - "Community 2250"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/evolution/met…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (4): code:go (// internal/engine/cached_condition_test.go), code:go (// internal/engine/cached_condition.go), code:bash (git add internal/engine/cached_condition.go internal/engine/), Task 4: `CachedCondition` decorator
 
 ### Community 2251 - "Community 2251"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Q3 Reliability — Wire the dashboard's dead task-metrics and block-fitness recor…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (4): code:go (// internal/engine/classify_task_kind_test.go), code:go (RegisterAction("ClassifyTaskKind", func(ctx *btcore.BTContex), code:bash (git add internal/engine/actions_superpowers_prod.go internal), Task 8: `ClassifyTaskKind` action (skill-dispatch router input)
 
 ### Community 2252 - "Community 2252"
 Cohesion: 0.5
-Nodes (3): Task 1: Give non-registry domain trees first-class descriptions via a unified description lookup, Task 2: Make smoke-test coverage of the domain-tree registry self-enforcing, Task 3: Extend condition coverage to benchmark suite reachability for every domain tree
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/evolution/met…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2253 - "Community 2253"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/engine/superp…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Q3 Reliability — Wire the dashboard's dead task-metrics and block-fitness recor…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2254 - "Community 2254"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: NotebookLM research: Establish one transactional gardener adoption path: validate the fina…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Task 1: Give non-registry domain trees first-class descriptions via a unified description lookup, Task 2: Make smoke-test coverage of the domain-tree registry self-enforcing, Task 3: Extend condition coverage to benchmark suite reachability for every domain tree
 
 ### Community 2255 - "Community 2255"
 Cohesion: 0.5
-Nodes (3): Task 1: Add category-aware retry helper for chain LLM calls, Task 2: Wire the retry helper into the six single-shot chain executors, Task 3: Replace ad hoc immediate retries in execMapReduce/execRefine with the shared policy
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/engine/superp…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2256 - "Community 2256"
 Cohesion: 0.5
-Nodes (3): Task 1: Add an injectable RNG seam to the evolution mutation primitives, Task 2: Route the four evolution algorithms through the seam and de-flake the Observe tests, Task 3: Close the domain-tree smoke, description, and condition-coverage gap
+Nodes (3): Superpowers Implementation Plan, Task 1: NotebookLM research: Establish one transactional gardener adoption path: validate the fina…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2257 - "Community 2257"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: NotebookLM research: Re-land the lost `SanitizeUserID` traversal guard: prefix all-dot ide…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Task 1: Add category-aware retry helper for chain LLM calls, Task 2: Wire the retry helper into the six single-shot chain executors, Task 3: Replace ad hoc immediate retries in execMapReduce/execRefine with the shared policy
 
 ### Community 2258 - "Community 2258"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Auction-based A2A task allocation for multi-agent coordination" milestone 5/5: Ad…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Task 1: Add an injectable RNG seam to the evolution mutation primitives, Task 2: Route the four evolution algorithms through the seam and de-flake the Observe tests, Task 3: Close the domain-tree smoke, description, and condition-coverage gap
 
 ### Community 2259 - "Community 2259"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/engine/superp…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: NotebookLM research: Re-land the lost `SanitizeUserID` traversal guard: prefix all-dot ide…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2260 - "Community 2260"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: NotebookLM research: Fetch the Create-Agent tree dropdown from the existing `/api/trees` e…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Auction-based A2A task allocation for multi-agent coordination" milestone 5/5: Ad…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2261 - "Community 2261"
 Cohesion: 0.5
-Nodes (3): Task 1: Characterization tests pinning `internal/config/defaults.go`'s exported defaults, Task 2: Behavioral routing coverage for RefactoringTree, SecurityAuditTree, DataPipelineTree, Task 3: Behavioral routing coverage for MeetingNotesTree, TradingSignalTree, GameAITree
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/engine/superp…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2262 - "Community 2262"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/engine/goap_r…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: NotebookLM research: Fetch the Create-Agent tree dropdown from the existing `/api/trees` e…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2263 - "Community 2263"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for cmd/bt-docgen/main.go …, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Task 1: Characterization tests pinning `internal/config/defaults.go`'s exported defaults, Task 2: Behavioral routing coverage for RefactoringTree, SecurityAuditTree, DataPipelineTree, Task 3: Behavioral routing coverage for MeetingNotesTree, TradingSignalTree, GameAITree
 
 ### Community 2264 - "Community 2264"
 Cohesion: 0.5
-Nodes (3): Task 1: bt_blocks_compose rejects unknown strategy tree IDs instead of silently dropping the router, Task 2: Validate composed trees and surface Save errors before activating via bt_blocks_compose save=true, Task 3: Guard bt-agent-cli positional-arg subcommands against index panic and trim feedback identifiers
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/engine/goap_r…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2265 - "Community 2265"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for cmd/benchcmp/main.go a…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for cmd/bt-docgen/main.go …, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2266 - "Community 2266"
 Cohesion: 0.5
-Nodes (3): Task 1: Keep filesystem I/O out of the Manager-wide store lock in `storeFor`, Task 2: Cancellable blackboard operations — context-aware API and a ctx-honouring scope gate, Task 3: Close the unguarded runtime-branch-coverage exemption across all three domain registries
+Nodes (3): Task 1: bt_blocks_compose rejects unknown strategy tree IDs instead of silently dropping the router, Task 2: Validate composed trees and surface Save errors before activating via bt_blocks_compose save=true, Task 3: Guard bt-agent-cli positional-arg subcommands against index panic and trim feedback identifiers
 
 ### Community 2267 - "Community 2267"
 Cohesion: 0.5
-Nodes (3): Task 1: Extract tunable parameters from struct fields, not just Metadata keys, Task 2: Tree-level CMA-ES tuning helper wrapping Extract→Optimize→Apply, Task 3: Algorithm selection and per-tree reporting in bt_evolve_bottlenecks
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for cmd/benchcmp/main.go a…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2268 - "Community 2268"
 Cohesion: 0.5
-Nodes (3): Task 1: Characterization tests for eval_suites.go (Q1 backlog m1/3): pin AllSuites() structure and task-builder helper semantics, Task 2: Characterization tests for swebench_verified.go (Q1 backlog m3/3): pin resolution boundary, failure/aggregation semantics, and JSON wire format, Task 3: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: internal/domains/trees.go, internal/domains/domains_test.go)
+Nodes (3): Task 1: Keep filesystem I/O out of the Manager-wide store lock in `storeFor`, Task 2: Cancellable blackboard operations — context-aware API and a ctx-honouring scope gate, Task 3: Close the unguarded runtime-branch-coverage exemption across all three domain registries
 
 ### Community 2269 - "Community 2269"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Blackboard holds a global mutex while blocking forever on a cross-process flock" …, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Task 1: Extract tunable parameters from struct fields, not just Metadata keys, Task 2: Tree-level CMA-ES tuning helper wrapping Extract→Optimize→Apply, Task 3: Algorithm selection and per-tree reporting in bt_evolve_bottlenecks
 
 ### Community 2270 - "Community 2270"
 Cohesion: 0.5
-Nodes (3): Task 1: RunSuite path-match types — Result.PathMatched + RunMetrics.PathMatchRate, Task 2: ScoreMutation/RunABTest penalize routing regressions even when Outcome still "succeeds", Task 3: Cross-tree integration guard — PathMatchRate consulted for every registered domain suite
+Nodes (3): Task 1: Characterization tests for eval_suites.go (Q1 backlog m1/3): pin AllSuites() structure and task-builder helper semantics, Task 2: Characterization tests for swebench_verified.go (Q1 backlog m3/3): pin resolution boundary, failure/aggregation semantics, and JSON wire format, Task 3: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: internal/domains/trees.go, internal/domains/domains_test.go)
 
 ### Community 2271 - "Community 2271"
 Cohesion: 0.5
-Nodes (3): Task 1: Track the real tree ID separately from the collision-disambiguated registry name, Task 2: Filter gardener reflection scoring by real tree ID and `Record.User`, Task 3: Stop `bankFor` from permanently caching the shared-bank fallback on a transient open error
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Blackboard holds a global mutex while blocking forever on a cross-process flock" …, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2272 - "Community 2272"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Failover preflight never clears expired backoff state, breaking the half-open inv…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Task 1: RunSuite path-match types — Result.PathMatched + RunMetrics.PathMatchRate, Task 2: ScoreMutation/RunABTest penalize routing regressions even when Outcome still "succeeds", Task 3: Cross-tree integration guard — PathMatchRate consulted for every registered domain suite
 
 ### Community 2273 - "Community 2273"
 Cohesion: 0.5
-Nodes (3): Task 1: Isolate in-memory scope serialization from cross-process file locking, Task 2: Bound cross-process lock waits with context deadlines and explicit timeout failure, Task 3: Enforce complete domain-tree smoke coverage and condition/description invariants by registry-derived iteration
+Nodes (3): Task 1: Track the real tree ID separately from the collision-disambiguated registry name, Task 2: Filter gardener reflection scoring by real tree ID and `Record.User`, Task 3: Stop `bankFor` from permanently caching the shared-bank fallback on a transient open error
 
 ### Community 2274 - "Community 2274"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: NotebookLM research: Remove the committed 8.5MB `bt-scalability-probe` binary from version…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Failover preflight never clears expired backoff state, breaking the half-open inv…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2275 - "Community 2275"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: NotebookLM research: Implement autonomous stall recovery using Dijkstra’s algorithm over…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Task 1: Isolate in-memory scope serialization from cross-process file locking, Task 2: Bound cross-process lock waits with context deadlines and explicit timeout failure, Task 3: Enforce complete domain-tree smoke coverage and condition/description invariants by registry-derived iteration
 
 ### Community 2276 - "Community 2276"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/benchmark/eva…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: NotebookLM research: Remove the committed 8.5MB `bt-scalability-probe` binary from version…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2277 - "Community 2277"
 Cohesion: 0.5
-Nodes (3): Task 1: Characterization tests for `actions_bt_manager.go` pure helper functions, Task 2: Characterization tests for the registered BT Manager actions, Task 3: Per-tree smoke assertions for the domain trees currently covered only by the generic loop
+Nodes (3): Superpowers Implementation Plan, Task 1: NotebookLM research: Implement autonomous stall recovery using Dijkstra’s algorithm over…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2278 - "Community 2278"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for cmd/bt-dashboard/agent…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/benchmark/eva…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2279 - "Community 2279"
 Cohesion: 0.5
-Nodes (3): Task 1: Characterization tests pinning MockLLM's exported behavior, Task 2: Derive the resolver-reachable domain-tree work list from production instead of a test literal, Task 3: Rewire every resolver-reachable guard onto the production registry and close the missing coverage legs
+Nodes (3): Task 1: Characterization tests for `actions_bt_manager.go` pure helper functions, Task 2: Characterization tests for the registered BT Manager actions, Task 3: Per-tree smoke assertions for the domain trees currently covered only by the generic loop
 
 ### Community 2280 - "Community 2280"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Rate limiter's 10k-bucket cap rejects every previously-unseen client" milestone 1…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for cmd/bt-dashboard/agent…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2281 - "Community 2281"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/engine/rate_l…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Task 1: Characterization tests pinning MockLLM's exported behavior, Task 2: Derive the resolver-reachable domain-tree work list from production instead of a test literal, Task 3: Rewire every resolver-reachable guard onto the production registry and close the missing coverage legs
 
 ### Community 2282 - "Community 2282"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Give cross-process JSON state exactly one owner — a locked read-merge-write per…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Rate limiter's 10k-bucket cap rejects every previously-unseen client" milestone 1…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2283 - "Community 2283"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/blackboard/ha…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/engine/rate_l…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2284 - "Community 2284"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: NotebookLM research: Remove the two committed root-level build artifacts and prevent recur…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Give cross-process JSON state exactly one owner — a locked read-merge-write per…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2285 - "Community 2285"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/agent/registr…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/blackboard/ha…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2286 - "Community 2286"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/agent/registr…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: NotebookLM research: Remove the two committed root-level build artifacts and prevent recur…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2287 - "Community 2287"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/benchmark/eva…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/agent/registr…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2288 - "Community 2288"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: NotebookLM research: Review complete. The report above is my full output in the required G…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/agent/registr…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2289 - "Community 2289"
 Cohesion: 0.5
-Nodes (3): Task 1: Add migration accounting and stable generation cadence to IslandModel, Task 2: Register deterministic bt_evolve_island MCP tool in bt-agent, Task 3: Domain-seeded islands — per-domain trees as island populations
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/benchmark/eva…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2290 - "Community 2290"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Blackboard holds a global mutex while blocking forever on a cross-process flock" …, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: NotebookLM research: Review complete. The report above is my full output in the required G…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2291 - "Community 2291"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Q1 Correctness / Q3 Reliability — Close the mcpDeps shared-blackboard data race…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Task 1: Add migration accounting and stable generation cadence to IslandModel, Task 2: Register deterministic bt_evolve_island MCP tool in bt-agent, Task 3: Domain-seeded islands — per-domain trees as island populations
 
 ### Community 2292 - "Community 2292"
 Cohesion: 0.5
-Nodes (3): Task 1: Per-tree behavioral-diversity archive accessor on Gardener, Task 2: Wire the diversity archive into `CrisisDetector.Detect`'s call site, Task 3: Structural completeness guard for domain-tree coverage registries
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Blackboard holds a global mutex while blocking forever on a cross-process flock" …, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2293 - "Community 2293"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/a2a/doc.go an…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Q1 Correctness / Q3 Reliability — Close the mcpDeps shared-blackboard data race…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2294 - "Community 2294"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/engine/goap_r…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Task 1: Per-tree behavioral-diversity archive accessor on Gardener, Task 2: Wire the diversity archive into `CrisisDetector.Detect`'s call site, Task 3: Structural completeness guard for domain-tree coverage registries
 
 ### Community 2295 - "Community 2295"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for cmd/bt-dashboard/agent…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/a2a/doc.go an…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2296 - "Community 2296"
 Cohesion: 0.5
-Nodes (3): Task 1: Bounded-capacity bookkeeping for RateLimiter (recency order + cleanup sync), Task 2: Evict the least-recently-used bucket instead of 429'ing every new client, Task 3: Close the last domain-tree coverage hole — no exported tree constructor outside every registry
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/engine/goap_r…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2297 - "Community 2297"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/engine/superp…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for cmd/bt-dashboard/agent…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2298 - "Community 2298"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for cmd/bt-agent/hitl_tool…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Task 1: Bounded-capacity bookkeeping for RateLimiter (recency order + cleanup sync), Task 2: Evict the least-recently-used bucket instead of 429'ing every new client, Task 3: Close the last domain-tree coverage hole — no exported tree constructor outside every registry
 
 ### Community 2299 - "Community 2299"
 Cohesion: 0.5
-Nodes (3): Task 1: Derive the rotation replacement TTL from the rotated key instead of a hardcoded 24h, Task 2: Give callers an explicit replacement-TTL opt-out and correct the RotateKey contract docs, Task 3: Close the registry hole that lets a domain tree escape smoke, description, and condition coverage
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/engine/superp…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2300 - "Community 2300"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/agent/quality…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for cmd/bt-agent/hitl_tool…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2301 - "Community 2301"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/benchmark/eva…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Task 1: Derive the rotation replacement TTL from the rotated key instead of a hardcoded 24h, Task 2: Give callers an explicit replacement-TTL opt-out and correct the RotateKey contract docs, Task 3: Close the registry hole that lets a domain tree escape smoke, description, and condition coverage
 
 ### Community 2302 - "Community 2302"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Q2 Evolvability — Wire the knowledge graph into the gardener daemon's live prio…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/agent/quality…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2303 - "Community 2303"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: NotebookLM research: Implement autonomous stall recovery using Dijkstra’s algorithm over…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/benchmark/eva…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2304 - "Community 2304"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Blackboard holds a global mutex while blocking forever on a cross-process flock" …, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Q2 Evolvability — Wire the knowledge graph into the gardener daemon's live prio…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2305 - "Community 2305"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for cmd/bt-dashboard/agent…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: NotebookLM research: Implement autonomous stall recovery using Dijkstra’s algorithm over…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2306 - "Community 2306"
 Cohesion: 0.5
-Nodes (3): Task 1: Per-scope gating and a deadline-bounded sidecar flock in `beginScope`, Task 2: Lock down the invariant — structural guard, same-scope atomicity, engine tool-path wiring, Task 3: Extend the unregistered-node guard to every domain-tree registry
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Blackboard holds a global mutex while blocking forever on a cross-process flock" …, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2307 - "Community 2307"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "RotateKey silently caps the replacement API key at 24 hours" milestone 1/1: In in…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for cmd/bt-dashboard/agent…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2308 - "Community 2308"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "CompanyState mutex held across multi-minute LLM tree executions in RunSprint" mil…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Task 1: Per-scope gating and a deadline-bounded sidecar flock in `beginScope`, Task 2: Lock down the invariant — structural guard, same-scope atomicity, engine tool-path wiring, Task 3: Extend the unregistered-node guard to every domain-tree registry
 
 ### Community 2309 - "Community 2309"
 Cohesion: 0.5
-Nodes (3): Task 1: Characterization tests for actions_godev.go's fixed-output actions (SuggestImprovements, CompileGoCode, RunGoTests, AnalyzeTestResults), Task 2: Characterization tests for actions_godev.go's LLM-plan-backed actions (ReviewGoCode, FixBuildErrors, ExplainGoConcept), Task 3: Guard AllDomainTrees() registry purity and confirm smoke/description/condition coverage holds
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "RotateKey silently caps the replacement API key at 24 hours" milestone 1/1: In in…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2310 - "Community 2310"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Blackboard holds a global mutex while blocking forever on a cross-process flock" …, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "CompanyState mutex held across multi-minute LLM tree executions in RunSprint" mil…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2311 - "Community 2311"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Blackboard holds a global mutex while blocking forever on a cross-process flock" …, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Task 1: Characterization tests for actions_godev.go's fixed-output actions (SuggestImprovements, CompileGoCode, RunGoTests, AnalyzeTestResults), Task 2: Characterization tests for actions_godev.go's LLM-plan-backed actions (ReviewGoCode, FixBuildErrors, ExplainGoConcept), Task 3: Guard AllDomainTrees() registry purity and confirm smoke/description/condition coverage holds
 
 ### Community 2312 - "Community 2312"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Rate limiter's 10k-bucket cap rejects every previously-unseen client" milestone 1…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Blackboard holds a global mutex while blocking forever on a cross-process flock" …, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2313 - "Community 2313"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/blocks/hitl_e…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Blackboard holds a global mutex while blocking forever on a cross-process flock" …, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2314 - "Community 2314"
 Cohesion: 0.5
-Nodes (3): Task 1: Make the bucket cap a configurable field and add a lossless LRU eviction helper, Task 2: Admit new clients at capacity by evicting the LRU bucket instead of returning false, Task 3: Subject the unwrapped GOAP tree variants to the registry-derived coverage guards
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Rate limiter's 10k-bucket cap rejects every previously-unseen client" milestone 1…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2315 - "Community 2315"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/agent/registr…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/blocks/hitl_e…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2316 - "Community 2316"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Harden the ADR-010 personalization layer — user isolation, crash safety, and re…, Task 2: NotebookLM research: Defense-in-depth in the retry policy: when a rate-limit error's known…
+Nodes (3): Task 1: Make the bucket cap a configurable field and add a lossless LRU eviction helper, Task 2: Admit new clients at capacity by evicting the LRU bucket instead of returning false, Task 3: Subject the unwrapped GOAP tree variants to the registry-derived coverage guards
 
 ### Community 2317 - "Community 2317"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/blackboard/ha…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/agent/registr…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2318 - "Community 2318"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/evaluator/eva…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Harden the ADR-010 personalization layer — user isolation, crash safety, and re…, Task 2: NotebookLM research: Defense-in-depth in the retry policy: when a rate-limit error's known…
 
 ### Community 2319 - "Community 2319"
 Cohesion: 0.5
-Nodes (3): Task 1: Make the replacement key's lifetime a derived policy instead of a hardcoded constant, Task 2: RotateKey inherits the rotated key's lifetime and gains an explicit TTL opt-out, Task 3: Describe the resolver-reachable trees that the description maps currently cannot answer for
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/blackboard/ha…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2320 - "Community 2320"
 Cohesion: 0.5
-Nodes (3): Task 1: Characterize NotebookLMState in-memory semantics (hash, cooldowns, counters, summary), Task 2: Make NotebookLM state persistence testable and fix the nil-ChainState panic in the load action, Task 3: Fail-closed guard — every exported domain tree constructor must land in a coverage registry
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/evaluator/eva…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2321 - "Community 2321"
 Cohesion: 0.5
-Nodes (3): Task 1: Restore + configure feedback persistence at scheduler startup, Task 2: Accumulate feedback on every run and flush on shutdown, Task 3: Close remaining domain-tree smoke/description/condition coverage gaps
+Nodes (3): Task 1: Make the replacement key's lifetime a derived policy instead of a hardcoded constant, Task 2: RotateKey inherits the rotated key's lifetime and gains an explicit TTL opt-out, Task 3: Describe the resolver-reachable trees that the description maps currently cannot answer for
 
 ### Community 2322 - "Community 2322"
 Cohesion: 0.5
-Nodes (3): Task 1: Trim `--id` when building the CLI blackboard scope in `parseBBScopeFlag`, Task 2: Pin the cross-tool round-trip: CLI scope reads entries the daemon wrote, Task 3: Verify domain-tree smoke/description/condition coverage holds fleet-wide (no fabrication)
+Nodes (3): Task 1: Characterize NotebookLMState in-memory semantics (hash, cooldowns, counters, summary), Task 2: Make NotebookLM state persistence testable and fix the nil-ChainState panic in the load action, Task 3: Fail-closed guard — every exported domain tree constructor must land in a coverage registry
 
 ### Community 2323 - "Community 2323"
 Cohesion: 0.5
-Nodes (3): Task 1: Characterization tests for BT Manager's reflection-driven report actions, Task 2: Characterization tests for BT Manager bootstrap/intervention actions and pure helpers, Task 3: Close domain-tree smoke/description/condition coverage gaps
+Nodes (3): Task 1: Restore + configure feedback persistence at scheduler startup, Task 2: Accumulate feedback on every run and flush on shutdown, Task 3: Close remaining domain-tree smoke/description/condition coverage gaps
 
 ### Community 2324 - "Community 2324"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for cmd/bt-agent/hitl_tool…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Task 1: Trim `--id` when building the CLI blackboard scope in `parseBBScopeFlag`, Task 2: Pin the cross-tool round-trip: CLI scope reads entries the daemon wrote, Task 3: Verify domain-tree smoke/description/condition coverage holds fleet-wide (no fabrication)
 
 ### Community 2325 - "Community 2325"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Panic-proof the evolution execution path and close the gardener experience loop (…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Task 1: Characterization tests for BT Manager's reflection-driven report actions, Task 2: Characterization tests for BT Manager bootstrap/intervention actions and pure helpers, Task 3: Close domain-tree smoke/description/condition coverage gaps
 
 ### Community 2326 - "Community 2326"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: NotebookLM research: Implement autonomous stall recovery using Dijkstra’s algorithm over…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for cmd/bt-agent/hitl_tool…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2327 - "Community 2327"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: NotebookLM research: Bound the ExperienceBank: add a capacity cap (~200-500 entries) with …, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Panic-proof the evolution execution path and close the gardener experience loop (…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2328 - "Community 2328"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/evolution/def…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: NotebookLM research: Implement autonomous stall recovery using Dijkstra’s algorithm over…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2329 - "Community 2329"
 Cohesion: 0.5
-Nodes (3): Task 1: Add raise-only evolved-fitness write-back to the knowledge graph, Task 2: Wire the write-back into `bt_evolve_bottlenecks` with scale normalization, Task 3: Confirm/consolidate domain-tree coverage guard
+Nodes (3): Superpowers Implementation Plan, Task 1: NotebookLM research: Bound the ExperienceBank: add a capacity cap (~200-500 entries) with …, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2330 - "Community 2330"
 Cohesion: 0.5
-Nodes (3): Task 1: Give RateLimiter an O(1) recency index that cleanup() keeps consistent, Task 2: Evict the least-recently-used bucket at capacity instead of denying new clients, Task 3: Close the domain-tree coverage loop with a union accessor and a constructor census guard
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/evolution/def…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2331 - "Community 2331"
 Cohesion: 0.5
-Nodes (3): Task 1: Make the bucket cap a configurable, accounted-for field instead of a magic literal, Task 2: Evict the least-recently-used bucket at capacity instead of denying every new client, Task 3: Close the last describability hole — prefixed resolver tree families
+Nodes (3): Task 1: Add raise-only evolved-fitness write-back to the knowledge graph, Task 2: Wire the write-back into `bt_evolve_bottlenecks` with scale normalization, Task 3: Confirm/consolidate domain-tree coverage guard
 
 ### Community 2332 - "Community 2332"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/engine/goap_r…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Task 1: Give RateLimiter an O(1) recency index that cleanup() keeps consistent, Task 2: Evict the least-recently-used bucket at capacity instead of denying new clients, Task 3: Close the domain-tree coverage loop with a union accessor and a constructor census guard
 
 ### Community 2333 - "Community 2333"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Blackboard holds a global mutex while blocking forever on a cross-process flock" …, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Task 1: Make the bucket cap a configurable, accounted-for field instead of a magic literal, Task 2: Evict the least-recently-used bucket at capacity instead of denying every new client, Task 3: Close the last describability hole — prefixed resolver tree families
 
 ### Community 2334 - "Community 2334"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Rate limiter's 10k-bucket cap rejects every previously-unseen client" milestone 1…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/engine/goap_r…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2335 - "Community 2335"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Idle deployment can restart newly admitted jobs" milestone 1/1: RED: In internal/…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Blackboard holds a global mutex while blocking forever on a cross-process flock" …, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2336 - "Community 2336"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Q5 Consistency & Reuse — Consolidate the triplicated block-fitness outcome-scor…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Rate limiter's 10k-bucket cap rejects every previously-unseen client" milestone 1…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2337 - "Community 2337"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: NotebookLM research: Replace append-only personal-tree rescanning with reconciliation keye…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Idle deployment can restart newly admitted jobs" milestone 1/1: RED: In internal/…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2338 - "Community 2338"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Blackboard holds a global mutex while blocking forever on a cross-process flock" …, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Q5 Consistency & Reuse — Consolidate the triplicated block-fitness outcome-scor…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2339 - "Community 2339"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Rate limiter's 10k-bucket cap rejects every previously-unseen client" milestone 1…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: NotebookLM research: Replace append-only personal-tree rescanning with reconciliation keye…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2340 - "Community 2340"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Auction subsystem production hardening (review follow-up 2026-07-04)" milestone 4…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Blackboard holds a global mutex while blocking forever on a cross-process flock" …, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2341 - "Community 2341"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Give Q-learning evolution durable cross-run memory (Q2 Evolvability)" milestone 4…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Rate limiter's 10k-bucket cap rejects every previously-unseen client" milestone 1…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2342 - "Community 2342"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Blackboard holds a global mutex while blocking forever on a cross-process flock" …, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Auction subsystem production hardening (review follow-up 2026-07-04)" milestone 4…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2343 - "Community 2343"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Give cross-process JSON state exactly one owner — a locked read-merge-write per…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Give Q-learning evolution durable cross-run memory (Q2 Evolvability)" milestone 4…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2344 - "Community 2344"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/a2a/doc.go an…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Blackboard holds a global mutex while blocking forever on a cross-process flock" …, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2345 - "Community 2345"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "RotateKey silently caps the replacement API key at 24 hours" milestone 1/1: In in…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Give cross-process JSON state exactly one owner — a locked read-merge-write per…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2346 - "Community 2346"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/evolution/def…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/a2a/doc.go an…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2347 - "Community 2347"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Close the fitness feedback loop into tree discovery and re-evolution targeting (Q…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "RotateKey silently caps the replacement API key at 24 hours" milestone 1/1: In in…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2348 - "Community 2348"
 Cohesion: 0.5
-Nodes (3): Task 1: Wire the benchmark-suite gate into `bt_evolve_island`, Task 2: Harden the remaining `bt_evolve_island` archive tests against gate-induced flakiness, Task 3: Domain trees smoke/description/condition coverage — re-verify only
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/evolution/def…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2349 - "Community 2349"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: NotebookLM research: Implement autonomous stall recovery using Dijkstra’s algorithm over…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Close the fitness feedback loop into tree discovery and re-evolution targeting (Q…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2350 - "Community 2350"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: NotebookLM research: Give knowledge feedback one serialized persistence owner with mutatio…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Task 1: Wire the benchmark-suite gate into `bt_evolve_island`, Task 2: Harden the remaining `bt_evolve_island` archive tests against gate-induced flakiness, Task 3: Domain trees smoke/description/condition coverage — re-verify only
 
 ### Community 2351 - "Community 2351"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/benchmark/eva…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: NotebookLM research: Implement autonomous stall recovery using Dijkstra’s algorithm over…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2352 - "Community 2352"
 Cohesion: 0.5
-Nodes (3): Task 1: Behavior tests for handleAgentCreate/handleAgentDelete lifecycle, Task 2: Behavior tests for handleSecurityAudit/handleAlertRules, Task 3: Descriptions-map coverage for resolver-reachable trees outside AllDomainTrees
+Nodes (3): Superpowers Implementation Plan, Task 1: NotebookLM research: Give knowledge feedback one serialized persistence owner with mutatio…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2353 - "Community 2353"
 Cohesion: 0.5
-Nodes (3): Task 1: Make WorkerPool Submit/Shutdown fail-safe against send-on-closed panic, Task 2: Wire graceful WorkerPool shutdown into the dashboard lifecycle and surface pool state, Task 3: Guarantee smoke tests, descriptions, and condition coverage for all domain trees
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/benchmark/eva…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2354 - "Community 2354"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/blocks/observ…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Task 1: Behavior tests for handleAgentCreate/handleAgentDelete lifecycle, Task 2: Behavior tests for handleSecurityAudit/handleAlertRules, Task 3: Descriptions-map coverage for resolver-reachable trees outside AllDomainTrees
 
 ### Community 2355 - "Community 2355"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Auction-based A2A task allocation for multi-agent coordination" milestone 5/5: Ad…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Task 1: Make WorkerPool Submit/Shutdown fail-safe against send-on-closed panic, Task 2: Wire graceful WorkerPool shutdown into the dashboard lifecycle and surface pool state, Task 3: Guarantee smoke tests, descriptions, and condition coverage for all domain trees
 
 ### Community 2356 - "Community 2356"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Rate limiter's 10k-bucket cap rejects every previously-unseen client" milestone 1…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/blocks/observ…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2357 - "Community 2357"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Rate limiter's 10k-bucket cap rejects every previously-unseen client" milestone 1…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Auction-based A2A task allocation for multi-agent coordination" milestone 5/5: Ad…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2358 - "Community 2358"
 Cohesion: 0.5
-Nodes (3): Task 1: Sidecar flock primitive for the experience-bank snapshot, Task 2: Hold the sidecar lock across addEntry's merge-from-disk → atomic-rename window, Task 3: Make MarkReused/public Persist merge-under-lock so full-file rewrites cannot drop the other writer's entries
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Rate limiter's 10k-bucket cap rejects every previously-unseen client" milestone 1…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2359 - "Community 2359"
 Cohesion: 0.5
-Nodes (3): Task 1: Add durable load for GOAP fusion charge/refund stamps, Task 2: Wire durable load into resumed-tick research-goal charging, Task 3: Regression-cover the milestone refund path through the full scheduled-resume entry point
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Rate limiter's 10k-bucket cap rejects every previously-unseen client" milestone 1…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2360 - "Community 2360"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/engine/parall…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Task 1: Sidecar flock primitive for the experience-bank snapshot, Task 2: Hold the sidecar lock across addEntry's merge-from-disk → atomic-rename window, Task 3: Make MarkReused/public Persist merge-under-lock so full-file rewrites cannot drop the other writer's entries
 
 ### Community 2361 - "Community 2361"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/engine/monito…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Task 1: Add durable load for GOAP fusion charge/refund stamps, Task 2: Wire durable load into resumed-tick research-goal charging, Task 3: Regression-cover the milestone refund path through the full scheduled-resume entry point
 
 ### Community 2362 - "Community 2362"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: NotebookLM research: Wire `a2a.AuctionCardsFn` (and the underlying A2A card source) into `…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/engine/parall…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2363 - "Community 2363"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/agent/registr…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/engine/monito…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2364 - "Community 2364"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/agentexec/pip…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: NotebookLM research: Wire `a2a.AuctionCardsFn` (and the underlying A2A card source) into `…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2365 - "Community 2365"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Blackboard holds a global mutex while blocking forever on a cross-process flock" …, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/agent/registr…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2366 - "Community 2366"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Failover preflight never clears expired backoff state, breaking the half-open inv…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/agentexec/pip…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2367 - "Community 2367"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Rate limiter's 10k-bucket cap rejects every previously-unseen client" milestone 1…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Blackboard holds a global mutex while blocking forever on a cross-process flock" …, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2368 - "Community 2368"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/evolution/met…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Failover preflight never clears expired backoff state, breaking the half-open inv…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2369 - "Community 2369"
 Cohesion: 0.5
-Nodes (3): Task 1: Characterize `StatusAborted` and the abort semantics its consumers depend on, Task 2: Characterization tests for `BuildRateLimit` throttling and metadata parsing, Task 3: Close the two remaining domain-tree coverage holes — unregistered constructors and unregistered tree *variants*
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Rate limiter's 10k-bucket cap rejects every previously-unseen client" milestone 1…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2370 - "Community 2370"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Q3 Reliability — harden the knowledge-graph embedding client against an unrespo…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/evolution/met…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2371 - "Community 2371"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/engine/monito…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Task 1: Characterize `StatusAborted` and the abort semantics its consumers depend on, Task 2: Characterization tests for `BuildRateLimit` throttling and metadata parsing, Task 3: Close the two remaining domain-tree coverage holes — unregistered constructors and unregistered tree *variants*
 
 ### Community 2372 - "Community 2372"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/evaluator/eva…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Q3 Reliability — harden the knowledge-graph embedding client against an unrespo…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2373 - "Community 2373"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Rate limiter's 10k-bucket cap rejects every previously-unseen client" milestone 1…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/engine/monito…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2374 - "Community 2374"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Rate limiter's 10k-bucket cap rejects every previously-unseen client" milestone 1…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/evaluator/eva…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2375 - "Community 2375"
 Cohesion: 0.5
@@ -12940,43 +12932,43 @@ Nodes (3): Superpowers Implementation Plan, Task 1: Program "Rate limiter's 10k-
 
 ### Community 2376 - "Community 2376"
 Cohesion: 0.5
-Nodes (3): Task 1: Canonical tree identity that unwraps both wrapper layers, Task 2: Give the unwrapped constructor variants a registry and description home, Task 3: Source-derived constructor census plus the missing guard-edge legs
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Rate limiter's 10k-bucket cap rejects every previously-unseen client" milestone 1…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2377 - "Community 2377"
 Cohesion: 0.5
-Nodes (3): Task 1: Branch age and abandonment gate helpers for superpowers branch reaping, Task 2: Wire age/abandonment gates into reapOrphanedSuperpowersBranches with archive-before-delete, Task 3: Ensure all domain trees have smoke tests, descriptions, and condition coverage
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Rate limiter's 10k-bucket cap rejects every previously-unseen client" milestone 1…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2378 - "Community 2378"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for cmd/bt-docgen/main.go …, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Task 1: Canonical tree identity that unwraps both wrapper layers, Task 2: Give the unwrapped constructor variants a registry and description home, Task 3: Source-derived constructor census plus the missing guard-edge legs
 
 ### Community 2379 - "Community 2379"
 Cohesion: 0.5
-Nodes (3): Task 1: Add normalized fitness write-back method to the knowledge graph, Task 2: Wire the write-back into `bt_evolve_bottlenecks` and prove bottleneck-clearing, Task 3: Assert domain-tree smoke/description/condition coverage stays complete
+Nodes (3): Task 1: Branch age and abandonment gate helpers for superpowers branch reaping, Task 2: Wire age/abandonment gates into reapOrphanedSuperpowersBranches with archive-before-delete, Task 3: Ensure all domain trees have smoke tests, descriptions, and condition coverage
 
 ### Community 2380 - "Community 2380"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for cmd/benchcmp/main.go a…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for cmd/bt-docgen/main.go …, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2381 - "Community 2381"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for cmd/bt-docgen/main.go …, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Task 1: Add normalized fitness write-back method to the knowledge graph, Task 2: Wire the write-back into `bt_evolve_bottlenecks` and prove bottleneck-clearing, Task 3: Assert domain-tree smoke/description/condition coverage stays complete
 
 ### Community 2382 - "Community 2382"
 Cohesion: 0.5
-Nodes (3): Task 1: Add `FeedbackFile()` path helper for the feedback snapshot, Task 2: Wire `FeedbackPath` into the production daemon scheduler, Task 3: Enforce descriptions + leaf-condition coverage across all domain trees
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for cmd/benchcmp/main.go a…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2383 - "Community 2383"
 Cohesion: 0.5
-Nodes (3): Task 1: Add leaf-with-children validation rule for AlwaysSucceed in ValidateTreeFull, Task 2: Generalize the rule to all childless leaf types and surface it through the flat ValidateTree, Task 3: Fleet-wide domain-tree guard — no leaf carries children, and condition/description coverage holds
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for cmd/bt-docgen/main.go …, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2384 - "Community 2384"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Rate limiter's 10k-bucket cap rejects every previously-unseen client" milestone 1…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Task 1: Add `FeedbackFile()` path helper for the feedback snapshot, Task 2: Wire `FeedbackPath` into the production daemon scheduler, Task 3: Enforce descriptions + leaf-condition coverage across all domain trees
 
 ### Community 2385 - "Community 2385"
 Cohesion: 0.5
-Nodes (3): Task 1: Blackboard `EnablePersistence` must not hold the manager mutex across directory creation, Task 2: Give every externally-built resolver-selectable tree a Condition description, Task 3: Make the domains exemption enforced instead of asserted, via a machine-readable guard-edge registry
+Nodes (3): Task 1: Add leaf-with-children validation rule for AlwaysSucceed in ValidateTreeFull, Task 2: Generalize the rule to all childless leaf types and surface it through the flat ValidateTree, Task 3: Fleet-wide domain-tree guard — no leaf carries children, and condition/description coverage holds
 
 ### Community 2386 - "Community 2386"
 Cohesion: 0.5
@@ -12984,163 +12976,163 @@ Nodes (3): Superpowers Implementation Plan, Task 1: Program "Rate limiter's 10k-
 
 ### Community 2387 - "Community 2387"
 Cohesion: 0.5
-Nodes (3): Task 1: Durable Claude rate-limit backoff state (helpers + persistence), Task 2: Claude review fallback consumes and records the backoff, Task 3: Superpowers runtime honors and records the backoff
+Nodes (3): Task 1: Blackboard `EnablePersistence` must not hold the manager mutex across directory creation, Task 2: Give every externally-built resolver-selectable tree a Condition description, Task 3: Make the domains exemption enforced instead of asserted, via a machine-readable guard-edge registry
 
 ### Community 2388 - "Community 2388"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: NotebookLM research: Rewrite `gardener.CollectAgentSLOs()` (`internal/gardener/gardener.go…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Rate limiter's 10k-bucket cap rejects every previously-unseen client" milestone 1…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2389 - "Community 2389"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/engine/superp…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Task 1: Durable Claude rate-limit backoff state (helpers + persistence), Task 2: Claude review fallback consumes and records the backoff, Task 3: Superpowers runtime honors and records the backoff
 
 ### Community 2390 - "Community 2390"
 Cohesion: 0.5
-Nodes (3): Task 1: util/persist.go — perm-aware atomic save with tmp cleanup, Task 2: evolution — delete file_lock.go, migrate 19 lock sites and 15 atomic-write blocks onto the canonical owners, Task 3: domains — extend resolver coverage to the prefix-namespaced switch branches
+Nodes (3): Superpowers Implementation Plan, Task 1: NotebookLM research: Rewrite `gardener.CollectAgentSLOs()` (`internal/gardener/gardener.go…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2391 - "Community 2391"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/a2a/doc.go an…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/engine/superp…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2392 - "Community 2392"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Blackboard holds a global mutex while blocking forever on a cross-process flock" …, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Task 1: util/persist.go — perm-aware atomic save with tmp cleanup, Task 2: evolution — delete file_lock.go, migrate 19 lock sites and 15 atomic-write blocks onto the canonical owners, Task 3: domains — extend resolver coverage to the prefix-namespaced switch branches
 
 ### Community 2393 - "Community 2393"
 Cohesion: 0.5
-Nodes (3): Task 1: Thread caller cancellation through the blackboard scope lock, Task 2: Make the engine's bb_* tools cancellable, Task 3: Close the domain-tree coverage registry over the package source
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/a2a/doc.go an…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2394 - "Community 2394"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for cmd/benchcmp/main.go a…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Blackboard holds a global mutex while blocking forever on a cross-process flock" …, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2395 - "Community 2395"
 Cohesion: 0.5
-Nodes (3): Task 1: Persist replay outcomes on DeadLetterEntry — LastReplayAt/LastReplayError stamped in Replay()'s failure path, Task 2: bt_dlq_replay wait=true reports the actual replay error instead of a canned reason, Task 3: Dashboard /api/dlq listing surfaces replay outcomes and a failed_replays aggregate
+Nodes (3): Task 1: Thread caller cancellation through the blackboard scope lock, Task 2: Make the engine's bb_* tools cancellable, Task 3: Close the domain-tree coverage registry over the package source
 
 ### Community 2396 - "Community 2396"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: NotebookLM research: Fix the tree-ID mismatch in `RegisterNotebookLMFitness` so the anti-f…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for cmd/benchcmp/main.go a…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2397 - "Community 2397"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/evaluator/eva…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Task 1: Persist replay outcomes on DeadLetterEntry — LastReplayAt/LastReplayError stamped in Replay()'s failure path, Task 2: bt_dlq_replay wait=true reports the actual replay error instead of a canned reason, Task 3: Dashboard /api/dlq listing surfaces replay outcomes and a failed_replays aggregate
 
 ### Community 2398 - "Community 2398"
 Cohesion: 0.5
-Nodes (3): Task 1: Make the bucket cap a configurable field with an LRU eviction primitive, Task 2: Admit previously-unseen clients at capacity by evicting the LRU bucket, Task 3: Guard smoke, description, and condition coverage for the external-package domain trees
+Nodes (3): Superpowers Implementation Plan, Task 1: NotebookLM research: Fix the tree-ID mismatch in `RegisterNotebookLMFitness` so the anti-f…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2399 - "Community 2399"
 Cohesion: 0.5
-Nodes (3): Task 1: Admit new clients at capacity by evicting the coldest bucket, Task 2: Make at-capacity admission cheap, idle-first, and observable, Task 3: Extend smoke and condition coverage to external-package resolver trees
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/evaluator/eva…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2400 - "Community 2400"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: NotebookLM research: Stop `internal/engine` unit tests from exec-ing the live NotebookLM C…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Task 1: Make the bucket cap a configurable field with an LRU eviction primitive, Task 2: Admit previously-unseen clients at capacity by evicting the LRU bucket, Task 3: Guard smoke, description, and condition coverage for the external-package domain trees
 
 ### Community 2401 - "Community 2401"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Q1 Correctness / Q3 Reliability — Close the mcpDeps shared-blackboard data race…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Task 1: Admit new clients at capacity by evicting the coldest bucket, Task 2: Make at-capacity admission cheap, idle-first, and observable, Task 3: Extend smoke and condition coverage to external-package resolver trees
 
 ### Community 2402 - "Community 2402"
 Cohesion: 0.5
-Nodes (3): Task 1: Add an exported tool-invocation seam to engine.Server, Task 2: Register bt_evolve_qd (MAP-Elites quality-diversity) MCP tool, Task 3: Register bt_evolve_multiobjective (NSGA-II) MCP tool
+Nodes (3): Superpowers Implementation Plan, Task 1: NotebookLM research: Stop `internal/engine` unit tests from exec-ing the live NotebookLM C…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2403 - "Community 2403"
 Cohesion: 0.5
-Nodes (3): Task 1: Bounded bucket index — configurable cap plus O(1) LRU recency tracking, Task 2: Evict the least-recently-used bucket instead of denying unseen clients, Task 3: Derive every domain-tree coverage guard from one canonical registry
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Q1 Correctness / Q3 Reliability — Close the mcpDeps shared-blackboard data race…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2404 - "Community 2404"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Q3 Reliability — Fix the bt-fusion HITL gate misclassification that deadlocks e…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Task 1: Add an exported tool-invocation seam to engine.Server, Task 2: Register bt_evolve_qd (MAP-Elites quality-diversity) MCP tool, Task 3: Register bt_evolve_multiobjective (NSGA-II) MCP tool
 
 ### Community 2405 - "Community 2405"
 Cohesion: 0.5
-Nodes (3): Task 1: Bound the rate limiter with LRU eviction instead of denying unseen clients, Task 2: Make capacity eviction enforcement-safe and observable, Task 3: Make domain-tree coverage self-enforcing at the source level
+Nodes (3): Task 1: Bounded bucket index — configurable cap plus O(1) LRU recency tracking, Task 2: Evict the least-recently-used bucket instead of denying unseen clients, Task 3: Derive every domain-tree coverage guard from one canonical registry
 
 ### Community 2406 - "Community 2406"
 Cohesion: 0.5
-Nodes (3): Task 1: IslandModel per-island population cap with fitness-ordered eviction, Task 2: Island-count cap, eviction counters, and Stats/Summary surfacing, Task 3: Wire caps into the bt_evolve_island tool and surface eviction in its JSON result
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Q3 Reliability — Fix the bt-fusion HITL gate misclassification that deadlocks e…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2407 - "Community 2407"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/engine/parall…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Task 1: Bound the rate limiter with LRU eviction instead of denying unseen clients, Task 2: Make capacity eviction enforcement-safe and observable, Task 3: Make domain-tree coverage self-enforcing at the source level
 
 ### Community 2408 - "Community 2408"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "RotateKey silently caps the replacement API key at 24 hours" milestone 1/1: In in…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Task 1: IslandModel per-island population cap with fitness-ordered eviction, Task 2: Island-count cap, eviction counters, and Stats/Summary surfacing, Task 3: Wire caps into the bt_evolve_island tool and surface eviction in its JSON result
 
 ### Community 2409 - "Community 2409"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/agent/langage…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/engine/parall…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2410 - "Community 2410"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: NotebookLM research: Implement autonomous stall recovery using Dijkstra’s algorithm over…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "RotateKey silently caps the replacement API key at 24 hours" milestone 1/1: In in…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2411 - "Community 2411"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/engine/action…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/agent/langage…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2412 - "Community 2412"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Give cross-process JSON state exactly one owner — a locked read-merge-write per…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: NotebookLM research: Implement autonomous stall recovery using Dijkstra’s algorithm over…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2413 - "Community 2413"
 Cohesion: 0.5
-Nodes (3): Task 1: Bound the in-process scope gate under the same deadline as the cross-process flock, Task 2: Make internal/evolution actually carry the structure coverage domains' ExternalPackageDescriptions claims it does, Task 3: Describe and guard the prefix-selectable finance:/research: trees
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/engine/action…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2414 - "Community 2414"
 Cohesion: 0.5
-Nodes (3): Task 1: Stop holding the Manager-global lock across scope disk loads, Task 2: Per-Manager lock timeout knob and typed timeout error, verified at the engine tool path, Task 3: Execute every domain tree in the smoke registries, not just walk it
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Give cross-process JSON state exactly one owner — a locked read-merge-write per…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2415 - "Community 2415"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Rate limiter's 10k-bucket cap rejects every previously-unseen client" milestone 1…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Task 1: Bound the in-process scope gate under the same deadline as the cross-process flock, Task 2: Make internal/evolution actually carry the structure coverage domains' ExternalPackageDescriptions claims it does, Task 3: Describe and guard the prefix-selectable finance:/research: trees
 
 ### Community 2416 - "Community 2416"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: NotebookLM research: Register the ~24 domain trees missing from `internal/knowledge/regist…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Task 1: Stop holding the Manager-global lock across scope disk loads, Task 2: Per-Manager lock timeout knob and typed timeout error, verified at the engine tool path, Task 3: Execute every domain tree in the smoke registries, not just walk it
 
 ### Community 2417 - "Community 2417"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: NotebookLM research: Add characterization tests for `internal/blocks/a2a.go`'s `A2AHandoff…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Rate limiter's 10k-bucket cap rejects every previously-unseen client" milestone 1…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2418 - "Community 2418"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: NotebookLM research: Mirror the loop tree's terminal `AlwaysSucceed` "ResearchOptional" sk…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: NotebookLM research: Register the ~24 domain trees missing from `internal/knowledge/regist…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2419 - "Community 2419"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/blackboard/ha…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: NotebookLM research: Add characterization tests for `internal/blocks/a2a.go`'s `A2AHandoff…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2420 - "Community 2420"
 Cohesion: 0.5
-Nodes (3): Task 1: Export `shiftEdgeIndices` in `internal/evolution/mutate.go` for cross-package reuse, Task 2: Wire `ShiftEdgeIndices` into `applyMutationOp`'s add/remove cases, Task 3: Re-verify domain-tree smoke/description/condition coverage is still complete
+Nodes (3): Superpowers Implementation Plan, Task 1: NotebookLM research: Mirror the loop tree's terminal `AlwaysSucceed` "ResearchOptional" sk…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2421 - "Community 2421"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/domains/noteb…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/blackboard/ha…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2422 - "Community 2422"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/engine/action…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Task 1: Export `shiftEdgeIndices` in `internal/evolution/mutate.go` for cross-package reuse, Task 2: Wire `ShiftEdgeIndices` into `applyMutationOp`'s add/remove cases, Task 3: Re-verify domain-tree smoke/description/condition coverage is still complete
 
 ### Community 2423 - "Community 2423"
 Cohesion: 0.5
-Nodes (3): Task 1: Bounded LRU bucket store for RateLimiter (fields, constructor, invariants), Task 2: Allow admits previously-unseen clients at capacity by evicting the LRU bucket, Task 3: Execute every registered domain tree in the smoke guard and close description/condition gaps
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/domains/noteb…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2424 - "Community 2424"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Self-fix (review 2026-07-22): ScoreOutcome success-string fallback contradicts su…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/engine/action…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2425 - "Community 2425"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Rate limiter's 10k-bucket cap rejects every previously-unseen client" milestone 1…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Task 1: Bounded LRU bucket store for RateLimiter (fields, constructor, invariants), Task 2: Allow admits previously-unseen clients at capacity by evicting the LRU bucket, Task 3: Execute every registered domain tree in the smoke guard and close description/condition gaps
 
 ### Community 2426 - "Community 2426"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Rate limiter's 10k-bucket cap rejects every previously-unseen client" milestone 1…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Self-fix (review 2026-07-22): ScoreOutcome success-string fallback contradicts su…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2427 - "Community 2427"
 Cohesion: 0.5
@@ -13148,83 +13140,83 @@ Nodes (3): Superpowers Implementation Plan, Task 1: Program "Rate limiter's 10k-
 
 ### Community 2428 - "Community 2428"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Q2 Evolvability — Wire the entropy/Gini-based BTOptimizer/DTAnalyzer decision-t…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Rate limiter's 10k-bucket cap rejects every previously-unseen client" milestone 1…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2429 - "Community 2429"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Blackboard holds a global mutex while blocking forever on a cross-process flock" …, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Rate limiter's 10k-bucket cap rejects every previously-unseen client" milestone 1…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2430 - "Community 2430"
 Cohesion: 0.5
-Nodes (3): Task 1: Legacy island-archive adoption helpers: detection + merge via im.Load, Task 2: Wire one-time legacy adoption into the bt_evolve_island handler, Task 3: Fail-safe retire ordering: never strand adopted genomes
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Q2 Evolvability — Wire the entropy/Gini-based BTOptimizer/DTAnalyzer decision-t…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2431 - "Community 2431"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Q5 Consistency & Reuse — Graph fidelity and pipeline robustness: untrack heavy …, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Blackboard holds a global mutex while blocking forever on a cross-process flock" …, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2432 - "Community 2432"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/evolution/def…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Task 1: Legacy island-archive adoption helpers: detection + merge via im.Load, Task 2: Wire one-time legacy adoption into the bt_evolve_island handler, Task 3: Fail-safe retire ordering: never strand adopted genomes
 
 ### Community 2433 - "Community 2433"
 Cohesion: 0.5
-Nodes (3): Task 1: Fix alert_router's CriticalAlert/HealthAlert keyword coverage gaps, Task 2: Fix trading_signal's IsTAPath false-positive on "reversion", Task 3: Make branch-reachability coverage check actual path match, not just success
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Q5 Consistency & Reuse — Graph fidelity and pipeline robustness: untrack heavy …, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2434 - "Community 2434"
 Cohesion: 0.5
-Nodes (3): Task 1: NotebookLM research: `treeFeedback` gains `RecentRuns` and `SaveFeedback` serializes it, Task 2: `LoadFeedback` restores `RecentRuns` so domain fitness scores real history after restart, Task 3: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: internal/domains/trees.go, internal/domains/domains_test.go)
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/evolution/def…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2435 - "Community 2435"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/engine/rate_l…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Task 1: Fix alert_router's CriticalAlert/HealthAlert keyword coverage gaps, Task 2: Fix trading_signal's IsTAPath false-positive on "reversion", Task 3: Make branch-reachability coverage check actual path match, not just success
 
 ### Community 2436 - "Community 2436"
 Cohesion: 0.5
-Nodes (3): Task 1: Dashboard route-coverage — agent-lifecycle Route definitions + coverage guard, Task 2: Dashboard route-coverage — task/workflow/blackboard Route definitions, Task 3: Dashboard route-coverage — pipeline Route definitions + consolidated zero-uncovered guard
+Nodes (3): Task 1: NotebookLM research: `treeFeedback` gains `RecentRuns` and `SaveFeedback` serializes it, Task 2: `LoadFeedback` restores `RecentRuns` so domain fitness scores real history after restart, Task 3: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: internal/domains/trees.go, internal/domains/domains_test.go)
 
 ### Community 2437 - "Community 2437"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Close the knowledge-graph analytics→action loop — make ComputeAnalytics signa…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/engine/rate_l…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2438 - "Community 2438"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for cmd/bt-agent/hitl_tool…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Task 1: Dashboard route-coverage — agent-lifecycle Route definitions + coverage guard, Task 2: Dashboard route-coverage — task/workflow/blackboard Route definitions, Task 3: Dashboard route-coverage — pipeline Route definitions + consolidated zero-uncovered guard
 
 ### Community 2439 - "Community 2439"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/agent/langage…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Close the knowledge-graph analytics→action loop — make ComputeAnalytics signa…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2440 - "Community 2440"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/engine/parall…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for cmd/bt-agent/hitl_tool…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2441 - "Community 2441"
 Cohesion: 0.5
-Nodes (3): Task 1: Coverage backlog milestone 1/3 — characterize internal/blocks/dlq.go, Task 2: Coverage backlog milestone 2/3 — characterize internal/blocks/evolve.go, Task 3: Coverage backlog milestone 3/3 — characterize internal/blocks/expand.go
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/agent/langage…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2442 - "Community 2442"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Blackboard holds a global mutex while blocking forever on a cross-process flock" …, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/engine/parall…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2443 - "Community 2443"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/engine/superp…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Task 1: Coverage backlog milestone 1/3 — characterize internal/blocks/dlq.go, Task 2: Coverage backlog milestone 2/3 — characterize internal/blocks/evolve.go, Task 3: Coverage backlog milestone 3/3 — characterize internal/blocks/expand.go
 
 ### Community 2444 - "Community 2444"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/evolution/met…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Blackboard holds a global mutex while blocking forever on a cross-process flock" …, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2445 - "Community 2445"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/agent/langage…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/engine/superp…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2446 - "Community 2446"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Rate limiter's 10k-bucket cap rejects every previously-unseen client" milestone 1…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/evolution/met…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2447 - "Community 2447"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "RotateKey silently caps the replacement API key at 24 hours" milestone 1/1: In in…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/agent/langage…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2448 - "Community 2448"
 Cohesion: 0.5
@@ -13232,7 +13224,7 @@ Nodes (3): Superpowers Implementation Plan, Task 1: Program "Rate limiter's 10k-
 
 ### Community 2449 - "Community 2449"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/agentexec/pip…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "RotateKey silently caps the replacement API key at 24 hours" milestone 1/1: In in…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2450 - "Community 2450"
 Cohesion: 0.5
@@ -13244,171 +13236,171 @@ Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic cover
 
 ### Community 2452 - "Community 2452"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Q3 Reliability — Harden the LLM text-generation call path with retry-with-full-…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Rate limiter's 10k-bucket cap rejects every previously-unseen client" milestone 1…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2453 - "Community 2453"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Blackboard holds a global mutex while blocking forever on a cross-process flock" …, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/agentexec/pip…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2454 - "Community 2454"
 Cohesion: 0.5
-Nodes (3): Task 1: Extract a pure quality-blended signal helper, Task 2: Wire the blended signal into the RecordRun fitness EMA, Task 3: Guard clamping and zero-quality invariants end-to-end through RecordRun
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Q3 Reliability — Harden the LLM text-generation call path with retry-with-full-…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2455 - "Community 2455"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Exploration isolation strands landing-hook repairs" milestone 1/1: RED: In intern…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Blackboard holds a global mutex while blocking forever on a cross-process flock" …, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2456 - "Community 2456"
 Cohesion: 0.5
-Nodes (3): Task 1: Add cancellable, bounded file-lock acquisition in reliability, Task 2: Decouple blackboard in-memory serialization from cross-process flock wait, Task 3: Make domain-tree smoke-test, description, and condition coverage contract explicit and registry-driven
+Nodes (3): Task 1: Extract a pure quality-blended signal helper, Task 2: Wire the blended signal into the RecordRun fitness EMA, Task 3: Guard clamping and zero-quality invariants end-to-end through RecordRun
 
 ### Community 2457 - "Community 2457"
 Cohesion: 0.5
-Nodes (3): Task 1: Add durable feedback persistence substrate (SaveFeedback/LoadFeedback), Task 2: Debounce the flush (dirty flag + throttled write + Flush/shutdown), Task 3: Ensure all domain trees have smoke tests, descriptions, and condition coverage
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Exploration isolation strands landing-hook repairs" milestone 1/1: RED: In intern…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2458 - "Community 2458"
 Cohesion: 0.5
-Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/agent/langage…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
+Nodes (3): Task 1: Add cancellable, bounded file-lock acquisition in reliability, Task 2: Decouple blackboard in-memory serialization from cross-process flock wait, Task 3: Make domain-tree smoke-test, description, and condition coverage contract explicit and registry-driven
 
 ### Community 2459 - "Community 2459"
 Cohesion: 0.5
-Nodes (3): Task 1: Export agent.OutcomeErrorDetail with unit coverage for tail-distillation behavior, Task 2: Route the scheduler retry closure's no-runErr failure through OutcomeErrorDetail, Task 3: Consolidated registry-coverage guard for domain-tree smoke, description, and condition invariants
+Nodes (3): Task 1: Add durable feedback persistence substrate (SaveFeedback/LoadFeedback), Task 2: Debounce the flush (dirty flag + throttled write + Flush/shutdown), Task 3: Ensure all domain trees have smoke tests, descriptions, and condition coverage
 
 ### Community 2460 - "Community 2460"
 Cohesion: 0.5
-Nodes (3): GREEN phase, RED phase, Summary
+Nodes (3): Superpowers Implementation Plan, Task 1: Program "Deterministic coverage backlog: characterization tests for internal/agent/langage…, Task 2: Ensure all domain trees have smoke tests, descriptions, and condition coverage (files: int…
 
 ### Community 2461 - "Community 2461"
 Cohesion: 0.5
-Nodes (3): GREEN phase, RED phase, Summary
+Nodes (3): Task 1: Export agent.OutcomeErrorDetail with unit coverage for tail-distillation behavior, Task 2: Route the scheduler retry closure's no-runErr failure through OutcomeErrorDetail, Task 3: Consolidated registry-coverage guard for domain-tree smoke, description, and condition invariants
 
 ### Community 2462 - "Community 2462"
 Cohesion: 0.5
-Nodes (3): code:block1 (# github.com/nico/go-bt-evolve/internal/a2a [github.com/nico), GREEN phase, RED phase
+Nodes (3): GREEN phase, RED phase, Summary
 
 ### Community 2463 - "Community 2463"
 Cohesion: 0.5
-Nodes (3): code:block1 (tools_test.go:3151: bt_evolve_expert must warm-start from th), GREEN phase, RED phase
+Nodes (3): GREEN phase, RED phase, Summary
 
 ### Community 2464 - "Community 2464"
 Cohesion: 0.5
+Nodes (3): code:block1 (# github.com/nico/go-bt-evolve/internal/a2a [github.com/nico), GREEN phase, RED phase
+
+### Community 2465 - "Community 2465"
+Cohesion: 0.5
+Nodes (3): code:block1 (tools_test.go:3151: bt_evolve_expert must warm-start from th), GREEN phase, RED phase
+
+### Community 2466 - "Community 2466"
+Cohesion: 0.5
 Nodes (3): code:block1 (internal/knowledge/feedback_test.go:289:11: undefined: blend), GREEN phase, RED phase
 
-### Community 2467 - "Community 2467"
+### Community 2469 - "Community 2469"
 Cohesion: 0.5
 Nodes (3): GREEN phase, RED phase, Summary
-
-### Community 2468 - "Community 2468"
-Cohesion: 0.5
-Nodes (3): code:block1 (--- FAIL: TestRegisterMCPToolsCommentMatchesActualToolCount ), GREEN phase, RED phase
 
 ### Community 2470 - "Community 2470"
 Cohesion: 0.5
-Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/cmd/bt-dashboard	0.069s), GREEN phase, RED phase
+Nodes (3): code:block1 (--- FAIL: TestRegisterMCPToolsCommentMatchesActualToolCount ), GREEN phase, RED phase
 
-### Community 2473 - "Community 2473"
+### Community 2472 - "Community 2472"
 Cohesion: 0.5
-Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/gardener	0.099s), GREEN phase, RED phase
+Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/cmd/bt-dashboard	0.069s), GREEN phase, RED phase
 
 ### Community 2474 - "Community 2474"
 Cohesion: 0.5
-Nodes (3): code:block1 (--- FAIL: TestRecoverGoapFusionPendingPatches_WarnsWhenAband), GREEN phase, RED phase
+Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/gardener	0.099s), GREEN phase, RED phase
 
 ### Community 2475 - "Community 2475"
 Cohesion: 0.5
-Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/evolution	3.795s), GREEN phase, RED phase
+Nodes (3): code:block1 (--- FAIL: TestRecoverGoapFusionPendingPatches_WarnsWhenAband), GREEN phase, RED phase
 
 ### Community 2476 - "Community 2476"
 Cohesion: 0.5
-Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/engine	61.971s), GREEN phase, RED phase
+Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/evolution	3.795s), GREEN phase, RED phase
 
 ### Community 2477 - "Community 2477"
 Cohesion: 0.5
+Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/engine	61.971s), GREEN phase, RED phase
+
+### Community 2478 - "Community 2478"
+Cohesion: 0.5
 Nodes (3): code:block1 (error_handler_node_test.go:565: consecutive escalate_failed ), GREEN phase, RED phase
-
-### Community 2479 - "Community 2479"
-Cohesion: 0.5
-Nodes (3): code:block1 (--- FAIL: TestDeadLetterQueue_SaveMergesSiblingRequeueStamps), GREEN phase, RED phase
-
-### Community 2480 - "Community 2480"
-Cohesion: 0.5
-Nodes (3): code:block1 (# github.com/nico/go-bt-evolve/internal/dashboard [github.co), GREEN phase, RED phase
 
 ### Community 2481 - "Community 2481"
 Cohesion: 0.5
-Nodes (3): code:block1 (--- FAIL: TestEvolveTreeV2_CrisisIntervention_UsesCalibrated), GREEN phase, RED phase
+Nodes (3): code:block1 (--- FAIL: TestDeadLetterQueue_SaveMergesSiblingRequeueStamps), GREEN phase, RED phase
+
+### Community 2482 - "Community 2482"
+Cohesion: 0.5
+Nodes (3): code:block1 (# github.com/nico/go-bt-evolve/internal/dashboard [github.co), GREEN phase, RED phase
 
 ### Community 2483 - "Community 2483"
 Cohesion: 0.5
+Nodes (3): code:block1 (--- FAIL: TestEvolveTreeV2_CrisisIntervention_UsesCalibrated), GREEN phase, RED phase
+
+### Community 2485 - "Community 2485"
+Cohesion: 0.5
 Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/cmd/bt-agent	0.029s), GREEN phase, RED phase
-
-### Community 2488 - "Community 2488"
-Cohesion: 0.5
-Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/cmd/bt-dashboard	0.205s), GREEN phase, RED phase
-
-### Community 2489 - "Community 2489"
-Cohesion: 0.5
-Nodes (3): code:block1 (--- FAIL: TestConvertToAgentCard_AttachesSignature), GREEN phase, RED phase
 
 ### Community 2490 - "Community 2490"
 Cohesion: 0.5
-Nodes (3): GREEN phase, RED phase, Summary
+Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/cmd/bt-dashboard	0.205s), GREEN phase, RED phase
 
 ### Community 2491 - "Community 2491"
 Cohesion: 0.5
-Nodes (3): code:block1 (--- FAIL: TestSanitizeUserID_AdversarialIDs (0.00s)), GREEN phase, RED phase
+Nodes (3): code:block1 (--- FAIL: TestConvertToAgentCard_AttachesSignature), GREEN phase, RED phase
 
 ### Community 2492 - "Community 2492"
 Cohesion: 0.5
-Nodes (3): code:block1 (/usr/local/go/bin/go test ./internal/engine ./cmd/bt-agent -), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/engine	53.965s), Summary
+Nodes (3): GREEN phase, RED phase, Summary
 
-### Community 2493 - "Community 2493"
+### Community 2494 - "Community 2494"
 Cohesion: 0.5
-Nodes (3): code:block1 (/usr/local/go/bin/go test ./internal/engine -short -count=1 ), code:block2 (structure cycle must leave last-reviewed SHA unchanged: got ), RED phase result
+Nodes (3): code:block1 (--- FAIL: TestSanitizeUserID_AdversarialIDs (0.00s)), GREEN phase, RED phase
 
 ### Community 2495 - "Community 2495"
 Cohesion: 0.5
-Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/a2a	0.260s), GREEN phase, RED phase
+Nodes (3): code:block1 (/usr/local/go/bin/go test ./internal/engine ./cmd/bt-agent -), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/engine	53.965s), Summary
 
 ### Community 2496 - "Community 2496"
 Cohesion: 0.5
-Nodes (3): code:block1 (internal/dashboard/metrics_test.go:112:13: undefined: TreeSn), GREEN phase, RED phase
-
-### Community 2497 - "Community 2497"
-Cohesion: 0.5
-Nodes (3): code:block1 (internal/gardener/evolve_v2_test.go:2846:3: unknown field Is), GREEN phase, RED phase
+Nodes (3): code:block1 (/usr/local/go/bin/go test ./internal/engine -short -count=1 ), code:block2 (structure cycle must leave last-reviewed SHA unchanged: got ), RED phase result
 
 ### Community 2498 - "Community 2498"
 Cohesion: 0.5
-Nodes (3): GREEN phase, RED phase, Summary
+Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/a2a	0.260s), GREEN phase, RED phase
+
+### Community 2499 - "Community 2499"
+Cohesion: 0.5
+Nodes (3): code:block1 (internal/dashboard/metrics_test.go:112:13: undefined: TreeSn), GREEN phase, RED phase
 
 ### Community 2500 - "Community 2500"
 Cohesion: 0.5
-Nodes (3): code:block1 (internal/gardener/evolve_v2_test.go:1110:4: unknown field DT), GREEN phase, RED phase
+Nodes (3): code:block1 (internal/gardener/evolve_v2_test.go:2846:3: unknown field Is), GREEN phase, RED phase
 
 ### Community 2501 - "Community 2501"
 Cohesion: 0.5
-Nodes (3): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/blocks ./int), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/blocks	0.042s), Summary
+Nodes (3): GREEN phase, RED phase, Summary
 
-### Community 2502 - "Community 2502"
+### Community 2504 - "Community 2504"
 Cohesion: 0.5
-Nodes (3): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/gardener ./c), code:block2 (cmd/bt-gardener/main_test.go:81:16: undefined: wireSelectorO), Summary
+Nodes (3): code:block1 (internal/gardener/evolve_v2_test.go:1110:4: unknown field DT), GREEN phase, RED phase
 
 ### Community 2505 - "Community 2505"
 Cohesion: 0.5
+Nodes (3): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/blocks ./int), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/blocks	0.042s), Summary
+
+### Community 2506 - "Community 2506"
+Cohesion: 0.5
+Nodes (3): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/gardener ./c), code:block2 (cmd/bt-gardener/main_test.go:81:16: undefined: wireSelectorO), Summary
+
+### Community 2508 - "Community 2508"
+Cohesion: 0.5
 Nodes (3): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/agent ./cmd/), code:block2 (ok  github.com/nico/go-bt-evolve/internal/agent   3.557s), Summary
-
-### Community 2507 - "Community 2507"
-Cohesion: 0.5
-Nodes (3): GREEN phase, RED phase, Summary
-
-### Community 2509 - "Community 2509"
-Cohesion: 0.5
-Nodes (3): GREEN phase, RED phase, Summary
 
 ### Community 2510 - "Community 2510"
 Cohesion: 0.5
-Nodes (3): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/evolution ./), GREEN phase, RED phase
+Nodes (3): GREEN phase, RED phase, Summary
 
 ### Community 2512 - "Community 2512"
 Cohesion: 0.5
@@ -13416,113 +13408,121 @@ Nodes (3): GREEN phase, RED phase, Summary
 
 ### Community 2513 - "Community 2513"
 Cohesion: 0.5
-Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/cmd/bt-agent	0.233s), GREEN phase, RED phase
-
-### Community 2514 - "Community 2514"
-Cohesion: 0.5
-Nodes (3): GREEN phase, RED phase, Summary
-
-### Community 2515 - "Community 2515"
-Cohesion: 0.5
-Nodes (3): code:block1 (--- FAIL: TestPersistGoapProgram_ConcurrentCallersAllSurvive), GREEN phase, RED phase
+Nodes (3): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/evolution ./), GREEN phase, RED phase
 
 ### Community 2516 - "Community 2516"
 Cohesion: 0.5
-Nodes (3): code:block1 (mid-batch degrade must still unwrap committed snapshots to b), GREEN phase, RED phase
+Nodes (3): GREEN phase, RED phase, Summary
 
 ### Community 2517 - "Community 2517"
 Cohesion: 0.5
-Nodes (3): code:block1 (learning_test.go:569: CrisisReasons = [], want to contain di), GREEN phase, RED phase
+Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/cmd/bt-agent	0.233s), GREEN phase, RED phase
 
 ### Community 2518 - "Community 2518"
 Cohesion: 0.5
-Nodes (3): code:block1 (/usr/local/go/bin/go test ./cmd/benchcmp ./cmd/bt-dashboard ), code:block2 (ok  github.com/nico/go-bt-evolve/cmd/benchcmp        0.014s), Summary
+Nodes (3): GREEN phase, RED phase, Summary
 
 ### Community 2519 - "Community 2519"
 Cohesion: 0.5
-Nodes (3): GREEN phase, RED phase, Summary
+Nodes (3): code:block1 (--- FAIL: TestPersistGoapProgram_ConcurrentCallersAllSurvive), GREEN phase, RED phase
 
 ### Community 2520 - "Community 2520"
 Cohesion: 0.5
-Nodes (3): code:block1 (/usr/local/go/bin/go test ./cmd/bt-gardener ./internal/agent), code:block2 (ok  	github.com/nico/go-bt-evolve/cmd/bt-gardener	0.520s), Summary
+Nodes (3): code:block1 (mid-batch degrade must still unwrap committed snapshots to b), GREEN phase, RED phase
 
 ### Community 2521 - "Community 2521"
 Cohesion: 0.5
-Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/domains	5.125s), GREEN phase, RED phase
+Nodes (3): code:block1 (learning_test.go:569: CrisisReasons = [], want to contain di), GREEN phase, RED phase
+
+### Community 2522 - "Community 2522"
+Cohesion: 0.5
+Nodes (3): code:block1 (/usr/local/go/bin/go test ./cmd/benchcmp ./cmd/bt-dashboard ), code:block2 (ok  github.com/nico/go-bt-evolve/cmd/benchcmp        0.014s), Summary
 
 ### Community 2523 - "Community 2523"
 Cohesion: 0.5
-Nodes (3): code:block1 (total_cycles = 0, want 3), GREEN phase, RED phase
+Nodes (3): GREEN phase, RED phase, Summary
 
 ### Community 2524 - "Community 2524"
 Cohesion: 0.5
-Nodes (3): code:block1 (/usr/local/go/bin/go test ./internal/engine -run "TestValida), GREEN phase, RED phase
+Nodes (3): code:block1 (/usr/local/go/bin/go test ./cmd/bt-gardener ./internal/agent), code:block2 (ok  	github.com/nico/go-bt-evolve/cmd/bt-gardener	0.520s), Summary
 
 ### Community 2525 - "Community 2525"
 Cohesion: 0.5
-Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/cmd/bt-dashboard	0.025s), GREEN phase, RED phase
+Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/domains	5.125s), GREEN phase, RED phase
+
+### Community 2527 - "Community 2527"
+Cohesion: 0.5
+Nodes (3): code:block1 (total_cycles = 0, want 3), GREEN phase, RED phase
 
 ### Community 2528 - "Community 2528"
 Cohesion: 0.5
-Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/reliability	10.99), GREEN phase, RED phase
+Nodes (3): code:block1 (/usr/local/go/bin/go test ./internal/engine -run "TestValida), GREEN phase, RED phase
 
-### Community 2530 - "Community 2530"
+### Community 2529 - "Community 2529"
 Cohesion: 0.5
-Nodes (3): code:block1 (internal/gardener/user_trees_test.go:93:9: e.TreeID undefine), GREEN phase, RED phase
+Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/cmd/bt-dashboard	0.025s), GREEN phase, RED phase
 
 ### Community 2531 - "Community 2531"
 Cohesion: 0.5
-Nodes (3): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./cmd/bt-agent -short -), GREEN phase, RED phase
-
-### Community 2532 - "Community 2532"
-Cohesion: 0.5
-Nodes (3): GREEN phase, RED phase, Summary
+Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/reliability	10.99), GREEN phase, RED phase
 
 ### Community 2533 - "Community 2533"
 Cohesion: 0.5
-Nodes (3): code:block1 (/usr/local/go/bin/go test ./internal/knowledge -short -count), GREEN phase, RED phase
+Nodes (3): code:block1 (internal/gardener/user_trees_test.go:93:9: e.TreeID undefine), GREEN phase, RED phase
 
 ### Community 2534 - "Community 2534"
 Cohesion: 0.5
-Nodes (3): GREEN phase, RED phase, Summary
-
-### Community 2535 - "Community 2535"
-Cohesion: 0.5
-Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/knowledge	0.132s), GREEN phase, RED phase
+Nodes (3): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./cmd/bt-agent -short -), GREEN phase, RED phase
 
 ### Community 2536 - "Community 2536"
 Cohesion: 0.5
-Nodes (3): code:block1 (/usr/local/go/bin/go test ./internal/engine ./internal/a2a .), GREEN phase, RED phase
+Nodes (3): GREEN phase, RED phase, Summary
 
 ### Community 2537 - "Community 2537"
+Cohesion: 0.5
+Nodes (3): code:block1 (/usr/local/go/bin/go test ./internal/knowledge -short -count), GREEN phase, RED phase
+
+### Community 2538 - "Community 2538"
 Cohesion: 0.5
 Nodes (3): GREEN phase, RED phase, Summary
 
 ### Community 2539 - "Community 2539"
 Cohesion: 0.5
-Nodes (3): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./cmd/bt-agent ./intern), code:block2 (ok  	github.com/nico/go-bt-evolve/cmd/bt-agent	1.442s), Summary
+Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/knowledge	0.132s), GREEN phase, RED phase
 
 ### Community 2540 - "Community 2540"
 Cohesion: 0.5
-Nodes (3): GREEN phase, RED phase, Summary
+Nodes (3): code:block1 (/usr/local/go/bin/go test ./internal/engine ./internal/a2a .), GREEN phase, RED phase
 
 ### Community 2541 - "Community 2541"
 Cohesion: 0.5
-Nodes (3): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/gardener -sh), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/gardener	0.108s), Summary
+Nodes (3): GREEN phase, RED phase, Summary
+
+### Community 2542 - "Community 2542"
+Cohesion: 0.5
+Nodes (3): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./cmd/bt-agent ./intern), code:block2 (ok  	github.com/nico/go-bt-evolve/cmd/bt-agent	1.442s), Summary
 
 ### Community 2543 - "Community 2543"
 Cohesion: 0.5
-Nodes (3): code:block1 (--- FAIL: TestIsToolMatch_EmptyPath), GREEN phase, RED phase
+Nodes (3): GREEN phase, RED phase, Summary
 
 ### Community 2544 - "Community 2544"
 Cohesion: 0.5
-Nodes (3): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/evolution -s), GREEN phase, RED phase
+Nodes (3): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/gardener -sh), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/gardener	0.108s), Summary
+
+### Community 2545 - "Community 2545"
+Cohesion: 0.5
+Nodes (3): code:block1 (--- FAIL: TestIsToolMatch_EmptyPath), GREEN phase, RED phase
 
 ### Community 2546 - "Community 2546"
 Cohesion: 0.5
-Nodes (3): code:block1 (cmd/bt-agent/wiring_test.go:49:9: undefined: feedbackSnapsho), GREEN phase, RED phase
+Nodes (3): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/evolution -s), GREEN phase, RED phase
 
 ### Community 2547 - "Community 2547"
+Cohesion: 0.5
+Nodes (3): code:block1 (cmd/bt-agent/wiring_test.go:49:9: undefined: feedbackSnapsho), GREEN phase, RED phase
+
+### Community 2548 - "Community 2548"
 Cohesion: 0.5
 Nodes (3): code:block1 (FILES_CHANGED:), GREEN phase, RED phase
 
@@ -13530,55 +13530,55 @@ Nodes (3): code:block1 (FILES_CHANGED:), GREEN phase, RED phase
 Cohesion: 0.5
 Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/a2a	0.466s), GREEN phase, RED phase
 
-### Community 2555 - "Community 2555"
+### Community 2554 - "Community 2554"
 Cohesion: 0.5
 Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/fusion	0.159s), GREEN phase, RED phase
 
-### Community 2556 - "Community 2556"
+### Community 2555 - "Community 2555"
 Cohesion: 0.5
 Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/util	0.015s), GREEN phase, RED phase
 
-### Community 2557 - "Community 2557"
+### Community 2556 - "Community 2556"
 Cohesion: 0.5
 Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/cmd/bt-dashboard	0.223s), GREEN phase, RED phase
 
-### Community 2558 - "Community 2558"
+### Community 2557 - "Community 2557"
 Cohesion: 0.5
 Nodes (3): GREEN phase, RED phase, Summary
 
-### Community 2559 - "Community 2559"
+### Community 2558 - "Community 2558"
 Cohesion: 0.5
 Nodes (3): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/evolution -s), GREEN phase, RED phase
 
-### Community 2560 - "Community 2560"
+### Community 2559 - "Community 2559"
 Cohesion: 0.5
 Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/domains	5.134s), GREEN phase, RED phase
 
-### Community 2562 - "Community 2562"
+### Community 2561 - "Community 2561"
 Cohesion: 0.5
 Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/knowledge	4.357s), GREEN phase, RED phase
 
-### Community 2564 - "Community 2564"
+### Community 2563 - "Community 2563"
 Cohesion: 0.5
 Nodes (3): code:block1 (--- FAIL: TestScheduler_PersistsFeedbackOnRunAndStop (0.01s)), GREEN phase, RED phase
 
-### Community 2565 - "Community 2565"
+### Community 2564 - "Community 2564"
 Cohesion: 0.5
 Nodes (3): code:block1 (PATH=/usr/local/go/bin:$PATH gofmt -l internal/engine/action), GREEN phase, RED phase
 
-### Community 2566 - "Community 2566"
+### Community 2565 - "Community 2565"
 Cohesion: 0.5
 Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/cmd/bt-dashboard	0.384s), GREEN phase, RED phase
 
-### Community 2567 - "Community 2567"
+### Community 2566 - "Community 2566"
 Cohesion: 0.5
 Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/domains	5.093s), GREEN phase, RED phase
 
-### Community 2568 - "Community 2568"
+### Community 2567 - "Community 2567"
 Cohesion: 0.5
 Nodes (3): GREEN phase, RED phase, Summary
 
-### Community 2569 - "Community 2569"
+### Community 2568 - "Community 2568"
 Cohesion: 0.5
 Nodes (3): code:block1 (/usr/local/go/bin/go test ./internal/a2a ./internal/agentexe), code:block2 (--- FAIL: TestDaemonConfiguresAuctionDelegateHook (0.00s)), RED phase complete
 
@@ -13638,69 +13638,65 @@ Nodes (3): GREEN phase, RED phase, Summary
 Cohesion: 0.5
 Nodes (3): GREEN phase, RED phase, Summary
 
-### Community 2584 - "Community 2584"
+### Community 2585 - "Community 2585"
 Cohesion: 0.5
 Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/gardener	0.126s), GREEN phase, RED phase
 
-### Community 2585 - "Community 2585"
-Cohesion: 0.5
-Nodes (3): GREEN phase, RED phase, Summary
-
 ### Community 2586 - "Community 2586"
 Cohesion: 0.5
-Nodes (3): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/engine -shor), GREEN phase, RED phase
+Nodes (3): GREEN phase, RED phase, Summary
 
 ### Community 2587 - "Community 2587"
 Cohesion: 0.5
-Nodes (3): code:block1 (--- FAIL: TestRunSprint_DoesNotHoldStateLockAcrossTreeExecut), GREEN phase, RED phase
+Nodes (3): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/engine -shor), GREEN phase, RED phase
 
-### Community 2589 - "Community 2589"
+### Community 2588 - "Community 2588"
 Cohesion: 0.5
-Nodes (3): code:block1 (bt_evolve_multiobjective must recommend more than the hardco), GREEN phase, RED phase
+Nodes (3): code:block1 (--- FAIL: TestRunSprint_DoesNotHoldStateLockAcrossTreeExecut), GREEN phase, RED phase
 
 ### Community 2590 - "Community 2590"
 Cohesion: 0.5
-Nodes (3): GREEN phase, RED phase, Summary
+Nodes (3): code:block1 (bt_evolve_multiobjective must recommend more than the hardco), GREEN phase, RED phase
 
 ### Community 2591 - "Community 2591"
 Cohesion: 0.5
-Nodes (3): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/agent ./inte), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/agent	3.785s), Summary
+Nodes (3): GREEN phase, RED phase, Summary
 
 ### Community 2592 - "Community 2592"
 Cohesion: 0.5
-Nodes (3): code:block1 (internal/engine/superpowers_worktree_sweep_test.go:186:87: t), GREEN phase, RED phase
+Nodes (3): code:block1 (PATH=/usr/local/go/bin:$PATH go test ./internal/agent ./inte), code:block2 (ok  	github.com/nico/go-bt-evolve/internal/agent	3.785s), Summary
 
 ### Community 2593 - "Community 2593"
 Cohesion: 0.5
-Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/engine	66.987s), GREEN phase, RED phase
+Nodes (3): code:block1 (internal/engine/superpowers_worktree_sweep_test.go:186:87: t), GREEN phase, RED phase
 
-### Community 2595 - "Community 2595"
+### Community 2594 - "Community 2594"
 Cohesion: 0.5
-Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/evolution	3.909s), GREEN phase, RED phase
+Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/engine	66.987s), GREEN phase, RED phase
 
 ### Community 2596 - "Community 2596"
 Cohesion: 0.5
-Nodes (3): code:block1 (internal/gardener/evolve_v2_test.go:811:67: too many argumen), GREEN phase, RED phase
+Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/evolution	3.909s), GREEN phase, RED phase
 
 ### Community 2597 - "Community 2597"
 Cohesion: 0.5
-Nodes (3): code:block1 (--- FAIL: TestWithFusionKnowledgeStubsLiveNotebookLMResearch), GREEN phase, RED phase
+Nodes (3): code:block1 (internal/gardener/evolve_v2_test.go:811:67: too many argumen), GREEN phase, RED phase
 
 ### Community 2598 - "Community 2598"
 Cohesion: 0.5
-Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/knowledge	0.135s), GREEN phase, RED phase
+Nodes (3): code:block1 (--- FAIL: TestWithFusionKnowledgeStubsLiveNotebookLMResearch), GREEN phase, RED phase
 
 ### Community 2599 - "Community 2599"
 Cohesion: 0.5
-Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/dashboard	0.882s), GREEN phase, RED phase
+Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/knowledge	0.135s), GREEN phase, RED phase
 
 ### Community 2600 - "Community 2600"
 Cohesion: 0.5
-Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/cmd/bt-dashboard	0.211s), GREEN phase, RED phase
+Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/dashboard	0.882s), GREEN phase, RED phase
 
 ### Community 2601 - "Community 2601"
 Cohesion: 0.5
-Nodes (3): GREEN phase, RED phase, Summary
+Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/cmd/bt-dashboard	0.211s), GREEN phase, RED phase
 
 ### Community 2602 - "Community 2602"
 Cohesion: 0.5
@@ -13708,115 +13704,103 @@ Nodes (3): GREEN phase, RED phase, Summary
 
 ### Community 2603 - "Community 2603"
 Cohesion: 0.5
-Nodes (3): code:block1 (--- FAIL: TestQuery_SortedByFitnessDescThenIDAsc (0.00s)), GREEN phase, RED phase
+Nodes (3): GREEN phase, RED phase, Summary
 
 ### Community 2604 - "Community 2604"
 Cohesion: 0.5
-Nodes (3): code:block1 (cmd/bt-dashboard/main_test.go:559:2: undefined: currentWorkf), GREEN phase, RED phase
-
-### Community 2605 - "Community 2605"
-Cohesion: 0.5
-Nodes (3): GREEN phase, RED phase, Result
+Nodes (3): code:block1 (--- FAIL: TestQuery_SortedByFitnessDescThenIDAsc (0.00s)), GREEN phase, RED phase
 
 ### Community 2606 - "Community 2606"
 Cohesion: 0.5
-Nodes (3): code:block1 (--- FAIL: TestSaveSLOMetrics_ConcurrentCallsDoNotRaceOrCorru), GREEN phase, RED phase
+Nodes (3): code:block1 (cmd/bt-dashboard/main_test.go:559:2: undefined: currentWorkf), GREEN phase, RED phase
 
 ### Community 2607 - "Community 2607"
 Cohesion: 0.5
-Nodes (3): code:block1 (/usr/local/go/bin/go test ./internal/knowledge -short -count), GREEN phase, RED phase
+Nodes (3): GREEN phase, RED phase, Result
 
 ### Community 2608 - "Community 2608"
 Cohesion: 0.5
-Nodes (3): code:block1 (internal/knowledge/feedback_persist_test.go:42:16: src.SaveF), GREEN phase, RED phase
+Nodes (3): code:block1 (--- FAIL: TestSaveSLOMetrics_ConcurrentCallsDoNotRaceOrCorru), GREEN phase, RED phase
 
 ### Community 2609 - "Community 2609"
 Cohesion: 0.5
-Nodes (3): code:block1 (--- FAIL: TestKnowledgeGraphRegistersResolverSpecialCaseTree), GREEN phase, RED phase
+Nodes (3): code:block1 (/usr/local/go/bin/go test ./internal/knowledge -short -count), GREEN phase, RED phase
 
 ### Community 2610 - "Community 2610"
 Cohesion: 0.5
-Nodes (3): code:block1 (--- FAIL: TestPrometheusHandler_DoesNotHoldAgentLockAcrossFu), GREEN phase, RED phase
+Nodes (3): code:block1 (internal/knowledge/feedback_persist_test.go:42:16: src.SaveF), GREEN phase, RED phase
 
 ### Community 2611 - "Community 2611"
 Cohesion: 0.5
-Nodes (3): code:block1 (/usr/local/go/bin/go test ./cmd/bt-agent -short -count=1 -ti), code:block2 (--- FAIL: TestEvolveToolsSurfacePopulationHealthSnapshot (0.), RED phase result
+Nodes (3): code:block1 (--- FAIL: TestKnowledgeGraphRegistersResolverSpecialCaseTree), GREEN phase, RED phase
 
 ### Community 2612 - "Community 2612"
 Cohesion: 0.5
-Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/cmd/bt-dashboard	0.209s), GREEN phase, RED phase
+Nodes (3): code:block1 (--- FAIL: TestPrometheusHandler_DoesNotHoldAgentLockAcrossFu), GREEN phase, RED phase
 
 ### Community 2613 - "Community 2613"
 Cohesion: 0.5
-Nodes (3): code:block1 (--- FAIL: TestHandleAgentExecute_SetsQualityScoreFromRunResu), GREEN phase, RED phase
+Nodes (3): code:block1 (/usr/local/go/bin/go test ./cmd/bt-agent -short -count=1 -ti), code:block2 (--- FAIL: TestEvolveToolsSurfacePopulationHealthSnapshot (0.), RED phase result
 
 ### Community 2614 - "Community 2614"
 Cohesion: 0.5
-Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/cmd/bt-dashboard	0.185s), GREEN phase, RED phase
+Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/cmd/bt-dashboard	0.209s), GREEN phase, RED phase
 
 ### Community 2615 - "Community 2615"
 Cohesion: 0.5
-Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/cicd	0.024s), GREEN phase, RED phase
+Nodes (3): code:block1 (--- FAIL: TestHandleAgentExecute_SetsQualityScoreFromRunResu), GREEN phase, RED phase
 
 ### Community 2616 - "Community 2616"
 Cohesion: 0.5
-Nodes (3): code:block1 (--- FAIL: TestGoapGoalFailureNote_PreservesActionableEnding ), GREEN phase, RED phase
+Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/cmd/bt-dashboard	0.185s), GREEN phase, RED phase
 
 ### Community 2617 - "Community 2617"
 Cohesion: 0.5
-Nodes (3): code:block1 (internal/domains/trees_test.go:109:31: undefined: benchmark.), GREEN phase, RED phase
+Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/cicd	0.024s), GREEN phase, RED phase
 
 ### Community 2618 - "Community 2618"
 Cohesion: 0.5
-Nodes (3): code:block1 (internal/evolution/learning_test.go:775:81: not enough argum), GREEN phase, RED phase
+Nodes (3): code:block1 (--- FAIL: TestGoapGoalFailureNote_PreservesActionableEnding ), GREEN phase, RED phase
 
 ### Community 2619 - "Community 2619"
 Cohesion: 0.5
-Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/cmd/bt-agent	1.279s), GREEN phase, RED phase
+Nodes (3): code:block1 (internal/domains/trees_test.go:109:31: undefined: benchmark.), GREEN phase, RED phase
 
 ### Community 2620 - "Community 2620"
 Cohesion: 0.5
-Nodes (3): GREEN phase, RED phase, Summary
+Nodes (3): code:block1 (internal/evolution/learning_test.go:775:81: not enough argum), GREEN phase, RED phase
 
 ### Community 2621 - "Community 2621"
 Cohesion: 0.5
-Nodes (3): code:block1 (--- FAIL: TestBuildDashboardKnowledgeGraph_SetsExpectedDomai), GREEN phase, RED phase
+Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/cmd/bt-agent	1.279s), GREEN phase, RED phase
 
 ### Community 2622 - "Community 2622"
 Cohesion: 0.5
+Nodes (3): GREEN phase, RED phase, Summary
+
+### Community 2623 - "Community 2623"
+Cohesion: 0.5
+Nodes (3): code:block1 (--- FAIL: TestBuildDashboardKnowledgeGraph_SetsExpectedDomai), GREEN phase, RED phase
+
+### Community 2624 - "Community 2624"
+Cohesion: 0.5
 Nodes (3): code:block1 (ok  	github.com/nico/go-bt-evolve/internal/knowledge	19.624s), GREEN phase, RED phase
-
-### Community 2646 - "Community 2646"
-Cohesion: 0.67
-Nodes (3): Agent home directory, code:block2 (${AGENT_HOME}/), Layout
-
-### Community 2647 - "Community 2647"
-Cohesion: 0.67
-Nodes (3): History (`${AGENT_HOME}/history/<agent>.jsonl`), Memory (`${AGENT_HOME}/memory/<agent>/memory.json`), Memory and history
-
-### Community 2648 - "Community 2648"
-Cohesion: 0.67
-Nodes (3): Agent YAML schema, code:yaml (name: code-reviewer), Fields that matter today
 
 ### Community 2650 - "Community 2650"
 Cohesion: 0.67
-Nodes (3): Actual scanning follow-up to the twenty-first increment, Final-head permission finding, Twenty-first increment — target-owned sibling control
+Nodes (3): Agent home directory, code:block2 (${AGENT_HOME}/), Layout
 
 ### Community 2651 - "Community 2651"
 Cohesion: 0.67
-Nodes (3): code:go (package engine), code:bash (/usr/local/go/bin/go test ./internal/engine -count=1 -run 'T), Task 2: Add typed production runtime model
+Nodes (3): History (`${AGENT_HOME}/history/<agent>.jsonl`), Memory (`${AGENT_HOME}/memory/<agent>/memory.json`), Memory and history
 
 ### Community 2652 - "Community 2652"
 Cohesion: 0.67
-Nodes (3): code:bash (/home/nico/.local/bin/claude --print --dangerously-skip-perm), code:go (type CommandRunner interface {), Task 4: Extract a reusable command runner and Claude runner
-
-### Community 2653 - "Community 2653"
-Cohesion: 0.67
-Nodes (3): code:go (type SuperpowersMode string), code:bash (/tmp/bt-agent-cli run superpowers-prod-smoke --input "dry_ru), Task 14: End-to-end dry-run mode
+Nodes (3): Agent YAML schema, code:yaml (name: code-reviewer), Fields that matter today
 
 ### Community 2654 - "Community 2654"
 Cohesion: 0.67
-Nodes (3): code:bash (/usr/local/go/bin/gofmt -w <changed-go-files>), code:bash (strings bin/bt-agent-cli | grep 'SuperpowersPipeline_Main'), Task 10: Production verification runner
+Nodes (3): Actual scanning follow-up to the twenty-first increment, Final-head permission finding, Twenty-first increment — target-owned sibling control
 
 ### Community 2655 - "Community 2655"
 Cohesion: 0.67
@@ -13824,58 +13808,70 @@ Nodes (3): code:text (ReadVaultResearch → ReadGraphifyReport → AnalyzeImprov
 
 ### Community 2656 - "Community 2656"
 Cohesion: 0.67
-Nodes (3): code:go (const superpowersRunsDir = "/home/nico/go-bt-evolve/docs/sup), code:go (func TestWriteArtifactOnce_Idempotent(t *testing.T) {), Task 3: Add artifact store and idempotent phase writes
+Nodes (3): code:bash (/home/nico/.local/bin/claude --print --dangerously-skip-perm), code:go (type CommandRunner interface {), Task 4: Extract a reusable command runner and Claude runner
 
 ### Community 2657 - "Community 2657"
 Cohesion: 0.67
-Nodes (3): code:bash (systemctl --user stop bt-agent), code:bash (python3 - <<'PY'), Rollback Plan
+Nodes (3): code:bash (/usr/local/go/bin/gofmt -w <changed-go-files>), code:bash (strings bin/bt-agent-cli | grep 'SuperpowersPipeline_Main'), Task 10: Production verification runner
 
 ### Community 2658 - "Community 2658"
 Cohesion: 0.67
-Nodes (3): code:go (func planSuperpowersWorktree(run *SuperpowersRun) (path stri), code:bash (/usr/local/go/bin/go test ./internal/domains ./internal/engi), Task 5: Production worktree manager
+Nodes (3): code:bash (systemctl --user stop bt-agent), code:bash (python3 - <<'PY'), Rollback Plan
 
 ### Community 2659 - "Community 2659"
 Cohesion: 0.67
-Nodes (3): code:bash (cd <repo-root>), code:bash (git status --short          # expect: empty), Task 1: Branch setup
+Nodes (3): code:go (package engine), code:bash (/usr/local/go/bin/go test ./internal/engine -count=1 -run 'T), Task 2: Add typed production runtime model
 
 ### Community 2660 - "Community 2660"
 Cohesion: 0.67
-Nodes (3): code:bash (for d in $(find internal -maxdepth 1 -type d ! -name interna), code:bash (grep -F '## 5.0 Composable Blocks' docs/arc42/05-building-bl), Task 4: Merge §5 (Building Block View) — biggest restructure
+Nodes (3): code:go (func planSuperpowersWorktree(run *SuperpowersRun) (path stri), code:bash (/usr/local/go/bin/go test ./internal/domains ./internal/engi), Task 5: Production worktree manager
 
 ### Community 2661 - "Community 2661"
 Cohesion: 0.67
-Nodes (3): code:bash (# ----- 5. arc42 section files validation -----), code:bash (bash scripts/check-doc-drift.sh; echo "exit=$?"), Task 12: Drift script — replace check #5 with the arc42 block
+Nodes (3): code:go (type SuperpowersMode string), code:bash (/tmp/bt-agent-cli run superpowers-prod-smoke --input "dry_ru), Task 14: End-to-end dry-run mode
 
 ### Community 2662 - "Community 2662"
 Cohesion: 0.67
-Nodes (3): code:bash (PATH=/usr/local/go/bin:$PATH make check-quick), code:bash (git add -A), Task 13: Gate + Commit 1
+Nodes (3): code:go (const superpowersRunsDir = "/home/nico/go-bt-evolve/docs/sup), code:go (func TestWriteArtifactOnce_Idempotent(t *testing.T) {), Task 3: Add artifact store and idempotent phase writes
 
 ### Community 2663 - "Community 2663"
 Cohesion: 0.67
-Nodes (3): code:markdown (# arc42 Section Guidelines), code:bash (grep -c '^## Section [0-9]' docs/arc42/GUIDELINES.md   # exp), Task 8: Create `docs/arc42/GUIDELINES.md`
+Nodes (3): code:bash (git rm docs/arc42/go-bt-evolve-arc42.md docs/arc42/09-test-s), code:bash (grep -rn 'docs/adr' README.md docs/*.md | grep -v 'docs/plan), Task 9: Deletions + cross-doc reference updates
 
 ### Community 2664 - "Community 2664"
 Cohesion: 0.67
-Nodes (3): code:bash (git rm docs/arc42/go-bt-evolve-arc42.md docs/arc42/09-test-s), code:bash (grep -rn 'docs/adr' README.md docs/*.md | grep -v 'docs/plan), Task 9: Deletions + cross-doc reference updates
+Nodes (3): code:bash (grep -c 'RegisterAction(' internal/engine/*.go | awk -F: '{s), code:bash (grep -c '^| Q[0-9] | \*\*' docs/arc42/01-introduction-goals.), Task 2: Merge §1 (Introduction and Goals)
 
 ### Community 2665 - "Community 2665"
 Cohesion: 0.67
-Nodes (3): code:go (// internal/domains/superpowers_workflow_test.go), code:bash (git add internal/domains/superpowers_workflow.go internal/do), Task 10: `domain:superpowers_workflow` tree
+Nodes (3): code:markdown (# arc42 Section Guidelines), code:bash (grep -c '^## Section [0-9]' docs/arc42/GUIDELINES.md   # exp), Task 8: Create `docs/arc42/GUIDELINES.md`
+
+### Community 2666 - "Community 2666"
+Cohesion: 0.67
+Nodes (3): code:bash (for d in $(find internal -maxdepth 1 -type d ! -name interna), code:bash (grep -F '## 5.0 Composable Blocks' docs/arc42/05-building-bl), Task 4: Merge §5 (Building Block View) — biggest restructure
+
+### Community 2667 - "Community 2667"
+Cohesion: 0.67
+Nodes (3): code:bash (PATH=/usr/local/go/bin:$PATH make check-quick), code:bash (git add -A), Task 13: Gate + Commit 1
+
+### Community 2668 - "Community 2668"
+Cohesion: 0.67
+Nodes (3): code:bash (# ----- 5. arc42 section files validation -----), code:bash (bash scripts/check-doc-drift.sh; echo "exit=$?"), Task 12: Drift script — replace check #5 with the arc42 block
 
 ## Knowledge Gaps
-- **9143 isolated node(s):** `{ defineConfig }`, `{ chromium }`, `Remove fenced/inline code so example links and IDs are not obligations.`, `GitHub-style heading slugs plus explicit HTML IDs used by ADR records.`, `maxTokensCapable` (+9138 more)
+- **9151 isolated node(s):** `{ defineConfig }`, `{ chromium }`, `Remove fenced/inline code so example links and IDs are not obligations.`, `GitHub-style heading slugs plus explicit HTML IDs used by ADR records.`, `maxTokensCapable` (+9146 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **1245 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **1251 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `main()` connect `Community 55` to `Community 129`, `Community 2`, `Community 6`, `Community 264`, `Community 145`, `Community 20`, `Community 21`, `Community 28`, `Community 158`, `Community 31`, `Community 287`, `Community 542`, `Community 41`, `Community 42`, `Community 184`, `Community 57`, `Community 59`, `Community 317`, `Community 192`, `Community 65`, `Community 66`, `Community 74`, `Community 77`, `Community 78`, `Community 79`, `Community 81`, `Community 82`, `Community 90`, `Community 91`, `Community 221`, `Community 96`, `Community 228`, `Community 230`, `Community 111`, `Community 241`, `Community 115`, `Community 116`, `Community 121`, `Community 122`, `Community 254`?**
+- **Why does `registerMCPTools()` connect `Community 5` to `Community 11`, `Community 140`, `Community 139`, `Community 14`, `Community 142`, `Community 17`, `Community 401`, `Community 19`, `Community 31`, `Community 32`, `Community 288`, `Community 290`, `Community 41`, `Community 42`, `Community 43`, `Community 174`, `Community 51`, `Community 183`, `Community 56`, `Community 57`, `Community 314`, `Community 60`, `Community 61`, `Community 192`, `Community 197`, `Community 70`, `Community 71`, `Community 74`, `Community 77`, `Community 78`, `Community 79`, `Community 86`, `Community 88`, `Community 89`, `Community 92`, `Community 95`, `Community 101`, `Community 103`, `Community 232`, `Community 233`?**
   _High betweenness centrality (0.023) - this node is a cross-community bridge._
-- **Why does `registerMCPTools()` connect `Community 6` to `Community 128`, `Community 2`, `Community 4`, `Community 267`, `Community 268`, `Community 271`, `Community 20`, `Community 28`, `Community 158`, `Community 30`, `Community 31`, `Community 37`, `Community 41`, `Community 44`, `Community 173`, `Community 172`, `Community 303`, `Community 302`, `Community 430`, `Community 50`, `Community 55`, `Community 185`, `Community 58`, `Community 59`, `Community 61`, `Community 64`, `Community 192`, `Community 65`, `Community 67`, `Community 69`, `Community 329`, `Community 74`, `Community 203`, `Community 78`, `Community 334`, `Community 81`, `Community 82`, `Community 212`, `Community 84`, `Community 219`, `Community 95`, `Community 101`, `Community 111`, `Community 112`, `Community 113`, `Community 115`, `Community 244`, `Community 127`?**
-  _High betweenness centrality (0.019) - this node is a cross-community bridge._
-- **Why does `Warn()` connect `Community 78` to `Community 258`, `Community 3`, `Community 4`, `Community 6`, `Community 264`, `Community 8`, `Community 138`, `Community 11`, `Community 265`, `Community 13`, `Community 277`, `Community 22`, `Community 158`, `Community 287`, `Community 31`, `Community 418`, `Community 42`, `Community 43`, `Community 178`, `Community 55`, `Community 57`, `Community 59`, `Community 64`, `Community 192`, `Community 66`, `Community 67`, `Community 199`, `Community 73`, `Community 75`, `Community 332`, `Community 77`, `Community 79`, `Community 211`, `Community 85`, `Community 95`, `Community 96`, `Community 352`, `Community 111`, `Community 112`, `Community 241`, `Community 115`, `Community 124`, `Community 127`?**
-  _High betweenness centrality (0.012) - this node is a cross-community bridge._
+- **Why does `main()` connect `Community 17` to `Community 1`, `Community 258`, `Community 5`, `Community 139`, `Community 11`, `Community 14`, `Community 145`, `Community 534`, `Community 23`, `Community 22`, `Community 539`, `Community 31`, `Community 287`, `Community 39`, `Community 41`, `Community 42`, `Community 45`, `Community 175`, `Community 177`, `Community 57`, `Community 64`, `Community 71`, `Community 74`, `Community 76`, `Community 79`, `Community 209`, `Community 82`, `Community 81`, `Community 213`, `Community 88`, `Community 219`, `Community 92`, `Community 97`, `Community 490`, `Community 108`, `Community 117`, `Community 119`, `Community 122`?**
+  _High betweenness centrality (0.022) - this node is a cross-community bridge._
+- **Why does `Warn()` connect `Community 74` to `Community 4`, `Community 5`, `Community 8`, `Community 393`, `Community 266`, `Community 10`, `Community 139`, `Community 16`, `Community 17`, `Community 19`, `Community 148`, `Community 22`, `Community 152`, `Community 26`, `Community 169`, `Community 42`, `Community 44`, `Community 175`, `Community 304`, `Community 51`, `Community 52`, `Community 62`, `Community 446`, `Community 64`, `Community 65`, `Community 197`, `Community 202`, `Community 76`, `Community 333`, `Community 81`, `Community 82`, `Community 88`, `Community 89`, `Community 218`, `Community 90`, `Community 92`, `Community 101`, `Community 490`, `Community 235`, `Community 108`, `Community 109`, `Community 111`, `Community 115`, `Community 117`?**
+  _High betweenness centrality (0.015) - this node is a cross-community bridge._
 - **Are the 180 inferred relationships involving `NewRequest()` (e.g. with `TestWaitForRequest_Approve()` and `TestWaitForRequest_Escalate()`) actually correct?**
   _`NewRequest()` has 180 INFERRED edges - model-reasoned connections that need verification._
 - **Are the 178 inferred relationships involving `NewKnowledgeGraph()` (e.g. with `TestDiscoverRelated_EmptyGraph()` and `TestDiscoverRelated_ConnectedTo()`) actually correct?**

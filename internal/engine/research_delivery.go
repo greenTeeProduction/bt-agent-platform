@@ -49,6 +49,9 @@ func recordSuperpowersResearchDeliveryContext(ctx context.Context, run *Superpow
 	} else if err := recordImplementedGoalsContext(ctx, run); err != nil {
 		run.ResearchDeliveryError = err.Error()
 		Warn("landed code lacks complete research attribution", "run", run.ID, "err", err.Error())
+	} else if err := reconcileProgramDelivery(ctx, run); err != nil {
+		run.ResearchDeliveryError = err.Error()
+		Warn("landed code lacks complete program attribution", "run", run.ID, "err", err.Error())
 	} else {
 		run.ResearchDeliveryPending = false
 	}

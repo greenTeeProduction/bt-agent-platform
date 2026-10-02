@@ -40,7 +40,7 @@ func TestProgramLifecycle(t *testing.T) {
 		t.Fatalf("first pending milestone expected, got %d %+v", idx, milestone)
 	}
 
-	if !re.MarkDone(active.ID, 0, "run-abc") {
+	if !seedLegacyProgramDone(re, active.ID, 0, "run-abc") {
 		t.Fatal("MarkDone must succeed for a pending milestone")
 	}
 	if err := re.Save(); err != nil {
@@ -57,7 +57,7 @@ func TestProgramLifecycle(t *testing.T) {
 		t.Fatalf("completion must persist: %+v", active2.Milestones[0])
 	}
 
-	re2.MarkDone(active2.ID, 1, "run-def")
+	seedLegacyProgramDone(re2, active2.ID, 1, "run-def")
 	if re2.Active() != nil {
 		t.Fatal("fully completed program must no longer be active")
 	}
@@ -256,7 +256,7 @@ func TestRefundAttempt_NeverTouchesDoneOrUnknown(t *testing.T) {
 	ps, _ := OpenPrograms(filepath.Join(t.TempDir(), "p.json"))
 	p := ps.Add("Done", "test", []string{"m1"})
 	ps.Programs[0].Milestones[0].Attempts = 1
-	ps.MarkDone(p.ID, 0, "run-1")
+	seedLegacyProgramDone(ps, p.ID, 0, "run-1")
 
 	if ps.RefundAttempt(p.ID, 0, 3) {
 		t.Fatal("a done milestone must never be refunded")
@@ -274,7 +274,7 @@ func TestRecordAttemptAndMaybeBlock(t *testing.T) {
 	p := ps.Add("Prog", "test", []string{"m1 buildable", "m2 fabricated", "m3 buildable"})
 
 	// m1 completes normally.
-	ps.MarkDone(p.ID, 0, "run-1")
+	seedLegacyProgramDone(ps, p.ID, 0, "run-1")
 
 	// m2 fails 3 times → blocked; NextMilestone then skips to m3.
 	for i := 1; i <= 3; i++ {

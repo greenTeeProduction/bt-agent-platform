@@ -78,7 +78,7 @@ func TestRepeatedHashHaltBypassedInNormalOperation(t *testing.T) {
 
 	// Idle (no active program) but readable store → still bypassed (CONTINUE),
 	// so the cycle reaches Phase 0.5 seeding instead of HALTing on stale hashes.
-	ps.MarkDone(ps.Programs[0].ID, 0, "r")
+	seedLegacyProgramDone(ps, ps.Programs[0].ID, 0, "r")
 	_ = ps.Save()
 	if got := GetAction("EvaluateScheduledGoapFusionCircuitBreaker")(&btcore.BTContext[Blackboard]{Blackboard: bb}); got != 1 {
 		t.Fatalf("idle+readable store must bypass so the loop can seed, got %d", got)

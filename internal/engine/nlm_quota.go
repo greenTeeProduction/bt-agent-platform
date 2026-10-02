@@ -291,7 +291,7 @@ func deriveNotebookLMResearchQuery(task string) string {
 	// lost-update risk and no need for research.UpdatePrograms' shared flock
 	// (see self_fix_seed.go's file doc comment for the writer-side gap this
 	// program closed).
-	if ps, err := research.OpenPrograms(goapProgramsPath); err == nil {
+	if ps, err := research.OpenPrograms(currentGoapProgramsPath()); err == nil {
 		if p := ps.Active(); p != nil {
 			// Only let the next milestone drive research when the milestone
 			// itself reads as a research direction. Implementation tasks — code

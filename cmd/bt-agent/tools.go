@@ -392,7 +392,7 @@ func evolveHealthProjection(pop *evolution.Population) map[string]any {
 	}
 }
 
-// registerMCPTools registers all 85 MCP tools on the server.
+// registerMCPTools registers all 87 MCP tools on the server.
 // Each tool handler accesses shared state through deps instead of main() locals.
 func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 	// ─── TREE EXECUTION ───────────────────────────────────────────────

@@ -162,7 +162,7 @@ func TestSeedCodeFixProgram_CapIgnoresClosedPrograms(t *testing.T) {
 	if err := ps.Save(); err != nil {
 		t.Fatal(err)
 	}
-	if !ps.MarkDone(done.ID, 0, "run1") {
+	if !seedLegacyProgramDone(ps, done.ID, 0, "run1") {
 		t.Fatal("mark done failed")
 	}
 	if err := ps.Save(); err != nil {

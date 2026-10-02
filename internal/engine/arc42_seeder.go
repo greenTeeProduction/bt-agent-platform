@@ -74,7 +74,7 @@ func init() {
 			return 1
 		}
 
-		ps, err := research.OpenPrograms(goapProgramsPath)
+		ps, err := research.OpenPrograms(currentGoapProgramsPath())
 		if err != nil {
 			bb.Outcome = "arc42_seeder_store_unreadable"
 			bb.OutcomeRefinement = "degraded"

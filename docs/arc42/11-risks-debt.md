@@ -128,8 +128,11 @@ exact executed trees and recomputable result contracts where evidence exists.
 This observes code presence and checked output, not execution of changed functions
 or a causal research benefit. Dirty/unknown builds and changed delivered files
 cannot earn adoption credit; stored metadata assumes trusted local build/storage.
-Paired code-change experiments, semantic goal fulfillment, program lineage,
-legacy milestone RED-precheck completion and historical backfill remain open.
+ADR-290 removes legacy milestone RED-precheck completion and journals exact
+pre-run milestone references with verified Git delivery. The host repair moved
+60 unsupported completion labels to review; it did not implement their goals.
+Paired code-change experiments, semantic goal fulfillment, immutable research
+source identity through program rewrites and historical backfill remain open.
 Exact matching intentionally leaves rewritten/automatically scoped goals unlinked.
 No production deployment is claimed by local protocol or live model tests.
 

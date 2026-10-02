@@ -1,6 +1,7 @@
 package research
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/nico/go-bt-evolve/internal/reliability"
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 // Programs are research-proposed multi-cycle changes: work too large for one
@@ -17,22 +19,42 @@ import (
 // ~/.go-bt-evolve).
 
 type Milestone struct {
-	Goal         string    `json:"goal"`
-	Status       string    `json:"status"` // pending | done | blocked
-	Attempts     int       `json:"attempts,omitzero"`
-	CompletedRun string    `json:"completed_run,omitempty"`
-	CompletedAt  time.Time `json:"completed_at,omitzero"`
-	BlockedAt    time.Time `json:"blocked_at,omitzero"`
+	Goal          string            `json:"goal"`
+	Status        string            `json:"status"` // pending | done | blocked | needs_review
+	Attempts      int               `json:"attempts,omitzero"`
+	CompletedRun  string            `json:"completed_run,omitempty"`
+	CompletedAt   time.Time         `json:"completed_at,omitzero"`
+	BlockedAt     time.Time         `json:"blocked_at,omitzero"`
+	Delivery      *Delivery         `json:"delivery,omitempty"`
+	Review        *MilestoneReview  `json:"review,omitempty"`
+	ReviewHistory []MilestoneReview `json:"review_history,omitempty"`
 	// RedPassStreak counts consecutive cycles whose RED command unexpectedly
-	// passed for this milestone — evidence the work already exists at HEAD
-	// rather than an unbuildable goal. Reset on any genuine failure.
+	// passed before implementation. Repetition triggers review, not completion.
 	RedPassStreak int `json:"red_pass_streak,omitzero"`
 	// LastRedCmd is the RED command whose unexpected pass produced the
-	// streak. The next cycle re-runs it at charge time (the red pre-check,
-	// 2026-07-23 review gap 5): a second pass completes the milestone
-	// without burning a Claude plan phase, a failure kills the
-	// already-landed hypothesis. Cleared with the streak.
+	// streak. The next cycle re-runs it at charge time (the red pre-check);
+	// a second pass requires review before another planning phase. A failure
+	// clears the stale hypothesis.
 	LastRedCmd string `json:"last_red_cmd,omitempty"`
+}
+
+// MilestoneReview retains the disposition being corrected as evidence.
+// A review hold never claims implementation or silently retries dependent work.
+type MilestoneReview struct {
+	Reason               string    `json:"reason"`
+	RunID                string    `json:"run_id,omitempty"`
+	PreviousStatus       string    `json:"previous_status"`
+	PreviousCompletedRun string    `json:"previous_completed_run,omitempty"`
+	PreviousCompletedAt  time.Time `json:"previous_completed_at,omitzero"`
+	RecordedAt           time.Time `json:"recorded_at"`
+}
+
+// MilestoneRef is captured before implementation so later title changes or
+// another goal touching the same files cannot inherit completion credit.
+type MilestoneRef struct {
+	ProgramID string `json:"program_id"`
+	Index     int    `json:"index"`
+	Goal      string `json:"goal"`
 }
 
 type Program struct {
@@ -53,10 +75,14 @@ type Program struct {
 }
 
 // NextMilestone returns the first pending milestone and its index, or (-1, nil).
+// A review hold stops selection of subsequent dependent milestones.
 // Blocked milestones (abandoned after too many attempts) are skipped, so a
 // program with one unbuildable milestone advances past it instead of freezing.
 func (p *Program) NextMilestone() (int, *Milestone) {
 	for i := range p.Milestones {
+		if p.Milestones[i].Status == "needs_review" {
+			return -1, nil
+		}
 		if p.Milestones[i].Status == "pending" {
 			return i, &p.Milestones[i]
 		}
@@ -138,11 +164,7 @@ type ProgramStore struct {
 
 // DefaultProgramsPath is the ADR-003 location of the program backlog.
 func DefaultProgramsPath() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		home = "/home/nico"
-	}
-	return filepath.Join(home, ".go-bt-evolve", "research", "programs.json")
+	return filepath.Join(util.RuntimePlatformHome(), "research", "programs.json")
 }
 
 // OpenPrograms loads the store; a missing file yields an empty store.
@@ -158,6 +180,13 @@ func OpenPrograms(path string) (*ProgramStore, error) {
 	if err := json.Unmarshal(b, ps); err != nil {
 		return nil, fmt.Errorf("program store %s is corrupt: %w", path, err)
 	}
+	var shape map[string]json.RawMessage
+	if err := json.Unmarshal(b, &shape); err != nil || shape == nil || shape["programs"] == nil {
+		return nil, fmt.Errorf("program store %s has no programs container", path)
+	}
+	if err := validatePrograms(ps); err != nil {
+		return nil, err
+	}
 	return ps, nil
 }
 
@@ -171,7 +200,13 @@ func OpenPrograms(path string) (*ProgramStore, error) {
 // closes that gap by serializing writers, the same idiom
 // reliability.DeadLetterQueue.save uses for its own sidecar file.
 func UpdatePrograms(path string, fn func(*ProgramStore) error) error {
-	release, err := reliability.AcquireFileLock(path)
+	return UpdateProgramsWithContext(context.Background(), path, fn)
+}
+
+func UpdateProgramsWithContext(ctx context.Context, path string, fn func(*ProgramStore) error) error {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	release, err := reliability.AcquireFileLockWithContext(ctx, path)
 	if err != nil {
 		return fmt.Errorf("update programs %s: %w", path, err)
 	}
@@ -180,6 +215,11 @@ func UpdatePrograms(path string, fn func(*ProgramStore) error) error {
 	ps, err := OpenPrograms(path)
 	if err != nil {
 		return err
+	}
+	if ps.ReviewLegacyRedCompletions() > 0 {
+		if err := preserveProgramReviewBackup(path); err != nil {
+			return err
+		}
 	}
 	if err := fn(ps); err != nil {
 		return err
@@ -347,8 +387,21 @@ func (ps *ProgramStore) Add(title, source string, milestones []string) *Program 
 	return p
 }
 
-// MarkDone completes one milestone; reports whether anything changed.
-func (ps *ProgramStore) MarkDone(programID string, milestoneIdx int, runID string) bool {
+// MarkDelivered records verified code delivery. The caller must inspect actual
+// Git objects and task scope before supplying the receipt. Semantic goal impact
+// remains a separate qualification.
+func (ps *ProgramStore) MarkDelivered(programID string, milestoneIdx int, delivery Delivery) bool {
+	if delivery.Validate() != nil || strings.HasPrefix(delivery.RunID, "red-evidence") {
+		return false
+	}
+	data, err := json.Marshal(delivery)
+	if err != nil {
+		return false
+	}
+	var snapshot Delivery
+	if json.Unmarshal(data, &snapshot) != nil {
+		return false
+	}
 	for _, p := range ps.Programs {
 		if p.ID != programID {
 			continue
@@ -360,13 +413,52 @@ func (ps *ProgramStore) MarkDone(programID string, milestoneIdx int, runID strin
 		if m.Status == "done" {
 			return false
 		}
+		if m.Review != nil {
+			m.ReviewHistory = append(m.ReviewHistory, *m.Review)
+			m.Review = nil
+		}
 		m.Status = "done"
-		m.CompletedRun = runID
+		m.CompletedRun = delivery.RunID
 		m.CompletedAt = time.Now().UTC()
+		m.Delivery = &snapshot
 		p.Updated = time.Now().UTC()
 		return true
 	}
 	return false
+}
+
+func (ps *ProgramStore) MarkNeedsReview(programID string, idx int, runID, reason string) bool {
+	if strings.TrimSpace(reason) == "" {
+		return false
+	}
+	for _, p := range ps.Programs {
+		if p.ID != programID || idx < 0 || idx >= len(p.Milestones) {
+			continue
+		}
+		m := &p.Milestones[idx]
+		if m.Status == "needs_review" || m.Delivery != nil {
+			return false
+		}
+		m.Review = &MilestoneReview{Reason: reason, RunID: runID, PreviousStatus: m.Status, PreviousCompletedRun: m.CompletedRun, PreviousCompletedAt: m.CompletedAt, RecordedAt: time.Now().UTC()}
+		m.Status, m.CompletedRun, m.CompletedAt = "needs_review", "", time.Time{}
+		p.Updated = time.Now().UTC()
+		return true
+	}
+	return false
+}
+
+// ReviewLegacyRedCompletions corrects only an explicitly identifiable unsupported
+// completion class. Other historical states are preserved, not upgraded to proof.
+func (ps *ProgramStore) ReviewLegacyRedCompletions() int {
+	count := 0
+	for _, p := range ps.Programs {
+		for i, m := range p.Milestones {
+			if m.Status == "done" && strings.HasPrefix(m.CompletedRun, "red-evidence") && ps.MarkNeedsReview(p.ID, i, "legacy-red-evidence", "Passing a preimplementation test does not establish delivered work; review the goal and its regression test.") {
+				count++
+			}
+		}
+	}
+	return count
 }
 
 // Save writes the store atomically (tmp+rename) per ADR-003. The tmp file
@@ -382,6 +474,9 @@ func (ps *ProgramStore) MarkDone(programID string, milestoneIdx int, runID strin
 // atomic on one filesystem while giving each concurrent Save its own,
 // unrelated tmp file.
 func (ps *ProgramStore) Save() error {
+	if err := validatePrograms(ps); err != nil {
+		return err
+	}
 	dir := filepath.Dir(ps.path)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
@@ -419,7 +514,7 @@ func (ps *ProgramStore) Save() error {
 
 // RecordRedPass increments the milestone's consecutive red-pass counter and
 // returns the new streak. A red-pass (the plan's RED command passing before
-// GREEN) is evidence the milestone's work already exists at HEAD.
+// GREEN) cannot establish implementation and is retained for review.
 func (ps *ProgramStore) RecordRedPass(programID string, milestoneIdx int, redCmd string) int {
 	for _, p := range ps.Programs {
 		if p.ID != programID {
@@ -429,7 +524,7 @@ func (ps *ProgramStore) RecordRedPass(programID string, milestoneIdx int, redCmd
 			return 0
 		}
 		m := &p.Milestones[milestoneIdx]
-		if m.Status == "done" {
+		if m.Status == "done" || m.Status == "needs_review" {
 			return m.RedPassStreak
 		}
 		m.RedPassStreak++

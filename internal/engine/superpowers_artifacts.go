@@ -162,6 +162,11 @@ func currentSuperpowersRun(bb *Blackboard) (*SuperpowersRun, error) {
 		StartedAt:   now,
 		UpdatedAt:   now,
 	}
+	refs, err := captureProgramMilestones(bb)
+	if err != nil {
+		return nil, err
+	}
+	run.ProgramMilestones = refs
 	setSuperpowersRun(bb, run)
 	return run, nil
 }

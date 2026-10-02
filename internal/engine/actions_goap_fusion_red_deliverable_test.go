@@ -65,7 +65,7 @@ func TestRedPass_MissingDeliverableNeverCompletesMilestone(t *testing.T) {
 	id := seedDeliverableProgram(t, deliverableGoal)
 	stubRepoFileState(t, false, true) // probe is certain: the test file is absent
 
-	for range goapRedPassCompleteStreak + 2 {
+	for range goapRedPassReviewStreak + 2 {
 		handleGoapRedPassCycleFailure(redPassBB(id))
 	}
 
@@ -82,11 +82,11 @@ func TestRedPass_MissingDeliverableNeverCompletesMilestone(t *testing.T) {
 
 // The legitimate case must keep working: when the deliverable IS at HEAD, a
 // repeated red-pass really is evidence the work landed out-of-band.
-func TestRedPass_PresentDeliverableStillCompletesMilestone(t *testing.T) {
+func TestRedPass_PresentDeliverableStillRequiresDeliveryEvidence(t *testing.T) {
 	id := seedDeliverableProgram(t, deliverableGoal)
 	stubRepoFileState(t, true, true) // probe is certain: the test file exists
 
-	for range goapRedPassCompleteStreak {
+	for range goapRedPassReviewStreak {
 		handleGoapRedPassCycleFailure(redPassBB(id))
 	}
 
@@ -94,9 +94,9 @@ func TestRedPass_PresentDeliverableStillCompletesMilestone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := ps.Programs[0].Milestones[0].Status; got != "done" {
-		t.Fatalf("milestone status = %q, want \"done\": a landed deliverable plus %d red-passes "+
-			"is the case red-evidence completion exists for", got, goapRedPassCompleteStreak)
+	if got := ps.Programs[0].Milestones[0].Status; got != "needs_review" {
+		t.Fatalf("milestone status = %q, want \"needs_review\": a landed deliverable plus %d red-passes "+
+			"cannot establish delivered implementation", got, goapRedPassReviewStreak)
 	}
 }
 
@@ -107,7 +107,7 @@ func TestRedPass_UndeterminedProbeCompletesNothingAndKeepsEvidence(t *testing.T)
 	id := seedDeliverableProgram(t, deliverableGoal)
 	stubRepoFileState(t, false, false) // could not determine
 
-	for range goapRedPassCompleteStreak + 1 {
+	for range goapRedPassReviewStreak + 1 {
 		handleGoapRedPassCycleFailure(redPassBB(id))
 	}
 
@@ -209,11 +209,11 @@ func TestRedPass_UndeterminedProbeRefundsTheAttempt(t *testing.T) {
 // A goal naming no _test.go deliverable keeps the original behavior: for a
 // "fix the bug in Y.go" milestone the plan writes its own failing regression
 // test, so a repeated red-pass genuinely means the fix already landed.
-func TestRedPass_GoalWithoutTestDeliverableIsUnaffected(t *testing.T) {
+func TestRedPass_GoalWithoutTestDeliverableStillRequiresReview(t *testing.T) {
 	id := seedDeliverableProgram(t, "Fix the off-by-one in internal/engine/executor.go retry accounting.")
 	stubRepoFileState(t, false, true) // certain-absent, but no _test.go is named
 
-	for range goapRedPassCompleteStreak {
+	for range goapRedPassReviewStreak {
 		handleGoapRedPassCycleFailure(redPassBB(id))
 	}
 
@@ -221,9 +221,9 @@ func TestRedPass_GoalWithoutTestDeliverableIsUnaffected(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := ps.Programs[0].Milestones[0].Status; got != "done" {
-		t.Fatalf("milestone status = %q, want \"done\": a goal that names no _test.go deliverable "+
-			"must keep the pre-existing red-evidence behavior", got)
+	if got := ps.Programs[0].Milestones[0].Status; got != "needs_review" {
+		t.Fatalf("milestone status = %q, want \"needs_review\": a goal that names no _test.go deliverable "+
+			"must not gain completion from a passing test", got)
 	}
 }
 

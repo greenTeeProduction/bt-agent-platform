@@ -3,6 +3,8 @@ package engine
 import (
 	"strings"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/research"
 )
 
 type SuperpowersPhase string
@@ -25,23 +27,24 @@ const (
 
 type SuperpowersRun struct {
 	artifactSnapshot        string
-	User                    string              `json:"user,omitempty"`
-	ResearchDeliveryError   string              `json:"research_delivery_error,omitempty"`
-	ResearchDeliveryPending bool                `json:"research_delivery_pending,omitempty"`
-	ID                      string              `json:"id"`
-	Task                    string              `json:"task"`
-	Mode                    SuperpowersMode     `json:"mode"`
-	Phase                   SuperpowersPhase    `json:"phase"`
-	RepoDir                 string              `json:"repo_dir"`
-	WorktreePath            string              `json:"worktree_path"`
-	WorktreeBranch          string              `json:"worktree_branch"`
-	ArtifactDir             string              `json:"artifact_dir"`
-	DesignPath              string              `json:"design_path"`
-	PlanPath                string              `json:"plan_path"`
-	Tasks                   []SuperpowersTask   `json:"tasks"`
-	Verification            []VerificationCheck `json:"verification"`
-	ChangedFiles            []string            `json:"changed_files"`
-	ApplyStatus             string              `json:"apply_status,omitempty"`
+	User                    string                  `json:"user,omitempty"`
+	ResearchDeliveryError   string                  `json:"research_delivery_error,omitempty"`
+	ResearchDeliveryPending bool                    `json:"research_delivery_pending,omitempty"`
+	ProgramMilestones       []research.MilestoneRef `json:"program_milestones,omitempty"`
+	ID                      string                  `json:"id"`
+	Task                    string                  `json:"task"`
+	Mode                    SuperpowersMode         `json:"mode"`
+	Phase                   SuperpowersPhase        `json:"phase"`
+	RepoDir                 string                  `json:"repo_dir"`
+	WorktreePath            string                  `json:"worktree_path"`
+	WorktreeBranch          string                  `json:"worktree_branch"`
+	ArtifactDir             string                  `json:"artifact_dir"`
+	DesignPath              string                  `json:"design_path"`
+	PlanPath                string                  `json:"plan_path"`
+	Tasks                   []SuperpowersTask       `json:"tasks"`
+	Verification            []VerificationCheck     `json:"verification"`
+	ChangedFiles            []string                `json:"changed_files"`
+	ApplyStatus             string                  `json:"apply_status,omitempty"`
 	// PartialFailure records a failed task that was carried forward while the
 	// run's completed tasks landed (partial-landing mode).
 	PartialFailure string `json:"partial_failure,omitempty"`

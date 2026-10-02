@@ -39,6 +39,13 @@ func ResearchRuntimeStatus(ctx context.Context, user string, records *evolution.
 		return nil, err
 	}
 	report := traces.Summary()
+	if user == "" {
+		programs, err := ResearchProgramStatus(user)
+		if err != nil {
+			return nil, err
+		}
+		report["program_status"] = programs
+	}
 	if records == nil {
 		report["runtime_evidence"] = "unavailable"
 		return report, nil

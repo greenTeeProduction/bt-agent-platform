@@ -1,0 +1,55 @@
+{
+  "observed_utc": "2026-10-01T23:57:51Z",
+  "services": [
+    {
+      "unit": "bt-agent",
+      "state": "inactive",
+      "enabled": "disabled",
+      "effective_model_settings": {
+        "BT_CODEX_BIN": "/home/nico/.local/bin/codex",
+        "BT_LLM_PROVIDER": "codex",
+        "BT_LLM_SOL_ONLY": "true",
+        "BT_SUPERPOWERS_CODEX_BIN": "/home/nico/.local/bin/codex",
+        "BT_SUPERPOWERS_CODEX_MODEL": "gpt-6.1-sol",
+        "BT_SUPERPOWERS_CODEX_ONLY": "true",
+        "BT_SUPERPOWERS_PROVIDER": "codex",
+        "BT_SUPERPOWERS_RATE_LIMIT_FAILOVER": "false"
+      },
+      "method": "isolated systemd transient process with identical model Environment and ordered EnvironmentFiles; prints only allowlisted keys"
+    },
+    {
+      "unit": "bt-dashboard",
+      "state": "inactive",
+      "enabled": "disabled",
+      "effective_model_settings": {
+        "BT_CODEX_BIN": "/home/nico/.local/bin/codex",
+        "BT_LLM_PROVIDER": "codex",
+        "BT_LLM_SOL_ONLY": "true",
+        "BT_SUPERPOWERS_CODEX_BIN": "/home/nico/.local/bin/codex",
+        "BT_SUPERPOWERS_CODEX_MODEL": "gpt-6.1-sol",
+        "BT_SUPERPOWERS_CODEX_ONLY": "true",
+        "BT_SUPERPOWERS_PROVIDER": "codex",
+        "BT_SUPERPOWERS_RATE_LIMIT_FAILOVER": "false"
+      },
+      "method": "isolated systemd transient process with identical model Environment and ordered EnvironmentFiles; prints only allowlisted keys"
+    },
+    {
+      "unit": "bt-gardener",
+      "state": "inactive",
+      "enabled": "disabled",
+      "effective_model_settings": {
+        "BT_CODEX_BIN": "/home/nico/.local/bin/codex",
+        "BT_LLM_PROVIDER": "codex",
+        "BT_LLM_SOL_ONLY": "true",
+        "BT_SUPERPOWERS_CODEX_BIN": "/home/nico/.local/bin/codex",
+        "BT_SUPERPOWERS_CODEX_MODEL": "gpt-6.1-sol",
+        "BT_SUPERPOWERS_CODEX_ONLY": "true",
+        "BT_SUPERPOWERS_PROVIDER": "codex",
+        "BT_SUPERPOWERS_RATE_LIMIT_FAILOVER": "false"
+      },
+      "method": "isolated systemd transient process with identical model Environment and ordered EnvironmentFiles; prints only allowlisted keys"
+    }
+  ],
+  "configuration_changed": false,
+  "services_started": false
+}

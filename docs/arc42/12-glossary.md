@@ -69,7 +69,7 @@ runtime details in §§5–8 and decision history in [§9](09-decisions.md).
 | **PlannerNode** | The behavior-tree adapter to GOAP planning; not a second independent A* implementation. |
 | **Pre-Mutation Snapshot** | A copy of the predecessor tree used for rejection/rollback evidence. Snapshot timing matters: capturing after adoption cannot restore the previous tree. |
 | **PreGate** | A composed sequence of input/prerequisite checks before a task's main work. |
-| **Program / Milestone** | Durable research/improvement goals grouped into a program with tracked milestones; distinct from a transient planner path. |
+| **Program / Milestone** | Durable research/improvement goals with captured implementation references and optional Git delivery receipts. A review hold stops dependent work; legacy done labels alone are not verified delivery (ADR-290). |
 | **Provider Cooldown** | Provider-specific durable quota timing that controls eligibility for later CLI attempts. Failover may try one alternate when explicitly enabled. |
 | **Q-Learning** | Reinforcement-learning approach that updates action values from observed rewards, used in supported evolution/selection components. |
 | **Quota Economy** | Policies and caches intended to reduce metered calls and respect provider quotas; not a guarantee of free or unlimited execution. |

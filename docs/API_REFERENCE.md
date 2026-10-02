@@ -333,7 +333,9 @@ Panic/retry primitives, locks, DLQ, queues and routing. Principal interface/cons
 
 ### Package: research
 
-Deduplicated knowledge, goals/programs and quota-related state. Principal interface/consumers: `KnowledgeStore`, `ProgramStore`, `UpdatePrograms`.
+Deduplicated knowledge, goals/programs and quota-related state. Principal interface/consumers: `KnowledgeStore`, `ProgramStore`, `UpdatePrograms`. `UpdateProgramsWithContext` bounds shared backlog transactions; `MarkDelivered` accepts a receipt only after the engine checks actual Git delivery.
+
+Framework-scoped MCP controls: `bt_program_reconcile` backs up and corrects known unsupported RED-pass completion labels; `bt_program_review` requires `program_id`, zero-based `milestone_index`, `expected_goal` and a changed `revised_goal`. It reopens pending work without completion credit. `bt_research_status` reports program states separately from verified code deliveries. See [ADR-290](arc42/09-decisions.md#adr-290).
 
 [Source](../internal/research) · `go doc ./internal/research`
 

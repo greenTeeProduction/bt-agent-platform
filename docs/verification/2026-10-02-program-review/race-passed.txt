@@ -1,0 +1,3 @@
+ok  	github.com/nico/go-bt-evolve/internal/research	1.908s
+ok  	github.com/nico/go-bt-evolve/internal/engine	66.208s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-agent	24.573s

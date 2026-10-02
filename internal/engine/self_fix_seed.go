@@ -20,7 +20,7 @@ package engine
 // concurrent SELF-FIX seeds can't lose an update against EACH OTHER. That
 // on-disk lock is scoped to ledger.json and to self-fix-vs-self-fix
 // serialization only; the program-store add+save itself goes through
-// research.UpdatePrograms(goapProgramsPath, ...), the SAME shared
+// research.UpdatePrograms(currentGoapProgramsPath(), ...), the SAME shared
 // cross-process flock every other programs.json writer in the engine holds
 // (persistGoapProgram, RefundAttempt, RecordRedPass, MarkDone, arc42_seeder,
 // goap_seed_program) — so this write is now serialized against every other
@@ -270,7 +270,7 @@ func seedCodeFixProgram(sig, title, milestoneGoal, source string) (bool, string)
 	// the on-disk store untouched, matching the previous bare-OpenPrograms
 	// fail-safe semantics exactly.
 	var programID, reason string
-	err := research.UpdatePrograms(goapProgramsPath, func(ps *research.ProgramStore) error {
+	err := research.UpdatePrograms(currentGoapProgramsPath(), func(ps *research.ProgramStore) error {
 		// Cap: count OPEN (has a pending milestone) self-fix programs.
 		open := 0
 		for _, p := range ps.Programs {

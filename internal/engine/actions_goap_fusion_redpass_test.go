@@ -110,7 +110,7 @@ func redPassBlackboard(runID, chargedRef string) *Blackboard {
 // consecutive red-pass — two independently written failing-test plans both
 // passing at HEAD — completes the milestone instead of retrying forever
 // (loop-breaker for the 2026-07-15 re-attempt-of-landed-work treadmill).
-func TestRepeatedRedPassRefundsThenCompletesMilestone(t *testing.T) {
+func TestRepeatedRedPassRefundsThenRequiresReview(t *testing.T) {
 	isolateGoapProgramStore(t)
 	p := seedRedPassProgram(t)
 
@@ -132,13 +132,13 @@ func TestRepeatedRedPassRefundsThenCompletesMilestone(t *testing.T) {
 	handleGoapRedPassCycleFailure(bb2)
 
 	m2 := redPassMilestone(t)
-	if m2.Status != "done" {
-		t.Fatalf("second consecutive red-pass must complete the milestone, status = %q", m2.Status)
+	if m2.Status != "needs_review" {
+		t.Fatalf("second consecutive red-pass must hold the milestone for review, status = %q", m2.Status)
 	}
-	if m2.CompletedRun != "red-evidence:runB" {
-		t.Fatalf("CompletedRun = %q, want red-evidence:runB", m2.CompletedRun)
+	if m2.CompletedRun != "" || !m2.CompletedAt.IsZero() || m2.Review == nil {
+		t.Fatalf("CompletedRun = %q, want no completion credit", m2.CompletedRun)
 	}
-	if !strings.Contains(strings.ToLower(bb2.Result), "red-pass") {
+	if !strings.Contains(strings.ToLower(bb2.Result), "review") {
 		t.Fatalf("completion must be surfaced in the cycle report, got: %s", bb2.Result)
 	}
 }
@@ -231,7 +231,7 @@ func TestRepeatedRedPassRequiresReviewWithoutDelivery(t *testing.T) {
 	if got := reloadGoalBudget(t).Count(key); got != 0 {
 		t.Fatalf("closed goal's budget must be cleared, count = %d", got)
 	}
-	if !strings.Contains(strings.ToLower(bb2.Result), "red-pass") {
+	if !strings.Contains(strings.ToLower(bb2.Result), "review") {
 		t.Fatalf("closure must be surfaced in the cycle report, got: %s", bb2.Result)
 	}
 }
