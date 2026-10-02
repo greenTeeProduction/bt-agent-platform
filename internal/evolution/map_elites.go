@@ -116,7 +116,7 @@ func (g *MAPElitesGrid) InsertFromPopulation(pop *Population, domain string) int
 	for i := range pop.Individuals {
 		desc := Descriptor(pop.Individuals[i].Tree, domain)
 		// Use fitness from the individual (must be evaluated first)
-		if g.Insert(desc, &pop.Individuals[i]) {
+		if g.Insert(desc, snapshotIndividual(&pop.Individuals[i])) {
 			updated++
 		}
 	}
@@ -132,10 +132,13 @@ func (g *MAPElitesGrid) Elites() []*Individual {
 	}
 
 	// Collect all cell winners
-	elites := slices.Collect(maps.Values(g.Cells))
+	elites := make([]*Individual, 0, len(g.Cells))
+	for _, key := range slices.Sorted(maps.Keys(g.Cells)) {
+		elites = append(elites, g.Cells[key])
+	}
 
 	// Sort by fitness descending
-	slices.SortFunc(elites, func(a, b *Individual) int {
+	slices.SortStableFunc(elites, func(a, b *Individual) int {
 		return cmp.Compare(b.Fitness, a.Fitness)
 	})
 

@@ -29,14 +29,18 @@ type Individual struct {
 
 // Population is a generation of individuals.
 type Population struct {
-	Individuals         []Individual      `json:"individuals"`
-	Generation          int               `json:"generation"`
-	BestFitness         float64           `json:"best_fitness"`
-	PrevBestFitness     float64           `json:"prev_best_fitness"`
-	BestTree            *SerializableNode `json:"-"`
-	TotalMutations      int               `json:"total_mutations"`
-	Regressions         int               `json:"regressions"`
-	NicheDiversityScore float64           `json:"niche_diversity"`
+	// DeferExperienceCommit keeps heuristic search from recording measured
+	// improvement claims. Qualified single-operation learning is handled by
+	// the publication owner; batch gains cannot be assigned to individual ops.
+	DeferExperienceCommit bool              `json:"-"`
+	Individuals           []Individual      `json:"individuals"`
+	Generation            int               `json:"generation"`
+	BestFitness           float64           `json:"best_fitness"`
+	PrevBestFitness       float64           `json:"prev_best_fitness"`
+	BestTree              *SerializableNode `json:"-"`
+	TotalMutations        int               `json:"total_mutations"`
+	Regressions           int               `json:"regressions"`
+	NicheDiversityScore   float64           `json:"niche_diversity"`
 
 	// Crisis wires proactive population-level crisis detection into the GA
 	// loop. It is lazily initialized on first Evolve so death spirals
@@ -111,10 +115,17 @@ func NewPopulation(size int, baseTree *SerializableNode) *Population {
 		Generation:  0,
 	}
 	pop.Individuals[0] = Individual{Tree: cloneTree(baseTree), Genome: hashTree(baseTree)}
+	recoveryTargets := ContractRecoveryTargets(baseTree)
 	for i := 1; i < size; i++ {
 		mutated := cloneTree(baseTree)
-		// Apply random mutation
-		ops := randomMutation(mutated)
+		// Give an explicit missing recovery control a bounded proposal before
+		// random exploration. Qualification still measures actual task impact.
+		var ops []MutationOp
+		if i <= len(recoveryTargets) {
+			ops = []MutationOp{{Operation: "add_contract_recovery", Target: recoveryTargets[i-1]}}
+		} else {
+			ops = randomMutation(mutated)
+		}
 		ApplyMutations(mutated, ops)
 		pop.Individuals[i] = Individual{Tree: mutated, Genome: hashTree(mutated)}
 	}
@@ -126,7 +137,7 @@ func (p *Population) Evaluate(fitnessFn func(*SerializableNode) float64) {
 	best := 0.0
 	for i := range p.Individuals {
 		p.Individuals[i].Fitness = fitnessFn(p.Individuals[i].Tree)
-		if p.Individuals[i].Fitness > best {
+		if i == 0 || p.Individuals[i].Fitness > best {
 			best = p.Individuals[i].Fitness
 			p.BestTree = p.Individuals[i].Tree
 		}
@@ -158,7 +169,13 @@ func (p *Population) Select() []*SerializableNode {
 
 // Crossover produces an offspring by swapping subtrees.
 func Crossover(a, b *SerializableNode) *SerializableNode {
+	if a == nil {
+		return cloneTree(b)
+	}
 	child := cloneTree(a)
+	if b == nil {
+		return child
+	}
 	// Pick a random node in child and replace with random node from b
 	if len(child.Children) > 0 {
 		childIdx := evoIntn(len(child.Children))
@@ -166,6 +183,11 @@ func Crossover(a, b *SerializableNode) *SerializableNode {
 			bIdx := evoIntn(len(b.Children))
 			child.Children[childIdx] = *cloneTree(&b.Children[bIdx])
 		}
+	}
+	// Arbitrary subtree exchange can erase an entire task path. Keep the
+	// first parent's capabilities and controls unless equivalence is proven.
+	if !PreservesGovernance(a, child) {
+		return cloneTree(a)
 	}
 	return child
 }
@@ -446,7 +468,9 @@ func RetrieveExperienceHints(bank *ExperienceBank, tree *SerializableNode, topK 
 // EvoRepair-style learn→retrieve→mutate loop against an ExperienceBank:
 // operator selection is warm-started from RetrieveByTreeType hints for the
 // population's tree type, and every fitness-improving mutation is recorded
-// back into the bank via AddFromMutation. A nil bank degrades to plain Evolve.
+// back into the bank via AddFromMutation unless DeferExperienceCommit is set.
+// Production heuristic search defers this credit until measured qualification.
+// A nil bank degrades to plain Evolve.
 func (p *Population) EvolveWithExperience(generations int, fitnessFn func(*SerializableNode) float64, bank *ExperienceBank) *SerializableNode {
 	return p.EvolveWithExperienceContext(generations, fitnessFn, bank, "")
 }
@@ -558,7 +582,9 @@ func (p *Population) mutateAndRecord(
 		p.Regressions++
 		return child
 	}
-	_ = bank.AddFromMutation(mutated, op, before, after, nil, query)
+	if !p.DeferExperienceCommit {
+		_ = bank.AddFromMutation(mutated, op, before, after, nil, query)
+	}
 	return mutated
 }
 
@@ -659,9 +685,8 @@ func (qt *QTable) GetState(tree *SerializableNode, category string) string {
 // SelectAction returns best action via epsilon-greedy.
 func (qt *QTable) SelectAction(state string, epsilon float64) string {
 	actions, ok := qt.Values[state]
-	if !ok || rand.Float64() < epsilon {
-		allMutations := []string{"add_before", "add_after", "add_fallback", "replace_node", "remove_node"}
-		return allMutations[rand.Intn(len(allMutations))]
+	if !ok || evoFloat64() < epsilon {
+		return AllMutationOps[evoIntn(len(AllMutationOps))]
 	}
 	best := ""
 	bestVal := -1e9
@@ -952,6 +977,14 @@ func (p *Population) qLearnMutate(
 
 // ─── Helpers ───
 
+// snapshotIndividual keeps an archive entry's tree and score attached when
+// the breeding population is sorted or replaced during crisis recovery.
+func snapshotIndividual(ind *Individual) *Individual {
+	snapshot := *ind
+	snapshot.Tree = cloneTree(ind.Tree)
+	return &snapshot
+}
+
 func cloneTree(t *SerializableNode) *SerializableNode {
 	if t == nil {
 		return nil
@@ -969,6 +1002,11 @@ func cloneTree(t *SerializableNode) *SerializableNode {
 	if t.Edges != nil {
 		c.Edges = make([]TypedEdge, len(t.Edges))
 		copy(c.Edges, t.Edges)
+		for i := range c.Edges {
+			if t.Edges[i].Blackboard != nil {
+				c.Edges[i].Blackboard = maps.Clone(t.Edges[i].Blackboard)
+			}
+		}
 	}
 	for _, ch := range t.Children {
 		c.Children = append(c.Children, *cloneTree(&ch))
@@ -1013,22 +1051,17 @@ func hashTree(t *SerializableNode) string {
 }
 
 func randomMutation(tree *SerializableNode) []MutationOp {
-	if ops := tryBlockRandomMutation(tree); len(ops) > 0 {
-		return ops
+	// A registered block library contributes proposals without starving node
+	// mutations. Previously its always-nonempty response prevented every
+	// governance mutation from reaching production populations.
+	if evoIntn(4) == 0 {
+		if ops := tryBlockRandomMutation(tree); len(ops) > 0 {
+			return ops
+		}
 	}
-	// Include all mutation types the expert system recommends
-	allOps := []string{
-		"add_before", "add_after", "add_fallback",
-		"replace_node", "replace_children", "reorder_children",
-		"increase_retries", "prune_node", "increase_iterations", "add_tool",
-	}
-	op := allOps[evoIntn(len(allOps))]
-	// Find a random target node
-	target := randomNodeName(tree, tree.Name)
-	if target == "" {
-		target = tree.Name
-	}
-	return []MutationOp{{Operation: op, Target: target}}
+	mutator := NewMCTSMutator()
+	op := AllMutationOps[evoIntn(len(AllMutationOps))]
+	return []MutationOp{mutator.concreteMutationOp(op, tree)}
 }
 
 func randomNodeName(node *SerializableNode, fallback string) string {

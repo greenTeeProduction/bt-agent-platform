@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -185,7 +186,7 @@ func refundGoapMilestoneAttemptForInfraFailure(bb *Blackboard) bool {
 		return false
 	}
 	var refunded bool
-	err := research.UpdatePrograms(goapProgramsPath, func(ps *research.ProgramStore) error {
+	err := research.UpdatePrograms(currentGoapProgramsPath(), func(ps *research.ProgramStore) error {
 		refunded = ps.RefundAttempt(programID, idx, goapProgramMaxMilestoneAttempts)
 		// This cycle is giving up on the milestone — release its program claim
 		// (if it still holds one) so a sibling cycle need not wait out the full
@@ -273,18 +274,12 @@ func classifyGoapCycleFailure(outcome, result string) string {
 	return goapCycleFailureGenuine
 }
 
-// goapRedPassCompleteStreak is how many consecutive red-passes complete a
-// milestone: two independently written failing-test plans both passing at
-// HEAD is strong evidence the work already landed, while a single red-pass
-// may just be one weak test.
-const goapRedPassCompleteStreak = 2
+// Two consecutive preimplementation passes require review of the proposed
+// regression. They cannot establish that an implementation was delivered.
+const goapRedPassReviewStreak = 2
 
-// handleGoapRedPassCycleFailure handles a cycle that stopped on a red-pass:
-// the charge is refunded (never the abandon budget) and evidence recorded; at
-// goapRedPassCompleteStreak the milestone is completed instead of retried
-// forever. 2026-07-15 23:04: a cycle re-attempted already-hand-landed
-// milestones, burned 16 minutes, and reported a "degraded" alarm — without
-// the streak loop-breaker the refund alone would retry that no-op every cycle.
+// handleGoapRedPassCycleFailure retains the test evidence and stops repeated
+// unsuitable plans through a review hold, without reporting completed work.
 func handleGoapRedPassCycleFailure(bb *Blackboard) {
 	programID, idx, ok := goapChargedMilestoneRef(bb)
 	if !ok {
@@ -296,11 +291,9 @@ func handleGoapRedPassCycleFailure(bb *Blackboard) {
 	}
 	ref := fmt.Sprintf("%s:%d", programID, idx)
 
-	// Deliverable post-condition (2026-08-01). A red-pass only means "the work
-	// already landed" when the RED command can DISCRIMINATE. For a milestone
-	// whose goal names a _test.go it is supposed to create, the recorded RED
-	// command is the existing package suite — which passes precisely BECAUSE
-	// that file was never written. Completing on that is an inverted inference:
+	// A missing named deliverable independently establishes unfinished work.
+	// A whole-package RED command may pass because the requested _test.go
+	// was never written. Completing on that is an inverted inference:
 	// an audit found 41 of 47 checkable red-evidence completions named a
 	// _test.go that does not exist and, per git log, never did.
 	//
@@ -316,7 +309,7 @@ func handleGoapRedPassCycleFailure(bb *Blackboard) {
 		// cycle need not wait out the full lease before planning the program's
 		// OTHER milestones. Refund is the only other caller of ReleaseClaim on
 		// this path, and we deliberately skip it, so release explicitly.
-		_ = research.UpdatePrograms(goapProgramsPath, func(ps *research.ProgramStore) error {
+		_ = research.UpdatePrograms(currentGoapProgramsPath(), func(ps *research.ProgramStore) error {
 			ps.ReleaseClaim(programID, bb.RunID)
 			return nil
 		})
@@ -327,32 +320,27 @@ func handleGoapRedPassCycleFailure(bb *Blackboard) {
 
 	refundGoapMilestoneAttemptForInfraFailure(bb)
 	var streak int
-	var completed bool
-	if err := research.UpdatePrograms(goapProgramsPath, func(ps *research.ProgramStore) error {
-		// The passing RED command rides along so the NEXT cycle's charge-time
-		// pre-check can re-run it without burning a Claude plan phase.
+	var review bool
+	if err := research.UpdatePrograms(currentGoapProgramsPath(), func(ps *research.ProgramStore) error {
 		streak = ps.RecordRedPass(programID, idx, extractRedPassCommand(bb.Result))
-		// The red-pass itself is known and is recorded either way; only the
-		// COMPLETION decision waits for a determined deliverable probe, so a
-		// transient git outage delays completion without losing evidence.
-		if streak >= goapRedPassCompleteStreak && verdict == goapDeliverablesSatisfied {
-			completed = ps.MarkDone(programID, idx, "red-evidence:"+bb.RunID)
+		if streak >= goapRedPassReviewStreak {
+			review = ps.MarkNeedsReview(programID, idx, bb.RunID, "Repeated RED commands passed before implementation; revise the goal/test or inspect an actual delivery before continuing dependent milestones.")
 		}
 		return nil
 	}); err != nil {
 		return
 	}
-	if !completed && verdict == goapDeliverablesUnknown {
-		bb.Result += fmt.Sprintf("\n\n## Red-Pass Undetermined\n\nMilestone %s: RED passed (streak %d/%d) but the deliverable probe could not reach HEAD, so completion is withheld this cycle. Attempt refunded; evidence recorded.", ref, streak, goapRedPassCompleteStreak)
+	if !review && verdict == goapDeliverablesUnknown {
+		bb.Result += fmt.Sprintf("\n\n## Red-Pass Undetermined\n\nMilestone %s: RED passed (streak %d/%d) but the deliverable probe could not reach HEAD, so completion is withheld this cycle. Attempt refunded; evidence recorded.", ref, streak, goapRedPassReviewStreak)
 		Info("goap fusion: red-pass recorded, completion withheld — deliverable probe unavailable", "milestone", ref, "streak", streak)
 		return
 	}
-	if completed {
-		bb.Result += fmt.Sprintf("\n\n## Milestone Completed On Red-Pass Evidence\n\nMilestone %s: %d consecutive plans' RED commands passed before GREEN — the predicted regression does not exist at HEAD, so the work is already landed (or untestable as specified). Marked done (`red-evidence:%s`) instead of retrying.", ref, streak, bb.RunID)
-		Info("goap fusion: milestone completed on repeated red-pass evidence", "milestone", ref, "streak", streak)
+	if review {
+		bb.Result += fmt.Sprintf("\n\n## Milestone Needs Review\n\nMilestone %s: %d RED commands passed before implementation. No code delivery is established. Automatic retries and dependent milestones are held for goal/test review.", ref, streak)
+		Info("goap fusion: milestone needs review after repeated red-pass", "milestone", ref, "streak", streak)
 		return
 	}
-	bb.Result += fmt.Sprintf("\n\n## Red-Pass Recorded\n\nMilestone %s: RED command passed before GREEN (streak %d/%d) — attempt refunded; the work may already be landed.", ref, streak, goapRedPassCompleteStreak)
+	bb.Result += fmt.Sprintf("\n\n## Red-Pass Recorded\n\nMilestone %s: RED passed before implementation (streak %d/%d). Attempt refunded; no code delivery established.", ref, streak, goapRedPassReviewStreak)
 	Info("goap fusion: red-pass recorded, milestone attempt refunded", "milestone", ref, "streak", streak)
 }
 
@@ -367,7 +355,7 @@ func resetGoapMilestoneRedPassStreak(bb *Blackboard) {
 	if !ok {
 		return
 	}
-	if err := research.UpdatePrograms(goapProgramsPath, func(ps *research.ProgramStore) error {
+	if err := research.UpdatePrograms(currentGoapProgramsPath(), func(ps *research.ProgramStore) error {
 		ps.ResetRedPassStreak(programID, idx)
 		ps.ReleaseClaim(programID, bb.RunID)
 		return nil
@@ -376,15 +364,8 @@ func resetGoapMilestoneRedPassStreak(bb *Blackboard) {
 	}
 }
 
-// recordGoapResearchGoalRedPass tracks red-pass evidence for the charged
-// research goal. Only reached when no program milestone was charged this
-// cycle — milestones lead the queue, so with none charged the head plan task
-// came from the research goal and the red-pass evidence is genuinely about
-// it (a milestone cycle's red-pass must never close the untouched goal
-// queued behind it). At goapRedPassCompleteStreak the goal is recorded
-// goap:implemented — the same record a landed run writes, which research
-// prompts use to stop re-proposing done work — and its failure budget is
-// cleared, mirroring recordImplementedGoals.
+// recordGoapResearchGoalRedPass stops repeated unsuitable RED plans without
+// claiming they implemented a change. The goal remains visible for review.
 func recordGoapResearchGoalRedPass(bb *Blackboard) {
 	if bb == nil || bb.ChainState == nil {
 		return
@@ -395,44 +376,26 @@ func recordGoapResearchGoalRedPass(bb *Blackboard) {
 	}
 	s, err := research.OpenGoalAttempts(goapGoalAttemptsPath)
 	if err != nil {
+		bb.Result += "\n\nCould not read research red-pass evidence: " + err.Error()
 		return
 	}
 	streak := s.RecordRedPass(key)
-	if streak < goapRedPassCompleteStreak {
-		if err := s.Save(); err != nil {
-			return
-		}
-		bb.Result += fmt.Sprintf("\n\n## Red-Pass Recorded\n\nResearch goal `%s`: RED command passed before GREEN (streak %d/%d) — the work may already be landed.", key, streak, goapRedPassCompleteStreak)
-		Info("goap fusion: research-goal red-pass recorded", "goal_key", key, "streak", streak)
-		return
-	}
-	// Closure needs the goal's readable text: the goap:implemented record is
-	// consumed by title in research prompts. A carryover plan without the
-	// text stamp keeps the streak and closes on a later stamped cycle.
-	goalText := strings.TrimSpace(func() string { t, _ := bb.ChainState["goap_fusion_research_goal_charged_text"].(string); return t }())
-	closed := false
-	if goalText != "" {
-		if store, err := research.Open(btFusionKnowledgePath); err == nil {
-			title := goalText
-			if len(title) > 120 {
-				title = title[:120]
-			}
-			store.Record("goap:implemented", title, goalText)
-			if err := store.Save(); err == nil {
-				closed = true
-			}
-		}
-	}
-	if closed {
-		s.Clear(key)
-	}
 	if err := s.Save(); err != nil {
+		bb.Result += "\n\nCould not persist research red-pass evidence: " + err.Error()
 		return
 	}
-	if closed {
-		bb.Result += fmt.Sprintf("\n\n## Research Goal Closed On Red-Pass Evidence\n\nResearch goal `%s`: %d consecutive plans' RED commands passed before GREEN — the predicted regression does not exist at HEAD, so the work is already landed (or untestable as specified). Recorded goap:implemented and cleared its budget instead of retrying.", truncateGoap(goalText, 120), streak)
-		Info("goap fusion: research goal closed on repeated red-pass evidence", "goal_key", key, "streak", streak)
+	goal, _ := bb.ChainState["goap_fusion_research_goal_charged_text"].(string)
+	if streak < goapRedPassReviewStreak || strings.TrimSpace(goal) == "" {
+		bb.Result += fmt.Sprintf("\n\nRed-pass evidence for goal `%s`: streak %d/%d. No code delivery established.", key, streak, goapRedPassReviewStreak)
 		return
 	}
-	bb.Result += fmt.Sprintf("\n\n## Red-Pass Recorded\n\nResearch goal `%s`: red-pass streak %d but no goal text available this cycle — closure deferred to the next stamped cycle.", key, streak)
+	err = research.UpdateTraces(context.Background(), researchTracePath(bb.User), bb.User, func(traces *research.TraceStore) error {
+		traces.Goal(researchGoalTraceID(goal), goal).ReviewReason = "Repeated RED commands passed before implementation; the proposed test does not establish the claimed gap. Revise the goal/test before retrying."
+		return nil
+	})
+	if err != nil {
+		bb.Result += "\n\nCould not persist research review requirement: " + err.Error()
+		return
+	}
+	bb.Result += fmt.Sprintf("\n\nResearch goal `%s` needs review after %d consecutive red-pass results. Automatic retries are withheld; no delivery or impact credit was awarded.", truncateGoap(goal, 120), streak)
 }

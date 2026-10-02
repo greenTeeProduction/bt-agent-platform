@@ -60,7 +60,7 @@ func newWiringFixture(t *testing.T, treeName string) (Config, TreeEntry, *evolut
 // even though the global kill switch is untouched.
 func TestEvolveTreeV2_PerTreeDisabledFailsClosed(t *testing.T) {
 	cfg, entry, _ := newWiringFixture(t, "wiring_v2_tree")
-	g := NewGardener(cfg)
+	g := newOrchestrationTestGardener(t, cfg)
 
 	metrics := g.evolveTreeV2(entry, EvolveV2Config{})
 	if metrics.Mutations != 0 {

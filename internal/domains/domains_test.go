@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/nico/go-bt-evolve/internal/benchmark"
 	"github.com/nico/go-bt-evolve/internal/engine"
@@ -29,9 +28,10 @@ func singleTaskSuite(name, task string, shouldSucceed bool) benchmark.Suite {
 
 func TestCodeReviewTree(t *testing.T) {
 	tree := CodeReviewTree()
-	mock := benchmark.DefaultMock()
+	model := benchmark.RealLLM(t)
 	suite := singleTaskSuite("code_review_smoke", "find bugs in this code", true)
-	metrics := benchmark.RunSuite(tree, suite, mock)
+	metrics := benchmark.RunSuite(tree, suite, model)
+	requireQualifiedBenchmark(t, metrics)
 
 	if metrics.SuccessRate < 0.5 {
 		t.Errorf("CodeReviewTree success rate too low: %.2f (want >= 0.5)", metrics.SuccessRate)
@@ -42,9 +42,10 @@ func TestCodeReviewTree(t *testing.T) {
 
 func TestDevOpsTree(t *testing.T) {
 	tree := DevOpsCITree()
-	mock := benchmark.DefaultMock()
+	model := benchmark.RealLLM(t)
 	suite := singleTaskSuite("devops_ci_smoke", "build the project", true)
-	metrics := benchmark.RunSuite(tree, suite, mock)
+	metrics := benchmark.RunSuite(tree, suite, model)
+	requireQualifiedBenchmark(t, metrics)
 
 	if metrics.Successes == 0 {
 		t.Error("DevOpsCITree task should succeed")
@@ -55,9 +56,10 @@ func TestDevOpsTree(t *testing.T) {
 
 func TestAgentMonitor(t *testing.T) {
 	tree := AgentMonitorTree()
-	mock := benchmark.DefaultMock()
+	model := benchmark.RealLLM(t)
 	suite := singleTaskSuite("agent_monitor_smoke", "check health of all agents", true)
-	metrics := benchmark.RunSuite(tree, suite, mock)
+	metrics := benchmark.RunSuite(tree, suite, model)
+	requireQualifiedBenchmark(t, metrics)
 
 	if metrics.Successes == 0 {
 		t.Error("AgentMonitorTree task should succeed")
@@ -68,9 +70,10 @@ func TestAgentMonitor(t *testing.T) {
 
 func TestCrashInvestigator(t *testing.T) {
 	tree := CrashInvestigatorTree()
-	mock := benchmark.DefaultMock()
+	model := benchmark.RealLLM(t)
 	suite := singleTaskSuite("crash_investigator_smoke", "parse this stack trace for crash", true)
-	metrics := benchmark.RunSuite(tree, suite, mock)
+	metrics := benchmark.RunSuite(tree, suite, model)
+	requireQualifiedBenchmark(t, metrics)
 
 	if metrics.Successes == 0 {
 		t.Error("CrashInvestigatorTree task should succeed")
@@ -81,9 +84,10 @@ func TestCrashInvestigator(t *testing.T) {
 
 func TestGameAI(t *testing.T) {
 	tree := GameAITree()
-	mock := benchmark.DefaultMock()
+	model := benchmark.RealLLM(t)
 	suite := singleTaskSuite("game_ai_smoke", "game: patrol the area", true)
-	metrics := benchmark.RunSuite(tree, suite, mock)
+	metrics := benchmark.RunSuite(tree, suite, model)
+	requireQualifiedBenchmark(t, metrics)
 
 	if metrics.Successes == 0 {
 		t.Error("GameAITree task should succeed")
@@ -365,11 +369,9 @@ func TestGoapTreesSeedGoapToolsBeforeGOAPRoot(t *testing.T) {
 
 func TestNotebooklmPlanImplement(t *testing.T) {
 	tree := evolution.NotebooklmPlanImplementTree()
-	mock := benchmark.DefaultMock()
 
 	bb := &engine.Blackboard{
 		Task: "Research BT platform scalability gaps and implement fixes",
-		LLM:  mock,
 	}
 
 	// 1. Build the tree — must not panic or return nil
@@ -401,106 +403,34 @@ func TestNotebooklmPlanImplement(t *testing.T) {
 		t.Log("All 8 actions found in engine registry")
 	}
 
-	// 3. Run the tree with a generous timeout.
-	//    ResearchNotebookLM calls nlmRun with long timeouts (up to 360s for
-	//    research status polling). If nlm is available and authenticated,
-	//    the fast research mode (~30s) should complete within this window.
-	//    If nlm is unavailable, nlmRun retries 3x and returns quickly.
-	done := make(chan struct{})
-	var output string
-	go func() {
-		defer close(done)
-		output = engine.RunTask(bb, cmd)
-	}()
-
-	select {
-	case <-done:
-		// 4. Verify no panic (the tree's panic recovery would set Outcome to a panic message)
-		if strings.Contains(bb.Outcome, "PANIC") || strings.Contains(bb.Outcome, "panic") {
-			t.Errorf("tree panicked during execution: outcome=%s, result=%s", bb.Outcome, output)
-		}
-		t.Logf("Outcome: %s", bb.Outcome)
-		t.Logf("Duration: %dms", bb.DurationMs)
-		t.Logf("Result length: %d", len(output))
-		t.Logf("Quality score: %.2f", bb.QualityScore)
-
-		if bb.Outcome == "failure" || bb.Outcome == "chain_failed" {
-			t.Log("NOTE: Tree failed (expected when nlm CLI / Ollama unavailable)")
-		}
-
-	case <-time.After(5 * time.Second):
-		// nlm research is taking too long (>5s). The structural validation
-		// already passed. This is expected for the full nlm research pipeline.
-		t.Log("Runtime test skipped: nlm research is in progress (expected; structural checks passed)")
-	}
+	// Runtime qualification requires isolated NotebookLM and implementation fixtures.
 }
 
 func TestAllDomainTrees(t *testing.T) {
-	all := AllDomainTrees()
-	tasks := tasksForTree()
-	mock := benchmark.DefaultMock()
-
+	all, tasks := AllDomainTrees(), tasksForTree()
 	if len(all) != len(tasks) {
-		t.Errorf("domain tree registry/task mismatch: got %d registered trees and %d smoke tasks", len(all), len(tasks))
+		t.Fatalf("domain tree registry/task mismatch: got %d trees and %d tasks", len(all), len(tasks))
 	}
-
-	for name, tree := range all {
-		task, ok := tasks[name]
-		if !ok {
-			t.Errorf("no smoke task defined for tree %q", name)
-			continue
-		}
-		// Arc42 trees require graphify + LLM + shell access. Smoke-test
-		// structural validity only: verify BuildTree doesn't panic.
-		if strings.HasPrefix(name, "arc42:") {
-			bb := &engine.Blackboard{
-				Task: task,
-				LLM:  mock,
+	for _, name := range slices.Sorted(maps.Keys(all)) {
+		tree := all[name]
+		t.Run(name, func(t *testing.T) {
+			task, ok := tasks[name]
+			if !ok {
+				t.Fatal("missing representative task")
 			}
-			cmd := engine.BuildTree(tree, bb)
-			if cmd == nil {
-				t.Errorf("arc42 tree %q: BuildTree returned nil", name)
+			if engine.BuildTree(tree, &engine.Blackboard{Task: task}) == nil {
+				t.Fatal("BuildTree returned nil")
 			}
-			t.Logf("  %s: structure OK (skip runtime — needs graphify + LLM)", name)
-			continue
-		}
-
-		// goap_fusion, bt_manager, bt_fusion, and notebooklm flows require real runtime state
-		// (Reflection store, nlm CLI, or persisted fusion candidates) not available
-		// in offline mock tests. superpowers_workflow likewise needs real git
-		// worktree/HITL/Claude Code state (RunSuite's mock LLM never resolves its
-		// HumanApprovalGate nodes or runs real git commands) — structural smoke
-		// only, same as the others in this list. hermes_update shells out to
-		// the real hermes/git binaries, so it is structural-only too.
-		// auction_demo's award stage runs the AuctionDelegate seam, which needs
-		// a live A2A transport / AuctionDelegateFn hook (nil offline), so it is
-		// structural-only as well. arc42_seeder queries nlm/Claude for a program
-		// proposal, so it is structural-only too (its action logic is unit-tested
-		// in engine/arc42_seeder_test.go with stubbed fetch). self_review's
-		// RunSelfReview action shells out to the real git binary and the real
-		// claude CLI via its default (non-overridable-from-here) deps — its
-		// action logic is unit-tested in engine/actions_self_review_test.go
-		// with a faked commitScanner and ClaudeRunner, so this smoke test stays
-		// structural-only too.
-		if name == "goap_fusion" || name == "goap_fusion_loop" || name == "bt_manager" || name == "bt_fusion" || name == "notebooklm" || name == "notebooklm_consumer" || name == "notebooklm_plan_implement" || name == "superpowers_workflow" || name == "hermes_update" || name == "auction_demo" || name == "arc42_seeder" || name == "self_review" {
-			bb := &engine.Blackboard{Task: task, LLM: mock}
-			cmd := engine.BuildTree(tree, bb)
-			if cmd == nil {
-				t.Errorf("tree %q: BuildTree returned nil", name)
-			}
-			t.Logf("  %s: structure OK (skip runtime — needs reflection store / nlm CLI)", name)
-			continue
-		}
-
-		suite := singleTaskSuite(name+"_smoke", task, true)
-		metrics := benchmark.RunSuite(tree, suite, mock)
-
-		if metrics.Successes == 0 {
-			t.Errorf("tree %q failed its smoke task %q (0/%d passed)", name, task, metrics.TotalTasks)
-		}
-
-		t.Logf("  %s: %d/%d passed, rate=%.2f, avgDur=%dms",
-			name, metrics.Successes, metrics.TotalTasks, metrics.SuccessRate, int64(metrics.AvgDurationMs))
+			// Structural coverage always runs; task qualification requires inference.
+			t.Run("live", func(t *testing.T) {
+				model := benchmark.RealLLM(t)
+				metrics := benchmark.RunSuite(tree, singleTaskSuite(name, task, true), model)
+				requireQualifiedBenchmark(t, metrics)
+				if metrics.ContractPassRate != 1 {
+					t.Fatalf("task contract failed: %+v", metrics)
+				}
+			})
+		})
 	}
 }
 
@@ -851,10 +781,8 @@ func TestAuctionDemoTree(t *testing.T) {
 	}
 
 	// Structural smoke: BuildTree must not panic or return nil in offline mode.
-	mock := benchmark.DefaultMock()
 	bb := &engine.Blackboard{
 		Task: "auction: allocate a task to the best bidder via announce-bid-award",
-		LLM:  mock,
 	}
 	cmd := engine.BuildTree(tree, bb)
 	if cmd == nil {
@@ -1230,13 +1158,12 @@ func TestGoapFusionTreeHasResearchRouter(t *testing.T) {
 // TestResolverReachableRegistryIsDerivedFromTreeResolver — which reads the
 // production registry — while never being built once.
 func TestResolverReachableDomainTreesHaveSmokeStructure(t *testing.T) {
-	mock := benchmark.DefaultMock()
 	for name, tree := range ResolverReachableDomainTrees() {
 		if tree == nil || len(tree.Children) == 0 {
 			t.Errorf("resolver-reachable tree %q is nil or empty", name)
 			continue
 		}
-		bb := &engine.Blackboard{Task: "smoke: exercise " + name, LLM: mock}
+		bb := &engine.Blackboard{Task: "smoke: exercise " + name}
 		if cmd := engine.BuildTree(tree, bb); cmd == nil {
 			t.Errorf("resolver-reachable tree %q: BuildTree returned nil", name)
 		}
@@ -1541,7 +1468,7 @@ func TestNoDomainTreeHasUnregisteredActions(t *testing.T) {
 // it was designed to handle. Each domain's dedicated benchmark.SuiteForTree
 // suite already encodes a realistic representative task per branch
 // (TaskCase.ExpectedPath); running every ShouldSucceed task through the real
-// tree with the mock LLM (Sandbox mode, no side effects) and asserting a
+// tree with the model LLM (Sandbox mode, no side effects) and asserting a
 // "success" outcome verifies the branch is actually reachable, not just
 // nominally present. Exercises the same runtime-state exemptions as
 // TestAllDomainTrees (git/nlm/claude-dependent trees can't run offline).
@@ -1561,13 +1488,14 @@ func TestDomainTreeSuitesReachAllStrategyBranches(t *testing.T) {
 		"meeting_notes": true,
 	}
 
-	mock := benchmark.DefaultMock()
+	model := benchmark.RealLLM(t)
 	for name, tree := range AllDomainTrees() {
 		if strings.HasPrefix(name, "arc42:") || exempt[name] {
 			continue
 		}
 		suite := benchmark.SuiteForTree(name)
-		metrics := benchmark.RunSuite(tree, suite, mock)
+		metrics := benchmark.RunSuite(tree, suite, model)
+		requireQualifiedBenchmark(t, metrics)
 		for _, r := range metrics.Results {
 			var tc *benchmark.TaskCase
 			for i := range suite.Tasks {
@@ -1615,7 +1543,6 @@ func tasksForKanbanAndHermesTrees() map[string]string {
 func TestKanbanAndHermesTreesHaveSmokeAndConditionCoverage(t *testing.T) {
 	trees := KanbanAndHermesDomainTrees()
 	tasks := tasksForKanbanAndHermesTrees()
-	mock := benchmark.DefaultMock()
 
 	if len(trees) != len(tasks) {
 		t.Errorf("kanban/hermes tree registry/task mismatch: got %d registered trees and %d smoke tasks", len(trees), len(tasks))
@@ -1632,7 +1559,7 @@ func TestKanbanAndHermesTreesHaveSmokeAndConditionCoverage(t *testing.T) {
 			continue
 		}
 
-		bb := &engine.Blackboard{Task: task, LLM: mock}
+		bb := &engine.Blackboard{Task: task}
 		cmd := engine.BuildTree(tree, bb)
 		if cmd == nil {
 			t.Errorf("tree %q: BuildTree returned nil", name)
@@ -1773,7 +1700,8 @@ func TestWrapWithErrorHandlerIsIdempotentAndNilSafe(t *testing.T) {
 // HealthAlert.
 func TestAlertRouterSuiteReachesDeclaredPaths(t *testing.T) {
 	suite := benchmark.AlertRouterSuite()
-	metrics := benchmark.RunSuite(AlertRouterTree(), suite, benchmark.DefaultMock())
+	metrics := benchmark.RunSuite(AlertRouterTree(), suite, benchmark.RealLLM(t))
+	requireQualifiedBenchmark(t, metrics)
 
 	for i, r := range metrics.Results {
 		tc := suite.Tasks[i]
@@ -1795,7 +1723,8 @@ func TestAlertRouterSuiteReachesDeclaredPaths(t *testing.T) {
 // TechnicalAnalysis instead.
 func TestTradingSignalSuiteReachesDeclaredPaths(t *testing.T) {
 	suite := benchmark.TradingSignalSuite()
-	metrics := benchmark.RunSuite(TradingSignalTree(), suite, benchmark.DefaultMock())
+	metrics := benchmark.RunSuite(TradingSignalTree(), suite, benchmark.RealLLM(t))
+	requireQualifiedBenchmark(t, metrics)
 
 	for i, r := range metrics.Results {
 		tc := suite.Tasks[i]
@@ -1831,7 +1760,7 @@ func TestTradingSignalSuiteReachesDeclaredPaths(t *testing.T) {
 // TestGoapTreesSeedGoapToolsBeforeGOAPRoot guards against for the GOAP_Root
 // branch.
 func TestCrashInvestigatorStrategyBranchesAreReachable(t *testing.T) {
-	mock := benchmark.DefaultMock()
+	model := benchmark.RealLLM(t)
 	tree := CrashInvestigatorTree()
 
 	cases := []struct {
@@ -1848,7 +1777,8 @@ func TestCrashInvestigatorStrategyBranchesAreReachable(t *testing.T) {
 		suite := benchmark.Suite{Name: "crash_investigator_branch", Tasks: []benchmark.TaskCase{
 			{Task: tc.task, ExpectedPath: tc.want, ShouldSucceed: true, MinResultLen: 5},
 		}}
-		metrics := benchmark.RunSuite(tree, suite, mock)
+		metrics := benchmark.RunSuite(tree, suite, model)
+		requireQualifiedBenchmark(t, metrics)
 		if len(metrics.Results) != 1 {
 			t.Fatalf("task %q: expected 1 result, got %d", tc.task, len(metrics.Results))
 		}
@@ -2295,7 +2225,6 @@ func TestEveryResolverReachableDomainTreeIsCovered(t *testing.T) {
 
 	names := slices.Sorted(maps.Keys(ids))
 
-	mock := benchmark.DefaultMock()
 	for _, id := range names {
 		ctor := ids[id]
 		t.Run(id, func(t *testing.T) {
@@ -2304,7 +2233,7 @@ func TestEveryResolverReachableDomainTreeIsCovered(t *testing.T) {
 			if tree == nil || len(tree.Children) == 0 {
 				t.Fatalf("ResolveTreeID(%q) (built by %s) returned a nil or childless tree", id, ctor)
 			}
-			bb := &engine.Blackboard{Task: "smoke: exercise " + id, LLM: mock}
+			bb := &engine.Blackboard{Task: "smoke: exercise " + id}
 			if cmd := engine.BuildTree(tree, bb); cmd == nil {
 				t.Errorf("resolver ID %q (built by %s): BuildTree returned nil", id, ctor)
 			}
@@ -2357,7 +2286,7 @@ func TestDomainPrefixedTreesHaveSmokeDescriptionsAndConditionCoverage(t *testing
 			if !ok || strings.TrimSpace(task) == "" {
 				t.Fatalf("no smoke task defined for domain tree %q", name)
 			}
-			bb := &engine.Blackboard{Task: task, LLM: benchmark.DefaultMock(), Sandbox: true}
+			bb := &engine.Blackboard{Task: task}
 			if engine.BuildTree(tree, bb) == nil {
 				t.Errorf("ResolveTreeID(%q): BuildTree returned nil", id)
 			}

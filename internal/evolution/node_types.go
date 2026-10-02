@@ -95,7 +95,9 @@ var KnownNodeTypes = map[string]bool{
 	// Domain-specific
 	"HumanApprovalGate":  true,
 	"QualityGate":        true,
+	"FileTask":           true,
 	"CheckpointVerifier": true,
+	"GoapStep":           true,
 	// ClaudeErrorHandler — self-extending recovery decorator: child 0 is the
 	// protected subtree; further children are Claude-proposed recovery nodes
 	// grafted at build time (engine/error_handler_node.go).
@@ -110,6 +112,14 @@ var KnownNodeTypes = map[string]bool{
 	// (errorHandlerAllowedNodeTypes in error_handler_claude.go), which already
 	// excludes MemSequence explicitly and independently of this map.
 	"MemSequence": true,
+	// Implemented stateful/controlled nodes in engine.buildNodeInner.
+	"MemSelector":           true,
+	"PersistentMemSequence": true,
+	"CachedCondition":       true,
+	"SemaphoreGuard":        true,
+	"ForEachTask":           true,
+	"ReviewCycle":           true,
+	"BanditSelector":        true,
 }
 
 // ValidateEdge validates a single TypedEdge against the tree structure.

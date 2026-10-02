@@ -44,6 +44,7 @@ func TestFinalizeAutomationApproval_ApprovedActivatesAgentAndLedger(t *testing.T
 		HITLID:         "req-1",
 		TreeID:         "goal:demo",
 		Representative: "demo task",
+		AgentName:      "auto-nico-sig-1", Schedule: "0 9 * * *",
 	}); err != nil {
 		t.Fatalf("seed ledger: %v", err)
 	}
@@ -106,6 +107,7 @@ func TestFinalizeAutomationApproval_RejectedQuarantinesTreeAndLedger(t *testing.
 		HITLID:         "req-2",
 		TreeID:         treeID,
 		Representative: "reject task",
+		AgentName:      "auto-nico-sig-2", Schedule: "0 9 * * 1",
 	}); err != nil {
 		t.Fatalf("seed ledger: %v", err)
 	}
@@ -161,5 +163,75 @@ func TestFinalizeAutomationApproval_NilOrNonAutomationRequestIgnored(t *testing.
 	req := &hitl.Request{ID: "req-3", Context: map[string]string{}}
 	if out := persona.FinalizeAutomationApproval(reg, store, req, true); out != nil {
 		t.Errorf("non-automation request must be ignored, got %v", out)
+	}
+}
+
+func TestAutomationApprovalBindsReservationAndSurvivesRetry(t *testing.T) {
+	for _, changed := range []string{"task", "tree_id", "agent_name", "schedule", "pattern_signature", "user", "request", "missing_ledger", "corrupt_ledger", "rejected", "flagged", "exact"} {
+		t.Run(changed, func(t *testing.T) {
+			reg, store := newFinalizeTestDeps(t)
+			ledger, err := persona.NewAutomationStore(store.Workspace("alice"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			rec := persona.AutomationRecord{Signature: "sig", Status: persona.AutomationPending, HITLID: "request", TreeID: "goal:report", AgentName: "auto-report", Schedule: "0 9 * * *", Representative: "Read report\nand summarize."}
+			if err := ledger.Reserve(rec, 3); err != nil {
+				t.Fatal(err)
+			}
+			req := &hitl.Request{ID: rec.HITLID, Task: rec.Representative, Context: map[string]string{"automation": "true", "user": "alice", "tree_id": rec.TreeID, "agent_name": rec.AgentName, "schedule": rec.Schedule, "pattern_signature": rec.Signature}}
+			switch changed {
+			case "task":
+				req.Task += " changed"
+			case "request":
+				req.ID += " changed"
+			case "missing_ledger":
+				if err := os.Remove(store.Workspace("alice").AutomationsPath()); err != nil {
+					t.Fatal(err)
+				}
+			case "corrupt_ledger":
+				if err := os.WriteFile(store.Workspace("alice").AutomationsPath(), []byte("{"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			case "rejected", "flagged":
+				if _, _, err := ledger.SetStatus(rec.HITLID, changed, ""); err != nil {
+					t.Fatal(err)
+				}
+			case "exact":
+			default:
+				req.Context[changed] += " changed"
+			}
+			out := persona.FinalizeAutomationApproval(reg, store, req, true)
+			if changed != "exact" {
+				if out["activated"] != false || out["activation_error"] == nil || len(reg.List()) != 0 {
+					t.Fatalf("unmatched approval admitted: %v", out)
+				}
+				return
+			}
+			if out["activated"] != true {
+				t.Fatalf("exact approval failed: %v", out)
+			}
+			inst, err := reg.Get(rec.AgentName)
+			if err != nil || inst.Definition.Description != rec.Representative {
+				t.Fatalf("scheduled task changed: %+v %v", inst, err)
+			}
+			again := persona.FinalizeAutomationApproval(reg, store, req, true)
+			if again["activated"] != true || len(reg.List()) != 1 {
+				t.Fatalf("retry changed activation: %v", again)
+			}
+		})
+	}
+}
+
+func TestActivateAutomationRejectsExistingForeignAgent(t *testing.T) {
+	reg, _ := newFinalizeTestDeps(t)
+	if err := persona.ActivateAutomation(reg, "alice", "auto-report", "goal:report", "sig", "0 9 * * *", "Exact task"); err != nil {
+		t.Fatal(err)
+	}
+	if err := persona.ActivateAutomation(reg, "bob", "auto-report", "goal:report", "sig", "0 9 * * *", "Exact task"); err == nil {
+		t.Fatal("foreign name collision acknowledged as activated")
+	}
+	inst, err := reg.Get("auto-report")
+	if err != nil || inst.Definition.Metadata["user"] != "alice" {
+		t.Fatalf("original agent changed: %+v %v", inst, err)
 	}
 }

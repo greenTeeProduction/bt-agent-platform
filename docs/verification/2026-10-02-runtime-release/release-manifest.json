@@ -1,0 +1,135 @@
+{
+  "revision": "b615595b9cb55cdadf6664a8c9d306602abf60d6",
+  "installed_utc": "2026-10-02T00:14:18.544747+00:00",
+  "backup": "/home/nico/.local/state/go-bt-evolve/runtime-release-20261002T001136Z",
+  "state_backups": [
+    {
+      "path": "/home/nico/.go-bt-evolve",
+      "resolved": "/mnt/ssd/home-dirs/.go-bt-evolve",
+      "archive": "/home/nico/.local/state/go-bt-evolve/runtime-release-20261002T001136Z/state-go-bt-evolve.tar",
+      "bytes": 1120829440,
+      "sha256": "d43fe87631a4519897300e81bc3335df73ab01951d2fc121c05af880be950d1b",
+      "archived_files": 406,
+      "archived_file_bytes": 1119986137
+    },
+    {
+      "path": "/home/nico/.go-bt-reflections",
+      "resolved": "/home/nico/.go-bt-reflections",
+      "archive": "/home/nico/.local/state/go-bt-evolve/runtime-release-20261002T001136Z/state-go-bt-reflections.tar",
+      "bytes": 5120000,
+      "sha256": "eb5c0d4d766ef365e8665e3df2478eeea0f454042090eae84ce2086be04f4598",
+      "archived_files": 1539,
+      "archived_file_bytes": 2338532
+    },
+    {
+      "path": "/home/nico/.go-bt-gardener",
+      "resolved": "/mnt/ssd/home-dirs/.go-bt-gardener",
+      "archive": "/home/nico/.local/state/go-bt-evolve/runtime-release-20261002T001136Z/state-go-bt-gardener.tar",
+      "bytes": 1424517120,
+      "sha256": "2b94f759bb8c0921936aa7b2b609273f8b4aa630b5276356c66d630cd9840c65",
+      "archived_files": 236581,
+      "archived_file_bytes": 996111429
+    }
+  ],
+  "installed_binaries": [
+    {
+      "name": "benchcmp",
+      "previous_sha256": "ea1bacfb1c1d42ca9446203180a567483f440cfdb7fb3dc88c5f5f046b90f5be",
+      "installed_sha256": "c62700aadd5f810da6b0efbac02aef95d1b17b6f89c19c6e55026c499cd37568",
+      "native_revision": "b615595b9cb55cdadf6664a8c9d306602abf60d6",
+      "native_dirty": false
+    },
+    {
+      "name": "bt-agent",
+      "previous_sha256": "7a439c3dedafb890e2361934eccb9f6e689a653a4e151eaa1241ca276ddbc3ec",
+      "installed_sha256": "dc63943b52199d860e52959c4959f44af7cd929a54f9a2d4049909af042c2275",
+      "native_revision": "b615595b9cb55cdadf6664a8c9d306602abf60d6",
+      "native_dirty": false
+    },
+    {
+      "name": "bt-agent-cli",
+      "previous_sha256": "8f20c587ad0c0e2a36407afbefc216d3116cb8d1fd680daeb87586a946cded15",
+      "installed_sha256": "233741e8c7fd85223c4a7a2cda6bf8f4783ee86ab8c362502db2464886e5c087",
+      "native_revision": "b615595b9cb55cdadf6664a8c9d306602abf60d6",
+      "native_dirty": false
+    },
+    {
+      "name": "bt-assistant",
+      "previous_sha256": "15a06fca1f8403daa37d959f1c6b690cade58741550691c3fe1e9cf45c82e98d",
+      "installed_sha256": "93a36cbd3485bca11a351b4439f6a0143be30d35902be2758e2e42410803c0e3",
+      "native_revision": "b615595b9cb55cdadf6664a8c9d306602abf60d6",
+      "native_dirty": false
+    },
+    {
+      "name": "bt-ci-doctor",
+      "previous_sha256": "e0149fdc0c7b68c6737d4786bbcb980469648acf06860301255734ef4e84934e",
+      "installed_sha256": "8a3b2a6d7dec70ad5d0996fefbe52753d074265cde6039a0ca6521361f09803f",
+      "native_revision": "b615595b9cb55cdadf6664a8c9d306602abf60d6",
+      "native_dirty": false
+    },
+    {
+      "name": "bt-dashboard",
+      "previous_sha256": "5dbc67a375c2891b4761131f79c5068044637b3ca34f1890a46cb17aba0dffb4",
+      "installed_sha256": "edc89d692ff18a7cd116d768a67381b7815d3801c104753f6ecd478fb9b28539",
+      "native_revision": "b615595b9cb55cdadf6664a8c9d306602abf60d6",
+      "native_dirty": false
+    },
+    {
+      "name": "bt-docgen",
+      "previous_sha256": "f0b876d0dba50952a03cf1fd145560ace04f7171e97c271800698e233a4c0ff5",
+      "installed_sha256": "5bf210090bd36501186a13013e9b957315025559fb730a62eaf8e4fe222bcb1f",
+      "native_revision": "b615595b9cb55cdadf6664a8c9d306602abf60d6",
+      "native_dirty": false
+    },
+    {
+      "name": "bt-evaluator",
+      "previous_sha256": "85b76bb432642c7d75ec598236c7dd2a786e918c585a03d4b8a57d9801164aaf",
+      "installed_sha256": "b44d95a0ed225bad68355ca1fe7749080fbbaeb0a79f60e392f29cf48250f9fe",
+      "native_revision": "b615595b9cb55cdadf6664a8c9d306602abf60d6",
+      "native_dirty": false
+    },
+    {
+      "name": "bt-gardener",
+      "previous_sha256": "b7ce7d7a2555911d6cc481b1e8aec5adb0690c2cf0e7dd5dd5442542f81bf936",
+      "installed_sha256": "37f579d61a2463fddc5fb10604dada0741bdc194d59687dcd1a815c2fbd6be4e",
+      "native_revision": "b615595b9cb55cdadf6664a8c9d306602abf60d6",
+      "native_dirty": false
+    },
+    {
+      "name": "bt-langagent",
+      "previous_sha256": "ae1dfc4f4cc09bac20a4f304a52b83d203bf8af6fa8e16589b25b295d5f2c2cc",
+      "installed_sha256": "57db708761015342fdee163826f64a9ee1a19401db1986495549829f734dac5b",
+      "native_revision": "b615595b9cb55cdadf6664a8c9d306602abf60d6",
+      "native_dirty": false
+    },
+    {
+      "name": "bt-notebooklm-auth",
+      "previous_sha256": "8b2640091c4a4f63a87feb0386a9f0ad49a69cb516e9662f653177ba07b34cdf",
+      "installed_sha256": "500185e9e3951eab07daabd94d11e95fe6b469c0036f7720fd6f927edfcd676e",
+      "native_revision": "b615595b9cb55cdadf6664a8c9d306602abf60d6",
+      "native_dirty": false
+    },
+    {
+      "name": "bt-scalability-probe",
+      "previous_sha256": "047af775b22aa64f913f8eb0420205767e48bc93cff49cd805f8a4bbe44f94cb",
+      "installed_sha256": "972b2b7cf52a7b57ff23b6c5238555857d6babfbf0229f7b1c264345f56c950e",
+      "native_revision": "b615595b9cb55cdadf6664a8c9d306602abf60d6",
+      "native_dirty": false
+    },
+    {
+      "name": "bt-security-probe",
+      "previous_sha256": "1304d10f3095edbeff53c132e6f284aa53d14b8bc675a97c457801e4821fb06d",
+      "installed_sha256": "8324f942dc49cf8085e7625b76677fbf611e117f6b966de9fe017dbc2c18f87b",
+      "native_revision": "b615595b9cb55cdadf6664a8c9d306602abf60d6",
+      "native_dirty": false
+    },
+    {
+      "name": "bt-tree-integration",
+      "previous_sha256": "a0498282957856e5f0f883df9091dd8ae40dbdbd93c9d5f16adae297fa2ae9c9",
+      "installed_sha256": "127af870e81475b6da2f2d260e94880cf437c15ea54e7979c96ea618e07738f6",
+      "native_revision": "b615595b9cb55cdadf6664a8c9d306602abf60d6",
+      "native_dirty": false
+    }
+  ],
+  "scope": "Manual deployment from clean committed source while all three services were stopped. Native identity verified after service start; automatic rebuild/restart remain disabled."
+}

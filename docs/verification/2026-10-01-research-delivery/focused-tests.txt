@@ -1,0 +1,473 @@
+ok  	github.com/nico/go-bt-evolve/internal/research	0.161s
+--- FAIL: TestRecordImplementedGoals_ClearsGoalBudget (0.30s)
+    actions_goap_fusion_goal_budget_test.go:376: /usr/local/go/bin/go [test ./...]: exit status 1
+        # internal/byteorder
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/unsafeheader
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/goarch
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/coverage/rtcov
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/godebugs
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/cpu
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/goexperiment
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/profilerecord
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/goos
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # math/bits
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/asan
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/msan
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/runtime/pprof/label
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/trace/tracev2
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # unicode/utf8
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # sync/atomic
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # cmp
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # encoding
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # unicode
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # crypto/internal/fips140/alias
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # crypto/internal/constanttime
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # unicode/utf16
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # example.invalid/delivery/cmd/bt-agent
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # crypto/internal/boring/sig
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        FAIL	example.invalid/delivery [build failed]
+        FAIL	example.invalid/delivery/cmd/bt-agent [build failed]
+        FAIL
+--- FAIL: TestRecoverGoapFusionPendingPatches_SkipsSupersededViaKnowledgeStore (0.15s)
+    actions_superpowers_prod_test.go:1489: /usr/local/go/bin/go [test ./...]: exit status 1
+        # internal/byteorder
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/unsafeheader
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/goarch
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/coverage/rtcov
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/godebugs
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/profilerecord
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/goexperiment
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/goos
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/cpu
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # math/bits
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/msan
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/asan
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/runtime/pprof/label
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/trace/tracev2
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # unicode/utf8
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # sync/atomic
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # cmp
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # encoding
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # unicode
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # unicode/utf16
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # crypto/internal/fips140/alias
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # crypto/internal/constanttime
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # crypto/internal/boring/sig
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        FAIL	example.invalid/delivery [build failed]
+        # example.invalid/delivery/internal/engine [example.invalid/delivery/internal/engine.test]
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        FAIL	example.invalid/delivery/internal/engine [build failed]
+        FAIL
+--- FAIL: TestRecentImplementedGoalsReadsStore (0.16s)
+    goap_research_goals_test.go:162: /usr/local/go/bin/go [test ./...]: exit status 1
+        # internal/unsafeheader
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/goarch
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/byteorder
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/coverage/rtcov
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/godebugs
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/goexperiment
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/goos
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/profilerecord
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # math/bits
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/cpu
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/asan
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/msan
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/trace/tracev2
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/runtime/pprof/label
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # cmp
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # sync/atomic
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # unicode/utf8
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # unicode
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # encoding
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # crypto/internal/constanttime
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # crypto/internal/fips140/alias
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # unicode/utf16
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # crypto/internal/boring/sig
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        FAIL	example.invalid/delivery [build failed]
+        FAIL
+--- FAIL: TestRecordImplementedGoalsStripsTransientEnrichment (0.16s)
+    graphify_components_test.go:569: /usr/local/go/bin/go [test ./...]: exit status 1
+        # internal/unsafeheader
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/goarch
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/byteorder
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/godebugs
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/coverage/rtcov
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/goos
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/profilerecord
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/goexperiment
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/asan
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # math/bits
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/cpu
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/msan
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/runtime/pprof/label
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/trace/tracev2
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # unicode/utf8
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # sync/atomic
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # cmp
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # unicode
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # encoding
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # crypto/internal/constanttime
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # crypto/internal/fips140/alias
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # unicode/utf16
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # crypto/internal/boring/sig
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        FAIL	example.invalid/delivery [build failed]
+        # example.invalid/delivery/internal/engine
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        FAIL	example.invalid/delivery/internal/engine [build failed]
+        FAIL
+--- FAIL: TestResearchDeliveryLinksSourceToRealCommitWithoutClaimingImpact (0.15s)
+    research_delivery_test.go:88: /usr/local/go/bin/go [test ./...]: exit status 1
+        # internal/byteorder
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/unsafeheader
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/goarch
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/godebugs
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/coverage/rtcov
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/cpu
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/goexperiment
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/goos
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/profilerecord
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # math/bits
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/asan
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/msan
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/runtime/pprof/label
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/trace/tracev2
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # unicode/utf8
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # cmp
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # unicode
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # sync/atomic
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # encoding
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # crypto/internal/constanttime
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # crypto/internal/fips140/alias
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # unicode/utf16
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # example.invalid/delivery/internal
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # crypto/internal/boring/sig
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        FAIL	example.invalid/delivery [build failed]
+        FAIL	example.invalid/delivery/internal [build failed]
+        FAIL
+--- FAIL: TestResearchDeliveryRejectsUnsupportedCompletion (0.17s)
+    research_delivery_test.go:122: /usr/local/go/bin/go [test ./...]: exit status 1
+        # internal/unsafeheader
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/goarch
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/byteorder
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/coverage/rtcov
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/godebugs
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/goexperiment
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/cpu
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/profilerecord
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # math/bits
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/goos
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/asan
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/runtime/pprof/label
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/msan
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/trace/tracev2
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # unicode/utf8
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # cmp
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # encoding
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # unicode
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # sync/atomic
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # crypto/internal/fips140/alias
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # crypto/internal/constanttime
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # unicode/utf16
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # crypto/internal/boring/sig
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        FAIL	example.invalid/delivery [build failed]
+        FAIL
+--- FAIL: TestResearchDeliveryPersistenceFailureDoesNotReplayCode (0.16s)
+    research_delivery_test.go:158: /usr/local/go/bin/go [test ./...]: exit status 1
+        # internal/unsafeheader
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/goarch
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/byteorder
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/godebugs
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/coverage/rtcov
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/cpu
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/goexperiment
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/profilerecord
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/goos
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # math/bits
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/asan
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/runtime/pprof/label
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/msan
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # cmp
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/trace/tracev2
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # unicode/utf8
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # unicode
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # encoding
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # crypto/internal/fips140/alias
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # sync/atomic
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # crypto/internal/constanttime
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # unicode/utf16
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # crypto/internal/boring/sig
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        FAIL	example.invalid/delivery [build failed]
+        FAIL
+--- FAIL: TestResumeSkipsAlreadyImplementedPlan (0.17s)
+    superpowers_findings_fix_test.go:28: /usr/local/go/bin/go [test ./...]: exit status 1
+        # internal/byteorder
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/goarch
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/unsafeheader
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/coverage/rtcov
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/cpu
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/godebugs
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/goexperiment
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/goos
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/asan
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/profilerecord
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # math/bits
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/trace/tracev2
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/msan
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/runtime/pprof/label
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # cmp
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # sync/atomic
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # unicode/utf8
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # unicode
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # crypto/internal/fips140/alias
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # encoding
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # example.invalid/delivery/internal/engine [example.invalid/delivery/internal/engine.test]
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # crypto/internal/constanttime
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # unicode/utf16
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # crypto/internal/boring/sig
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        FAIL	example.invalid/delivery [build failed]
+        FAIL	example.invalid/delivery/internal/engine [build failed]
+        FAIL
+--- FAIL: TestSuperpowersPlanAlreadyImplementedRequiresAllTasks (0.17s)
+    superpowers_findings_fix_test.go:62: /usr/local/go/bin/go [test ./...]: exit status 1
+        # internal/byteorder
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/unsafeheader
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/goarch
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/godebugs
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/coverage/rtcov
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/goexperiment
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/cpu
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/goos
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # math/bits
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/profilerecord
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/asan
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/msan
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/trace/tracev2
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # internal/runtime/pprof/label
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # unicode/utf8
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # cmp
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # encoding
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # unicode
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # sync/atomic
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # crypto/internal/fips140/alias
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # crypto/internal/constanttime
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # unicode/utf16
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # example.invalid/delivery/internal/engine [example.invalid/delivery/internal/engine.test]
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        # crypto/internal/boring/sig
+        compile: version "go1.26.5" does not match go tool version "go1.26.3"
+        FAIL	example.invalid/delivery [build failed]
+        FAIL	example.invalid/delivery/internal/engine [build failed]
+        FAIL
+FAIL
+FAIL	github.com/nico/go-bt-evolve/internal/engine	1.631s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-agent	0.017s [no tests to run]
+FAIL

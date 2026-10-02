@@ -9,14 +9,15 @@ import (
 
 func TestPitchAgent_DCF(t *testing.T) {
 	tree := evolution.PitchAgentTree()
-	mock := benchmark.DefaultMock()
+	model := benchmark.RealLLM(t)
 	suite := benchmark.Suite{
 		Name: "pitch_dcf",
 		Tasks: []benchmark.TaskCase{
 			{Task: "build a DCF model", ExpectedPath: "DCFPath", ShouldSucceed: true, MinResultLen: 10},
 		},
 	}
-	metrics := benchmark.RunSuite(tree, suite, mock)
+	metrics := benchmark.RunSuite(tree, suite, model)
+	requireQualifiedBenchmark(t, metrics)
 	if metrics.SuccessRate < 0.5 {
 		t.Errorf("PitchAgent DCF success rate too low: %.2f", metrics.SuccessRate)
 	}
@@ -24,14 +25,15 @@ func TestPitchAgent_DCF(t *testing.T) {
 
 func TestEarningsReviewer(t *testing.T) {
 	tree := evolution.EarningsReviewerTree()
-	mock := benchmark.DefaultMock()
+	model := benchmark.RealLLM(t)
 	suite := benchmark.Suite{
 		Name: "earnings_review",
 		Tasks: []benchmark.TaskCase{
 			{Task: "review Q3 earnings", ExpectedPath: "EarningsIngestPath", ShouldSucceed: true, MinResultLen: 10},
 		},
 	}
-	metrics := benchmark.RunSuite(tree, suite, mock)
+	metrics := benchmark.RunSuite(tree, suite, model)
+	requireQualifiedBenchmark(t, metrics)
 	if metrics.TotalTasks == 0 {
 		t.Error("EarningsReviewer: no tasks run")
 	}
@@ -42,14 +44,15 @@ func TestEarningsReviewer(t *testing.T) {
 
 func TestKYCScreener(t *testing.T) {
 	tree := evolution.KYCScreenerTree()
-	mock := benchmark.DefaultMock()
+	model := benchmark.RealLLM(t)
 	suite := benchmark.Suite{
 		Name: "kyc_screen",
 		Tasks: []benchmark.TaskCase{
 			{Task: "run KYC screening for new client", ExpectedPath: "KYCPath", ShouldSucceed: true, MinResultLen: 10},
 		},
 	}
-	metrics := benchmark.RunSuite(tree, suite, mock)
+	metrics := benchmark.RunSuite(tree, suite, model)
+	requireQualifiedBenchmark(t, metrics)
 	if metrics.TotalTasks == 0 {
 		t.Error("KYCScreener: no tasks run")
 	}
@@ -60,14 +63,15 @@ func TestKYCScreener(t *testing.T) {
 
 func TestGLReconciler(t *testing.T) {
 	tree := evolution.GLReconcilerTree()
-	mock := benchmark.DefaultMock()
+	model := benchmark.RealLLM(t)
 	suite := benchmark.Suite{
 		Name: "gl_recon",
 		Tasks: []benchmark.TaskCase{
 			{Task: "reconcile the general ledger", ExpectedPath: "ReconPath", ShouldSucceed: true, MinResultLen: 10},
 		},
 	}
-	metrics := benchmark.RunSuite(tree, suite, mock)
+	metrics := benchmark.RunSuite(tree, suite, model)
+	requireQualifiedBenchmark(t, metrics)
 	if metrics.TotalTasks == 0 {
 		t.Error("GLReconciler: no tasks run")
 	}
@@ -102,20 +106,17 @@ func assertFallbacksUseChainAction(t *testing.T, treeName string, node evolution
 }
 
 func TestAllFinanceTrees(t *testing.T) {
+	model := benchmark.RealLLM(t)
 	for name, tree := range evolution.AllFinanceTrees() {
-		mock := benchmark.DefaultMock()
-		suite := benchmark.Suite{
-			Name: "all_finance_" + name,
-			Tasks: []benchmark.TaskCase{
+		t.Run(name, func(t *testing.T) {
+			suite := benchmark.Suite{Name: "all_finance_" + name, Tasks: []benchmark.TaskCase{
 				{Task: "process financial task", ShouldSucceed: true, MinResultLen: 10},
-			},
-		}
-		metrics := benchmark.RunSuite(tree, suite, mock)
-		if metrics.TotalTasks == 0 {
-			t.Errorf("tree %s: no tasks run", name)
-		}
-		if metrics.SuccessRate < 0.5 {
-			t.Errorf("tree %s: success rate too low: %.2f", name, metrics.SuccessRate)
-		}
+			}}
+			metrics := benchmark.RunSuite(tree, suite, model)
+			requireQualifiedBenchmark(t, metrics)
+			if metrics.ContractPassRate != 1 {
+				t.Fatalf("task contract failed: %+v", metrics)
+			}
+		})
 	}
 }

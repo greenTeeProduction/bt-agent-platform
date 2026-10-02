@@ -1,0 +1,28 @@
+{
+  "status": "passed",
+  "scope": "host",
+  "observed_utc": "2026-10-01T23:56:32Z",
+  "binary_sha256": "eb6fc7f9a183f44e07d0ad07672a07681b5facc7fcfd4361d102557b7d003fa4",
+  "programs": 145,
+  "milestones": 473,
+  "before": {
+    "done": 429,
+    "blocked": 44
+  },
+  "after": {
+    "done": 369,
+    "blocked": 44,
+    "needs_review": 60
+  },
+  "corrected": 60,
+  "verified_code_deliveries": 0,
+  "legacy_unverified_done": 369,
+  "before_sha256": "f9a02909cf6f6f3af3073f5d3abb36726562d13aa424cc7b81df5983f978af2e",
+  "after_sha256": "a49b507de5da8fef3649d3211d8556dfc284f5708171a3efa884a774e4501305",
+  "backup": "/home/nico/.go-bt-evolve/research/programs.json.before-red-review-f9a02909cf6f6f3af3073f5d3abb36726562d13aa424cc7b81df5983f978af2e.json",
+  "backup_matches": true,
+  "repeat_byte_identical": true,
+  "unrelated_milestones_unchanged": true,
+  "models_called_for_this_repair": false,
+  "services_started": false
+}

@@ -373,12 +373,10 @@ func TestRecordImplementedGoals_ClearsGoalBudget(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	run := &SuperpowersRun{Tasks: []SuperpowersTask{{
-		Title:     "Task 1",
-		Objective: goal,
-		Status:    "done",
-	}}}
-	recordImplementedGoals(run)
+	run := researchDeliveryFixture(t, []SuperpowersTask{{Title: "Task 1", Objective: goal, Status: "done"}})
+	if err := recordImplementedGoals(run); err != nil {
+		t.Fatal(err)
+	}
 
 	if got := reloadGoalBudget(t).Count(key); got != 0 {
 		t.Fatalf("landing must clear the goal budget; attempts = %d, want 0", got)

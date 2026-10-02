@@ -1,0 +1,92 @@
+=== RUN   TestRunSuite_PathMatchRate_ReflectsExpectedPath
+--- PASS: TestRunSuite_PathMatchRate_ReflectsExpectedPath (10.43s)
+=== RUN   TestABTest_WrapRetry_DoesNotRegress
+--- PASS: TestABTest_WrapRetry_DoesNotRegress (9.32s)
+=== RUN   TestABTest_AddBefore_Validates
+--- PASS: TestABTest_AddBefore_Validates (9.33s)
+=== RUN   TestScoreMutation_PruneRoutingCondition_BreaksPathMatchWithoutSuccessRegression
+--- PASS: TestScoreMutation_PruneRoutingCondition_BreaksPathMatchWithoutSuccessRegression (18.51s)
+=== RUN   TestScoreMutation_RequiresQualifiedEvidence
+--- PASS: TestScoreMutation_RequiresQualifiedEvidence (0.00s)
+=== RUN   TestLiveLLM_GenerateCtx
+--- PASS: TestLiveLLM_GenerateCtx (0.92s)
+=== RUN   TestLiveLLM_GenerateWithTimeout
+--- PASS: TestLiveLLM_GenerateWithTimeout (2.49s)
+=== RUN   TestQuickValidate_SmallSuite
+--- PASS: TestQuickValidate_SmallSuite (6.13s)
+=== RUN   TestQuickValidate_LargeSuite
+--- PASS: TestQuickValidate_LargeSuite (6.09s)
+=== RUN   TestScoreMutation_NeutralIsZero
+--- PASS: TestScoreMutation_NeutralIsZero (9.25s)
+=== RUN   TestScoreMutation_RegressionIsNegative
+--- PASS: TestScoreMutation_RegressionIsNegative (4.65s)
+=== RUN   TestLoadBFCLSuiteAndEvaluate
+--- PASS: TestLoadBFCLSuiteAndEvaluate (2.48s)
+=== RUN   TestBFCLV3LoadFlattenAndEvaluate
+--- PASS: TestBFCLV3LoadFlattenAndEvaluate (3.57s)
+=== RUN   TestGAIABuiltinAndEvaluation
+--- PASS: TestGAIABuiltinAndEvaluation (1.92s)
+=== RUN   TestQuickValidateCandidateRejectsRegressedExecution
+--- PASS: TestQuickValidateCandidateRejectsRegressedExecution (9.29s)
+=== RUN   TestQuickValidateCandidateRejectsInvalidTreeAgainstFailingBaseline
+--- PASS: TestQuickValidateCandidateRejectsInvalidTreeAgainstFailingBaseline (0.00s)
+=== RUN   TestLiveRunEvidenceRecordsVerifiedModelResult
+    live_evidence_test.go:51: verified persisted result with ollama:qwen2.5:1.5b, calls=1, tree=factory:sum version=sha256:e6572c7a3c0dc74d4f42055f9935e4b639ec373ed7e8c5a9afccbe7801e4cc36
+--- PASS: TestLiveRunEvidenceRecordsVerifiedModelResult (1.65s)
+=== RUN   TestLiveGoapPlansObserveActualPersonalFileEffects
+=== RUN   TestLiveGoapPlansObserveActualPersonalFileEffects/compiled
+    live_goap_test.go:116: compiled: two observed file effects, total=25, double_total=50, real calls=3
+=== RUN   TestLiveGoapPlansObserveActualPersonalFileEffects/dynamic
+    live_goap_test.go:116: dynamic: two observed file effects, total=25, double_total=50, real calls=2
+--- PASS: TestLiveGoapPlansObserveActualPersonalFileEffects (45.29s)
+    --- PASS: TestLiveGoapPlansObserveActualPersonalFileEffects/compiled (33.34s)
+    --- PASS: TestLiveGoapPlansObserveActualPersonalFileEffects/dynamic (11.95s)
+=== RUN   TestLiveGoapModelResultRequiresExactValueOracle
+    live_goap_test.go:159: real model result total=42; external effect receipts=0; model={Backend:ollama Model:qwen2.5:1.5b Calls:1 Fallbacks:0 LastError: Errors:0}
+--- PASS: TestLiveGoapModelResultRequiresExactValueOracle (1.20s)
+=== RUN   TestLiveGovernanceGateRecoversVerifiedResult
+    live_governance_test.go:58: live ollama:qwen2.5:1.5b: contract pass rate 0.50 -> 1.00; calls 1 + 2; recovered total=42
+--- PASS: TestLiveGovernanceGateRecoversVerifiedResult (2.06s)
+=== RUN   TestLiveBenchmarkFallsBackToSol
+=== RUN   TestLiveBenchmarkFallsBackToSol/unavailable
+    live_governance_test.go:79: live unavailable fallback verified: {Backend:sol Model:gpt-6.1-sol Calls:1 Fallbacks:1 LastError: Errors:0}
+=== RUN   TestLiveBenchmarkFallsBackToSol/deadline
+    live_governance_test.go:79: live deadline fallback verified: {Backend:sol Model:gpt-6.1-sol Calls:1 Fallbacks:1 LastError: Errors:0}
+--- PASS: TestLiveBenchmarkFallsBackToSol (14.05s)
+    --- PASS: TestLiveBenchmarkFallsBackToSol/unavailable (9.03s)
+    --- PASS: TestLiveBenchmarkFallsBackToSol/deadline (5.02s)
+=== RUN   TestRunSuiteReportsUnsupportedCapabilityAfterLiveInference
+--- PASS: TestRunSuiteReportsUnsupportedCapabilityAfterLiveInference (2.04s)
+PASS
+ok  	github.com/nico/go-bt-evolve/internal/benchmark	160.748s
+=== RUN   TestGardenerRunCycleTool_RejectsUnqualifiedSelectorOrdering
+2026/10/02 01:56:51 WARN validation-gate: no usable file evidence agent=selector_tree tree=selector_tree error="read SLO evidence: open /tmp/slo-evidence.json: no such file or directory"
+2026/10/02 01:56:51 INFO validation-gate: no SLO evidence, passing unverified (AllowUnverified) agent=selector_tree tree=selector_tree
+2026/10/02 01:56:59 ERROR gardener/v2: saving evolved tree failed, evolution result is not durably persisted tree=selector_tree error="candidate has not demonstrated task improvement: task 1 needs an independent result-value contract and isolated task fixture"
+--- PASS: TestGardenerRunCycleTool_RejectsUnqualifiedSelectorOrdering (8.41s)
+=== RUN   TestGardenerRunCycleTool_RejectsUnqualifiedSelectorOrdering_PerTreeTelemetryFile
+2026/10/02 01:56:59 WARN validation-gate: no usable file evidence agent=selector_tree tree=selector_tree error="read SLO evidence: open /tmp/slo-evidence.json: no such file or directory"
+2026/10/02 01:56:59 INFO validation-gate: no SLO evidence, passing unverified (AllowUnverified) agent=selector_tree tree=selector_tree
+2026/10/02 01:57:08 ERROR gardener/v2: saving evolved tree failed, evolution result is not durably persisted tree=selector_tree error="candidate has not demonstrated task improvement: task 1 needs an independent result-value contract and isolated task fixture"
+--- PASS: TestGardenerRunCycleTool_RejectsUnqualifiedSelectorOrdering_PerTreeTelemetryFile (8.36s)
+PASS
+ok  	github.com/nico/go-bt-evolve/cmd/bt-gardener	16.788s
+=== RUN   TestLivePersonalFileAutomation
+2026/10/02 01:57:10 WARN scheduler: no persisted job state found — starting with fresh jobs path=/tmp/TestLivePersonalFileAutomation2971233297/001/jobs/scheduler-jobs.json
+    file_automation_test.go:159: real personal task: ollama/qwen2.5:1.5b, 3 calls; independent output={"count":3,"total":25}
+--- PASS: TestLivePersonalFileAutomation (5.23s)
+=== RUN   TestLiveFactoryEvolutionPromotesAndRollsBackMeasuredVersion
+    runtime_promotion_test.go:48: recovery governance before=95.00 after=100.00
+    runtime_promotion_test.go:184: measured task passes 0% -> 100%; runtime adopted sha256:f54581d367411382e7cc4c4b491560d593d2f14de114c77e8d7cb969a6b2d7cd, rollback restored sha256:56228be5968b823939886d1dc6aa4f31db4d8fb863eb337a0619f2544ff9a8c9
+--- PASS: TestLiveFactoryEvolutionPromotesAndRollsBackMeasuredVersion (26.23s)
+=== RUN   TestLiveManualAndGeneticPublication
+=== RUN   TestLiveManualAndGeneticPublication/bt_evolve
+=== RUN   TestLiveManualAndGeneticPublication/bt_evolve_genetic
+--- PASS: TestLiveManualAndGeneticPublication (32.98s)
+    --- PASS: TestLiveManualAndGeneticPublication/bt_evolve (16.49s)
+    --- PASS: TestLiveManualAndGeneticPublication/bt_evolve_genetic (16.49s)
+=== RUN   TestLiveFactoryCreatesResolvesAndExecutesTask
+    task_factory_test.go:158: factory task executed with ollama:qwen2.5:1.5b, calls=1, version=sha256:7ef8edd68796c6343218249d13b297d0cd723febecee64c16b2cd310fafe9259
+--- PASS: TestLiveFactoryCreatesResolvesAndExecutesTask (1.26s)
+PASS
+ok  	github.com/nico/go-bt-evolve/cmd/bt-agent	65.723s

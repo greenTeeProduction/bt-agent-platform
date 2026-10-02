@@ -1,5 +1,7 @@
 # 11. Risks and Technical Debt
 
+Ordinary BT inference shares the Sol account/model dependency with no alternate fallback. NotebookLM generation/research, embeddings/indexing and legacy memory extraction retain their provider dependencies. Consumer Google sessions can still expire or be revoked despite keepalive; a saved browser profile can recover headlessly, while a fully revoked login still needs interactive sign-in. CLI output-token hints are not hard caps. See [model policy](../sol-model-policy.md).
+
 Reviewed against source baseline `012612e1` and selected deployed settings
 on 2026-09-16. Risks below describe remaining uncertainty, not a promise
 that a documented mitigation has been implemented. “Mitigated” means the
@@ -39,7 +41,7 @@ personalization renumbering. Every open risk has a closure criterion.
 | R11 | Low / open | **Dormant scaffolding may fail when first wired.** Unit-tested components are not proof of production reachability or integration. | Maintainer: add a representative runtime scenario and evidence at the entrypoint before marking a feature implemented. |
 | R12 | Low / open | **Worktree, artifact and DLQ growth.** Durable DLQ recovery claims cannot be expired, purged or evicted without an explicit outcome decision (ADR-280). Retained failure evidence competes with finite disk capacity; premature cleanup can destroy diagnosis data. | Operator: measure usage, set retention per artifact type and test recovery before pruning; preserve referenced run evidence. |
 | R5 | Low / partial | **HTTP/browser coverage remains selective.** Login/session/logout and browser expiry now have behavioral tests; pipeline rooted selection/inventory and enforced authentication now have real handler coverage (ADR-272); other management routes and real network deployment still need risk-based coverage. | Dashboard maintainer: map remaining state-changing routes to behavior tests and negative authorization cases ([current tests](../../cmd/bt-dashboard/security_test.go), QS27/QS34). |
-| R1 | Resolved historically | **Mutation death spiral.** Sandbox, gate and score changes corrected the recorded failure. This does not close newer adoption-path risks. | Evolution maintainer: preserve regressions; see R23 for the current separate gap. |
+| R1 | High / reopened (2026-10-01) | **Persisted tree collapse and proxy fitness.** The host audit found 52 of 53 saved trees reduced to recovery-only skeletons. Offline repair now restored 51 authored definitions and quarantined one retired tree, with exact backups and fresh registry hash verification (ADR-283). Governance scoring and qualified publication address incentives; representative task coverage, historical learning cleanup and deployed impact remain open. | Evolution maintainer: preserve backups, recover executable task trees, qualify versioned adoption/rollback and retain task outcomes; see [§8.5](08-crosscutting-concepts.md#85-evolution-pipeline), R20/R23. |
 | R14 | Mitigated | **Generated trees were not executable.** Scoped persisted-tree resolution now connects creation to execution. | [Resolver tests](../../internal/agentexec/wiring_test.go); identity residual is R29, not missing resolution. |
 | R15 | Mitigated | **Breeding ignored parent structure.** Structural crossover now consumes parent trees. | [Structural factory tests](../../internal/knowledge/factory_structural_test.go); end-to-end quality remains workload-dependent. |
 | R16 | Mitigated | **Duplicate GOAP planning/transient plans.** Canonical planner, durable goal queue and plan compiler are integrated. | [GOAP](../../internal/goap), ADR-133; keep engine adapters thin. |
@@ -67,12 +69,84 @@ and individual bug-fix narratives remain in [the ADR log](09-decisions.md).
 Their old test counts, line counts and coverage numbers are not current
 architectural constraints.
 
+
+The on-demand response factory now preserves tasks, requires declared output
+contracts, validates before publication, and prevents unresolved factory IDs
+from running a default tree. This closes the generic-prompt/tiny-budget and
+register-before-save paths for the MCP factory. It does not repair the personal
+GOAP compiler's assumed external effects, qualify legacy structural breeding,
+or demonstrate deployed versioned evolution. Shared discovery is in-process;
+personal task text is intentionally not indexed in the shared graph.
 DLQ recovery advances C09 without closing R30: independent-process and sibling
 fixtures prove conservative replay fencing while state is present. Mixed old
 writers can erase claims, and the trusted Go resolution API does not establish
 remote owner quiescence or provide an authenticated recovery transport. Stop/
 drain rollout, operator evidence handling, full transport journals and
 power/volume-loss qualification remain prioritized acceptance.
+
+
+Versioned gardener promotion and rollback now have a real-model controlled
+response-task cycle (ADR-281). MCP manual/genetic-family and selector publication
+now share that qualification boundary (ADR-282). This narrows R23 but does not
+close it: first-adoption races with legacy file writers, unmanaged resolve-time
+ordering, stale lineage-skip/archive estimates, domain capability fixtures and
+deployed adoption remain unqualified. The initial tiny benchmark model failed
+later trials; the stronger default passed a bounded probe, not a broad assistant
+evaluation. Managed `bt_reset` semantics and personal genetic evolution still
+need explicit workflows. Search ranking
+still uses historical/proxy estimates before the final measured publication
+gate. The persisted-tree repair is complete for the observed 52 collapsed files
+(51 restored, one retired). Representative task validation, historical learning
+cleanup and personal GOAP effect compilation still require work.
+
+Automation approval now reserves before publication, verifies the task/schedule
+and existing definition, surfaces commit errors, denies unreadable/contradictory
+ledgers and keeps personal descriptions out of shared discovery (ADR-284).
+ADR-285 replaces autopilot administrative plans with exact governed task reuse,
+adds immutable version consent and missing-ledger holds for marked definitions,
+and verifies one real file-task fixture including rejection without overwrite.
+Additional external capabilities, dynamic semantic
+oracles, file-task evolution corpora, incomplete-reservation recovery and stale
+feedback-review IDs remain open. Clean native b615 deployment and one real
+wall-clock Sol file task are now verified; that bounded task does not qualify
+broad personal assistant behavior.
+
+Typed checkpoint/source mismatches, retry state loss across ticks and standalone
+GOAP agent prediction-to-observation conflation are repaired by ADR-286. The
+compiled/dynamic paths now require observed effects (ADR-289); matching public
+GOAP state alone cannot qualify an executed step. Built-in research/DevOps action
+lists still need actual capability adapters and declared effect bindings. Persisted
+legacy effect writers and checkpoint wrappers require reviewed regeneration/version
+adoption. Compiled replanning retains only the original plan's capabilities.
+Generic unreceipted external effects, broad semantic planning, complete GOAP
+configuration preservation under mutation and cross-process retry recovery remain
+unqualified. The real dependent-file fixture is local proof, not service rollout.
+
+Research attribution is partial after ADR-287: current research goals can retain
+source-to-delivery receipts, false legacy/RED-pass delivery credit is removed, and
+pending receipt repair precedes new planning. ADR-288 links clean native builds,
+exact executed trees and recomputable result contracts where evidence exists.
+This observes code presence and checked output, not execution of changed functions
+or a causal research benefit. Dirty/unknown builds and changed delivered files
+cannot earn adoption credit; stored metadata assumes trusted local build/storage.
+ADR-290 removes legacy milestone RED-precheck completion and journals exact
+pre-run milestone references with verified Git delivery. The host repair moved
+60 unsupported completion labels to review; it did not implement their goals.
+Paired code-change experiments, semantic goal fulfillment, immutable research
+source identity through program rewrites and historical backfill remain open.
+Exact matching intentionally leaves rewritten/automatically scoped goals unlinked.
+Local protocol/live-model tests alone do not establish deployment. Separate
+2026-10-02 native PID/hash and actual cron evidence establishes b615 deployment
+for the three canonical services; causal research impact remains open.
+
+Native rebuild attribution is repaired in source (ADR-291): private ordinary
+checkouts and executable metadata checks replace unverifiable linked-worktree
+builds. All three canonical services already run the preceding clean b615 release.
+The new guard still needs release adoption. R13 remains open because bt-agent
+self restart samples scheduler state without sealing all process admission;
+automatic flags remain disabled. [Release evidence and remaining acceptance](../verification/2026-10-02-runtime-release/README.md)
+separate successful manual deployment/one cron file task from autonomous fleet
+handoff and causal research qualification.
 
 ---
 

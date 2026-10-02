@@ -40,6 +40,7 @@ type policy struct {
 	cdpURL   string
 	run      runner
 	restore  func(context.Context, string) Result
+	renew    func(context.Context) Result
 }
 
 // Ensure validates saved auth first. All callers use the same persistent state
@@ -57,7 +58,7 @@ func Ensure(ctx context.Context) Result {
 	if cdpURL == "" {
 		cdpURL = "http://localhost:9222"
 	}
-	p := policy{stateDir: dir, cdpURL: cdpURL, run: runCLI, restore: existingBrowserRestore}
+	p := policy{stateDir: dir, cdpURL: cdpURL, run: runCLI, restore: existingBrowserRestore, renew: renewSession}
 	return p.ensure(ctx)
 }
 
@@ -130,6 +131,7 @@ func (p policy) ensure(ctx context.Context) Result {
 	}
 	statePath := filepath.Join(p.stateDir, "cooldown.json")
 	var previous Result
+	var renewalWindow *Result
 	root, err := os.OpenRoot(p.stateDir)
 	if err != nil {
 		return stateError()
@@ -141,7 +143,13 @@ func (p policy) ensure(ctx context.Context) Result {
 			return stateError()
 		}
 		if time.Now().Before(previous.RetryAfter) {
-			return Result{Status: "cooldown", Detail: "previous " + previous.Status + "; automated auth retry suppressed", RetryAfter: previous.RetryAfter}
+			if previous.Status == "renewed" || previous.Status == "renewal_deferred" {
+				// A recent or rate-limited keepalive does not invalidate saved
+				// authentication. Check auth, but do not rotate cookies again.
+				renewalWindow = &previous
+			} else {
+				return Result{Status: "cooldown", Detail: "previous " + previous.Status + "; automated auth retry suppressed", RetryAfter: previous.RetryAfter}
+			}
 		}
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return stateError()
@@ -153,6 +161,22 @@ func (p policy) ensure(ctx context.Context) Result {
 		return stateError()
 	}
 	r := p.check(ctx)
+	if p.renew != nil && ((r.OK() && renewalWindow == nil) || r.Status == "auth_required") {
+		wasValid := r.OK()
+		renewal := p.renew(ctx)
+		if renewal.OK() {
+			r = p.check(ctx)
+			if r.OK() {
+				renewalWindow = &Result{Status: "renewed", Detail: "session renewed and saved auth rechecked", RetryAfter: time.Now().Add(cooldown)}
+			}
+		} else if wasValid && renewal.Status == "network_error" {
+			// Rotation can be rate-limited while notebook RPCs still work.
+			// The failed network path preserves the saved credentials.
+			renewalWindow = &Result{Status: "renewal_deferred", Detail: renewal.Detail, RetryAfter: time.Now().Add(cooldown)}
+		} else {
+			r = renewal
+		}
+	}
 	if r.Status == "auth_required" {
 		r = p.restore(ctx, p.cdpURL)
 		// A restore's own success text is insufficient. Recheck real saved auth.
@@ -161,6 +185,16 @@ func (p policy) ensure(ctx context.Context) Result {
 		}
 	}
 	if r.OK() {
+		if renewalWindow != nil {
+			if err := saveState(statePath, *renewalWindow); err != nil {
+				return stateError()
+			}
+			if renewalWindow.Status == "renewal_deferred" {
+				r.Detail += "; renewal deferred: " + renewalWindow.Detail
+				r.RetryAfter = renewalWindow.RetryAfter
+			}
+			return r
+		}
 		if err := os.Remove(statePath); err != nil {
 			return stateError()
 		}
@@ -171,6 +205,23 @@ func (p policy) ensure(ctx context.Context) Result {
 		return stateError()
 	}
 	return r
+}
+
+func renewSession(ctx context.Context) Result {
+	ctx, cancel := context.WithTimeout(ctx, 45*time.Second)
+	defer cancel()
+	out, err := helperCommand(ctx, "renew").Output()
+	if ctx.Err() != nil {
+		return Result{Status: "network_error", Detail: "session renewal deadline exceeded; credentials not confirmed"}
+	}
+	var result Result
+	if json.Unmarshal(out, &result) != nil || (result.Status != "valid" && result.Status != "auth_required" && result.Status != "network_error" && result.Status != "auth_error") {
+		return Result{Status: "auth_error", Detail: "session renewal did not return a valid verdict"}
+	}
+	if err != nil && result.OK() {
+		return Result{Status: "auth_error", Detail: "session renewal process failed"}
+	}
+	return result
 }
 
 func stateError() Result {

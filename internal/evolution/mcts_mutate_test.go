@@ -398,16 +398,20 @@ func TestMCTSMutator_Metrics(t *testing.T) {
 
 func TestAllMutationOps_Completeness(t *testing.T) {
 	expected := map[string]bool{
-		"add_before":          true,
-		"add_after":           true,
-		"add_fallback":        true,
-		"replace_node":        true,
-		"replace_children":    true,
-		"reorder_children":    true,
-		"increase_retries":    true,
-		"prune_node":          true,
-		"increase_iterations": true,
-		"add_tool":            true,
+		"add_before":            true,
+		"add_after":             true,
+		"add_fallback":          true,
+		"replace_node":          true,
+		"replace_children":      true,
+		"reorder_children":      true,
+		"increase_retries":      true,
+		"prune_node":            true,
+		"increase_iterations":   true,
+		"add_tool":              true,
+		"wrap_quality_gate":     true,
+		"guard_task":            true,
+		"add_contract_recovery": true,
+		"improve_prompt":        true,
 	}
 
 	for _, op := range AllMutationOps {

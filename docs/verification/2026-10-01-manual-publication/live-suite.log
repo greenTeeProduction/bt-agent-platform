@@ -1,0 +1,77 @@
+=== RUN   TestRunSuite_PathMatchRate_ReflectsExpectedPath
+--- PASS: TestRunSuite_PathMatchRate_ReflectsExpectedPath (4.70s)
+=== RUN   TestABTest_WrapRetry_DoesNotRegress
+--- PASS: TestABTest_WrapRetry_DoesNotRegress (9.21s)
+=== RUN   TestABTest_AddBefore_Validates
+--- PASS: TestABTest_AddBefore_Validates (9.14s)
+=== RUN   TestScoreMutation_PruneRoutingCondition_BreaksPathMatchWithoutSuccessRegression
+--- PASS: TestScoreMutation_PruneRoutingCondition_BreaksPathMatchWithoutSuccessRegression (18.28s)
+=== RUN   TestScoreMutation_RequiresQualifiedEvidence
+--- PASS: TestScoreMutation_RequiresQualifiedEvidence (0.00s)
+=== RUN   TestLiveLLM_GenerateCtx
+--- PASS: TestLiveLLM_GenerateCtx (0.89s)
+=== RUN   TestLiveLLM_GenerateWithTimeout
+--- PASS: TestLiveLLM_GenerateWithTimeout (2.47s)
+=== RUN   TestQuickValidate_SmallSuite
+--- PASS: TestQuickValidate_SmallSuite (6.08s)
+=== RUN   TestQuickValidate_LargeSuite
+--- PASS: TestQuickValidate_LargeSuite (6.05s)
+=== RUN   TestScoreMutation_NeutralIsZero
+--- PASS: TestScoreMutation_NeutralIsZero (9.17s)
+=== RUN   TestScoreMutation_RegressionIsNegative
+--- PASS: TestScoreMutation_RegressionIsNegative (4.58s)
+=== RUN   TestLoadBFCLSuiteAndEvaluate
+--- PASS: TestLoadBFCLSuiteAndEvaluate (2.43s)
+=== RUN   TestBFCLV3LoadFlattenAndEvaluate
+--- PASS: TestBFCLV3LoadFlattenAndEvaluate (3.49s)
+=== RUN   TestGAIABuiltinAndEvaluation
+--- PASS: TestGAIABuiltinAndEvaluation (1.86s)
+=== RUN   TestQuickValidateCandidateRejectsRegressedExecution
+--- PASS: TestQuickValidateCandidateRejectsRegressedExecution (9.18s)
+=== RUN   TestQuickValidateCandidateRejectsInvalidTreeAgainstFailingBaseline
+--- PASS: TestQuickValidateCandidateRejectsInvalidTreeAgainstFailingBaseline (0.00s)
+=== RUN   TestLiveRunEvidenceRecordsVerifiedModelResult
+    live_evidence_test.go:51: verified persisted result with ollama:qwen2.5:1.5b, calls=1, tree=factory:sum version=sha256:e6572c7a3c0dc74d4f42055f9935e4b639ec373ed7e8c5a9afccbe7801e4cc36
+--- PASS: TestLiveRunEvidenceRecordsVerifiedModelResult (1.63s)
+=== RUN   TestLiveGovernanceGateRecoversVerifiedResult
+    live_governance_test.go:58: live ollama:qwen2.5:1.5b: contract pass rate 0.50 -> 1.00; calls 1 + 2; recovered total=42
+--- PASS: TestLiveGovernanceGateRecoversVerifiedResult (1.99s)
+=== RUN   TestLiveBenchmarkFallsBackToSol
+=== RUN   TestLiveBenchmarkFallsBackToSol/unavailable
+    live_governance_test.go:79: live unavailable fallback verified: {Backend:sol Model:gpt-6.1-sol Calls:1 Fallbacks:1 LastError: Errors:0}
+=== RUN   TestLiveBenchmarkFallsBackToSol/deadline
+    live_governance_test.go:79: live deadline fallback verified: {Backend:sol Model:gpt-6.1-sol Calls:1 Fallbacks:1 LastError: Errors:0}
+--- PASS: TestLiveBenchmarkFallsBackToSol (15.97s)
+    --- PASS: TestLiveBenchmarkFallsBackToSol/unavailable (8.65s)
+    --- PASS: TestLiveBenchmarkFallsBackToSol/deadline (7.32s)
+=== RUN   TestRunSuiteReportsUnsupportedCapabilityAfterLiveInference
+--- PASS: TestRunSuiteReportsUnsupportedCapabilityAfterLiveInference (2.03s)
+PASS
+ok  	github.com/nico/go-bt-evolve/internal/benchmark	109.161s
+=== RUN   TestGardenerRunCycleTool_RejectsUnqualifiedSelectorOrdering
+2026/10/01 16:26:34 WARN validation-gate: no usable file evidence agent=selector_tree tree=selector_tree error="read SLO evidence: open /tmp/slo-evidence.json: no such file or directory"
+2026/10/01 16:26:34 INFO validation-gate: no SLO evidence, passing unverified (AllowUnverified) agent=selector_tree tree=selector_tree
+2026/10/01 16:26:42 ERROR gardener/v2: saving evolved tree failed, evolution result is not durably persisted tree=selector_tree error="candidate has not demonstrated task improvement: task 1 needs an independent result-value contract and isolated task fixture"
+--- PASS: TestGardenerRunCycleTool_RejectsUnqualifiedSelectorOrdering (8.38s)
+=== RUN   TestGardenerRunCycleTool_RejectsUnqualifiedSelectorOrdering_PerTreeTelemetryFile
+2026/10/01 16:26:42 WARN validation-gate: no usable file evidence agent=selector_tree tree=selector_tree error="read SLO evidence: open /tmp/slo-evidence.json: no such file or directory"
+2026/10/01 16:26:42 INFO validation-gate: no SLO evidence, passing unverified (AllowUnverified) agent=selector_tree tree=selector_tree
+2026/10/01 16:26:51 ERROR gardener/v2: saving evolved tree failed, evolution result is not durably persisted tree=selector_tree error="candidate has not demonstrated task improvement: task 1 needs an independent result-value contract and isolated task fixture"
+--- PASS: TestGardenerRunCycleTool_RejectsUnqualifiedSelectorOrdering_PerTreeTelemetryFile (8.33s)
+PASS
+ok  	github.com/nico/go-bt-evolve/cmd/bt-gardener	16.727s
+=== RUN   TestLiveFactoryEvolutionPromotesAndRollsBackMeasuredVersion
+    runtime_promotion_test.go:47: recovery governance before=95.00 after=100.00
+    runtime_promotion_test.go:173: measured task passes 0% -> 100%; runtime adopted sha256:1aff45cbfda9e9e1c6bf2446d69ca01ac0daf9b949458b772cb78b70a7bc13ae, rollback restored sha256:3d8c99d24da6d1736f0faa66ac5f8b2a1c5b672964c31daac17d78a340dffadc
+--- PASS: TestLiveFactoryEvolutionPromotesAndRollsBackMeasuredVersion (26.09s)
+=== RUN   TestLiveManualAndGeneticPublication
+=== RUN   TestLiveManualAndGeneticPublication/bt_evolve
+=== RUN   TestLiveManualAndGeneticPublication/bt_evolve_genetic
+--- PASS: TestLiveManualAndGeneticPublication (32.86s)
+    --- PASS: TestLiveManualAndGeneticPublication/bt_evolve (16.44s)
+    --- PASS: TestLiveManualAndGeneticPublication/bt_evolve_genetic (16.42s)
+=== RUN   TestLiveFactoryCreatesResolvesAndExecutesTask
+    task_factory_test.go:158: factory task executed with ollama:qwen2.5:1.5b, calls=1, version=sha256:e49aa87b6c7f47c4d536cdd3548bd56115eec0df72e3ff5002718313ff7c678b
+--- PASS: TestLiveFactoryCreatesResolvesAndExecutesTask (1.25s)
+PASS
+ok  	github.com/nico/go-bt-evolve/cmd/bt-agent	60.222s

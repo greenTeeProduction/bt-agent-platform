@@ -56,6 +56,8 @@ type TauBenchParam struct {
 
 // TauBenchMetrics holds aggregate evaluation results for τ-bench scenarios.
 type TauBenchMetrics struct {
+	ModelEvidence  ModelEvidence    `json:"model_evidence"`
+	Warning        string           `json:"warning,omitempty"`
 	TotalScenarios int              `json:"total_scenarios"`
 	GoalAchieved   int              `json:"goal_achieved"`
 	ActionAccuracy float64          `json:"action_accuracy"`
@@ -408,6 +410,8 @@ func retailTools() []TauBenchTool {
 // The evaluation tracks: goal achievement (success outcome), action accuracy
 // (how many expected tool names appear in the result), and average turns.
 func EvaluateTauBench(tree *evolution.SerializableNode, entries []TauBenchEntry, llmClient llm.LLM) *TauBenchMetrics {
+	var modelEvidence ModelEvidence
+	var warning string
 	results := make([]TauBenchResult, 0, 32)
 	goalAchieved := 0
 	totalActionsMatched := 0
@@ -418,24 +422,31 @@ func EvaluateTauBench(tree *evolution.SerializableNode, entries []TauBenchEntry,
 		// Build the full task description from scenario and known info
 		task := buildTauBenchTask(entry)
 
-		bb := &engine.Blackboard{
+		bb := &engine.Blackboard{NodeAdmission: benchmarkAdmission,
 			Task: task,
 			LLM:  llmClient,
 		}
 
 		start := time.Now()
-		bt := engine.BuildTree(tree, bb)
-		output := engine.RunTask(bb, bt)
+		output, taskEvidence, taskWarning := executeLiveTask(tree, bb)
+		mergeModelEvidence(&modelEvidence, taskEvidence)
+		if taskWarning != "" {
+			warning = taskWarning
+		}
 		duration := time.Since(start).Milliseconds()
 		totalDuration += duration
 
-		goalOK := bb.Outcome == "success"
+		goalOK := taskWarning == "" && bb.Outcome == "success"
 		if goalOK {
 			goalAchieved++
 		}
 
 		// Check which expected actions are referenced in the output
-		matched, missed := matchActions(output, entry.ExpectedActions)
+		matchOutput := output
+		if taskWarning != "" {
+			matchOutput = ""
+		}
+		matched, missed := matchActions(matchOutput, entry.ExpectedActions)
 		totalActionsMatched += len(matched)
 		totalActionsExpected += len(entry.ExpectedActions)
 
@@ -460,7 +471,7 @@ func EvaluateTauBench(tree *evolution.SerializableNode, entries []TauBenchEntry,
 
 	n := len(results)
 	if n == 0 {
-		return &TauBenchMetrics{Results: results}
+		return &TauBenchMetrics{ModelEvidence: modelEvidence, Warning: warning, Results: results}
 	}
 
 	actionAccuracy := 0.0
@@ -473,7 +484,7 @@ func EvaluateTauBench(tree *evolution.SerializableNode, entries []TauBenchEntry,
 		avgTurns = float64(totalDuration) / float64(n) / 1000.0 // seconds
 	}
 
-	return &TauBenchMetrics{
+	return &TauBenchMetrics{ModelEvidence: modelEvidence, Warning: warning,
 		TotalScenarios: n,
 		GoalAchieved:   goalAchieved,
 		ActionAccuracy: actionAccuracy,

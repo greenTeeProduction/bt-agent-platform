@@ -1,0 +1,5 @@
+ok  	github.com/nico/go-bt-evolve/internal/persona	5.164s
+ok  	github.com/nico/go-bt-evolve/internal/agent	6.077s
+ok  	github.com/nico/go-bt-evolve/internal/agentexec	0.105s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-agent	3.032s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-dashboard	2.005s

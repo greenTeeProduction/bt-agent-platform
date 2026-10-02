@@ -72,7 +72,7 @@ func TestCompilePlanToTree_Scaffold(t *testing.T) {
 	}
 
 	// PreGate seeds the initial world state.
-	seed := findChild(&tree.Children[0], "ApplyGoapEffects:has_result=false,task_type=general")
+	seed := findChild(&tree.Children[0], "SeedGoapState")
 	if seed == nil {
 		t.Fatalf("PreGate missing initial-state seed; children: %+v", tree.Children[0].Children)
 	}
@@ -87,25 +87,19 @@ func TestCompilePlanToTree_StepGuardsAndEffects(t *testing.T) {
 	if step1 == nil {
 		t.Fatal("missing step 1 sequence")
 	}
-	if len(step1.Children) != 3 {
-		t.Fatalf("step 1 children = %d, want guard + exec + effects", len(step1.Children))
+	if step1.Type != "GoapStep" || len(step1.Children) != 1 {
+		t.Fatalf("step must be an observed effect gate: %+v", step1)
 	}
-	if step1.Children[0].Type != "Condition" || step1.Children[0].Name != "GoapStateMatches:has_result=false" {
-		t.Fatalf("step 1 guard = %s %q", step1.Children[0].Type, step1.Children[0].Name)
+	if initial := step1.Metadata["preconditions"].(WorldState); initial["has_result"] != false {
+		t.Fatal("precondition lost")
 	}
-	if step1.Children[2].Type != "Action" || step1.Children[2].Name != "ApplyGoapEffects:has_analysis=true" {
-		t.Fatalf("step 1 effects = %s %q", step1.Children[2].Type, step1.Children[2].Name)
+	if effects := step1.Metadata["effects"].(WorldState); effects["has_analysis"] != true {
+		t.Fatal("effect oracle lost")
+	}
+	if findChild(tree, "ApplyGoapEffects:has_analysis=true") != nil {
+		t.Fatal("predicted effect writer remained")
 	}
 
-	// Multi-effect step encodes sorted pairs.
-	step2 := findChild(tree, "Step_2_execute_general")
-	if step2 == nil {
-		t.Fatal("missing step 2 sequence")
-	}
-	last := step2.Children[len(step2.Children)-1]
-	if last.Name != "ApplyGoapEffects:has_result=true,task_status=completed" {
-		t.Fatalf("step 2 effects = %q", last.Name)
-	}
 }
 
 func TestCompilePlanToTree_ExecutableNodeSelection(t *testing.T) {
@@ -114,7 +108,7 @@ func TestCompilePlanToTree_ExecutableNodeSelection(t *testing.T) {
 	// Default: LLM ChainAction with a derived prompt.
 	tree, _ := CompilePlanToTree(plan, CompileOptions{StyleHints: "Answer in German."})
 	step := findChild(tree, "Step_1_analyze_requirements")
-	exec := step.Children[1]
+	exec := step.Children[0]
 	if exec.Type != "ChainAction" || !strings.HasPrefix(exec.Name, "llm_call:") {
 		t.Fatalf("exec node = %s %q", exec.Type, exec.Name)
 	}
@@ -126,7 +120,7 @@ func TestCompilePlanToTree_ExecutableNodeSelection(t *testing.T) {
 	tree, _ = CompilePlanToTree(plan, CompileOptions{
 		LLMPrompts: map[string]string{"analyze_requirements": "Custom prompt for {{.Task}}"},
 	})
-	exec = findChild(tree, "Step_1_analyze_requirements").Children[1]
+	exec = findChild(tree, "Step_1_analyze_requirements").Children[0]
 	if exec.Name != "llm_call:Custom prompt for {{.Task}}" {
 		t.Fatalf("explicit prompt not used: %q", exec.Name)
 	}
@@ -135,12 +129,12 @@ func TestCompilePlanToTree_ExecutableNodeSelection(t *testing.T) {
 	tree, _ = CompilePlanToTree(plan, CompileOptions{
 		KnownAction: func(name string) bool { return name == "analyze_requirements" },
 	})
-	exec = findChild(tree, "Step_1_analyze_requirements").Children[1]
+	exec = findChild(tree, "Step_1_analyze_requirements").Children[0]
 	if exec.Type != "Action" || exec.Name != "analyze_requirements" {
 		t.Fatalf("registered action not used: %s %q", exec.Type, exec.Name)
 	}
 	// The other step still compiles to a ChainAction.
-	exec2 := findChild(tree, "Step_2_execute_general").Children[1]
+	exec2 := findChild(tree, "Step_2_execute_general").Children[0]
 	if exec2.Type != "ChainAction" {
 		t.Fatalf("unregistered step should stay ChainAction, got %s", exec2.Type)
 	}

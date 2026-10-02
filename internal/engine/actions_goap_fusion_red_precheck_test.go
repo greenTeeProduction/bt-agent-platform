@@ -2,7 +2,6 @@ package engine
 
 import (
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -11,14 +10,8 @@ import (
 	btcore "github.com/rvitorper/go-bt/core"
 )
 
-// Gap 5 of the 2026-07-23 fleet review: 14/20 cycles (70%) were the stale-
-// plan treadmill — a milestone whose work already landed burned a full
-// Claude plan phase per cycle just to discover "RED unexpectedly passed",
-// twice, before the RedPassStreak self-completed it. The red PRE-CHECK
-// re-runs the recorded RED command at charge time (seconds, no Claude): a
-// second pass completes the milestone before any plan is written, and a
-// failing RED kills the already-landed hypothesis so the cycle plans real
-// work.
+// A recorded preimplementation pass can justify review, never delivery credit.
+// Rechecking it avoids another unsuitable planning cycle.
 
 // seedPrecheckProgram seeds an isolated program store whose head milestone
 // carries prior red-pass evidence (streak 1 + the recorded RED command).
@@ -62,10 +55,8 @@ func reloadPrecheckMilestone(t *testing.T, idx int) research.Milestone {
 	return ps.Programs[0].Milestones[idx]
 }
 
-// A stale head milestone (streak 1 + recorded RED) whose RED passes again at
-// charge time is completed on the spot — no Claude plan phase — and the
-// cycle charges the NEXT pending milestone instead.
-func TestPrioritizeGoapGoals_RedPrecheckCompletesStaleMilestone(t *testing.T) {
+// Repeated RED passes hold the milestone and its dependent work for review.
+func TestPrioritizeGoapGoals_RedPrecheckHoldsDependentMilestonesForReview(t *testing.T) {
 	id := seedPrecheckProgram(t)
 	calls := stubRedPrecheck(t, "ok: TestBar passed", nil)
 
@@ -79,18 +70,18 @@ func TestPrioritizeGoapGoals_RedPrecheckCompletesStaleMilestone(t *testing.T) {
 		t.Fatalf("pre-check invocations = %v, want exactly the recorded RED command once", *calls)
 	}
 	head := reloadPrecheckMilestone(t, 0)
-	if head.Status != "done" {
-		t.Fatalf("stale milestone status = %q, want done (completed on pre-check evidence)", head.Status)
+	if head.Status != "needs_review" {
+		t.Fatalf("stale milestone status = %q, want needs_review", head.Status)
 	}
-	if !strings.HasPrefix(head.CompletedRun, "red-evidence-precheck:") {
-		t.Fatalf("CompletedRun = %q, want the red-evidence-precheck: evidence tag", head.CompletedRun)
+	if head.CompletedRun != "" || !head.CompletedAt.IsZero() || head.Review == nil {
+		t.Fatalf("CompletedRun = %q, want review without completion credit", head.CompletedRun)
 	}
 	charged, _ := bb.ChainState["goap_fusion_program_milestone_charged"].(string)
-	if charged != id+":1" {
-		t.Fatalf("charged stamp = %q, want %q (the fresh milestone, not the completed one)", charged, id+":1")
+	if charged != "" {
+		t.Fatalf("charged stamp = %q, want no dependent milestone charged for program %s", charged, id)
 	}
-	if tail := reloadPrecheckMilestone(t, 1); tail.Attempts != 1 {
-		t.Fatalf("fresh milestone attempts = %d, want 1 (charged for this cycle)", tail.Attempts)
+	if tail := reloadPrecheckMilestone(t, 1); tail.Attempts != 0 {
+		t.Fatalf("fresh milestone attempts = %d, want 0 (held behind reviewed dependency)", tail.Attempts)
 	}
 }
 
@@ -172,8 +163,8 @@ func TestPrecheckGoapStaleMilestones_ReleasesClaimHeldByPriorCycle(t *testing.T)
 	precheckGoapStaleMilestones(&Blackboard{RunID: "current-cycle-run-id", ChainState: map[string]any{}})
 
 	head := reloadPrecheckMilestone(t, 0)
-	if head.Status != "done" {
-		t.Fatalf("stale milestone status = %q, want done", head.Status)
+	if head.Status != "needs_review" {
+		t.Fatalf("stale milestone status = %q, want needs_review", head.Status)
 	}
 	ps, err := research.OpenPrograms(goapProgramsPath)
 	if err != nil {

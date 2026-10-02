@@ -20,11 +20,13 @@
 package gardener
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -41,11 +43,13 @@ import (
 
 // TreeEntry is a named tree in the registry with its evolution state.
 type TreeEntry struct {
-	Name        string                      `json:"name"`
-	Description string                      `json:"description"`
-	Tree        *evolution.SerializableNode `json:"-"`
-	FilePath    string                      `json:"file_path"`
-	Active      bool                        `json:"active"`
+	TreeID           string                      `json:"tree_id,omitempty"`
+	Name             string                      `json:"name"`
+	Description      string                      `json:"description"`
+	Tree             *evolution.SerializableNode `json:"-"`
+	FilePath         string                      `json:"file_path"`
+	Active           bool                        `json:"active"`
+	RecoveryRequired bool                        `json:"recovery_required,omitempty"`
 	// User marks a personal tree loaded from a user workspace (ADR-133
 	// Phase 5). It is the workspace directory name (already sanitized by
 	// persona.SanitizeUserID); empty for shared/builtin trees. Personal
@@ -56,10 +60,12 @@ type TreeEntry struct {
 
 // Registry manages all known behavior trees.
 type Registry struct {
-	mu        sync.RWMutex
-	entries   []TreeEntry
-	dir       string
-	usersRoot string
+	mu             sync.RWMutex
+	entries        []TreeEntry
+	dir            string
+	usersRoot      string
+	promote        func(TreeEntry) error
+	qualifications map[string]*evolution.RuntimeQualification
 }
 
 // NewRegistry creates a registry and loads all known trees.
@@ -87,28 +93,7 @@ func (r *Registry) loadAll() {
 
 	r.entries = nil
 
-	// Default trees (built-in)
-	r.addBuiltin("default", "General-purpose BT agent", evolution.DefaultTree())
-	r.addBuiltin("godev", "Go software developer BT", evolution.GoDeveloperTree())
-
-	// Finance trees
-	for name, tree := range evolution.AllFinanceTrees() {
-		r.addBuiltin("finance_"+name, evolution.AgentDescriptions[name], tree)
-	}
-
-	// Research trees
-	for name, tree := range evolution.ResearchTrees() {
-		r.addBuiltin("research_"+name, evolution.Descriptions[name], tree)
-	}
-
-	// Domain trees. Resolve descriptions through domains.DescriptionFor rather
-	// than indexing domains.Descriptions: descriptions are split across three
-	// maps, and a direct index registers a blank Description the moment a
-	// registry tree is described outside the curated map.
-	for name, tree := range domains.AllDomainTrees() {
-		desc, _ := domains.DescriptionFor(name)
-		r.addBuiltin("domain_"+name, desc, tree)
-	}
+	r.addCatalogBuiltins()
 
 	// Load persisted trees from disk (tree-<name>.json files only)
 	entries, _ := os.ReadDir(r.dir)
@@ -136,7 +121,13 @@ func (r *Registry) loadAll() {
 		already := false
 		for i := range r.entries {
 			if r.entries[i].FilePath == path {
-				r.entries[i].Tree = &tree
+				if outcomeRecoveryOnly(&tree) {
+					r.entries[i].Active = false
+					r.entries[i].RecoveryRequired = true
+					engine.Warn("persisted builtin has lost task logic; offline recovery required", "tree", r.entries[i].Name)
+				} else {
+					r.entries[i].Tree = &tree
+				}
 				already = true
 				break
 			}
@@ -148,17 +139,51 @@ func (r *Registry) loadAll() {
 			// "foo", not "tree-foo") — SaveTree round-trips FilePath using
 			// that same bare-name convention.
 			treeName := strings.TrimSuffix(strings.TrimPrefix(name, "tree-"), ".json")
-			r.entries = append(r.entries, TreeEntry{
+			entry := TreeEntry{
 				Name:        treeName,
 				Description: "Persisted tree",
 				Tree:        &tree,
 				FilePath:    path,
 				Active:      true,
-			})
+			}
+			entry.TreeID = runtimeTreeID(entry)
+			if name == "tree-domain_arc42:assemble.json" && outcomeRecoveryOnly(&tree) {
+				entry.Active, entry.RecoveryRequired = false, true
+			}
+			r.entries = append(r.entries, entry)
 		}
 	}
 
 	r.loadUserTreesLocked()
+	r.loadRuntimeVersionsLocked()
+}
+
+// addCatalogBuiltins constructs authored definitions without persisted overrides.
+func (r *Registry) addCatalogBuiltins() {
+	// Default trees (built-in)
+	r.addBuiltin("default", "General-purpose BT agent", evolution.DefaultTree())
+	r.addBuiltin("godev", "Go software developer BT", evolution.GoDeveloperTree())
+
+	// Finance trees
+	for name, tree := range evolution.AllFinanceTrees() {
+		r.addBuiltin("finance_"+name, evolution.AgentDescriptions[name], tree)
+	}
+
+	// Research trees
+	for name, tree := range evolution.ResearchTrees() {
+		r.addBuiltin("research_"+name, evolution.Descriptions[name], tree)
+	}
+
+	// Domain trees. Resolve descriptions through domains.DescriptionFor rather
+	// than indexing domains.Descriptions: descriptions are split across three
+	// maps, and a direct index registers a blank Description the moment a
+	// registry tree is described outside the curated map.
+	for name, tree := range domains.AllDomainTrees() {
+		desc, _ := domains.DescriptionFor(name)
+		r.addBuiltin("domain_"+name, desc, tree)
+	}
+
+	slices.SortFunc(r.entries, func(a, b TreeEntry) int { return strings.Compare(a.Name, b.Name) })
 }
 
 // Rescan re-scans usersRoot for personal trees written since construction (or
@@ -170,17 +195,20 @@ func (r *Registry) Rescan() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.loadUserTreesLocked()
+	r.loadRuntimeVersionsLocked()
 }
 
 func (r *Registry) addBuiltin(name, desc string, tree *evolution.SerializableNode) {
 	path := filepath.Join(r.dir, "tree-"+name+".json")
-	r.entries = append(r.entries, TreeEntry{
+	entry := TreeEntry{
 		Name:        name,
 		Description: desc,
 		Tree:        tree,
 		FilePath:    path,
 		Active:      true,
-	})
+	}
+	entry.TreeID = runtimeTreeID(entry)
+	r.entries = append(r.entries, entry)
 }
 
 // List returns all registered trees.
@@ -216,6 +244,9 @@ func (r *Registry) DeactivateAll() int {
 
 // SaveTree persists a tree to its file path.
 func (r *Registry) SaveTree(entry TreeEntry) error {
+	if r.promote != nil {
+		return r.promote(entry)
+	}
 	if err := util.SaveJSONAtomic(entry.FilePath, entry.Tree); err != nil {
 		return fmt.Errorf("write tree %q: %w", entry.FilePath, err)
 	}
@@ -230,6 +261,40 @@ func (r *Registry) SaveTree(entry TreeEntry) error {
 // snapshot) matters because a disabled gate can trip several regressed
 // cycles after the tree was last actually good.
 func (r *Registry) RollbackTree(name, snapshotDir string) error {
+	r.mu.RLock()
+	var activeEntry TreeEntry
+	for _, entry := range r.entries {
+		if entry.Name == name {
+			activeEntry = entry
+			break
+		}
+	}
+	r.mu.RUnlock()
+	if activeEntry.Tree != nil {
+		store := r.releaseStore()
+		id := runtimeTreeID(activeEntry)
+		_, release, err := store.Resolve(id, activeEntry.User)
+		if err != nil {
+			return err
+		}
+		if release != nil {
+			if _, err := store.Rollback(context.Background(), id, activeEntry.User, release.Version, "gardener quality gate requested rollback"); err != nil {
+				return err
+			}
+			restored, _, err := store.Resolve(id, activeEntry.User)
+			if err != nil {
+				return err
+			}
+			r.mu.Lock()
+			for i := range r.entries {
+				if r.entries[i].FilePath == activeEntry.FilePath {
+					r.entries[i].Tree = restored
+				}
+			}
+			r.mu.Unlock()
+			return nil
+		}
+	}
 	restored, err := evolution.RestoreTreeBeforeRegressionStreak(name, snapshotDir)
 	if err != nil {
 		return fmt.Errorf("rollback tree %q: %w", name, err)
@@ -247,30 +312,39 @@ func (r *Registry) RollbackTree(name, snapshotDir string) error {
 		r.mu.Unlock()
 		return fmt.Errorf("rollback tree %q: not found in registry", name)
 	}
-	r.entries[idx].Tree = restored
 	entry := r.entries[idx]
+	entry.Tree = restored
 	r.mu.Unlock()
 
-	return r.SaveTree(entry)
+	if err := r.SaveTree(entry); err != nil {
+		return err
+	}
+	r.mu.Lock()
+	r.entries[idx].Tree = restored
+	r.mu.Unlock()
+	return nil
 }
 
 // --- Metrics ---
 
 // CycleMetrics records the outcome of one evolution cycle for a single tree.
 type CycleMetrics struct {
-	TreeName    string  `json:"tree_name"`
-	Cycle       int     `json:"cycle"`
-	Timestamp   int64   `json:"timestamp"`
-	BaseFitness float64 `json:"base_fitness"`
-	NewFitness  float64 `json:"new_fitness"`
-	Delta       float64 `json:"delta"`
-	Mutations   int     `json:"mutations_applied"`
-	NodesBefore int     `json:"nodes_before"`
-	NodesAfter  int     `json:"nodes_after"`
-	Improved    bool    `json:"improved"`
-	DurationMs  int64   `json:"duration_ms"`
-	Rejections  int     `json:"rejections,omitzero"` // quality gate rejections this cycle
-	Rollbacks   int     `json:"rollbacks,omitzero"`  // quality gate rollbacks this cycle
+	BaselineVersion  string  `json:"baseline_version,omitempty"`
+	CandidateVersion string  `json:"candidate_version,omitempty"`
+	Qualification    string  `json:"qualification,omitempty"`
+	TreeName         string  `json:"tree_name"`
+	Cycle            int     `json:"cycle"`
+	Timestamp        int64   `json:"timestamp"`
+	BaseFitness      float64 `json:"base_fitness"`
+	NewFitness       float64 `json:"new_fitness"`
+	Delta            float64 `json:"delta"`
+	Mutations        int     `json:"mutations_applied"`
+	NodesBefore      int     `json:"nodes_before"`
+	NodesAfter       int     `json:"nodes_after"`
+	Improved         bool    `json:"improved"`
+	DurationMs       int64   `json:"duration_ms"`
+	Rejections       int     `json:"rejections,omitzero"` // quality gate rejections this cycle
+	Rollbacks        int     `json:"rollbacks,omitzero"`  // quality gate rollbacks this cycle
 	// SkippedNoEvidence marks a tree that carried no reflection records, so
 	// the evidence gate skipped mutation (no run-derived fitness gradient).
 	SkippedNoEvidence bool `json:"skipped_no_evidence,omitzero"`
@@ -482,7 +556,7 @@ type Config struct {
 	RefStore       *evolution.Store
 	Interval       time.Duration             // how often to wake up
 	MaxMutations   int                       // max mutations per cycle per tree
-	UseRealLLM     bool                      // use real Ollama for benchmark validation (slow but accurate)
+	UseRealLLM     bool                      // deprecated: validation always uses real benchmark inference
 	Gate           *evolution.QualityGate    // quality gate for regression detection
 	CrisisDetector *evolution.CrisisDetector // crisis detection & diversity injection
 	SnapshotDir    string                    // directory for pre-mutation snapshots
@@ -559,7 +633,8 @@ type Config struct {
 
 // Gardener is the 24/7 tree evolution agent.
 type Gardener struct {
-	cfg Config
+	candidateAcceptance candidateAcceptor
+	cfg                 Config
 
 	// Lazily opened per-user experience banks (see bankFor).
 	userBanksMu sync.Mutex
@@ -589,7 +664,19 @@ type Gardener struct {
 
 // NewGardener creates a tree gardener.
 func NewGardener(cfg Config) *Gardener {
-	return &Gardener{cfg: cfg}
+	g := &Gardener{cfg: cfg}
+	if cfg.Registry != nil {
+		cfg.Registry.promote = func(entry TreeEntry) error {
+			// This unexported seam exists only for deterministic orchestration
+			// unit tests. It cannot create a runtime release or qualification.
+			if g.candidateAcceptance != nil {
+				return util.SaveJSONAtomic(entry.FilePath, entry.Tree)
+			}
+			_, err := g.PromoteCandidate(context.Background(), entry)
+			return err
+		}
+	}
+	return g
 }
 
 // AnyInFlight reports whether an evolution cycle is currently executing.

@@ -1,0 +1,13 @@
+{
+  "observed_utc": "2026-10-01T23:14:49.635054+00:00",
+  "source": "source audit at 26de2da0dde3fea28f9d0c6c52b7d91bfe1234c2",
+  "finding": "Program RED-pass and precheck paths call ProgramStore.MarkDone after two passing preimplementation tests. Passing tests or existence of a named file cannot prove new delivered implementation; continuation can skip unimplemented dependent work. completeGoapProgramMilestone also accepts labels/declared files at its own boundary; inspect actual landed commit and verification before retaining completion.",
+  "source_id": "074d25e033c3edca290932eecc588bea0878c27f4df72e15f370ba0139d1a722",
+  "paths": [
+    "internal/engine/actions_goap_fusion.go",
+    "internal/engine/actions_goap_fusion_refund.go",
+    "internal/engine/goap_research_goals.go",
+    "internal/research/programs.go"
+  ],
+  "desired_behavior": "Repeated preimplementation passes require review and hold dependent milestones; verified completion retains real delivery evidence; unsupported historical red-pass completions remain visible for review."
+}

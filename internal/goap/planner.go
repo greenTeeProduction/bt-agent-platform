@@ -196,7 +196,7 @@ func (p *Planner) heuristic(state WorldState, goal *Goal) float64 {
 	unsatisfied := 0
 	for k, want := range goal.Conditions {
 		have, ok := state[k]
-		if !ok || have != want {
+		if !ok || !ValuesEqual(have, want) {
 			unsatisfied++
 		}
 	}

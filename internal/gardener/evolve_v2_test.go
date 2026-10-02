@@ -18,7 +18,6 @@ import (
 	"github.com/nico/go-bt-evolve/internal/evolution"
 	"github.com/nico/go-bt-evolve/internal/knowledge"
 	"github.com/nico/go-bt-evolve/internal/util"
-	btcore "github.com/rvitorper/go-bt/core"
 )
 
 // ============================================================================
@@ -153,8 +152,8 @@ func TestDefaultEvolveV2Config(t *testing.T) {
 	if !cfg.BlocksEnabled {
 		t.Error("BlocksEnabled should default to true")
 	}
-	if cfg.UseRealLLM {
-		t.Error("UseRealLLM should default to false")
+	if !cfg.UseRealLLM {
+		t.Error("UseRealLLM should default to true")
 	}
 	if cfg.CascadeCfg.QuickThreshold != evaluator.DefaultCascadeConfig().QuickThreshold {
 		t.Errorf("CascadeCfg.QuickThreshold mismatch")
@@ -191,7 +190,7 @@ func TestRunCycleV2_Basic(t *testing.T) {
 		MaxMutations:   1,
 		UseRealLLM:     false,
 	}
-	g := NewGardener(cfg)
+	g := newOrchestrationTestGardener(t, cfg)
 
 	results, err := g.RunCycleV2(DefaultEvolveV2Config())
 	if err != nil {
@@ -244,7 +243,7 @@ func TestRunCycleV2_MultipleTrees(t *testing.T) {
 		MaxMutations:   1,
 		UseRealLLM:     false,
 	}
-	g := NewGardener(cfg)
+	g := newOrchestrationTestGardener(t, cfg)
 
 	results, err := g.RunCycleV2(DefaultEvolveV2Config())
 	if err != nil {
@@ -280,7 +279,7 @@ func TestRunCycleV2_EmptyRegistry(t *testing.T) {
 		MaxMutations:   1,
 		UseRealLLM:     false,
 	}
-	g := NewGardener(cfg)
+	g := newOrchestrationTestGardener(t, cfg)
 
 	results, err := g.RunCycleV2(DefaultEvolveV2Config())
 	if err != nil {
@@ -310,7 +309,7 @@ func TestRunCycleV2_NilTree(t *testing.T) {
 		MaxMutations:   1,
 		UseRealLLM:     false,
 	}
-	g := NewGardener(cfg)
+	g := newOrchestrationTestGardener(t, cfg)
 
 	results, err := g.RunCycleV2(DefaultEvolveV2Config())
 	if err != nil {
@@ -354,7 +353,7 @@ func TestEvolveTreeV2_MetricsSaved(t *testing.T) {
 		MaxMutations:   1,
 		UseRealLLM:     false,
 	}
-	g := NewGardener(cfg)
+	g := newOrchestrationTestGardener(t, cfg)
 
 	_, err := g.RunCycleV2(DefaultEvolveV2Config())
 	if err != nil {
@@ -412,7 +411,7 @@ func TestRunCycleV2_MetricsSaveFailurePropagates(t *testing.T) {
 		EvolveWithoutReflections: true,
 		UseRealLLM:               false,
 	}
-	g := NewGardener(cfg)
+	g := newOrchestrationTestGardener(t, cfg)
 
 	if _, err := g.RunCycleV2(DefaultEvolveV2Config()); err == nil {
 		t.Fatal("RunCycleV2 returned a nil error despite every MetricsTracker.Save() call failing — the write failure is being silently discarded instead of propagated")
@@ -476,7 +475,7 @@ func TestRunCycleV2_SLOMetricsExportFailurePropagates(t *testing.T) {
 		UseRealLLM:               false,
 		ValidationGate:           ValidationGateConfig{EvidencePath: evidencePath},
 	}
-	g := NewGardener(cfg)
+	g := newOrchestrationTestGardener(t, cfg)
 
 	if _, err := g.RunCycleV2(DefaultEvolveV2Config()); err == nil {
 		t.Fatal("RunCycleV2 returned a nil error despite the SLO-metrics export rename failing — the export failure is being silently discarded instead of propagated")
@@ -513,7 +512,7 @@ func TestEvolveTreeV2_BloatGuard(t *testing.T) {
 		MaxMutations:   2,
 		UseRealLLM:     false,
 	}
-	g := NewGardener(cfg)
+	g := newOrchestrationTestGardener(t, cfg)
 
 	// Use a config with RichContext/Ensemble disabled to avoid ensemble bugs
 	v2cfg := EvolveV2Config{
@@ -558,7 +557,7 @@ func TestEvolveTreeV2_NoRegressionGate(t *testing.T) {
 	customReg.mu.Unlock()
 
 	cfg := Config{Registry: customReg, MetricsTracker: mt, RefStore: refStore, MaxMutations: 2, UseRealLLM: false}
-	g := NewGardener(cfg)
+	g := newOrchestrationTestGardener(t, cfg)
 	v2cfg := EvolveV2Config{
 		BlocksEnabled: false,
 		UseRealLLM:    false,
@@ -603,7 +602,7 @@ func TestRunCycleV2_ConfigDisabledFeatures(t *testing.T) {
 		MaxMutations:   1,
 		UseRealLLM:     false,
 	}
-	g := NewGardener(cfg)
+	g := newOrchestrationTestGardener(t, cfg)
 
 	// Run with all features disabled
 	v2cfg := EvolveV2Config{
@@ -667,7 +666,7 @@ func experienceRecordingGardener(t *testing.T, bank *evolution.ExperienceBank) (
 		MaxMutations:   1,
 		ExperienceBank: bank,
 	}
-	return NewGardener(cfg), registry.List()[0]
+	return newOrchestrationTestGardener(t, cfg), registry.List()[0]
 }
 
 // TestEvolveTreeV2_RecordsAcceptedMutationExperience pins milestone 1 of the
@@ -1086,7 +1085,7 @@ func TestEvolveTreeV2_AppliesLearnedSelectorOrderingBeforePersist(t *testing.T) 
 			EvolveWithoutReflections: true,
 			SelectorStatsPath:        statsPath,
 		}
-		return NewGardener(cfg), tree, reg.List()[0]
+		return newOrchestrationTestGardener(t, cfg), tree, reg.List()[0]
 	}
 
 	v2 := func(enabled bool) EvolveV2Config {
@@ -1214,7 +1213,7 @@ func TestEvolveTreeV2_AppliesDTOptimizerOrderingBeforePersist(t *testing.T) {
 			EvolveWithoutReflections: true,
 			DTStatsPath:              statsPath,
 		}
-		return NewGardener(cfg), tree, reg.List()[0]
+		return newOrchestrationTestGardener(t, cfg), tree, reg.List()[0]
 	}
 
 	v2 := func(enabled bool) EvolveV2Config {
@@ -1321,7 +1320,7 @@ func TestEvolveTreeV2_DTOptimizerOrderingPrefersPerTreeStatsOverConfigPath(t *te
 		EvolveWithoutReflections: true,
 		DTStatsPath:              fallbackPath,
 	}
-	g := NewGardener(cfg)
+	g := newOrchestrationTestGardener(t, cfg)
 	entry := reg.List()[0]
 
 	if got, want := routerChildNames(t, tree), []string{"A", "B", "C", "Fallback"}; !reflect.DeepEqual(got, want) {
@@ -1389,7 +1388,7 @@ func crisisMetricsGardener(t *testing.T, treeName string, maxMutations int) (*Ga
 		CrisisDetector:           evolution.NewCrisisDetector(),
 		EvolveWithoutReflections: true,
 	}
-	return NewGardener(cfg), reg.List()[0], cfg
+	return newOrchestrationTestGardener(t, cfg), reg.List()[0], cfg
 }
 
 // crisisV2Config mirrors the low-threshold cascade config used elsewhere in
@@ -1555,7 +1554,7 @@ func TestRunCycleV2_TranspositionTablePersistsAcrossGardenerInstances(t *testing
 			UseRealLLM:             false,
 			TranspositionTablePath: ttDir,
 		}
-		return NewGardener(cfg)
+		return newOrchestrationTestGardener(t, cfg)
 	}
 
 	g1 := newGardener(t)
@@ -1638,7 +1637,7 @@ func metaValidatorWiringGardener(t *testing.T, metaValidator *evolution.MetaVali
 		MaxMutations:   1,
 		MetaValidator:  metaValidator,
 	}
-	return NewGardener(cfg), registry.List()[0]
+	return newOrchestrationTestGardener(t, cfg), registry.List()[0]
 }
 
 // TestEvolveTreeV2_MetaValidatorRejectsStructurallyBrokenMutation pins the
@@ -1719,7 +1718,7 @@ func TestEvolveTreeV2_DeepSearchResultAppliedWhenGreedyLoopFindsNothing(t *testi
 		TranspositionTablePath: ttDir,
 		MaxMutations:           0, // greedy loop budget is zero: it cannot apply anything itself
 	}
-	g := NewGardener(cfg)
+	g := newOrchestrationTestGardener(t, cfg)
 
 	entry := registry.List()[0]
 	treeBefore := marshalTree(t, entry.Tree)
@@ -1795,7 +1794,7 @@ func TestEvolveTreeV2_DeepSearchMutationRejectedByValidationGateNotPersisted(t *
 		MaxMutations:           0, // greedy loop budget is zero: only deep search can apply anything
 		ValidationGate:         DefaultValidationGateConfig(),
 	}
-	g := NewGardener(cfg)
+	g := newOrchestrationTestGardener(t, cfg)
 
 	entry := registry.List()[0]
 	treeBefore := marshalTree(t, entry.Tree)
@@ -1878,7 +1877,7 @@ func TestEvolveTreeV2_DeepSearchMutationRejectedByMetaValidatorNotPersisted(t *t
 		ValidationGate:         ValidationGateConfig{Enabled: false},
 		MetaValidator:          strict,
 	}
-	g := NewGardener(cfg)
+	g := newOrchestrationTestGardener(t, cfg)
 
 	entry := registry.List()[0]
 	treeBefore := marshalTree(t, entry.Tree)
@@ -1975,7 +1974,7 @@ func TestEvolveTreeV2_DisabledGateTriggersAutomaticRollback(t *testing.T) {
 		MaxMutations:             1,
 		EvolveWithoutReflections: true, // bypass the evidence gate; irrelevant to this test
 	}
-	g := NewGardener(cfg)
+	g := newOrchestrationTestGardener(t, cfg)
 
 	v2cfg := EvolveV2Config{BlocksEnabled: false, UseRealLLM: false}
 	entry := registry.List()[0]
@@ -2052,7 +2051,7 @@ func knowledgeRecordingGardener(t *testing.T, kg *knowledge.KnowledgeGraph) (*Ga
 		MaxMutations:   1,
 		KnowledgeGraph: kg,
 	}
-	return NewGardener(cfg), registry.List()[0]
+	return newOrchestrationTestGardener(t, cfg), registry.List()[0]
 }
 
 // TestEvolveTreeV2_RecordsEvolvedRunInKnowledgeGraph pins the core milestone
@@ -2121,7 +2120,7 @@ func TestEvolveTreeV2_NoAcceptedMutation_DoesNotRecordEvolvedRun(t *testing.T) {
 		MaxMutations:   1,
 		KnowledgeGraph: kg,
 	}
-	g := NewGardener(cfg)
+	g := newOrchestrationTestGardener(t, cfg)
 
 	// No reflection records were seeded, so the evidence gate skips mutation
 	// entirely — this fixture deterministically accepts zero mutations.
@@ -2221,7 +2220,7 @@ func TestAnalyzeTreeDiagnostics_DoesNotMutateLiveTree(t *testing.T) {
 		RefStore:       refStore,
 		DTStatsPath:    statsPath,
 	}
-	g := NewGardener(cfg)
+	g := newOrchestrationTestGardener(t, cfg)
 
 	before, err := json.Marshal(tree)
 	if err != nil {
@@ -2272,7 +2271,7 @@ func TestAnalyzeTreeDiagnostics_NilTree(t *testing.T) {
 		t.Fatalf("NewMetricsTracker: %v", err)
 	}
 	cfg := Config{Registry: &Registry{dir: dir}, MetricsTracker: mt, RefStore: refStore}
-	g := NewGardener(cfg)
+	g := newOrchestrationTestGardener(t, cfg)
 
 	report := g.AnalyzeTreeDiagnostics(TreeEntry{Name: "nil_tree", Tree: nil, Active: true})
 	if report != nil {
@@ -2493,7 +2492,7 @@ func refineGardener(t *testing.T, treeName string) (*Gardener, TreeEntry, *evolu
 		MaxMutations:   0, // isolate the refinement pass from structural mutations
 		UseRealLLM:     false,
 	}
-	return NewGardener(cfg), reg.List()[0], tree
+	return newOrchestrationTestGardener(t, cfg), reg.List()[0], tree
 }
 
 // TestEvolveTreeV2_LocalSearchRefinesParams pins the milestone: after the
@@ -2602,7 +2601,7 @@ func localSearchGateArm(t *testing.T, treeName string, vgCfg ValidationGateConfi
 	}
 	registry.mu.Unlock()
 
-	g := NewGardener(Config{
+	g := newOrchestrationTestGardener(t, Config{
 		Registry:       registry,
 		MetricsTracker: mt,
 		RefStore:       refStore,
@@ -2759,7 +2758,7 @@ func eliteSeedGardener(t *testing.T, treeName string) (*Gardener, TreeEntry, *ev
 		UseRealLLM:     false,
 		CrisisDetector: evolution.NewCrisisDetector(),
 	}
-	return NewGardener(cfg), reg.List()[0], tree
+	return newOrchestrationTestGardener(t, cfg), reg.List()[0], tree
 }
 
 // eliteSeedV2Config keeps the cascade quick-check and blocks out of the way and
@@ -3037,15 +3036,9 @@ func TestEvolveTreeV2_DiversityCrisis_ReseedsFromLiveDrivenArchive(t *testing.T)
 // islandWinnerTree is structurally fitter and uses registered executable
 // vocabulary, so definition validation does not reject the adoption fixture.
 func islandWinnerTree() *evolution.SerializableNode {
-	const action = "IslandFixtureStep"
-	if engine.GetAction(action) == nil {
-		engine.RegisterAction(action, func(ctx *btcore.BTContext[engine.Blackboard]) int {
-			ctx.Blackboard.Result = "island fixture completed"
-			return 1
-		})
-	}
+	registerGardenerFixtureLeaves()
 	winner := eliteSeedTree()
-	winner.Children[1].Children[0].Name = action
+	winner.Children[1].Children[0].Name = "Step"
 	return winner
 }
 
@@ -3093,7 +3086,7 @@ func islandGardener(t *testing.T, names ...string) (*Gardener, *Registry, *evolu
 	reg.mu.Unlock()
 
 	im := evolution.NewIslandModel(5, 0.25)
-	return NewGardener(Config{
+	return newOrchestrationTestGardener(t, Config{
 		Registry:       reg,
 		MetricsTracker: mt,
 		RefStore:       refStore,
@@ -3368,7 +3361,10 @@ func TestAugmentWithMCTSCandidates_MergesSearchIntoOneCompetition(t *testing.T) 
 		t.Fatal("setup produced no heuristic candidates — the merge assertions below would be vacuous")
 	}
 
-	cfg := EvolveV2Config{MCTSStructuralSearch: true, MCTSIterations: 12}
+	// Keep one heuristic so independent MCTS gate proposals can join without
+	// being removed by the operation/target deduplication rule.
+	heuristic = heuristic[:1]
+	cfg := EvolveV2Config{MCTSStructuralSearch: true, MCTSIterations: len(evolution.AllMutationOps)}
 	merged := g.augmentWithMCTSCandidates(entry.Tree, entry.Name, records, seedFitness, heuristic, cfg)
 
 	if len(merged) <= len(heuristic) {

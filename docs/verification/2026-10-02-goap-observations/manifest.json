@@ -1,0 +1,33 @@
+{
+  "observed_utc": "2026-10-01T22:38:42.793744+00:00",
+  "parent_commit": "d9ae718214d4aac0c412f8b753d5c287f1f714bc",
+  "status": "verified increment; goal remains active",
+  "scope": "observed effects in compiled/dynamic GOAP and exact result/file evidence",
+  "pr83_head": "af780cdbf4745432b4b3a2d890a9c9e88443237e",
+  "pr83_is_ancestor": true,
+  "deployment": "not performed",
+  "files": {
+    "README.md": "6e010e36eb0f05038a60f82b37786f8683a9cf3b3c7399987e12e6e8a0215422",
+    "arc42-checker.txt": "8a38b148f8e928b5dd51a1a1387e6158537ac262aed69d22fb26f0233e584c17",
+    "broad-short-passed.txt": "4c4b74a55f946f344895b4f02234300c01bf06a252d67a066e751ff85e892590",
+    "changed-packages-lint.txt": "e92606b0bf483111dff0a120c315ea165821348f31365020e2468a0059095c47",
+    "core-race.txt": "029aca54b3d38d699970f3bf4292edbe77f2e151d6af5aa8602b4c948cd982c8",
+    "dependent-files-v2.json": "f6891edff647fbdfdd803b6d2d025f66e9113442ececf7638e04039fa59e7167",
+    "doc-drift.txt": "9b267efe25a2f9536f56840a796c51496eb3aff8c9f2ef5bab2dc333abd88aef",
+    "first-live-success.json": "3308c517bd593faaa1e9a477569b36925f8c538e2e0ab9916e2f9906861fe624",
+    "first-live-success.txt": "32978b94bf336512f3e00301255942ed893ad23c405af19cba2f131fce62801e",
+    "graph-update.txt": "7cdc84f0458087381b54d752b9a03211f994a60df978096131e486f99c83ad79",
+    "initial-broad-regressions.txt": "0c963eded4ef0e0fbe04ff4536a102edc95e972ccc8c25eaf582aef30bd824a2",
+    "initial-lint.txt": "659d979e412ca33e195a0a1aca8ad04acf55c8efc55cfccb60d4465e57862572",
+    "initial-live-final-digest-failure.txt": "c7309ddc228f79e7d817854a87487a6e50ed878966c152adc7d71a286aabe020",
+    "initial-observation-regressions.txt": "bc757bc3251eee85c6bbccabf0ca218097974d3d451ddc7a71585e2066007dfa",
+    "initial-regressions.txt": "da5cfd5c61d94ea8d75978075371164a7514c1aea659a2b97d0970bc57b3e0d0",
+    "live-dependent-files.json": "f64e9d41799d2dc5cae7a41cbc17e2aa01b3efe19d9121d1d9cb0a7e35c0a491",
+    "live-governance.json": "71c953ffd5060adedf3ba5a095c6771c0497c2248f878019a5c9a366bea8ccbc",
+    "live-suite.txt": "da17fee624c9b34fa124d2b725e6d201d0aab4f456a35f76cf169554a0682f10",
+    "live-terminal-evidence.json": "66e2cde5efe508ce32db38d64800b34c6f7e81c8177c0c21cedb8b1dbd0f26e9",
+    "live-value-parser-failure.txt": "d8440cedd79c7f94ee96f8d903200f0cbda069b7a977d7d050e04fd33910c9f1",
+    "numeric-persistence-failure.txt": "ee11cdaf1ff2eebaebb696225db5fa91de4d8211d5bd1f04ef7e05990f734035",
+    "updated-regressions.txt": "856daef49d97ef0d85cf60ae5d3ddddd3953933c79dc74467b4ed36513dd44c7"
+  }
+}

@@ -1,5 +1,7 @@
 # 8. Crosscutting Concepts
 
+Global [Sol policy](../sol-model-policy.md) defaults enabled and pins ordinary inference/coding to Sol. Owner-approved NotebookLM, embedding/indexing and memory-extraction integrations retain their own configuration. NotebookLM CLI/MCP share a profile; renewal uses a cross-process lock, bounded checks, account validation and 0.14 storage-mode-aware atomic writes under the upstream profile lock. Historical coding-only opt-outs cannot override the global policy.
+
 These are current shared mechanisms and their boundaries. Historical
 rationales remain in [§9](09-decisions.md); runtime examples are in
 [§6](06-runtime-view.md), acceptance evidence in [§10](10-quality.md).
@@ -179,12 +181,103 @@ The canonical runtime is [`gardener/evolve_v2.go`](../../internal/gardener/evolv
 Per-tree reflection evidence, structural fitness and genuine runtime fitness
 serve different purposes and must remain attributable to their owner.
 
+Reflection selection is strict for shared and personal trees. Missing
+tree attribution remains inspectable but is not assigned to an unrelated
+tree. Personal records require an exact owner match; an empty owner denotes
+shared evidence, not a wildcard. Catalog aliases reconcile `domain_name`
+with `domain:name` (and the finance/research catalogs) without borrowing
+other trees' outcomes. See [attribution regressions](../../internal/gardener/evidence_attribution_test.go).
+
+### Governance fitness and live benchmark evidence
+
+[Governance assessment](../../internal/evolution/governance.go) scores controls
+on executable task paths: input guards (25%), result checks (25%), declared
+JSON task contracts (10%), agent
+instructions actually consumed at runtime (20%), execution bounds (15%) and
+bounded recovery (5%). Coverage saturates per work node. Node count,
+decorative depth, documentation-only descriptions and unconditional checks
+such as the current `CheckConfidence` earn no control credit. A final check
+covers the last result, not every intermediate worker. Recovery-only trees
+receive zero governance credit.
+
+The history-based composite assigns 10% to this structural governance signal;
+it no longer rewards deleting nodes. Structural quick/Pareto/MCP scorers use
+governance rather than guessed success/speed from tree size. Candidate
+preservation rejects deleted task capabilities or stripped existing controls;
+crossover retains the first parent's contract. Heuristic and MCTS generators
+can propose executable input/result wrappers. Ordinary acceptance requires a
+positive score change, followed by validation. None of these static scores
+prove task impact or version-specific runtime success.
+
+[Live benchmarks](../../internal/benchmark/live_model.go) use
+`BT_BENCHMARK_BACKEND=ollama` and `BT_BENCHMARK_MODEL=qwen2.5:1.5b` by default.
+`BT_BENCHMARK_OLLAMA_URL` scopes the endpoint; `BT_BENCHMARK_TIMEOUT` defaults
+to 15 seconds per local call. Timeout/unavailability selects Sol 6.1 through
+Codex login without changing the ordinary Sol-only policy. Paired comparisons
+are repeated after a provider switch. Records retain model/call provenance,
+actual output and declared JSON-field/length/quality/outcome contract results. Short tests
+skip live-model integration; they do not replace it with synthetic inference.
+
+Live runs use engine `NodeAdmission` to execute supported model actions and
+fail explicitly when a task needs an unavailable isolated capability fixture.
+They no longer make every action succeed through the structural sandbox.
+A zero-model-call or unsupported run cannot qualify a promoted candidate.
+The `bt-tree-integration` command uses the same provider and records per-tree
+model evidence, warnings and task-contract rates; its report verifier rejects
+missing inference, unsupported capabilities and insufficient contract results.
+The [controlled live gate test](../../internal/benchmark/live_governance_test.go)
+verifies bad-output rejection, validated recovery, empty-input rejection and
+an independently checked arithmetic result. It is mechanism evidence, not a
+fleet SLO or proof that domain tool workflows have been qualified.
+
+A/B clones retain prompts, token limits, nested metadata and typed edges.
+External adapters report model provenance and qualification warnings; missing
+inference cannot earn correct-route or task-success credit. Their historical
+output-matching metrics still need task-specific environment/postcondition
+fixtures before they can establish real-world impact.
+
+Population search offers governance mutations alongside block proposals;
+Q-learning uses the same catalog. Pareto and MAP-Elites archives snapshot tree
+and score together, so population sorting cannot corrupt their correspondence.
+`Retry` bounds failed attempts and returns immediately on success; it no longer
+uses a repeat decorator that re-executes successful work.
+
+`QualityGate`, including typed quality edges, validates recovery output and
+resumes running recovery without replaying primary work. `CheckpointVerifier`
+requires one child and a nonempty boolean/string/number contract. Its `state_key`
+is explicitly `world_state` (legacy default) or `goap_world_state`; the GOAP wrapper
+selects the latter. String facts remain strings, numeric facts retain exact JSON
+values through persistence, and missing facts never satisfy expected false.
+Malformed declarations fail authoring validation and execution before the child.
+Evolution preserves the selected map and every declared fact (ADR-286).
+
+The checkpoint retains its attempt snapshot and retry budget across `Running`
+ticks and caches terminal disposition within a run. Snapshots restore only the
+selected in-memory state; a committed effect receipt followed by a failed gate
+causes an uncertain execution stop and forbids replay. Both gate types preserve
+typed execution stops. See [gate regressions](../../internal/engine/governance_gate_test.go)
+and [typed checkpoint regressions](../../internal/engine/checkpoint_contract_test.go).
+The facts still depend on their producer: a matching map alone does not prove an
+external action. Compiled/dynamic plans use `GoapStep` to separate predictions
+from fresh observations (ADR-289). Direct model results can establish only
+`result.*` facts checked against declared scalar values. External facts require
+an actual FileTask write/readback receipt or a trusted adapter calling
+`ObserveGoapFacts` inside the active step. Public blackboard assertions and old
+receipts do not qualify. Terminal `GoapChecks` retain source, scope, expected and
+observed values; value checks can be recomputed. Scope IDs are runtime correlation,
+not cryptographic attestations. FileTask adds a result check over its normalized,
+committed bytes, so the final output digest can be independently reverified.
+GOAP semantic metadata and persisted contract numbers retain exact JSON values.
+Evolution preserves each worker's observation source, bindings and required facts.
+Original plan capabilities survive compiled replanning; alternative capabilities
+not present in that plan cannot be invented by the replan path.
+
 | Path | Current acceptance behavior | Remaining boundary |
 |---|---|---|
 | Ordinary heuristic/MCTS mutation competition | Shared scored proposals; detached definition/expansion and bounded benchmark checks, fitness/quality/meta-validation, configured predecessor snapshot and persist before live/experience publication | Accepted proposal source/score/reason and MCTS search settings are persisted. Complete cycle replay and default-on cost remain R20/R21. |
 | Local parameter refinement | Re-score against target-tree records; whole settled-tree build/benchmark/meta/SLO checks before persistence | A useful parameter fit is not evidence of production task success. |
 | Transposition/deep-search candidate | Replay the complete ordered winning proposal; re-score actual candidate, definition/benchmark/quality/meta/SLO checks, configured predecessor snapshot, then persist before live/experience publication | Cached scores include reflection evidence; a warm-cache winner remains replayable. Runs only when configured/enabled. |
-| Island champion adoption | Evidence, improvement/bloat, validation, whole-tree definition/expansion preflight and quick benchmark, quality/meta-validation, configured predecessor snapshot, then persist before live assignment | Mock/real benchmark mode follows cycle configuration; quick evidence is bounded. Snapshot/write failure preserves the live predecessor. R23 regression contracts apply. |
+| Island champion adoption | Evidence, improvement/bloat, validation, whole-tree definition/expansion preflight and quick benchmark, quality/meta-validation, configured predecessor snapshot, then persist before live assignment | Benchmark evaluation uses a real local Ollama model with Sol fallback; quick evidence is bounded. Snapshot/write failure preserves the live predecessor. R23 regression contracts apply. |
 | Durable-archive MCP evolution tools | Tool-specific archive bounds and benchmark checks before persisting winners | Do not infer daemon wiring from an exported algorithm/tool. |
 
 Snapshot revision allocation holds a per-tree index sidecar lock through
@@ -302,6 +395,40 @@ vault context. Exhausted optional research can degrade without aborting the
 entire cycle. NotebookLM authentication is separately diagnosed by
 [`notebooklmauth`](../../internal/notebooklmauth). Program claims and
 charge/refund state need lock-protected updates and explicit retirement.
+
+Research delivery attribution (ADR-287) lives in a separate owner-scoped
+`knowledge.json.trace-<owner SHA-256>.json` ledger. A source records the complete
+answer digest, bounded excerpt and observation time. Goal identity preserves file
+scope while removing transport prefixes and transient planning notes. Completed
+tasks receive a receipt only when the actual Git commit belongs to the run, is
+reachable from the target checkout (or bare repository master), changes declared
+task files and has passing recorded verification. Receipts retain the full commit,
+Git tree, changed files, commands/output digests, run/task identity and times.
+Only sources observed before the run began receive links in its delivery receipt.
+
+`bt_research_status` reads the current blackboard owner's ledger. It distinguishes
+observed goals, deliveries, source-linked deliveries and goals needing review.
+ADR-288 adds observed clean-build execution, publication qualification and
+recomputed final-result counts. Code containment is checked with actual Git
+ancestry and unchanged delivered files; native build metadata never borrows the
+checkout HEAD or a display-only stamp. Corrupt records fail the evidence report.
+Causal research impact explicitly remains unestablished. Legacy
+`goap:implemented` labels, mere knowledge deduplication, dry runs, no-op applies and
+repeated passing RED tests do not establish delivery. A research goal with repeated
+passing RED commands is held for review rather than awarded completion credit.
+The older program-milestone RED-precheck path still needs separate reconciliation.
+
+The ledger uses rooted atomic JSON and a five-second transaction lock. An empty
+existing ledger is corrupt evidence, not a fresh missing store. Legacy
+knowledge/budget and Superpowers journal saves now reject stale snapshots under the same bounded locking
+convention instead of overwriting sibling evidence. New code-delivery attempts
+journal pending attribution before applying code. Preflight repairs pending
+receipts from run artifacts and Git observations, holding new planning on a repair
+failure without re-executing the landed change. Unreadable or misidentified run
+journals also hold planning. Legacy unmarked history is not
+automatically upgraded. Source write failures remain visible diagnostics, not
+fabricated provenance. See [delivery tests](../../internal/engine/research_delivery_test.go)
+and [store transactions](../../internal/research/trace_test.go).
 
 ## 8.10 Autonomous Landing Pipeline
 
@@ -428,7 +555,7 @@ as `domain:arc42:section1` without advertising unregistered domain IDs.
 **Tested contract:**
 [`TestDomainPrefixedTreesHaveSmokeDescriptionsAndConditionCoverage`](../../internal/domains/domains_test.go)
 derives IDs from the registry and checks resolver identity, smoke-task
-availability, sandboxed mock `BuildTree` construction, canonical-description
+availability, isolated `BuildTree` construction, canonical-description
 parity and descriptions on Condition nodes and guard edges. It also rejects
 description lookup for unregistered domain IDs.
 Registry/AST-derived tests catch newly reachable trees omitted from coverage
@@ -662,6 +789,76 @@ the dashboard startup wires shared controls. Process restart, generic filesystem
 preemption, fleet-wide budgets and operational capacity/SLO qualification remain
 separate risks; this does not create durable sprint resume.
 
+
+### Terminal evidence and executable result contracts
+
+`QualityGate.metadata.result_contract` declares `json_fields` (required values),
+`required_keys` (required JSON fields), and/or `min_length`. Both primary and
+recovery outputs must pass the declared constraints and ordinary output checks.
+Malformed/unknown contract fields are validation errors. Contract numeric values
+retain exact JSON precision across save/load; adjacent large integers cannot
+collapse into the same expected value. A successful JSON contract exempts
+only that exact output in that run from the generic prose-length minimum;
+changed or unchecked output cannot reuse the exemption. Other output checks
+still apply. Enforced JSON task
+contracts earn additional governance credit; automatic evolution cannot remove
+or rewrite an existing contract on the protected work to improve its score.
+See [contract implementation](../../internal/evolution/result_contract.go),
+[runtime gate tests](../../internal/engine/result_contract_test.go), and
+[governance protection](../../internal/evolution/result_contract_test.go).
+
+Run evidence is written once after terminal execution, rather than from an
+intermediate `ReflectOnOutcome` node. Agent runs defer finalization until their
+outer output/quality contracts have settled. Records retain owner, canonical
+caller tree ID (root name only when unspecified), source-definition SHA-256,
+expanded/executed versions, actual result, elapsed time, outcome, diagnostics,
+and output-digest-linked gate verdicts. A live mutation records every version
+that actually executes at a tick boundary. More than one version cannot count
+as an unchanged-version sample. Gate-verdict storage is bounded to 1024 entries;
+omission counts prevent a truncated record from qualifying as complete evidence.
+Persistence failures are reported without replaying completed work.
+
+Compilation and feedback records have explicit evidence kinds. Neither counts
+as task success/latency or satisfies the gardener's execution-evidence gate.
+Historical records remain inspectable; missing identity/version is never filled
+in retrospectively. `FilterByTreeVersion` provides strict version selection;
+full migration of gardener scoring/promotion from tree-level legacy history
+remains open. Personal experience-store failures never fall back to the shared
+bank. [Terminal writer](../../internal/engine/run_evidence.go),
+[outer quality regression](../../internal/agent/run_evidence_test.go), and
+[live result recording](../../internal/benchmark/live_evidence_test.go) cover
+these contracts. These source changes do not establish deployed adoption.
+
+
+### Runtime qualification and immutable versions
+
+Gardener and MCP manual/genetic-family publication share
+[paired qualification](../../internal/benchmark/runtime_publication.go) and a
+[version store](../../internal/evolution/runtime_release.go) (ADR-281/282).
+Factory response trees use their original fixed task and declared expected
+JSON values. Other suites must provide independent result-value contracts and
+isolated capability fixtures. Missing contracts, missing inference, changed
+execution definitions or provider-mixed comparisons cannot publish a version.
+At least three paired trials must show strictly more passing outcomes and no
+regression; every candidate trial must pass. Rejected outputs are retained.
+
+Definitions and accepted proofs are content addressed. A bounded sidecar lock
+protects the compare-and-swap of `active.json`; prepared events alone do not
+prove adoption. Rollback restores an exact retained ancestor without rerunning
+work. Scoped runtime resolvers prefer personal authority, then shared authority,
+and refuse corrupt managed definitions. Promoted versions skip unqualified
+resolve-time reordering. Owner-bound engine commands reject another user.
+
+Returned gardener improvement metrics use measured pass counts and definition
+versions. Single-mutation experience can inherit that measured gain; a batch
+cannot assign its entire gain to each individual operation. Legacy search
+ranking still uses heuristic/history estimates and can miss useful candidates.
+MCP proposals are retained separately from runnable definitions. Only committed
+qualified publication credits shared discovery; personal manual evolution stays
+out of the shared graph. GA heuristic mutations no longer record their estimated
+gains as new experience. Legacy lineage-skip/archive estimates, unmanaged
+resolve-time ordering, complete external-task corpora, legacy file concurrency
+during first adoption and deployed rollout remain open.
 Operator logs retain generated run IDs, registered route/method identity,
 status, timestamps and counts. Runner/scheduler/response-validator diagnostic
 fields do not copy raw request identifiers, schedules, validation fields or
@@ -676,5 +873,67 @@ reads through an `os.Root` opened on the configured workflow directory. Nested
 local workflows and operator-relocated roots remain supported; traversal and
 outward symlinks cannot read outside the opened root. Pipeline metric durations
 are clamped nonnegative before conversion, matching the dashboard executor.
+
+### Offline restoration is separate from qualified evolution
+
+Recovery restores current authored definitions, without assigning task-success
+credit. Exact-filename mapping prevents a corrupted root name from selecting
+another tree's replacement. Plans are sealed in process, originals are checked
+again before writes, and private backups precede changes. A bounded sidecar lock
+serializes cooperating recovery commands. Legacy writers do not honor it, so
+`--offline` is a required operator assertion, not a distributed exclusion proof.
+Atomic per-file writes do not make the batch transactional or power-loss durable;
+the manifest retains per-item completion. Unknown/personal trees and managed
+versions keep their own authorities. Seven already implemented engine node types
+are now recognized by schema validation; stateful review/task loops still require
+isolated fixtures in live benchmarks (ADR-283).
+
+### Automation approval persistence
+
+`AutomationStore` uses rooted private atomic JSON replacement and a bounded
+five-second sidecar wait around complete mutations. Records retain the raw owner;
+a colliding sanitized workspace cannot adopt a different recorded owner. Cold
+start and unowned legacy records remain distinct from corrupt storage. Reservation,
+cap checks and resolution share the transaction. Agent creation independently
+checks current disk state under a bounded per-definition lock; exact idempotence
+compares all configuration after normalizing timestamps/default version.
+
+The ledger and agent YAML are separate commits. A definition prepared before a
+failed ledger commit remains gated; this is not a distributed transaction or a
+power-loss durability guarantee. Legacy raw writers/updates do not all share the
+creation lock. ADR-285 adds version consent and missing-ledger admission for marked autopilot
+trees. Stale feedback-review identities and incomplete-reservation repair remain.
+
+### File task effect evidence
+
+`FileTask` uses a runtime-injected owner root; raw owner hashes isolate colliding
+legacy sanitized paths. Only relative paths are accepted. Rooted operations prevent
+escaping through nested symlinks, regular files are size-bounded, and atomic private
+replacement avoids partial outputs. A five-second context-bounded lock serializes
+cooperating writers per declared destination path. Readback checks both committed bytes and the
+declared JSON contract; the unchanged input snapshot is checked before commit.
+Terminal disposition is cached within the run. Failed post-write verification is
+uncertain and cannot trigger automatic replay. The receipt is an observation at
+completion, not continuous integrity or a distributed/power-loss guarantee.
+
+Generic live benchmarks deny this effectful node unless a dedicated isolated
+fixture supplies its real filesystem capability. Governance preservation prevents
+removing or redirecting existing file contracts. Qualified publication does not yet
+support general file-task corpora. Personal scheduler runs do not feed the shared
+knowledge graph; their exact execution records retain owner/version/effects.
+
+### Program metadata transactions
+
+Program updates acquire a context-bounded sidecar lock (at most five seconds),
+validate the current JSON container and identities, preserve original bytes before
+correcting legacy RED labels, then atomically replace the backlog. A conflicting
+backup or malformed store leaves the original untouched. Review revision uses
+an expected-goal compare-and-swap. Stored review history retains prior completion
+claims without treating them as evidence. Actual Git/task checks occur before
+recording a delivery; metadata repair never reruns the landed code (ADR-290).
+Advisory coordination and local trusted storage remain assumptions; these are not
+power-loss durability or distributed transaction guarantees.
+
+---
 
 *Generated by bt-agent arc42 pipeline — section8Concepts tree*

@@ -13,10 +13,11 @@ import (
 // Interaction is one observed unit of collaboration with the user — the raw
 // signal habit mining runs on (ADR-133 Phase 1).
 type Interaction struct {
-	Task       string `json:"task"`
-	TreeID     string `json:"tree_id,omitempty"`
-	Outcome    string `json:"outcome,omitempty"`
-	DurationMs int64  `json:"duration_ms,omitzero"`
+	Task        string `json:"task"`
+	TreeID      string `json:"tree_id,omitempty"`
+	TreeVersion string `json:"tree_version,omitempty"`
+	Outcome     string `json:"outcome,omitempty"`
+	DurationMs  int64  `json:"duration_ms,omitzero"`
 	// Correction holds explicit user feedback text when the user amended or
 	// re-asked; empty for plain runs.
 	Correction string `json:"correction,omitempty"`

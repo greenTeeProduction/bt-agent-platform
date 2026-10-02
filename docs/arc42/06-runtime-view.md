@@ -1,5 +1,7 @@
 # 6. Runtime View
 
+Under the [Sol policy](../sol-model-policy.md), ordinary LLM calls spawn a caller-bounded Codex process. NotebookLM generation/research and legacy scripts remain enabled. NotebookLM command deadlines include backoff; only passive reads may retry, successful JSON remains complete, and an open circuit returns immediately. Session renewal validates account and RPC before saving. Successful keepalive is throttled for 15 minutes; transient renewal failure does not invalidate a separately checked working login.
+
 Scenarios use the building blocks from [§5](05-building-blocks.md).
 Durations are budgets or targets where stated, not measured service-level
 guarantees. Code evidence and acceptance criteria are in [§10](10-quality.md).
@@ -402,6 +404,21 @@ metadata, including nested cycles. The watcher starts after owner/analysis
 initialization. The bt-agent self path still has only scheduler snapshots;
 daemon-wide scheduler/A2A/DLQ admission remains separate C09 acceptance.
 
+Checkpoint recovery retains the original attempt's typed state snapshot through
+`Running` ticks and keeps one bounded retry budget for the run. A missing/string-
+mismatched fact fails verification; a completed file write followed by a failed
+checkpoint stops as uncertain instead of treating state restoration as undo.
+The standalone GOAP agent publishes returned observations before callbacks and
+rejects unestablished effects; dynamic GOAP without an executor cannot advance.
+Compiled and dynamic steps now require fresh observations (ADR-289). Each step
+checks preconditions, retains one observation scope across `Running` ticks, and
+updates state only from fields that satisfy its effect oracle. A failed observation
+after a committed file write stops as uncertain; terminal steps do not replay.
+Setup applies declared capabilities/goals/prompts when selected and preserves
+observed facts. The dynamic memory sequence retains its plan across ticks; a
+failed replan clears the previous plan. The full declared goal must hold before
+completion. Legacy `ApplyGoapEffects` fails with a regeneration diagnostic.
+
 ## 6.6 Browser Authentication and Session Expiry
 
 ```mermaid
@@ -433,12 +450,54 @@ Sessions are process-local, so dashboard restart requires sign-in again
 
 ## 6.7 Personal Automation and Feedback
 
-Intent or recurring-pattern evidence creates a goal. The canonical planner
-produces a plan, the compiler validates a tree and persists it in the user's
-workspace, and the automation flow creates a tracked approval request.
-Approval finalization activates/schedules the tracked automation; rejection
-keeps it unavailable. Negative feedback can flag and pause an approved
-automation until review finalization.
+Personal automation reuses a governed owned task tree. Exact successful interaction
+records carry source tree versions; template selection resolves the adopted runtime
+version before consulting legacy storage. Keyword similarity alone cannot supply a task
+implementation. `bt_automation_schedule` offers the same proposal path directly for
+an existing owned response/file task and a validated five-field cron expression.
+Missing templates require an explicit task contract rather than a prose-only
+administrative GOAP plan. Approval schedules the copied task; rejection keeps it
+unavailable. Negative feedback can pause it for review.
+
+The proposal path reserves a pending record before publishing its tree. Reservation
+serializes duplicate checks and the per-user cap across instances; pending and
+flagged proposals consume slots. Approval compares the request, tree, agent,
+schedule and exact task with the reservation, creates or verifies the same agent
+definition, then commits approval. A failed commit is reported and leaves the
+previous admission state; retrying matches the existing definition. Scheduled
+agents receive the original task text as their description. Unreadable ledgers
+and contradictory records deny admission. Personal task descriptions are not
+registered in the shared knowledge graph (ADR-284).
+
+New proposals bind consent to the exact tree version as well as owner/task/schedule.
+Changed definitions and missing ledgers cannot resolve tracked trees; a registered
+agent with an unavailable tree cannot fall through to an unrelated alias/default.
+Legacy unversioned autopilot definitions require explicit reconciliation. Failed
+preparation can leave a pending reservation requiring repair (ADR-285).
+
+`FileTask` snapshots a declared input beneath an owner-isolated artifact root,
+runs the factory's bounded response/gateway children, validates JSON before writing,
+checks input freshness, atomically writes the declared destination and independently
+reads it back. Exact bytes and the result contract must agree. Run records and runner
+results retain input/output digests and committed/verified disposition. Failed gates
+leave the prior output intact; uncertain post-write verification stops replay. Paths
+are declared before consent and cannot be chosen by model output.
+
+The retained real Ollama trial used `Scheduler.RunNow` and the production runner:
+an expenses file totaling 25 across three entries produced a verified report; an
+inconsistent expected total failed without replacing it. This qualifies that file
+fixture, not cron wall-clock dispatch, other integrations or general assistant
+performance. Ordinary operations still use Sol 6.1. The compiled and dynamic GOAP
+paths also have a live dependent file fixture: expense total 25 is saved, read by
+the next step, and doubled to 50. Independent readback and scoped terminal receipts
+establish both effects. Built-in research/DevOps declarations still need concrete
+capability observers; their prose cannot establish task completion (ADR-289).
+
+Explicit-feedback totals and review thresholds are scoped to the exact
+tree/user pair. Another user's same-ID tree and unowned legacy feedback do
+not contribute. Compile-seed identifiers include both owner and tree, so
+recompilation cannot overwrite another user's seed. Compilation remains
+synthetic evidence, not proof that the requested task was completed.
 
 Task approval first persists a reconciliation marker, then resolves the HITL
 audit and clears the marker. Failure is reported and the task remains excluded
@@ -455,6 +514,30 @@ settings can permit auto-approval; the default HITL policy is not an
 unconditional guarantee that every installation requires a human click.
 See [automation finalization](../../internal/persona/automation_finalize.go),
 [autopilot tests](../../cmd/bt-agent/autopilot_test.go), and QS9–QS13.
+
+### On-demand governed task creation
+
+`bt_factory_create` and the compatibility name `bt_kg_auto_create` require
+`task` and `result_contract`. Optional steps each declare their own instruction
+and contract. `file_task` adds declared relative input/output artifact paths for
+an owned file workflow. The response factory retains the full task and uses bounded
+primary/recovery calls behind every step's quality gate. Expected values remain
+inside the verifier; only required field names are sent to the worker.
+
+The handler validates the draft, persists a fresh collision-resistant
+`factory:` ID and returns its definition hash. Only a successful shared write
+is indexed. Personal trees require the owner workspace and stay outside shared
+discovery. Creation returns `qualified: false`: it neither executes the task
+nor establishes fitness. Parent references record lineage; this response path
+does not splice unrelated parent actions into the requested work.
+
+Factory IDs resolve only to their saved definition. Missing or inaccessible
+IDs cannot execute DefaultTree. Owner-scoped execution reloads the definition
+and records its actual result, owner, version and gate verdicts. These are
+response workflows; file-task fixtures add real read/write effects (ADR-285).
+Other external integrations and measured file-task evolution/promotion
+remain separate work. See [factory handler](../../cmd/bt-agent/task_factory.go)
+and [real-model execution test](../../cmd/bt-agent/task_factory_test.go).
 
 ## 6.8 Inspect a Tree Definition
 
@@ -491,6 +574,104 @@ Failure preserves the actual healthy result and records its diagnostic in
 history; typed persistence evidence stops automatic replay. Promotion write
 admission respects the shorter caller/default scope budget. Startup filesystem
 I/O and arbitrary synchronous I/O remain cooperative (ADR-274, R30).
+
+
+### Terminal execution evidence
+
+`BuildAndValidate` binds the command to the source and expanded definitions.
+`RunTask` starts an independent evidence identity, executes the tree, resolves
+its terminal outcome and records the result once. `ReflectOnOutcome` requests
+reflection at finalization. `RunOnce` defers the write until its own output and
+quality checks complete, preserving a later rejection instead of publishing an
+earlier success. Live mutations append executed versions. Storage errors remain
+separate from the task outcome to prevent replay of completed effects.
+[Runtime regressions](../../internal/engine/run_evidence_test.go) and
+[agent regressions](../../internal/agent/run_evidence_test.go) cover this path.
+Compilation seeds cannot unlock the execution-evidence gate; feedback affects
+satisfaction independently of measured task success.
+
+
+### Measured factory evolution and runtime adoption
+
+The response-factory regression now exercises creation, a controlled failing
+worker, gardener mutation, three paired real-model trials, atomic publication,
+actual agent adoption, registry reload and rollback. The quality gateway checks
+the recovery output as well as the primary output. The added recovery worker
+recomputes the original task without copying a failed value or receiving the
+expected answer. Terminal records identify the version actually executed.
+This is one controlled response task, not deployed fleet or external-tool
+acceptance (ADR-281; [live regression](../../cmd/bt-agent/runtime_promotion_test.go)).
+
+### Manual and genetic evolution publication
+
+`bt_evolve` reads the requested owner/tree's active definition and requires three
+actual failures with matching source and executed hashes. Another task tree,
+owner, older version or compilation record cannot trigger it. The genetic-family
+and selector-ordering tools retain proposed definitions outside runtime discovery;
+a fresh paired comparison alone can activate a version under the original ID.
+Shared discovery receives governance coverage only after that commit. A candidate
+starts with zero attributed runtime tasks until it actually executes.
+`bt_get_tree` and `bt_get_fitness` read this active definition/evidence rather than
+an obsolete legacy file or pooled history. Manual publication supports explicit
+personal ownership; the genetic-family entrypoints remain shared-tree tools.
+See [entrypoint regressions](../../cmd/bt-agent/runtime_publication_test.go) and ADR-282.
+
+---
+
+### Recovery of collapsed persisted trees
+
+With all writers stopped, inspect exact registered filenames and validate each
+authored replacement. Refuse changed plans, changed original bytes, personal
+ownership in shared files or managed-version conflicts. Copy originals and save
+a prepared manifest before any overwrite. Restore each tree atomically and
+acknowledge its status; partial failure retains completed work and backups.
+Quarantine the explicitly retired `domain:arc42:assemble` skeleton rather than
+reviving its removed actions. Reload the production registry and compare exact
+definition versions. This is an operator repair; its counts do not enter fitness
+or promotion evidence (ADR-283).
+
+### Research delivery and attribution recovery
+
+NotebookLM/grill/provider-review goals record answer digests before implementation.
+A committed apply is inspected against Git and the completed task's file scope;
+its delivery receipt binds only research already observed when the run began.
+Repeated research-goal RED passes hold the goal for review without delivery credit.
+Pending attribution is journaled before apply. On a later cycle, preflight repairs
+receipts from committed run artifacts before planning; an unresolved repair holds
+new planning without repeating code. `bt_research_status` exposes the current
+owner's evidence (ADR-287). Terminal records now retain the running binary's native
+VCS metadata, start time, exact resolved publication and the executed result
+contract (ADR-288). Status joins clean builds containing unchanged delivered files
+to the owner's exact executions, then recomputes value contracts over final output.
+Historical publication trials remain inspectable after rollback. Observed code
+presence and checked results do not establish causal research impact; the report
+states that limitation explicitly. Missing metadata yields no adoption credit,
+and corrupt records fail reporting instead of silently reducing the sample.
+
+Repeated program RED passes now create `needs_review`, with no completion timestamp
+or delivery credit. Selection and batching stop before dependent milestones behind
+a review hold. A changed goal cannot inherit an old precheck result. An unreadable
+or unwritable program transaction stops planning. Explicit revision requires the
+exact current goal plus changed requirements, preserves review history and reopens
+pending work; it grants no implementation credit.
+
+New Superpowers runs capture program/index/goal references before implementation.
+After actual Git landing, completed task scope must intersect the captured goal's
+file anchors (or exact normalized objective when anchorless). The delivery receipt
+is saved before the pending journal clears. A failed metadata write is reconciled
+without repeating implementation. These checks establish attributed code delivery,
+not broad semantic goal fulfillment or causal research benefit (ADR-290).
+
+### Deployed bounded cron acceptance
+
+On 2026-10-02 the native `b615595b` daemon dispatched a factory-created scoped
+file task at its configured wall-clock cron. Sol 6.1 produced the independently
+expected service-count/revision report. The terminal record retained exact
+owner/tree/version, clean native build, two passed result checks and one verified
+file receipt. Existing host policy auto-approved activation; afterward the agent
+returned to on-demand. [Evidence](../verification/2026-10-02-runtime-release/README.md)
+qualifies this one scheduled workflow, not broad personal assistant behavior or
+causal research impact. Earlier local-only statements retain their dated scope.
 
 ---
 

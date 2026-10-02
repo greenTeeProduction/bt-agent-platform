@@ -1,5 +1,7 @@
 # 12. Glossary
 
+**Sol-only policy:** ordinary built-in BT inference/coding selects `gpt-6.1-sol` through Codex login. NotebookLM generation/research, external embeddings/session indexing and legacy memory extraction are explicit exceptions. **Session renewal:** validated cookie rotation that reduces expiry without guaranteeing permanent access. See [model policy](../sol-model-policy.md).
+
 Canonical terms used across the architecture, sorted alphabetically. Keep
 runtime details in §§5–8 and decision history in [§9](09-decisions.md).
 
@@ -40,6 +42,7 @@ runtime details in §§5–8 and decision history in [§9](09-decisions.md).
 | **Fitness Score** | An evaluation measure for a tree. Runtime-success EMA, structural fitness, benchmark score and user satisfaction are different signals, not interchangeable percentages. |
 | **Gardener** | The service that observes registered trees and orchestrates configured evolution passes, validation and persistence. |
 | **GOAP** | Goal-Oriented Action Planning. `internal/goap` owns the canonical planner and world-state/goal model; engine nodes adapt it to tree execution. |
+| **GoapStep** | A per-step gate that checks preconditions and accepts expected effects only from fresh verified result fields, file receipts or capability observations (ADR-289). |
 | **GOAP Fusion Loop** | The scheduled research-to-code workflow that gathers goals, plans work, delegates implementation, verifies and attempts landing. Schedule is deployment configuration. |
 | **Graphify Graph** | The repository analysis graph under `graphify-out/`, used to navigate source relationships. It is distinct from the runtime Knowledge Graph and may require regeneration. |
 | **Grill** | Iterative critical review of research, commonly through NotebookLM. Research evidence can inform goals without authorizing code changes by itself. |
@@ -58,6 +61,7 @@ runtime details in §§5–8 and decision history in [§9](09-decisions.md).
 | **Mutation** | An operation changing a tree's structure or metadata. Current operators are defined by implementation rather than a copied fixed count. |
 | **Non-admission evidence** | A trusted peer's explicit assertion that a rejected request did not enter execution. An HTTP error status alone is insufficient. |
 | **NSGA-II** | Non-dominated Sorting Genetic Algorithm II: multi-objective population selection using dominance ranking and crowding distance. |
+| **Offline tree recovery** | Restoring an authored task definition or quarantining a retired one after preserving original bytes. Requires stopped writers; it provides no measured evolution fitness or task-success credit (ADR-283). |
 | **OutcomeSelector** | An engine control node selecting behavior from prior outcome/state according to its configured routing rules. |
 | **Pareto Front** | Candidates not dominated by another candidate across all chosen objectives. |
 | **Partial Landing** | A workflow result where only eligible completed work is landed and remaining work stays explicit in artifacts; it is not completion of the full goal. |
@@ -65,7 +69,7 @@ runtime details in §§5–8 and decision history in [§9](09-decisions.md).
 | **PlannerNode** | The behavior-tree adapter to GOAP planning; not a second independent A* implementation. |
 | **Pre-Mutation Snapshot** | A copy of the predecessor tree used for rejection/rollback evidence. Snapshot timing matters: capturing after adoption cannot restore the previous tree. |
 | **PreGate** | A composed sequence of input/prerequisite checks before a task's main work. |
-| **Program / Milestone** | Durable research/improvement goals grouped into a program with tracked milestones; distinct from a transient planner path. |
+| **Program / Milestone** | Durable research/improvement goals with captured implementation references and optional Git delivery receipts. A review hold stops dependent work; legacy done labels alone are not verified delivery (ADR-290). |
 | **Provider Cooldown** | Provider-specific durable quota timing that controls eligibility for later CLI attempts. Failover may try one alternate when explicitly enabled. |
 | **Q-Learning** | Reinforcement-learning approach that updates action values from observed rewards, used in supported evolution/selection components. |
 | **Quota Economy** | Policies and caches intended to reduce metered calls and respect provider quotas; not a guarantee of free or unlimited execution. |
@@ -84,12 +88,14 @@ runtime details in §§5–8 and decision history in [§9](09-decisions.md).
 | **Structural Fitness** | A tree-shape/evaluation signal kept separate from genuine-run success history. |
 | **Superpowers Run** | Durable artifacts for a coding workflow, including plan, tasks, implementation and verification evidence. The historical name is provider-neutral. |
 | **Sprint batch budget** | A five-minute context owned by accepted asynchronous work, including queue time. Expiry stops new dispatch and returns only proven unstarted claims; capacity stays owned until actual cleanup (ADR-276). |
+| **Research delivery receipt** | Owner-scoped evidence linking a completed task to an actual landed Git commit, changed declared files and recorded verification. Only sources observed before the run are linked; it does not establish deployed adoption or measured impact (ADR-287). |
 | **Recovery hold** | Persisted inactive scheduler disposition requiring trusted operator reconciliation after interrupted or unrecorded execution. Restart, registry sync and ordinary scheduling do not prove side effects failed (ADR-277). |
 | **Restart admission seal** | Process-local exclusion of new owned work during accepted or uncertain restart handoff; proven rejection reopens admission. Shared dashboard/gardener gates and target-owned sibling requests use it; it is not a durable recovery claim or protection from arbitrary systemd calls (ADR-278/279). |
 | **Sprint metadata reconciliation** | Retrying a retained observed task result against its original in-progress owner without running the action again. Failed/conflicting writes and execution uncertainty block new admission; evidence is process-local (ADR-275). |
 | **Task Approval (dashboard)** | The dashboard task workflow's execution decision. It is separate from login authentication and may be distinct from an engine HITL request. |
 | **Tick** | One evaluation step of a behavior tree returning success, failure or running; a synchronous tick can contain slow work. |
 | **Transposition Table (TT)** | Cache of evaluations keyed by state/tree identity, used to reuse previous search results. |
+| **Qualified runtime version** | An immutable tree definition admitted by paired real-model task evidence and selected by the owner/tree active pointer. A retained search proposal or structural score alone is not qualified publication (ADR-281/282). |
 | **Tree Store** | Persisted serializable trees loaded by the appropriate registry/resolver. Global and per-user scopes must remain explicit. |
 | **Uncertain execution** | A dispatched operation whose completion cannot be established. Automatic replay stops; reconcile evidence before an operator chooses another attempt (ADR-267). |
 | **UtilitySelector** | A selector that ranks alternatives by configured utility/evidence before execution. |

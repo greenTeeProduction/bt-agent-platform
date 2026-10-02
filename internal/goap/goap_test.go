@@ -465,14 +465,14 @@ func TestBuildSerializableTree(t *testing.T) {
 	}
 
 	tree := BuildSerializableTree(def)
-	if tree.Type != "Sequence" {
-		t.Errorf("root should be Sequence, got %s", tree.Type)
+	if tree.Type != "MemSequence" {
+		t.Errorf("root should retain progress in MemSequence, got %s", tree.Type)
 	}
 	if tree.Name != "GOAP_Root" {
 		t.Errorf("root name should be GOAP_Root, got %q", tree.Name)
 	}
-	if len(tree.Children) != 4 {
-		t.Errorf("expected 4 children (HasGoapGoal, PlanGoapActions, GoapStrategyRouter, ReflectGoapOutcome), got %d", len(tree.Children))
+	if len(tree.Children) != 5 {
+		t.Errorf("expected setup, eligibility, planning, observed execution and reflection, got %d", len(tree.Children))
 	}
 }
 

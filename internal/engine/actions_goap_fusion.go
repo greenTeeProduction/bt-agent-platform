@@ -182,6 +182,7 @@ func registerGoapFusionActions() {
 		if program != nil {
 			persistGoapProgram(bb, program, "notebooklm")
 		}
+		recordGoapResearchSource(bb, goals, "notebooklm", answer)
 		appendGoapResearchGoals(bb, goals)
 		goalSummary := strings.Join(goapResearchGoalLines(bb), "\n- ")
 
@@ -325,11 +326,9 @@ func registerGoapFusionActions() {
 		gapsStr, _ := bb.ChainState["goap_fusion_improvement_gaps"].(string)
 		goals := []string{}
 
-		// Red pre-check (2026-07-23 review gap 5): head milestones carrying
-		// prior red-pass evidence get their recorded RED re-run BEFORE any
-		// charge or Claude plan phase — a stale milestone (work already
-		// landed) completes here for the cost of one test run instead of
-		// burning two full plan cycles on the RedPassStreak treadmill.
+		// Recheck prior RED-pass evidence before charging another planning
+		// cycle. Repeated passes hold the milestone for goal/test review;
+		// they never establish code delivery.
 		precheckGoapStaleMilestones(bb)
 
 		// P0: Verifiable correctness (test blockers, build failures)
@@ -343,13 +342,13 @@ func registerGoapFusionActions() {
 		// Charging the head milestone's attempt (RecordAttemptAndMaybeBlock +
 		// save) is a read-modify-write against the shared program store, so it
 		// must go through UpdatePrograms' flock like every other program-store
-		// writer (persistGoapProgram, RefundAttempt, RecordRedPass, MarkDone) —
+		// writer (persistGoapProgram, RefundAttempt, RecordRedPass, MarkDelivered) —
 		// a bare OpenPrograms+Save here could clobber a concurrent writer's
 		// already-persisted change with this call's stale in-memory copy.
 		var chargedProgramID string
 		var chargedIdx int
 		var charged bool
-		if err := research.UpdatePrograms(goapProgramsPath, func(ps *research.ProgramStore) error {
+		programErr := research.UpdatePrograms(currentGoapProgramsPath(), func(ps *research.ProgramStore) error {
 			// ClaimActiveForCycle (rather than plain Active()) refuses the
 			// program when it is still claimed by a DIFFERENT, in-lease
 			// sibling cycle — a sibling agent must not plan/charge a program
@@ -369,7 +368,14 @@ func registerGoapFusionActions() {
 			ps.RecordAttemptAndMaybeBlock(p.ID, idx, goapProgramMaxMilestoneAttempts)
 			chargedProgramID, chargedIdx, charged = p.ID, idx, true
 			return nil
-		}); err == nil && charged {
+		})
+		if programErr != nil {
+			setGoapState(bb, "program_error", programErr.Error())
+			bb.Result = "Program metadata requires repair before planning: " + programErr.Error()
+			bb.Outcome = "program_state_unavailable"
+			return -1
+		}
+		if charged {
 			// Stamp WHICH milestone was charged so an infrastructure failure
 			// later in this cycle can refund exactly this charge — the
 			// queued refs below are re-read after the store re-open and may
@@ -379,11 +385,14 @@ func registerGoapFusionActions() {
 
 		// Re-open (read-only) so a just-blocked milestone is reflected in the
 		// queueing pass below.
-		if ps, err := research.OpenPrograms(goapProgramsPath); err == nil {
+		if ps, err := research.OpenPrograms(currentGoapProgramsPath()); err == nil {
 			if p := ps.Active(); p != nil && !goapProgramClaimedBySibling(p, bb.RunID) {
 				var refs []string
 				for idx := range p.Milestones {
 					m := &p.Milestones[idx]
+					if m.Status == "needs_review" {
+						break
+					}
 					if m.Status != "pending" {
 						continue
 					}
@@ -405,9 +414,16 @@ func registerGoapFusionActions() {
 		// 2026-07-10). The head SURVIVING goal is stamped so a failed cycle
 		// charges exactly the goal it attempted.
 		goalBudget, _ := research.OpenGoalAttempts(goapGoalAttemptsPath)
+		traces, traceErr := research.OpenTraces(researchTracePath(bb.User), bb.User)
+		if traceErr != nil {
+			setGoapState(bb, "research_trace_error", traceErr.Error())
+		}
 		var abandonedGoals []string
 		researchGoalStamped := false
 		for _, nlmGoal := range goapFusionNotebookLMGoalsFromGaps(gapsStr) {
+			if traces != nil && (traces.Delivered(researchGoalTraceID(nlmGoal)) || traces.NeedsReview(researchGoalTraceID(nlmGoal))) {
+				continue
+			}
 			if goapAbandonedResearchGoal(goalBudget, nlmGoal) {
 				abandonedGoals = append(abandonedGoals, truncateGoap(nlmGoal, 90))
 				continue
@@ -415,9 +431,7 @@ func registerGoapFusionActions() {
 			goals = append(goals, "[P0] NotebookLM research: "+nlmGoal)
 			if !researchGoalStamped {
 				setGoapStateDurable(bb, "research_goal_charged", goapResearchGoalKey(nlmGoal))
-				// The raw goal text rides along so a red-pass closure can
-				// record it goap:implemented (research prompts dedup by
-				// title, not by budget key).
+				// Retain the goal text for review when RED cannot demonstrate the gap.
 				setGoapStateDurable(bb, "research_goal_charged_text", nlmGoal)
 				researchGoalStamped = true
 			}
@@ -645,7 +659,9 @@ func registerGoapFusionActions() {
 		if program := extractGoapProgram(answer); program != nil {
 			persistGoapProgram(bb, program, "grill")
 		}
-		appendGoapResearchGoals(bb, extractGoapResearchGoals(answer))
+		grillGoals := extractGoapResearchGoals(answer)
+		recordGoapResearchSource(bb, grillGoals, "notebooklm:grill", answer)
+		appendGoapResearchGoals(bb, grillGoals)
 		goal, gap := extractGoapNotebookLMRecommendation(answer)
 
 		// Save grill transcript to vault
@@ -897,23 +913,19 @@ var goapRedPrecheckRunFn = func(cmd string) (string, error) {
 	return runGoapShellTimeout(cmd, goapRedPrecheckTimeout)
 }
 
-// precheckGoapStaleMilestones re-runs the recorded RED command of head
-// milestones that already red-passed once (RedPassStreak ≥ 1): a second pass
-// completes the milestone on the spot (evidence `red-evidence-precheck:`),
-// letting the cycle charge and plan the NEXT genuinely-pending milestone in
-// the same slot; a failing RED kills the already-landed hypothesis (streak +
-// command cleared) and the milestone proceeds to a real implementation
-// attempt. The shell runs OUTSIDE the program-store flock — only the
-// bookkeeping takes the lock, with the milestone re-validated under it.
+// precheckGoapStaleMilestones checks a previously passing RED command before
+// spending another planning cycle. Another pass creates a review hold, never
+// delivery credit. A failed test clears the stale hypothesis. Shell execution
+// stays outside the bounded program transaction.
 func precheckGoapStaleMilestones(bb *Blackboard) {
 	for range goapRedPrecheckMaxPerCycle {
-		var programID, cmd string
+		var programID, cmd, goal string
 		var idx int
 		found := false
-		if ps, err := research.OpenPrograms(goapProgramsPath); err == nil {
+		if ps, err := research.OpenPrograms(currentGoapProgramsPath()); err == nil {
 			if p := ps.Active(); p != nil {
 				if mIdx, m := p.NextMilestone(); m != nil && m.RedPassStreak >= 1 && strings.TrimSpace(m.LastRedCmd) != "" {
-					programID, idx, cmd, found = p.ID, mIdx, m.LastRedCmd, true
+					programID, idx, cmd, goal, found = p.ID, mIdx, m.LastRedCmd, m.Goal, true
 				}
 			}
 		}
@@ -933,8 +945,8 @@ func precheckGoapStaleMilestones(bb *Blackboard) {
 		// branch is unreachable in production, because recorded RED commands are
 		// whole-package runs and the bare main checkout fails two environment
 		// tests unconditionally, so the error branch below always returns first.
-		if goapRedPassDeliverableVerdict(goapMilestoneGoalText(programID, idx)) == goapDeliverablesMissing {
-			_ = research.UpdatePrograms(goapProgramsPath, func(ps *research.ProgramStore) error {
+		if goapRedPassDeliverableVerdict(goal) == goapDeliverablesMissing {
+			_ = research.UpdatePrograms(currentGoapProgramsPath(), func(ps *research.ProgramStore) error {
 				ps.ResetRedPassStreak(programID, idx)
 				return nil
 			})
@@ -954,7 +966,7 @@ func precheckGoapStaleMilestones(bb *Blackboard) {
 			}
 			// RED still fails: the predicted regression exists, the work is
 			// genuinely missing — hypothesis dead, plan it for real.
-			_ = research.UpdatePrograms(goapProgramsPath, func(ps *research.ProgramStore) error {
+			_ = research.UpdatePrograms(currentGoapProgramsPath(), func(ps *research.ProgramStore) error {
 				ps.ResetRedPassStreak(programID, idx)
 				return nil
 			})
@@ -964,36 +976,30 @@ func precheckGoapStaleMilestones(bb *Blackboard) {
 		}
 
 		var streak int
-		var completed bool
-		if err := research.UpdatePrograms(goapProgramsPath, func(ps *research.ProgramStore) error {
-			// Re-validate under the lock: another writer may have completed,
-			// blocked, or re-evidenced the milestone while the shell ran.
+		var review bool
+		if err := research.UpdatePrograms(currentGoapProgramsPath(), func(ps *research.ProgramStore) error {
 			for _, p := range ps.Programs {
 				if p.ID != programID {
 					continue
 				}
-				if idx >= len(p.Milestones) || p.Milestones[idx].Status != "pending" || p.Milestones[idx].LastRedCmd != cmd {
+				if idx >= len(p.Milestones) || p.Milestones[idx].Status != "pending" || p.Milestones[idx].LastRedCmd != cmd || p.Milestones[idx].Goal != goal {
 					return nil
 				}
-			}
-			streak = ps.RecordRedPass(programID, idx, cmd)
-			if streak >= goapRedPassCompleteStreak {
-				completed = ps.MarkDone(programID, idx, "red-evidence-precheck:"+bb.RunID)
-				if completed {
-					// This precheck runs BEFORE the cycle's own
-					// ClaimActiveForCycle call, so any claim on the program
-					// belongs to an EARLIER cycle's RunID, not bb.RunID —
-					// ReleaseClaim's agentID match can never succeed here.
-					// Clear whatever claim is present instead.
-					ps.ClearClaim(programID)
+				streak = ps.RecordRedPass(programID, idx, cmd)
+				if streak >= goapRedPassReviewStreak {
+					review = ps.MarkNeedsReview(programID, idx, bb.RunID, "Recorded RED command passed again before implementation; review the goal/test. No code delivery established.")
+					if review {
+						ps.ClearClaim(programID)
+					}
 				}
+				return nil
 			}
 			return nil
-		}); err != nil || !completed {
+		}); err != nil || !review {
 			return
 		}
-		Info("goap fusion: milestone completed on red pre-check — recorded RED passed again at HEAD, no plan phase needed",
-			"milestone", fmt.Sprintf("%s:%d", programID, idx), "streak", streak)
+		setGoapState(bb, "program_milestone_review", fmt.Sprintf("%s:%d", programID, idx))
+		Info("goap fusion: milestone needs review after red pre-check", "milestone", fmt.Sprintf("%s:%d", programID, idx), "streak", streak)
 	}
 }
 

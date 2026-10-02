@@ -9,23 +9,12 @@ import (
 )
 
 func benchmarkSuccessTree() *evolution.SerializableNode {
-	return &evolution.SerializableNode{
-		Type: "Sequence",
-		Name: "BenchmarkSuccessRoot",
-		Children: []evolution.SerializableNode{
-			{Type: "Action", Name: "MarkSuccessful"},
-		},
-	}
+	tree, _ := liveRoutingFixture()
+	return tree
 }
 
 func benchmarkPlanTree() *evolution.SerializableNode {
-	return &evolution.SerializableNode{
-		Type: "Sequence",
-		Name: "BenchmarkPlanRoot",
-		Children: []evolution.SerializableNode{
-			{Type: "Action", Name: "ExecutePlan"},
-		},
-	}
+	return &evolution.SerializableNode{Type: "ChainAction", Name: "llm_call:Answer the question directly in one complete sentence. {{.Task}}", Metadata: map[string]any{"max_tokens": float64(48)}}
 }
 
 func TestLoadBFCLSuiteAndEvaluate(t *testing.T) {
@@ -33,7 +22,7 @@ func TestLoadBFCLSuiteAndEvaluate(t *testing.T) {
 	path := filepath.Join(dir, "bfcl_custom.json")
 	data := `[
 		{"id":"one","query":"build the Go project","expected_tool":"BuildPath","category":"simple"},
-		{"id":"two","query":"what is a goroutine?","expected_tool":"KnowledgePath","category":"simple"}
+		{"id":"two","query":"what is a goroutine?","expected_tool":"GoKnowledgePath","category":"simple"}
 	]`
 	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
 		t.Fatalf("write fixture: %v", err)
@@ -47,11 +36,9 @@ func TestLoadBFCLSuiteAndEvaluate(t *testing.T) {
 		t.Fatalf("unexpected suite: name=%q entries=%d", suite.Name, len(suite.Entries))
 	}
 
-	// MarkSuccessful's leaf action produces no real output, so routing
-	// (CorrectRoutes/Accuracy) is correct but the quality gate now fails
-	// the run (SuccessRate 0) instead of masking it as a false success.
-	metrics := suite.Evaluate(benchmarkSuccessTree(), DefaultMock())
-	if metrics.TotalEntries != 2 || metrics.CorrectRoutes != 2 || metrics.Accuracy != 1 || metrics.SuccessRate != 0 {
+	// The fixture uses real inference on both routing branches.
+	metrics := suite.Evaluate(benchmarkSuccessTree(), RealLLM(t))
+	if metrics.TotalEntries != 2 || metrics.CorrectRoutes != 2 || metrics.Accuracy != 1 || metrics.SuccessRate != 1 || metrics.Warning != "" || metrics.ModelEvidence.Calls < 2 {
 		t.Fatalf("unexpected metrics: %+v", metrics)
 	}
 	if metrics.Results[0].ActualPath != "BuildPath" || !metrics.Results[1].Correct {
@@ -105,10 +92,10 @@ func TestBFCLV3LoadFlattenAndEvaluate(t *testing.T) {
 	path := filepath.Join(dir, "bfcl_v3.json")
 	data := `{
 		"multi_turn_base": [
-			{"id":"base-1","category":"multi_turn_base","turns":[{"role":"user","content":"build the Go project"},{"role":"user","content":"what is a goroutine?"}],"expected_tools":["BuildPath","KnowledgePath"]}
+			{"id":"base-1","category":"multi_turn_base","turns":[{"role":"user","content":"build the Go project"},{"role":"user","content":"what is a goroutine?"}],"expected_tools":["BuildPath","GoKnowledgePath"]}
 		],
 		"multi_turn_miss_func": [
-			{"id":"miss-1","category":"multi_turn_miss_func","turns":[{"role":"user","content":"unclassifiable but clear task"}],"expected_tools":["GeneralPath"]}
+			{"id":"miss-1","category":"multi_turn_miss_func","turns":[{"role":"user","content":"unclassifiable but clear task"}],"expected_tools":["ExecutionPath"]}
 		]
 	}`
 	if err := os.WriteFile(path, []byte(data), 0o600); err != nil {
@@ -130,8 +117,8 @@ func TestBFCLV3LoadFlattenAndEvaluate(t *testing.T) {
 		t.Fatalf("flattened entries=%d want 2", len(entries))
 	}
 
-	metrics := EvaluateBFCLV3(benchmarkSuccessTree(), entries, DefaultMock())
-	if metrics.TotalEntries != 2 || metrics.TotalTurns != 3 || metrics.CorrectTurns != 3 || metrics.TurnAccuracy != 1 || metrics.FullyCorrect != 2 {
+	metrics := EvaluateBFCLV3(benchmarkSuccessTree(), entries, RealLLM(t))
+	if metrics.TotalEntries != 2 || metrics.TotalTurns != 3 || metrics.CorrectTurns != 3 || metrics.TurnAccuracy != 1 || metrics.FullyCorrect != 2 || metrics.Warning != "" || metrics.ModelEvidence.Calls < 3 {
 		t.Fatalf("unexpected v3 metrics: %+v", metrics)
 	}
 }
@@ -148,7 +135,7 @@ func TestBFCLV3LoadErrorsAndEmptyEvaluation(t *testing.T) {
 		t.Fatal("expected invalid v3 JSON error")
 	}
 
-	metrics := EvaluateBFCLV3(benchmarkSuccessTree(), nil, DefaultMock())
+	metrics := EvaluateBFCLV3(benchmarkSuccessTree(), nil, RealLLM(t))
 	if metrics.TotalEntries != 0 || metrics.TotalTurns != 0 || metrics.TurnAccuracy != 0 || metrics.MultiStepSuccessRate != 0 || len(metrics.Results) != 0 {
 		t.Fatalf("unexpected empty metrics: %+v", metrics)
 	}
@@ -210,11 +197,10 @@ func TestGAIABuiltinAndEvaluation(t *testing.T) {
 	}
 
 	metrics := EvaluateGAIA(benchmarkPlanTree(), []GAIAEntry{
-		// ExecutePlan returns the generated plan itself since b5c4d00
-		// (placeholder output removed); match DefaultMock's plan text.
-		{ID: "g1", Question: "what is LiFePO4", Answer: "execute workflow", Level: 1},
-		{ID: "g2", Question: "compare systems", Answer: "not-present", Level: 2},
-	}, DefaultMock())
+		// Ground truth is independent of the generated model response.
+		{ID: "g1", Question: "What is 17 plus 25?", Answer: "42", Level: 1},
+		{ID: "g2", Question: "What is 17 plus 25?", Answer: "9999999", Level: 2},
+	}, RealLLM(t))
 	if metrics.TotalQuestions != 2 || metrics.CorrectAnswers != 1 || metrics.Accuracy != 0.5 {
 		t.Fatalf("unexpected GAIA metrics: %+v", metrics)
 	}

@@ -1,0 +1,12 @@
+ok  	github.com/nico/go-bt-evolve/internal/goap	0.116s
+--- FAIL: TestGoapConversionPreservesLimitsEdgesAndExactNumbers (0.00s)
+    goap_step_test.go:29: execution definition changed: &{runtimePublication:<nil> Type:Retry Name:budgeted Description:bounded executor Children:[{runtimePublication:<nil> Type:AlwaysSucceed Name:leaf Description: Children:[] MaxRetries:0 TimeoutMs:0 Metadata:map[] Edges:[]}] MaxRetries:2 TimeoutMs:15000 Metadata:map[large:9.007199254740992e+15] Edges:[{Type:guard ChildIndex:-1 Label:value Condition:value must be verified Effect: Blackboard:map[] Priority:0 Weight:0}]}
+FAIL
+FAIL	github.com/nico/go-bt-evolve/internal/evolution	10.900s
+ok  	github.com/nico/go-bt-evolve/internal/engine	30.593s
+ok  	github.com/nico/go-bt-evolve/internal/domains	0.889s
+ok  	github.com/nico/go-bt-evolve/internal/knowledge	23.280s
+ok  	github.com/nico/go-bt-evolve/internal/factory	0.029s
+ok  	github.com/nico/go-bt-evolve/internal/benchmark	0.108s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-agent	3.143s
+FAIL

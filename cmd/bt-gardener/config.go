@@ -98,7 +98,7 @@ func buildGardenerConfig(refDir, metricsDir, snapDir, sloEvidencePath string) (g
 		RefStore:       refStore,
 		Interval:       5 * time.Minute,
 		MaxMutations:   2,
-		UseRealLLM:     false,
+		UseRealLLM:     true,
 		ValidationGate: validationGate,
 
 		// Shared with bt-agent's daemon bank (agent.HomeDir()/experience) so

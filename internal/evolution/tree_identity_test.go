@@ -1,0 +1,70 @@
+package evolution
+
+import (
+	"encoding/json"
+	"testing"
+)
+
+func TestTreeVersionRetainsPromptsAndRoundTrips(t *testing.T) {
+	tree := &SerializableNode{Type: "ChainAction", Name: "llm_call", Metadata: map[string]any{"prompt": "complete this task", "max_tokens": 128}}
+	version, err := TreeVersion(tree)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(tree)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var restored SerializableNode
+	if err = json.Unmarshal(data, &restored); err != nil {
+		t.Fatal(err)
+	}
+	got, err := TreeVersion(&restored)
+	if err != nil || got != version {
+		t.Fatalf("round trip changed version %q: %v", got, err)
+	}
+	restored.Metadata["prompt"] = "another task"
+	got, _ = TreeVersion(&restored)
+	if got == version {
+		t.Fatal("prompt change did not change version")
+	}
+}
+
+func TestExecutionEvidenceSeparatesCompilationFeedbackAndVersions(t *testing.T) {
+	records := []Record{
+		{TaskID: "compile", TreeName: "tree", User: "alice", TreeVersion: "v1", EvidenceKind: EvidenceCompilation},
+		{TaskID: "feedback", TreeName: "tree", User: "alice", EvidenceKind: EvidenceFeedback, UserFeedback: FeedbackPositive},
+		{TaskID: "run", TreeName: "tree", User: "alice", TreeVersion: "v1", EvidenceKind: EvidenceExecution, ExecutionVersions: []string{"v1"}},
+		{TaskID: "old", TreeName: "tree", User: "alice", TreeVersion: "v0", EvidenceKind: EvidenceExecution, ExecutionVersions: []string{"v0"}},
+		{TaskID: "other-owner", TreeName: "tree", User: "bob", TreeVersion: "v1", EvidenceKind: EvidenceExecution, ExecutionVersions: []string{"v1"}},
+		{TaskID: "expanded-other", TreeName: "tree", User: "alice", TreeVersion: "v1", EvidenceKind: EvidenceExecution, ExecutionVersions: []string{"v2"}},
+		{TaskID: "mixed", TreeName: "tree", User: "alice", TreeVersion: "v1", EvidenceKind: EvidenceExecution, ExecutionVersions: []string{"v1", "v2"}},
+	}
+	if got := ExecutionRecords(records); len(got) != 5 {
+		t.Fatalf("synthetic evidence counted: %+v", got)
+	}
+	got := FilterByTreeVersion(records, "tree", "alice", "v1")
+	if len(got) != 1 || got[0].TaskID != "run" {
+		t.Fatalf("wrong version evidence: %+v", got)
+	}
+}
+
+func TestTreeVersionTypedMetadataSurvivesPersistence(t *testing.T) {
+	tree := GOAPDevOpsTree()
+	before, err := TreeVersion(tree)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(tree)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var reloaded SerializableNode
+	if err := json.Unmarshal(data, &reloaded); err != nil {
+		t.Fatal(err)
+	}
+	after, err := TreeVersion(&reloaded)
+	if err != nil || before != after {
+		t.Fatalf("typed metadata changed version: %s != %s (%v)", before, after, err)
+	}
+}

@@ -1,0 +1,43 @@
+{
+  "observed_utc": "2026-10-01T17:14:18.775358+00:00",
+  "baseline_commit": "e6f5164f3e4e43c6ce54809bff76b2eb9438aacb",
+  "status": "Real-model suite, targeted final template adoption, affected race tests, lint, docs and graph passed; implementation commit hook pending.",
+  "pr83_head_verified": "af780cdbf4745432b4b3a2d890a9c9e88443237e",
+  "scope": "Owned response/file task scheduling; one real local input-to-verified-output fixture; production runner invoked through Scheduler.RunNow. No cron wall-clock observation or deployed rollout claimed.",
+  "observed": [
+    "MCP factory creates an owned FileTask, explicit scheduler proposal binds exact user/task/tree/version/paths/contracts, and HITL approval activates it.",
+    "Real Ollama qwen2.5:1.5b processes expenses 12+9+4; independent disk readback confirms total=25 and count=3, matching input/output digests and exact execution attribution.",
+    "A wrong total=999 contract fails after real-model recovery and leaves the existing output unchanged.",
+    "Edited definitions and missing approval ledgers block execution before further inference.",
+    "Personal scheduler results do not enter the shared knowledge graph.",
+    "Automation template lookup selects the real qualified and adopted runtime version, not the stale legacy definition.",
+    "Full live suite retains actual Sol fallback and promotion/adoption/rollback checks."
+  ],
+  "verification": {
+    "race": "Nine affected packages passed; before final active-template lookup edit and Go iterator modernization.",
+    "final_change": "Targeted live file task and manual publication/adopted-template checks passed after final lookup and digest assertions.",
+    "lint": "All changed packages passed; cmd/bt-agent rerun passed after final edits.",
+    "conventions_review": "No new higher-layer engine imports or resurrected packages. Artifact root injection is nil-checked; writes use rooted atomic replacement and bounded declared-destination locks. No database.",
+    "graph": "AST updated: 33112 nodes, 42611 edges."
+  },
+  "remaining": [
+    "General GOAP claimed effects and typed postconditions need repair.",
+    "File-task evolution requires dedicated real filesystem qualification fixtures; generic response benchmarks reject FileTask.",
+    "Result checks prove the supplied contract, not arbitrary task semantics.",
+    "Input snapshot checks and readback are observations, not a transaction against arbitrary external writers; destination locks use declared paths.",
+    "Incomplete reservations, legacy consent migration and stale feedback approval reconciliation remain open.",
+    "Research-to-commit-to-adoption-to-outcome attribution, historical learning cleanup and deployed rollout remain open."
+  ],
+  "files_sha256": {
+    "personal-file-live.json": "8efc445cae1bc9c957fc1ba1a9140fd2dd78dfddbb1aca1d6150b2d69b96a27c",
+    "published-template-live.json": "0f80c8ff138f3609a07970170dfa8fd004bfdd78d61d96f3604b34be03b93426",
+    "live-benchmark-report.json": "147f317261bfc0ffb3ec4f1895dce80452222f368ef0c73df3bb9e73154c706a",
+    "live-suite.txt": "aa620e989b0d097181f81c29fecd58f37d3e2f7f0d76d483c0159786047c0f36",
+    "final-adoption.txt": "b20852b1f5cb03471f8af235268bfd32dcb78c248151260732a2d01cc0ab1758",
+    "race.txt": "bfec2c78d000abfd1bbab9c9699f0968d68c0b4425554c351c06b9a1a593eadc",
+    "lint.txt": "e92606b0bf483111dff0a120c315ea165821348f31365020e2468a0059095c47",
+    "final-cmd-lint.txt": "e92606b0bf483111dff0a120c315ea165821348f31365020e2468a0059095c47",
+    "docs.txt": "322020a73a6b30cc76733f0ac44b80015ff54856be1892ebb0176fe9a09b2c50",
+    "graph.txt": "fd9d5783c2221ad2c8133560fe816be488e903dafbbe463a69b264bc24ada574"
+  }
+}

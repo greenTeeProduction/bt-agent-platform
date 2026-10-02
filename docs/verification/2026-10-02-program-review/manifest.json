@@ -1,0 +1,29 @@
+{
+  "observed_utc": "2026-10-02T00:02:59.364161+00:00",
+  "parent_commit": "26de2da0dde3fea28f9d0c6c52b7d91bfe1234c2",
+  "scope": "program review holds, verified Git delivery attribution, durable metadata repair and host backlog correction",
+  "status": "verified increment; goal remains active",
+  "pr83_head": "af780cdbf4745432b4b3a2d890a9c9e88443237e",
+  "pr83_is_ancestor": true,
+  "deployment": "not performed; host metadata correction only",
+  "files": {
+    "README.md": "c8591132d4336b786882e1ad3b3b330a4da4f3e468aac9c63233764c3edcb30b",
+    "broad-mcp-count-failure.txt": "40cdb173934c745b8d9cf26080bef85037d35ddd6c6924d0da5cd53481ae647a",
+    "changed-packages-lint.txt": "e92606b0bf483111dff0a120c315ea165821348f31365020e2468a0059095c47",
+    "doc-drift.txt": "fa18ec02b717bd010971a89b600955b443990959865f03d3ebf1fd01bb17d4bd",
+    "focused-passed.txt": "786acee1bd26ac6e1ea675098aaa10819633f11f19f62823c313d48a0bbfab67",
+    "graph-update.txt": "2a61ffb43b1dfdadf719c66890e93f0275dfd6e2bd14df2c42dccb840784e7a8",
+    "initial-compile-failure.txt": "082e78970eba8d6400a34989acb5398df1186af1fe323a1ef9e07e9325daaa77",
+    "initial-fixture-failure.txt": "e052a1e668b7f29b62e73e0912893828b49f8254191b3bdc0d7a16e1c1680d63",
+    "initial-lint.txt": "f73368191f90f9c1011c39e41e4d93ccc2ff4b64383fe3badc2974b4e81a069f",
+    "initial-protocol-failures.txt": "d74d33a7831728c6f45de9a89e486139d920b5294ad346e39c680edbc9cc6c5e",
+    "live-governance.json": "b7e292e0f2f08ab53bc6656354e3ff9a0a573af6bdd30829a8e6b920184082ef",
+    "live-suite.txt": "ef52bb6b873b6fa40a81fce92c1424314cbc44a4687867ddefdc15ea03827560",
+    "native-copy-result.json": "e178598a00595f1c7def0534fe61173d425d07334eb88fd2f17517841e76b6e5",
+    "native-host-result.json": "2e6e84a4bf017f61a7ce4bb2a5393e84f0fac117d36ccc7e1bcd7a7455a8e385",
+    "pr83-fetch.txt": "78085f567f405193b37b07008bbdd974e1c9a521df0703f58e26007f247b518c",
+    "race-passed.txt": "540eb6c4f879fa696aa39fe75e5a45924e832ecf840c859c5a1cbbf2b6fcec4a",
+    "service-model-policy.json": "2287341be123dbca43d20c907232ff3d2d273e2358fcd0714f8cfb24728dae0f",
+    "source-finding.json": "86017481fc9364dd4eebd1079eb6558cc19cf63509d99bfcc7379502bcb87183"
+  }
+}

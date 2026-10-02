@@ -1,0 +1,53 @@
+{
+  "observed_utc": "2026-10-01T17:53:44.190231+00:00",
+  "baseline_commit": "248b2aee9f9b6fca6186b3ccf988fd16750b0e3c",
+  "status": "Implementation, focused and affected regression suites, four core race suites, lint, docs and full real-model suite passed; broader cmd/bt-agent race suite failed a randomized archive assertion. Commit hook pending.",
+  "scope": "Typed checkpoint state contracts, in-memory retry lifecycle, committed-effect replay disposition, standalone GOAP observed state, and dynamic missing-executor failure. Not generic GOAP effect verification.",
+  "verification": {
+    "regression": "goap, evolution, engine, domains and cmd/bt-agent short suites passed",
+    "race_passed": [
+      "internal/goap",
+      "internal/evolution",
+      "internal/engine",
+      "internal/domains"
+    ],
+    "race_failure": {
+      "package": "cmd/bt-agent",
+      "test": "TestBTEvolveMultiObjectiveFeedsExpertKnowledgeArchive",
+      "observed": "learned_patterns was nil; the test assumes random structural search always improves and supplies canned benchmark-success metrics. This failure is retained, not reported as passing or task-performance evidence. Legacy archive/benchmark tests need repair."
+    },
+    "lint": "zero issues across all changed Go packages; after local variable naming correction",
+    "docs": "structure and references pass after ADR status/footer correction",
+    "graph": "AST updated: 33130 nodes, 42658 edges",
+    "conventions": "No higher-layer engine imports, revived package names, database or new persistence writer. Go tools use the configured toolchain.",
+    "live": "make test-live-benchmarks passed: real Ollama qwen2.5:1.5b, real Sol fallback, personal file read/write verification, runtime promotion/adoption/rollback, manual/genetic publication."
+  },
+  "meaningful_checks": [
+    "Boolean/string/exact large integer postconditions survive persistence; neighboring rounded integers, wrong source, missing false facts and malformed declarations fail.",
+    "Evolution cannot replace the declared checkpoint state map or typed facts.",
+    "A Running child preserves its attempt snapshot and total retry budget; terminal ticks cannot replay work.",
+    "A real committed file write followed by a failed checkpoint remains on disk, records uncertain disposition and is not replayed.",
+    "Standalone GOAP callbacks observe actual returned state including removed facts; missing promised effects fail without repeating the completed action.",
+    "Missing dynamic executor creates no step result, index advancement or synthesized effect and cannot be masked by fallback."
+  ],
+  "remaining": [
+    "Compiled ApplyGoapEffects and dynamic model-output effect assertions need independent capability/result observers.",
+    "Audit explicit GOAP definition metadata propagation and preserve observed state in replanning.",
+    "Persist dedicated typed checkpoint/observer verdict evidence with execution identity.",
+    "Four persisted shared GOAP wrappers still contain task_status=false and no state_key; review actual fact producers before migration.",
+    "Legacy randomized archive tests and canned benchmark metrics remain open; no green broad-race claim.",
+    "Cross-process checkpoint resume, unreceipted side effects, general task qualification, research attribution and deployment remain open."
+  ],
+  "files_sha256": {
+    "focused.txt": "999d4767e31e8c0e37e56d9813766d7f12a20d23b653d723c801556adb693bb5",
+    "regression.txt": "c87c86dfe7a612b4f87d35a007cefedb66c3b5c4f19aa11616ee16102db210da",
+    "race-with-archive-failure.txt": "16bdf3b198a6135875e8c3616123815663c2603c231e50488e1bc5e94b1f122a",
+    "lint.txt": "e92606b0bf483111dff0a120c315ea165821348f31365020e2468a0059095c47",
+    "docs.txt": "be756ed684d11455e99bbe44d9a69b71e3b6285d4e6870b8a17abc3185e4e112",
+    "graph.txt": "924c4a62933672237c97ba80f138aa7830c19448b1a4013fd39022caea33cabf",
+    "live-suite.txt": "ce2b0220b9a0b1267e17d5be5b3e5c3e25a48262c48baadab50a7a759387ad4c",
+    "live-governance.json": "50122b0453ad24b07a39b46080aa084395faed64d4dd84984574ce4ab053418c",
+    "personal-file-live.json": "9192f7e918996f0b571794c11dce7217840d1884595731e1753641ac7d34b720",
+    "persisted-checkpoint-inventory.json": "2de9bc918359e95a0d750c826e3b8662b3adbdaf832ad7f8730fce32facaed81"
+  }
+}

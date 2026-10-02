@@ -1,11 +1,15 @@
 package research
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/reliability"
+	"github.com/nico/go-bt-evolve/internal/util"
 )
 
 // Research-goal failure budgets: program milestones already block after
@@ -27,31 +31,27 @@ type GoalAttempt struct {
 	LastFailure string    `json:"last_failure,omitempty"`
 	UpdatedAt   time.Time `json:"updated_at"`
 	// RedPassStreak counts consecutive cycles whose RED command unexpectedly
-	// passed for this goal — evidence the work already exists at HEAD rather
-	// than an unlandable goal. RecordFailure resets it: a genuine failure
+	// passed for this goal — the proposed regression does not establish a gap. RecordFailure resets it: a genuine failure
 	// proves the goal's tests can still fail.
 	RedPassStreak int `json:"red_pass_streak,omitzero"`
 }
 
 // GoalAttemptStore persists per-goal failure budgets.
 type GoalAttemptStore struct {
+	snapshot string
 	path     string
 	Attempts map[string]*GoalAttempt `json:"attempts"`
 }
 
 // DefaultGoalAttemptsPath is the ADR-003 location of the goal-attempt budgets.
 func DefaultGoalAttemptsPath() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		home = "/home/nico"
-	}
-	return filepath.Join(home, ".go-bt-evolve", "research", "goal-attempts.json")
+	return filepath.Join(util.RuntimePlatformHome(), "research", "goal-attempts.json")
 }
 
 // OpenGoalAttempts loads the store; a missing file yields an empty store.
 func OpenGoalAttempts(path string) (*GoalAttemptStore, error) {
 	s := &GoalAttemptStore{path: path, Attempts: map[string]*GoalAttempt{}}
-	b, err := os.ReadFile(path)
+	b, err := util.ReadPersistenceFile(path)
 	if os.IsNotExist(err) {
 		return s, nil
 	}
@@ -64,6 +64,7 @@ func OpenGoalAttempts(path string) (*GoalAttemptStore, error) {
 	if s.Attempts == nil {
 		s.Attempts = map[string]*GoalAttempt{}
 	}
+	s.snapshot = string(b)
 	return s, nil
 }
 
@@ -112,24 +113,28 @@ func (s *GoalAttemptStore) Clear(key string) bool {
 }
 
 // Save writes the store atomically (tmp+rename) per ADR-003.
+// A stale reader must reload rather than erase a sibling writer's evidence.
 func (s *GoalAttemptStore) Save() error {
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
-		return err
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	var saved []byte
+	err := reliability.UpdateSharedJSONWithContext(ctx, s.path, func(data []byte) (any, error) {
+		if string(data) != s.snapshot {
+			return nil, fmt.Errorf("research store changed concurrently; reload before updating")
+		}
+		var err error
+		saved, err = json.MarshalIndent(s, "", "  ")
+		return s, err
+	})
+	if err == nil {
+		s.snapshot = string(saved)
 	}
-	b, err := json.MarshalIndent(s, "", "  ")
-	if err != nil {
-		return err
-	}
-	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, s.path)
+	return err
 }
 
 // RecordRedPass increments the goal's consecutive red-pass counter and
 // returns the new streak. A red-pass (the plan's RED command passing before
-// GREEN) is evidence the goal's work already exists at HEAD.
+// GREEN) calls for review; it does not establish code delivery.
 func (s *GoalAttemptStore) RecordRedPass(key string) int {
 	a, ok := s.Attempts[key]
 	if !ok {

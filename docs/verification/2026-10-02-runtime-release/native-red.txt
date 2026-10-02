@@ -1,0 +1,12 @@
+--- FAIL: TestRebuildNativeProvenanceAcrossRepositoryLayouts (1.22s)
+    --- FAIL: TestRebuildNativeProvenanceAcrossRepositoryLayouts/ordinary (0.40s)
+        rebuild_provenance_test.go:74: automatic rebuild lost native identity: {Revision: CommitTime: Module:github.com/nico/go-bt-evolve Dirty:true Known:false LocalReplacements:false}
+    --- FAIL: TestRebuildNativeProvenanceAcrossRepositoryLayouts/bare (0.42s)
+        rebuild_provenance_test.go:74: automatic rebuild lost native identity: {Revision: CommitTime: Module:github.com/nico/go-bt-evolve Dirty:true Known:false LocalReplacements:false}
+    --- FAIL: TestRebuildNativeProvenanceAcrossRepositoryLayouts/linked (0.41s)
+        rebuild_provenance_test.go:74: automatic rebuild lost native identity: {Revision: CommitTime: Module:github.com/nico/go-bt-evolve Dirty:true Known:false LocalReplacements:false}
+--- FAIL: TestRebuildNativeBuildScrubsInheritedGitEnvironment (0.39s)
+    rebuild_provenance_test.go:106: inherited Git environment redirected build identity: {Revision: CommitTime: Module:github.com/nico/go-bt-evolve Dirty:true Known:false LocalReplacements:false}
+FAIL
+FAIL	github.com/nico/go-bt-evolve/internal/agent	1.633s
+FAIL

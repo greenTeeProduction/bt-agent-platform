@@ -5,7 +5,6 @@ package evaluator
 
 import (
 	"cmp"
-	"context"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -19,6 +18,7 @@ import (
 
 // PlatformEvalResult is the comprehensive result of evaluating all suites.
 type PlatformEvalResult struct {
+	Error         string            `json:"error,omitempty"`
 	Timestamp     string            `json:"timestamp"`
 	TotalSuites   int               `json:"total_suites"`
 	TotalTasks    int               `json:"total_tasks"`
@@ -32,13 +32,15 @@ type PlatformEvalResult struct {
 
 // SuiteEvalResult is the result for a single suite.
 type SuiteEvalResult struct {
-	Name        string             `json:"name"`
-	TotalTasks  int                `json:"total_tasks"`
-	Passed      int                `json:"passed"`
-	Failed      int                `json:"failed"`
-	SuccessRate float64            `json:"success_rate"`
-	AvgDuration float64            `json:"avg_duration_ms"`
-	Results     []benchmark.Result `json:"results,omitempty"`
+	Warning       string                  `json:"warning,omitempty"`
+	ModelEvidence benchmark.ModelEvidence `json:"model_evidence"`
+	Name          string                  `json:"name"`
+	TotalTasks    int                     `json:"total_tasks"`
+	Passed        int                     `json:"passed"`
+	Failed        int                     `json:"failed"`
+	SuccessRate   float64                 `json:"success_rate"`
+	AvgDuration   float64                 `json:"avg_duration_ms"`
+	Results       []benchmark.Result      `json:"results,omitempty"`
 }
 
 // PlatformScorecard maps use cases to scores.
@@ -54,28 +56,6 @@ type UseCaseScore struct {
 	Frequency     string  `json:"frequency"`       // how often it runs
 	Status        string  `json:"status"`          // optimized | ready | partial | gap
 }
-
-// EvalMockLLM is a mock that returns sufficiently long output to pass quality gates.
-type EvalMockLLM struct{}
-
-func (m *EvalMockLLM) GenerateCtx(_ context.Context, prompt string) (string, error) {
-	return m.Generate(prompt)
-}
-func (m *EvalMockLLM) GenerateWithTimeout(prompt string, _ time.Duration) (string, error) {
-	return m.Generate(prompt)
-}
-
-func (m *EvalMockLLM) Generate(_ string) (string, error) {
-	return "EVAL_OUTPUT: This is a comprehensive response that addresses all aspects of the task in detail. " +
-		"It includes thorough analysis, specific recommendations, actionable steps, and supporting evidence. " +
-		"The response covers architecture considerations, implementation patterns, edge cases, and validation criteria. " +
-		"Each finding is documented with clear rationale and priority ranking. The output meets all quality standards " +
-		"for production-grade evaluation results with complete documentation and traceable decision logic. " +
-		"This ensures the response exceeds the minimum length requirement for the quality validation gate.", nil
-}
-func (m *EvalMockLLM) AnalyzeComplexity(_ string) string       { return "medium" }
-func (m *EvalMockLLM) GeneratePlan(task, _ string) string      { return "plan: " + task }
-func (m *EvalMockLLM) Reflect(_, _, _ string) (string, string) { return "good", "none" }
 
 // treeForSuite maps suite names to their optimal behavior trees.
 func treeForSuite(name string) *evolution.SerializableNode {
@@ -130,7 +110,11 @@ func RunPlatformEval() *PlatformEvalResult {
 	result := &PlatformEvalResult{
 		Timestamp: time.Now().Format(time.RFC3339),
 	}
-	mock := &EvalMockLLM{}
+	model, err := benchmark.DefaultLLM()
+	if err != nil {
+		result.Error = err.Error()
+		return result
+	}
 	suites := benchmark.AllSuites()
 
 	allResults := make([]SuiteEvalResult, 0, 8)
@@ -151,20 +135,27 @@ func RunPlatformEval() *PlatformEvalResult {
 		}
 
 		tree := treeForSuite(suite.Name)
-		metrics := benchmark.RunSuite(tree, suite, mock)
+		metrics := benchmark.RunSuite(tree, suite, model)
 
-		passed := metrics.Successes
+		passed := 0
+		if metrics.Warning == "" {
+			for _, task := range metrics.Results {
+				if task.ContractPassed {
+					passed++
+				}
+			}
+		}
 		totalPassed += passed
 		totalTasks += metrics.TotalTasks
 		totalDuration += int64(metrics.AvgDurationMs) * int64(metrics.TotalTasks)
 
-		failed := metrics.TotalTasks - metrics.Successes
+		failed := metrics.TotalTasks - passed
 		rate := 0.0
 		if metrics.TotalTasks > 0 {
 			rate = float64(passed) / float64(metrics.TotalTasks) * 100
 		}
 
-		allResults = append(allResults, SuiteEvalResult{
+		allResults = append(allResults, SuiteEvalResult{Warning: metrics.Warning, ModelEvidence: metrics.ModelEvidence,
 			Name:        suite.Name,
 			TotalTasks:  metrics.TotalTasks,
 			Passed:      passed,
@@ -219,7 +210,9 @@ func buildScorecard(results []SuiteEvalResult) PlatformScorecard {
 	for _, r := range results {
 		if c, ok := cases[r.Name]; ok {
 			c.SuitePass = r.SuccessRate
-			if r.SuccessRate >= 90 {
+			if r.Warning != "" {
+				c.Status = "unqualified"
+			} else if r.SuccessRate >= 90 {
 				c.Status = "optimized"
 			} else if r.SuccessRate >= 70 {
 				c.Status = "ready"

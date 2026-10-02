@@ -6,12 +6,17 @@
 package gardener
 
 import (
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/nico/go-bt-evolve/internal/evolution"
+	"github.com/nico/go-bt-evolve/internal/persona"
 )
 
 // loadUserTreesLocked scans every user workspace under usersRoot and appends
@@ -32,8 +37,10 @@ func (r *Registry) loadUserTreesLocked() {
 	}
 
 	seen := make(map[string]bool, len(r.entries))
+	seenPaths := make(map[string]bool, len(r.entries))
 	for i := range r.entries {
 		seen[r.entries[i].Name] = true
+		seenPaths[r.entries[i].FilePath] = true
 	}
 
 	for _, u := range users {
@@ -52,6 +59,9 @@ func (r *Registry) loadUserTreesLocked() {
 				continue
 			}
 			path := filepath.Join(treesDir, name)
+			if seenPaths[path] {
+				continue
+			}
 			data, err := os.ReadFile(path)
 			if err != nil {
 				continue
@@ -59,6 +69,14 @@ func (r *Registry) loadUserTreesLocked() {
 			var tree evolution.SerializableNode
 			if json.Unmarshal(data, &tree) != nil {
 				continue
+			}
+			owner := user
+			if declared, _ := tree.Metadata["user"].(string); declared != "" {
+				if persona.SanitizeUserID(declared) != user {
+					slog.Warn("personal tree owner does not match workspace", "path", path)
+					continue
+				}
+				owner = declared
 			}
 			entryName := strings.TrimSpace(tree.Name)
 			if entryName == "" {
@@ -69,59 +87,56 @@ func (r *Registry) loadUserTreesLocked() {
 			}
 			seen[entryName] = true
 			r.entries = append(r.entries, TreeEntry{
+				TreeID:      tree.Name,
 				Name:        entryName,
 				Description: "Personal tree (user " + user + ")",
 				Tree:        &tree,
 				FilePath:    path,
 				Active:      true,
-				User:        user,
+				User:        owner,
 			})
 		}
 	}
 }
 
-// recordsForEntry selects the reflection evidence a tree is evaluated on.
-// Personal trees use strict tree-name matching: the backward-compat fallback
-// in FilterByTreeName (no match → all records) would score a personal tree on
-// the global pool and blind the evidence gate to its missing history.
-//
-// Matching keys off the tree's real ID (entry.Tree.Name), not the registry's
-// display Name: a colliding entry gets a disambiguating "<user>_" prefix on
-// Name (see loadUserTreesLocked) but its underlying tree — and every
-// reflection Record recorded against it — still carries the bare ID, so
-// keying on Name would leave the renamed entry evidence-starved. Once
-// matched by tree ID, records are further filtered down to the owning user
-// (Record.User) so two users' trees sharing the same real ID never bleed
-// evidence into each other; records with no User (pre-Phase-5 or seed
-// reflections) still count for any owner, preserving backward compat.
+// recordsForEntry selects only this tree's owned evidence. Catalog aliases
+// bridge the gardener's historical domain_name spelling and runtime's
+// domain:name; personal entries use the real ID, never a collision-prefixed
+// display name. Missing history stays missing for the evidence gate.
 func recordsForEntry(allRecords []evolution.Record, entry TreeEntry) []evolution.Record {
-	if entry.User == "" {
-		return evolution.FilterByTreeName(allRecords, entry.Name)
+	names := evidenceTreeNames(entry.Name)
+	if id := runtimeTreeID(entry); id != "" && !slices.Contains(names, id) {
+		names = append(names, id)
 	}
-	treeID := entry.Name
-	if entry.Tree != nil && strings.TrimSpace(entry.Tree.Name) != "" {
-		treeID = entry.Tree.Name
+	if entry.User != "" {
+		names = []string{runtimeTreeID(entry)}
 	}
-	matched := evolution.FilterByTreeNameStrict(allRecords, treeID)
-	filtered := make([]evolution.Record, 0, len(matched))
-	for _, r := range matched {
-		if r.User == "" || r.User == entry.User {
-			filtered = append(filtered, r)
+	filtered := make([]evolution.Record, 0, len(allRecords))
+	for _, name := range names {
+		filtered = append(filtered, evolution.FilterByTreeOwner(allRecords, name, entry.User)...)
+	}
+	out := filtered[:0]
+	for _, record := range filtered {
+		if record.EvidenceKind != evolution.EvidenceCompilation {
+			out = append(out, record)
 		}
 	}
-	return filtered
+	return out
 }
 
 // bankFor resolves the experience bank for a tree: the shared bank for
 // builtin/shared trees, the user's own bank (<UserExperienceRoot>/<user>/
-// experience, lazily opened and cached) for personal trees. Falls back to the
-// shared bank when the per-user bank cannot be opened or no root is
-// configured, so evolution never silently loses experience recording.
+// experience, lazily opened and cached) for personal trees. Missing owner
+// storage never grants access to shared learning state.
 func (g *Gardener) bankFor(entry TreeEntry) *evolution.ExperienceBank {
-	if entry.User == "" || g.cfg.UserExperienceRoot == "" {
+	if entry.User == "" {
 		return g.cfg.ExperienceBank
 	}
 
+	if g.cfg.UserExperienceRoot == "" {
+		slog.Warn("personal experience unavailable: owner storage not configured", "user", entry.User)
+		return nil
+	}
 	g.userBanksMu.Lock()
 	defer g.userBanksMu.Unlock()
 	if g.userBanks == nil {
@@ -130,12 +145,16 @@ func (g *Gardener) bankFor(entry TreeEntry) *evolution.ExperienceBank {
 	if bank, ok := g.userBanks[entry.User]; ok {
 		return bank
 	}
-	bank, err := evolution.NewExperienceBank(filepath.Join(g.cfg.UserExperienceRoot, entry.User, "experience"))
+	bankDir := filepath.Join(g.cfg.UserExperienceRoot, persona.SanitizeUserID(entry.User), "experience")
+	if persona.SanitizeUserID(entry.User) != entry.User {
+		// Distinct raw owner IDs can share a sanitized workspace name. Never
+		// share their learning bank or guess ownership of the legacy bank.
+		bankDir = filepath.Join(bankDir, fmt.Sprintf("owner-%x", sha256.Sum256([]byte(entry.User))))
+	}
+	bank, err := evolution.NewExperienceBank(bankDir)
 	if err != nil {
-		// Do not cache: the open error may be transient (e.g. a path
-		// temporarily blocked), and caching the shared bank here would
-		// permanently strand the user on it even after the error clears.
-		return g.cfg.ExperienceBank
+		slog.Warn("personal experience unavailable", "user", entry.User, "error", err)
+		return nil
 	}
 	g.userBanks[entry.User] = bank
 	return bank

@@ -4,14 +4,18 @@
 package agent
 
 import (
+	"context"
 	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"sync"
 	"time"
 
+	"github.com/nico/go-bt-evolve/internal/reliability"
+	"github.com/nico/go-bt-evolve/internal/util"
 	"gopkg.in/yaml.v3"
 )
 
@@ -98,14 +102,57 @@ func NewRegistry(dir string) (*Registry, error) {
 
 // Create creates a new agent from a definition and adds it to the registry.
 func (r *Registry) Create(def Definition) (*Instance, error) {
+	return r.create(def, false)
+}
+
+// EnsureDefinition creates a definition or accepts an exact existing one.
+// Runtime timestamps and a default version are normalized; owner, task, tree,
+// schedule, inputs and every other configuration field must match. Creation
+// checks disk under a bounded sidecar lock, including with a stale registry.
+func (r *Registry) EnsureDefinition(def Definition) (*Instance, error) {
+	return r.create(def, true)
+}
+
+func (r *Registry) create(def Definition, acceptExact bool) (*Instance, error) {
 	if err := ValidateName(def.Name); err != nil {
 		return nil, err
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	path := filepath.Join(r.dir, def.Name+".yaml")
+	release, err := reliability.AcquireFileLockWithContext(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+	data, err := util.ReadPersistenceFile(path)
+	if err == nil {
+		var existing Definition
+		if err := yaml.Unmarshal(data, &existing); err != nil {
+			return nil, fmt.Errorf("existing agent definition: %w", err)
+		}
+		if !acceptExact {
+			return nil, fmt.Errorf("agent %q already exists", def.Name)
+		}
+		if !sameDefinition(existing, def) {
+			return nil, fmt.Errorf("agent %q already exists with different configuration", def.Name)
+		}
+		inst := &Instance{ID: fmt.Sprintf("agent_%d", existing.CreatedAt.UnixMilli()), Definition: existing, State: StateCreated}
+		if previous := r.instances[def.Name]; previous != nil {
+			inst = cloneInstance(previous)
+			inst.Definition = existing
+		}
+		r.instances[def.Name] = inst
+		return cloneInstance(inst), nil
+	}
+	if !os.IsNotExist(err) {
+		return nil, fmt.Errorf("read agent definition: %w", err)
+	}
 	if _, exists := r.instances[def.Name]; exists {
-		return nil, fmt.Errorf("agent %q already exists", def.Name)
+		return nil, fmt.Errorf("agent %q already exists in registry but is missing on disk", def.Name)
 	}
 
 	now := time.Now()
@@ -129,6 +176,18 @@ func (r *Registry) Create(def Definition) (*Instance, error) {
 
 	r.instances[def.Name] = inst
 	return cloneInstance(inst), nil
+}
+
+func sameDefinition(a, b Definition) bool {
+	a.CreatedAt, b.CreatedAt = time.Time{}, time.Time{}
+	a.UpdatedAt, b.UpdatedAt = time.Time{}, time.Time{}
+	if a.Version == "" {
+		a.Version = "1.0.0"
+	}
+	if b.Version == "" {
+		b.Version = "1.0.0"
+	}
+	return reflect.DeepEqual(a, b)
 }
 
 // Get returns an agent instance by name.

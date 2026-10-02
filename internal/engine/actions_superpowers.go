@@ -888,7 +888,7 @@ func goapFusionCircuitPolicyVerdictWithBypass(hashes []string, noopStreak int, b
 // An unreadable store falls through to the full breaker as a conservative
 // default.
 func goapFusionRepeatedHashBypassed() bool {
-	_, err := research.OpenPrograms(goapProgramsPath)
+	_, err := research.OpenPrograms(currentGoapProgramsPath())
 	return err == nil
 }
 

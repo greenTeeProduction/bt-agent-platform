@@ -6,6 +6,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/nico/go-bt-evolve/internal/config"
 )
 
 // DelegationProvider identifies which external coding CLI the platform
@@ -29,6 +31,9 @@ func (p DelegationProvider) Valid() bool {
 // codexOnlyDelegation defaults closed: unset or malformed configuration cannot
 // enable another coding provider. The legacy transport opt-out is explicit.
 func codexOnlyDelegation() bool {
+	if config.SolOnly() {
+		return true
+	}
 	raw := strings.TrimSpace(os.Getenv("BT_SUPERPOWERS_CODEX_ONLY"))
 	enabled, err := strconv.ParseBool(raw)
 	return err != nil || enabled
@@ -58,7 +63,7 @@ func resolvedSuperpowersProvider() (DelegationProvider, error) {
 // exact binary a delegation will actually invoke.
 func delegationBinary(p DelegationProvider) string {
 	if p == DelegationProviderCodex {
-		return getenvDefault("BT_SUPERPOWERS_CODEX_BIN", "/mnt/ssd/npm-global/bin/codex")
+		return getenvDefault("BT_SUPERPOWERS_CODEX_BIN", "/home/nico/.local/bin/codex")
 	}
 	return getenvDefault("BT_SUPERPOWERS_CLAUDE_BIN", "/home/nico/.local/bin/claude")
 }

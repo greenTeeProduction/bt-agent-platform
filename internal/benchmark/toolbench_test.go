@@ -102,7 +102,7 @@ func TestToolBench_EvaluateWithCodeReviewTree(t *testing.T) {
 
 func TestToolBench_EmptyEntries(t *testing.T) {
 	tree := evolution.GoDeveloperTree()
-	llmBackend := DefaultMock()
+	llmBackend := RealLLM(t)
 	metrics := EvaluateToolBench(tree, nil, llmBackend)
 
 	if metrics.TotalTasks != 0 {
@@ -116,7 +116,7 @@ func TestToolBench_EmptyEntries(t *testing.T) {
 func TestToolBench_IndividualEntries(t *testing.T) {
 	entries := BuiltinToolBench()
 	tree := evolution.GoDeveloperTree()
-	llmBackend := DefaultMock()
+	llmBackend := RealLLM(t)
 
 	// Test a few entries individually to verify they don't panic
 	sample := entries[:5]

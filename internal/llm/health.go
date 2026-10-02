@@ -1,12 +1,15 @@
 package llm
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os/exec"
 	"sync"
 	"time"
 
+	"github.com/nico/go-bt-evolve/internal/config"
 	"github.com/nico/go-bt-evolve/internal/reliability"
 )
 
@@ -166,12 +169,36 @@ func (h *HealthState) recordFailure(err error) {
 
 // HealthMonitor periodically probes LLM health and tracks state transitions.
 type HealthMonitor struct {
+	probe     func() error
 	state     *HealthState
 	serverURL string
 	interval  time.Duration
 	stopCh    chan struct{}
 	stopped   bool
 	mu        sync.Mutex
+}
+
+// NewProviderHealthMonitor checks transport/login readiness without spending
+// inference tokens. A successful check does not prove model entitlement.
+func NewProviderHealthMonitor(cfg *config.Config, interval time.Duration) *HealthMonitor {
+	monitor := NewHealthMonitor(cfg.OllamaHost, interval)
+	if config.SolOnly() || cfg.LLMProvider == "codex" {
+		client := NewCodexClient(0)
+		monitor.probe = func() error {
+			if err := client.validateExecutable(); err != nil {
+				return err
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			cmd := exec.CommandContext(ctx, client.Bin, "login", "status") // #nosec G204 G702 -- validated absolute operator executable, fixed non-inference arguments, no shell.
+			reliability.BindCommandCancellation(cmd)
+			if err := cmd.Run(); err != nil {
+				return fmt.Errorf("codex login unavailable: %w", err)
+			}
+			return nil
+		}
+	}
+	return monitor
 }
 
 // NewHealthMonitor creates a health monitor for the given Ollama server URL.
@@ -237,6 +264,14 @@ func (m *HealthMonitor) Stop() {
 // Returns true if the service is reachable.
 func (m *HealthMonitor) Probe() bool {
 	start := time.Now()
+	if m.probe != nil {
+		if err := m.probe(); err != nil {
+			m.state.recordFailure(err)
+			return false
+		}
+		m.state.recordSuccess(time.Since(start).Milliseconds())
+		return true
+	}
 
 	// Check the Ollama root endpoint — fast, no model loading needed.
 	url := m.serverURL

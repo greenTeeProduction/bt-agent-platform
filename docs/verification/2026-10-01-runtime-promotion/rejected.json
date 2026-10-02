@@ -1,0 +1,58 @@
+{
+  "qualification": {
+    "tree_id": "factory:core_82ceeb0dfdc1118b8f0f8df6dab1a760",
+    "user": "evolution-benchmark",
+    "baseline_version": "sha256:286d24bbad05268d4afa2bd25d9ee365c967b59eeb9e08ead4ba2556af7e609c",
+    "candidate_version": "sha256:e80414da2145f3a71f7068d37719b4206634ec941e4c01eed54546576a214bc9",
+    "backend": "ollama",
+    "model": "qwen2.5:0.5b",
+    "baseline_calls": 3,
+    "candidate_calls": 6,
+    "measured_at": "2026-10-01T13:19:22.025920552Z",
+    "trials": [
+      {
+        "task": "Compute seventeen plus twenty-five. Return compact JSON with only the field total containing the calculated sum. Do not add prose or padding.",
+        "contract": {
+          "json_fields": {
+            "total": 42
+          }
+        },
+        "before_output": "```json\n{\n  \"wrong_total\": 37\n}\n```",
+        "after_output": "```json\n{\n  \"total\": 37\n}\n```",
+        "before_outcome": "failure",
+        "after_outcome": "failure",
+        "before_duration_ms": 493,
+        "after_duration_ms": 974
+      },
+      {
+        "task": "Compute seventeen plus twenty-five. Return compact JSON with only the field total containing the calculated sum. Do not add prose or padding.",
+        "contract": {
+          "json_fields": {
+            "total": 42
+          }
+        },
+        "before_output": "```json\n{\n  \"wrong_total\": 37\n}\n```",
+        "after_output": "```json\n{\n  \"total\": 37\n}\n```",
+        "before_outcome": "failure",
+        "after_outcome": "failure",
+        "before_duration_ms": 486,
+        "after_duration_ms": 943
+      },
+      {
+        "task": "Compute seventeen plus twenty-five. Return compact JSON with only the field total containing the calculated sum. Do not add prose or padding.",
+        "contract": {
+          "json_fields": {
+            "total": 42
+          }
+        },
+        "before_output": "```json\n{\n  \"wrong_total\": 37\n}\n```",
+        "after_output": "```json\n{\n  \"total\": 37\n}\n```",
+        "before_outcome": "failure",
+        "after_outcome": "failure",
+        "before_duration_ms": 501,
+        "after_duration_ms": 945
+      }
+    ]
+  },
+  "rejection": "candidate must improve task passes and satisfy every declared trial"
+}

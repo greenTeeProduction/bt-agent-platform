@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/engine"
+	"github.com/nico/go-bt-evolve/internal/research"
 )
 
 // writeImpactMCPFixture materializes a tiny Go module under a temp directory
@@ -116,5 +117,69 @@ func TestBTImpactTestsRegistered(t *testing.T) {
 	tests, _ := out["tests"].([]any)
 	if len(tests) != 1 || tests[0] != "pkg/file_test.go" {
 		t.Errorf("tests = %v, want [pkg/file_test.go]", out["tests"])
+	}
+}
+
+func TestBTResearchStatusUsesCurrentOwnerAndDoesNotClaimImpact(t *testing.T) {
+	server := engine.NewServer("test")
+	registerMCPTools(server, &mcpDeps{bb: &engine.Blackboard{User: "research-status-owner"}})
+	res, ok := server.Invoke("bt_research_status", json.RawMessage(`{"user":"another-owner"}`))
+	if !ok || res == nil || len(res.Content) != 1 {
+		t.Fatal("missing research status")
+	}
+	var out map[string]any
+	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
+		t.Fatal(err)
+	}
+	if out["user"] != "research-status-owner" || out["runtime_adoption"] != "not_linked" || out["measured_impact"] != "not_linked" {
+		t.Fatalf("misleading or unscoped report: %v", out)
+	}
+}
+
+func TestBTProgramReviewPreservesHistoryAndRequiresExactRevision(t *testing.T) {
+	t.Setenv("BT_AGENT_HOME", t.TempDir())
+	path := research.DefaultProgramsPath()
+	ps, err := research.OpenPrograms(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := ps.Add("review fixture", "test", []string{"Original goal", "dependent goal"})
+	p.Milestones[0].Status, p.Milestones[0].CompletedRun = "done", "red-evidence:prior"
+	if err = ps.Save(); err != nil {
+		t.Fatal(err)
+	}
+	server := engine.NewServer("program-review")
+	registerImpactTools(server, &mcpDeps{bb: &engine.Blackboard{}})
+	call := func(name, args string) map[string]any {
+		t.Helper()
+		r, ok := server.Invoke(name, json.RawMessage(args))
+		if !ok || r == nil || len(r.Content) != 1 {
+			t.Fatal("missing tool result")
+		}
+		var out map[string]any
+		if err := json.Unmarshal([]byte(r.Content[0].Text), &out); err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	out := call("bt_program_reconcile", `{}`)
+	if out["verified_code_deliveries"] != float64(0) || out["states"].(map[string]any)["needs_review"] != float64(1) {
+		t.Fatalf("false completion survived MCP correction: %v", out)
+	}
+	args := fmt.Sprintf(`{"program_id":%q,"milestone_index":0,"expected_goal":"wrong goal","revised_goal":"Original goal with a discriminating regression"}`, p.ID)
+	if call("bt_program_review", args)["error"] == nil {
+		t.Fatal("stale review accepted")
+	}
+	args = fmt.Sprintf(`{"program_id":%q,"milestone_index":0,"expected_goal":"Original goal","revised_goal":"Original goal with a discriminating regression"}`, p.ID)
+	if call("bt_program_review", args)["status"] != "pending" {
+		t.Fatal("revised work not reopened")
+	}
+	ps, err = research.OpenPrograms(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := ps.Programs[0].Milestones[0]
+	if m.Status != "pending" || m.CompletedRun != "" || len(m.ReviewHistory) != 1 || m.ReviewHistory[0].PreviousCompletedRun != "red-evidence:prior" {
+		t.Fatalf("review lost history or gained completion credit: %+v", m)
 	}
 }

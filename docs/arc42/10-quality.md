@@ -1,5 +1,7 @@
 # 10. Quality Requirements
 
+Acceptance tests cover Sol selection and legacy ordinary-adapter rejection, plus configured embeddings and NotebookLM generation under Sol-only. NotebookLM tests cover deadlines, ambiguous-generation non-replay, full JSON, account mismatch, network failure and validated renewal, keepalive backoff and later-expiry detection with the installed 0.14.0 API. See [evidence](../sol-model-policy.md); fixture results do not establish live workflow readiness.
+
 The goals in [§1.2](01-introduction-goals.md#12-quality-goals) are realized by
 [§4](04-solution-strategy.md) and refined below. These are acceptance
 contracts, with evidence and limitations stated separately. A test reference
@@ -44,6 +46,13 @@ acceptance criterion. *Target* is a proposed acceptance measure, not an
 achieved SLO. Numeric targets retained from earlier specifications need an
 operator-owned measurement before promotion to an operational guarantee.
 
+The October 1 impact-loop repair adds exact tree/owner attribution and
+cross-user seed/feedback regressions under QS12:
+[gardener evidence](../../internal/gardener/evidence_attribution_test.go) and
+[feedback isolation](../../cmd/bt-agent/feedback_isolation_test.go). These
+contracts do not establish useful on-demand generation, revision-specific
+outcome improvements, or deployment adoption; those remain acceptance work.
+
 | ID | Goal | Context and stimulus | Required response and measure | Evidence / status |
 |---|---|---|---|---|
 | QS1 | Q3 | A goroutine launched through SafeGo panics. | Recover at that boundary and invoke its configured error callback; the process survives. Retry, breaker updates and DLQ insertion occur only where the caller wires them. | Tested contract: [panic-handler tests](../../internal/reliability/panic_handler_test.go). No universal recovery-latency or automatic-DLQ guarantee; [§6.5](06-runtime-view.md#65-error-recovery). |
@@ -58,7 +67,7 @@ operator-owned measurement before promotion to an operational guarantee.
 | QS10 | Q4 | A user's interactions meet the configured recurrence count/window and confidence rules. | Emit a recurring pattern eligible for consideration; with default policy, create a proposal by the next eligible consideration pass. | Tested pattern detection: [persona tests](../../internal/persona/persona_test.go). “3 in 14 days” depends on miner configuration; next-session latency is a target, not a timer guarantee. |
 | QS11 | Q4 | Goal factory produces a grounded plan for compilation. | Produce a resolvable tree with executable actions, precondition/effect guards and provenance; reject invalid plans before registration. | Tested contract: [compiler tests](../../internal/goap/compile_test.go). ≥80% first-compile benchmark success remains a workload target; compilation tests do not establish that rate. |
 | QS12 | Q2/Q4 | A personal tree receives explicit satisfaction feedback across ten evolution cycles. | Apply its configured quality/evidence gates and preserve attribution; reject unacceptable fitness regressions. | Partial: [personalization integration](../../cmd/bt-agent/feedback_tools_test.go), [gardener](../../internal/gardener/evolve_v2.go). Non-decreasing satisfaction and a universal “floor 30 / 20%” are not established for every adoption path; island acceptance controls are tested separately (R23). |
-| QS13 | Q4 | Many patterns are considered, including pending/rejected/flagged automations. | Respect per-user caps and configured approval policy; execute zero disallowed tracked automations. Policy-approved auto-approval is permitted. | Tested contract: [autopilot tests](../../cmd/bt-agent/autopilot_test.go), [resolver tests](../../internal/agentexec/wiring_test.go). Untracked manual trees are outside this automation-status gate. |
+| QS13 | Q4 | Many patterns are considered, including pending/rejected/flagged automations. | Respect per-user caps and configured approval policy; execute zero disallowed tracked automations. Policy-approved auto-approval is permitted. | Tested contract: [autopilot tests](../../cmd/bt-agent/autopilot_test.go), [transaction/cap/failure tests](../../internal/persona/automation_transaction_test.go), [exact activation tests](../../internal/persona/automation_finalize_test.go), and [resolver tests](../../internal/agentexec/wiring_test.go) (ADR-284). Untracked manual trees and missing-ledger provenance remain outside this tracked-status guarantee; no external-task success is inferred. |
 | QS14 | Q5 | A change introduces a second owner for outcome, retry, planning or persistence policy. | Review identifies the owner in §5/§8 and consolidates or records a justified distinction before acceptance. | Target/process rule: [building blocks](05-building-blocks.md); no general automatic semantic-duplication detector is claimed. |
 | QS15 | Q5 | At least two trees need a new capability. | Reuse or add a registered action/block with one documented implementation and tests. | Target/process rule: [block registry](../../internal/blocks), [engine registry](../../internal/engine/registry.go). A KG query is supporting evidence, not proof of uniqueness. |
 | QS16 | Q5 | Factory/breeding proposes a tree similar to the catalog. | Inspect capability/structural similarity and either reuse, merge, or record a meaningful distinction before broad adoption. | Partial: [knowledge factory](../../internal/knowledge/factory.go). Universal creation blocking at one similarity threshold is not enforced. |
@@ -82,7 +91,7 @@ operator-owned measurement before promotion to an operational guarantee.
 | QS34 | Q1/Q3 | A service binds to a non-loopback address. | Require credentials where the listener helper applies; operator verifies intended reachability, public routes, firewall and TLS termination from the relevant network. | Partial: [listener tests](../../internal/security/listener_test.go); observed all-interface binds are recorded in §7. Remote isolation/TLS not verified (R25). |
 | QS35 | Q3 | A task exhausts its configured execution budget. | Cooperative nodes stop on cancellation; subprocess workflows obey their separately configured phase/cycle budgets and persist partial evidence. | Partial: [RunTask](../../internal/engine/tree.go), [coding runtime](../../internal/engine/superpowers_task_executor.go). [HITL contention tests](../../internal/hitl/transaction_regression_test.go) and [gate failure tests](../../internal/engine/hitl_persistence_regression_test.go) prove shorter caller deadlines during mutex/file-lock contention. [Dashboard admission tests](../../cmd/bt-dashboard/execution_admission_test.go) and [pool/limiter contention tests](../../internal/reliability/admission_context_test.go) cover caller cancellation, closed-pool rejection, drained queued work and reservation ownership. [Executor context tests](../../internal/dashboard/executor_context_test.go) cover tree deadlines and fake CLI process-group cleanup (ADR-266). [Workflow terminal tests](../../internal/dashboard/execution_terminal_workflow_test.go) retain healthy deadline-racing outcomes and stop uncertain retry/parallel work. Remote timeout/lost/malformed responses stop automatic execution replay (ADR-267); durable idempotency remains open. [Known-stop SDK-to-runner tests](../../internal/agent/a2a_stopped_runner_test.go), [parallel admission/branch evidence](../../internal/engine/execution_stop_test.go), [workflow failure/panic/skip tests](../../internal/dashboard/execution_stopped_workflow_test.go), [typed scheduler SLO tests](../../cmd/bt-agent/scheduler_retry_test.go) and [completion-event tests](../../internal/agent/scheduler_stopped_test.go) cover failed/paused disposition without automatic replay or false fault/delivery classification (ADR-269). [Shared workflow consent/prefix tests](../../internal/dashboard/workflow_control_regression_test.go), [HITL creation contention](../../internal/dashboard/approval_test.go), [actual pipeline HTTP round trips](../../cmd/bt-dashboard/pipeline_control_http_test.go) and [browser waiting/nested-ID tests](../../tests/unit/workflows.test.js) cover complete loop bodies, nested deadlines, non-bypassable approval stops and completed-prefix replay protection (ADR-270). [Workflow metadata lock tests](../../internal/dashboard/workflow_metadata_regression_test.go) cover shorter caller budgets both before admission and after healthy completion (ADR-271). [Default owner/admission/healthy promotion tests](../../internal/agent/blackboard_owner_regression_test.go), [atomic related metadata tests](../../internal/blackboard/group_transaction_test.go), [loaded pipeline owner tests](../../internal/agentexec/blackboard_owner_regression_test.go) and [actual HTTP admission negatives](../../cmd/bt-dashboard/blackboard_owner_regression_test.go) cover failed initialization without memory substitution, concurrent/pinned ownership and caller-bounded promotion acknowledgement without healthy-action replay (ADR-274). The default 120-second tree context is not a hard process-wide wall-clock guarantee (R30). [A2A SDK transport/history/poll/cancel tests](../../internal/a2a/execution_terminal_test.go), [BT stop tests](../../internal/engine/execution_stop_test.go) and [RunOnce typed-error/history tests](../../internal/agent/execution_terminal_delegation_test.go) cover A2A ownership and nested replay stops (ADR-268). [Sprint capacity/batch ownership](../../cmd/bt-dashboard/sprint_admission_regression_test.go) and [task mutex/sidecar/group budgets](../../internal/dashboard/task_execution_context_test.go) prevent rejected admission from claiming work and preserve single completed execution with proven unstarted cleanup (ADR-276). |
 | QS36 | Q3 | With explicit legacy policy opt-out and `BT_SUPERPOWERS_RATE_LIMIT_FAILOVER=true`, runtime preflight encounters a valid loaded Claude or Codex backoff deadline at or before `now`. | In that preflight call, clear each expired provider's shared JSON file, legacy agent-scope blackboard key and ChainState entry before returning inactive; preserve future deadlines for the other provider. If either provider is available, return zero deadline / inactive and permit a runtime attempt. | Tested contract: `TestDelegationPreflightBackoff_ClearsExpiredState` covers both primary selections, expired primary/alternate/both, a missing primary and exact-deadline boundaries; `TestRunSuperpowersRuntime_ExpiredBackoffExecutes` pins failover on with Claude and verifies runner invocation and stale-state removal ([regressions](../../internal/engine/actions_superpowers_prod_test.go)). This establishes half-open eligibility, not provider success or recovery latency; live readiness remains R27 in [§11](11-risks-debt.md). Implementation: [§8.19](08-crosscutting-concepts.md#819-coding-provider-policy). |
-| QS37 | Q1/Q5 | A maintainer adds or changes an `AllDomainTrees()` entry selected through `domain:<name>`, including nested names such as `domain:arc42:section1`. | Every registered entry must resolve to a nonempty tree with the registered root, have a nonblank smoke task, build with the mock LLM, and return the same nonblank description as its canonical name. Every Condition must have a description and at least one guard edge with nonblank label/condition; unregistered `domain:` IDs return no description. Qualified IDs reuse the canonical description without a duplicate metadata entry. | Tested structural contract: `TestDomainPrefixedTreesHaveSmokeDescriptionsAndConditionCoverage` in [domain tests](../../internal/domains/domains_test.go), alongside the existing smoke and bare-ID resolver guards. Registration drives enumeration; condition coverage here checks metadata, not execution of every branch or end-to-end success. Developer effort and end-to-end success remain unmeasured. [Exact inspection tests](../../internal/domains/tree_lookup_test.go) and [actual enforced HTTP round trips](../../cmd/bt-dashboard/tree_structure_regression_test.go) cover qualified/bare catalog definitions, generated child metadata and misses without fallback (ADR-273). [Mind-map regressions](../../tests/unit/mindmap.test.js) cover escaped source text, repeated-name branch selection and sibling order. Description/resolver ownership: [§5.1 catalog interfaces](05-building-blocks.md#catalog-and-mcp-interfaces). |
+| QS37 | Q1/Q5 | A maintainer adds or changes an `AllDomainTrees()` entry selected through `domain:<name>`, including nested names such as `domain:arc42:section1`. | Every registered entry must resolve to a nonempty tree with the registered root, have a nonblank smoke task, build without simulated execution, and return the same nonblank description as its canonical name. Every Condition must have a description and at least one guard edge with nonblank label/condition; unregistered `domain:` IDs return no description. Qualified IDs reuse the canonical description without a duplicate metadata entry. | Tested structural contract: `TestDomainPrefixedTreesHaveSmokeDescriptionsAndConditionCoverage` in [domain tests](../../internal/domains/domains_test.go), alongside the existing smoke and bare-ID resolver guards. Registration drives enumeration; condition coverage here checks metadata, not execution of every branch or end-to-end success. Developer effort and end-to-end success remain unmeasured. [Exact inspection tests](../../internal/domains/tree_lookup_test.go) and [actual enforced HTTP round trips](../../cmd/bt-dashboard/tree_structure_regression_test.go) cover qualified/bare catalog definitions, generated child metadata and misses without fallback (ADR-273). [Mind-map regressions](../../tests/unit/mindmap.test.js) cover escaped source text, repeated-name branch selection and sibling order. Description/resolver ownership: [§5.1 catalog interfaces](05-building-blocks.md#catalog-and-mcp-interfaces). |
 | QS38 | Q1/Q3 | An authenticated operator reads security audit data with capture disabled, an empty enabled buffer or retained events, reads live metric categories, or polls idle/running/finished sprint state while response enforcement is enabled. | Return 200 with actual event counts/attributes and an event array, preserving empty [] and dynamic category maps; reject missing/wrong credentials before disclosure. Sprint progress/start evidence and actual task-store counters remain readable; unstarted elapsed time is zero. Schema descriptions cannot be required entry names. | Tested contracts: [actual authenticated diagnostic handlers](../../cmd/bt-dashboard/diagnostic_schema_regression_test.go), [catalog declaration guard](../../internal/api/schema_catalog_regression_test.go), [sprint status snapshots](../../cmd/bt-dashboard/sprint_schema_regression_test.go). The guard covers named required properties in all catalog requests/parameters/responses, not full JSON Schema conformance or every payload/error status. D1 remains partial. [Sprint error/repair observations](../../cmd/bt-dashboard/sprint_persistence_regression_test.go) preserve terminal diagnostics under enforced authentication/schema validation; [browser polling](../../tests/unit/tasks.test.js) distinguishes errors, batch completion and idle state. |
 
 The platform owner owns acceptance of targets; maintainers own regression
@@ -90,6 +99,59 @@ evidence and operators own deployed measurements. Record workload, commit,
 configuration, host and date with measurements. Current test/file counts,
 coverage percentages and benchmark scores belong in generated CI artifacts,
 not copied into this specification.
+
+The 2026-10-01 governance revision adds [scoring regressions](../../internal/evaluator/governance_fitness_test.go),
+[control-preservation tests](../../internal/evolution/governance_test.go) and
+[real-model gate qualification](../../internal/benchmark/live_governance_test.go).
+QS2/QS12 remain partial: the retained controlled experiment improved contract
+passes from 0.5 to 1.0 using real Qwen 2.5 0.5B inference, but the fleet,
+on-demand factory task coverage, tree-version attribution and deployment
+qualification remain open. Structural or skipped tests do not count as live
+benchmark acceptance.
+
+
+Live benchmark qualification is reproducible with `make test-live-benchmarks` ([runner](../../scripts/test-live-benchmarks.sh)). [Snapshot/search regressions](../../internal/evolution/governance_search_test.go) cover archive identity through population reordering and governance mutation reachability. [Retry contracts](../../internal/engine/retry_node_test.go) cover failed attempts, running children, success without replay and terminal stops. Platform scorecards retain provider/qualification evidence and cannot label a missing-model run ready ([tests](../../internal/evaluator/live_evidence_test.go)).
+
+
+Terminal-evidence regressions additionally cover final failure after a reflection
+node, distinct repeated runs, outer agent quality rejection, live-mutation
+version history, and persistence failure without replay. Result-contract tests
+reject wrong JSON fields/values in primary and recovery output and reject
+malformed gateway declarations. These strengthen QS2/QS12 evidence integrity;
+fleet impact still requires representative execution evidence.
+
+
+The response factory now has a real-model creation→persistence→owner-scoped
+resolution→execution regression in [task factory tests](../../cmd/bt-agent/task_factory_test.go).
+The retained arithmetic sample used Qwen 2.5 0.5B, independently checked the
+answer and matched the saved definition hash to terminal execution evidence.
+It establishes this response-task path, not general assistant capability or
+broad assistant capability. The bounded promotion/adoption/rollback cycle below
+adds one controlled evolution case; external-tool fixtures and broader task
+coverage remain open. The same
+live test is included in `make test-live-benchmarks`.
+
+
+### Bounded versioned-evolution evidence
+
+[The live promotion regression](../../cmd/bt-agent/runtime_promotion_test.go)
+now verifies the response-factory cycle with real Qwen 2.5 0.5B inference:
+three failing baseline trials become three passing candidate trials, a fresh
+agent run independently verifies 17 + 25 = 42, registry reload preserves the
+active definition, and rollback restores the predecessor's hash and failure.
+The recorded rejected attempt returned 37 in all three recovery outputs;
+qualification refused it. Recovery now recomputes independently instead of
+copying the invalid result. `BT_PROMOTION_REPORT` retains definitions, paired
+outputs, model/call counts, terminal adoption and rollback evidence.
+
+This is repeated measurement of one controlled task, not three independent
+tasks or general assistant quality. [Release transaction tests](../../internal/evolution/runtime_release_test.go)
+cover concurrent promotion, stale predecessors, bounded locks, owner isolation,
+proof corruption and rejection retention. [Resolver tests](../../internal/agentexec/runtime_version_test.go)
+cover shared/personal precedence and refusal to fall back from corrupt personal
+authority. Routing telemetry without an independent task contract must preserve
+the authored version. These cases run in `make test-live-benchmarks`; short
+unit tests do not stand in for model evidence.
 
 ---
 
@@ -99,5 +161,101 @@ traversal, absolute names and outward symlinks. They exercise the actual loader,
 not a predicate-only fixture. Actual separate gosec findings and corrected-head
 acceptance are retained in the [target-control report](../verification/2026-10-01-restart-control/README.md);
 local high-security success alone does not qualify GitHub scanning.
+
+### MCP publication and local-model qualification
+
+[Manual/genetic live regressions](../../cmd/bt-agent/runtime_publication_test.go)
+exercise three actual baseline failures, qualification, active-version inspection,
+real agent adoption and history isolation. Shared qualified feedback is loaded
+into a fresh graph to verify persistence; personal evolution cannot credit the
+shared graph. The retained Qwen 0.5B manual attempt failed one of three candidate
+trials and correctly stayed unpublished. Qwen 2.5 1.5B then passed both entrypoint
+cycles, each with 0/3 baseline and 3/3 candidate contract passes and a separately
+verified adopted run. [Evidence manifest](../verification/2026-10-01-manual-publication/manifest.json)
+retains model comparison, rejected outputs and final entrypoint reports.
+The live runner includes both entrypoints; no mock LLM qualifies a release.
+The fixed arithmetic case still does not establish general assistant capability.
+
+---
+
+### Persisted tree recovery evidence
+
+[Recovery regressions](../../internal/gardener/recovery_test.go) exercise complete
+catalog restoration and reload, unchanged unknown files, byte-identical backups,
+stale/tampered plans, lock deadlines, backup failure and retired-tree quarantine.
+[CLI regression](../../cmd/bt-gardener/recovery_test.go) verifies inspection-only
+behavior and the offline precondition. The first run exposed missing implemented
+node types; the next exposed GOAP metadata hash drift. Both failures and their
+corrections are retained in [the recovery evidence](../verification/2026-10-01-tree-recovery/manifest.json).
+Actual host recovery and fresh registry checks cover 51 restored definitions plus
+one retired tree. They establish restored task structure and identity, not broad
+real-model task success or service adoption.
+
+ADR-285 adds a real owned file-task fixture under QS9/QS13: create a contract tree,
+propose/approve its exact version, dispatch through `Scheduler.RunNow`/`RunOnce`,
+read back correct expense totals and retain effect digests. A deliberately wrong
+result contract exercises real model recovery and preserves the prior file. Changed
+versions and absent ledgers cause zero additional inference. Filesystem lifecycle
+tests cover missing/wrong effects, input changes and escaping paths. These do not
+establish general semantic accuracy, wall-clock cron or non-file integrations.
+
+ADR-286 adds typed checkpoint persistence/source checks, missing-fact rejection,
+malformed-contract rejection before child execution, preserved retry snapshots
+and budgets across `Running`, and a real filesystem lifecycle fixture proving
+that a downstream failed gate cannot replay a committed write. The standalone
+GOAP executor tests compare its published state with actual action return values,
+including deletion and unfulfilled effects. Dynamic missing-executor checks prove
+no step/history/effect advancement. These are control and persistence regressions;
+actual model capability remains subject to the live benchmark boundary above.
+
+ADR-287 adds research attribution regressions under QS1/QS24: real temporary Git
+commits and Go test/build commands establish the delivery boundary, while dry/no-op,
+unlanded, failed-check and unrelated-file cases receive no receipt. Observations
+made after a run starts receive no retroactive source credit. Owner and file scopes
+remain separate. A failed receipt write survives in the run journal; reconciliation
+repairs only metadata and leaves commit count unchanged. Store checks exercise
+concurrent observations, stale writers, corruption and deadline cancellation.
+These are delivery-control tests, not model benchmarks or measured user impact.
+
+ADR-289 extends QS1/QS10/QS24 with compiled and dynamic dependent file tasks:
+real inference computes an expense sum of 25, then reads that saved result and
+writes its doubled value of 50. Independent host arithmetic and file readback
+verify both effects; retained scoped observations and exact final-output checks
+are required. A separate real model test checks result total 42 without claiming
+an external effect. [Live tests](../../internal/benchmark/live_goap_test.go) and
+[observation regressions](../../internal/engine/goap_observation_test.go) cover
+stale assertions, Running continuity, committed-failure replay stops, complete
+goals and stale-plan rejection. Exact numeric persistence and observation-gate
+preservation are covered in [evolution tests](../../internal/evolution/goap_step_test.go).
+These qualify the named fixtures; provider/fallback details and initial failures
+are retained in [verification evidence](../verification/2026-10-02-goap-observations/README.md).
+
+### Program completion evidence (Q1/Q2/Q3)
+
+A test that passes before implementation must not complete a milestone. Repetition
+holds dependent work for review; genuine Git delivery is attributed only to the
+captured milestone/goal and completed changed task scope. A failed program write
+keeps the delivery journal pending; repair preserves the existing Git HEAD.
+[Delivery/recovery tests](../../internal/engine/program_delivery_test.go),
+[backlog backup and revision tests](../../internal/research/program_review_test.go)
+and [MCP handlers](../../cmd/bt-agent/impact_tools_test.go) cover these boundaries.
+The compiled MCP copy/host checks corrected 60 labels with exact backups and
+unchanged repeat output. [Retained evidence](../verification/2026-10-02-program-review/README.md)
+also includes race checks and actual-model regression suites. Metadata corrections
+and passing tests are not research-impact scores (ADR-290).
+
+### Native release and scheduler evidence (2026-10-02)
+
+QS9/QS13 and QS29–QS31 now have bounded host evidence: three actual service
+executables at clean `b615595b`, effective Sol policy, protected HTTP smoke and
+one factory-created file task dispatched by real cron with independent output
+checks and persisted receipts. [Release evidence](../verification/2026-10-02-runtime-release/README.md)
+records exact scope and hashes. This is not a fleet latency/availability series
+or proof of research-caused improvement. Native rebuild regressions (ADR-291)
+exercise real Go/Git across repository layouts and reject dirty executable output
+before replacing a deployed file. Daemon-wide automatic restart admission and
+real bounded fleet handoff remain open under R13.
+
+---
 
 *Generated by bt-agent arc42 pipeline — section10Quality tree*

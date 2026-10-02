@@ -1,5 +1,7 @@
 # 7. Deployment View
 
+2026-10-02: all three BT units are active and enabled on clean native release `b615595b`, with effective Sol-only ordinary inference and disabled alternate fallbacks. Automatic rebuild/restart remain disabled pending daemon-wide restart admission. The dated observations below retain their original scope; see the current release evidence at the end of this section. NotebookLM MCP uses `bin/bt-notebooklm-auth --mcp`; a separate user timer renews its existing profile every 15 minutes without starting BT services. The upgraded 0.14.0 integration recovered the existing account headlessly and listed 29 notebooks. See [policy](../sol-model-policy.md) and [auth operations](../../internal/notebooklmauth/README.md).
+
 The reference deployment is a supervised, single-host installation.
 Configuration observations below were checked on **2026-09-16**; source
 defaults are separately identified. Hardware capacity and a VPN address do
@@ -121,11 +123,11 @@ Changing an environment file does not hot-reload an already-running process.
 configuration must be checked after restart without printing secrets.
 
 **Observed launch update, 2026-10-01:** all three BT user units now have a final
-Codex-only drop-in/environment file: provider `codex`, policy `true`, quota
-failover `false`, model `auto`. The shared Hermes launch environment matches.
+Sol-only drop-in/environment file: provider `codex`, policies `true`, quota
+failover `false`, model `gpt-6.1-sol`. The shared Hermes launch environment matches.
 Unit definitions were reloaded; BT units were inactive at inspection. This
 records configuration, not running-binary identity or a completed delivery
-cycle. See the [runbook](../coding-delegation.md#observed-launch-configuration-2026-10-01).
+cycle. See the [current policy](../sol-model-policy.md#host-deployment).
 
 ## 7.3 Release, Recovery and Operational Checks
 
@@ -234,6 +236,8 @@ completed or failed started work before another sprint. These local source/tests
 establish ownership behavior, not production termination or capacity targets
 (ADR-276, R30).
 
+
+Benchmark qualification on 2026-10-01 installed `gemma3:270m`, `qwen2.5:0.5b`, `qwen3:0.6b` and `qwen2.5:1.5b` in the host Ollama store. Later repeated trials invalidated the initial 0.5B selection; 1.5B is now the benchmark default, the fastest candidate to pass the six-task/three-repetition corpus among the three Qwen models tested (18/18 at median 1.18 seconds). This is a benchmark-only exception to ordinary Sol inference. Source changes and live qualification are isolated in `codex/runtime-impact-20261001`; they do not establish adoption by the deployed BT services. See [benchmark policy](../sol-model-policy.md).
 ### Bounded operational qualification — 2026-10-01
 
 The [durable checkpoint](../verification/2026-10-01-checkpoint/README.md)
@@ -274,6 +278,68 @@ the directory entry rather than writing its external target. Failed replacement
 preserves the live image ([rollback regressions](../../internal/agent/rollback_root_regression_test.go)).
 This is local filesystem fixture evidence, not deployed handoff or rollback
 qualification. No host permissions or service settings are changed by checks.
+
+---
+
+### Observed offline tree recovery, 2026-10-01
+
+All three BT services were inactive/disabled, with no matching daemon processes,
+when the recovery command repaired the host shared reflection directory. It
+restored 51 current authored trees and quarantined one retired assembly tree.
+The prior 54-file backup and the repair manifest retain all 52 damaged originals;
+the other two files were unchanged. Fresh registry loading verified all 51
+replacement hashes, and repeat inspection found zero known collapsed trees.
+[Retained evidence](../verification/2026-10-01-tree-recovery/manifest.json) identifies
+the exact files and binary fingerprint. No service restart or task execution was
+part of this recovery; feature deployment and broader task acceptance remain open.
+
+Research delivery ledgers (ADR-287) are private JSON beside the configured
+knowledge index, with SHA-256 owner suffixes. Back up ledgers and Superpowers run
+artifacts together. A successful receipt demonstrates a local Git landing; even
+`committed_pr_opened` does not establish remote merge, deployed build adoption or
+service health. Legacy labels are retained but are not automatically migrated into
+verified delivery. On upgrade, review historical attribution separately.
+
+### Observed backlog correction, 2026-10-02
+
+The compiled MCP reconciliation tool was first qualified against a copy of the
+145-program, 473-milestone host backlog, then applied with all three BT services
+inactive/disabled. It moved 60 unsupported RED-pass `done` labels to `needs_review`.
+The remaining 369 historical `done` labels and 44 blocked milestones were unchanged;
+none was upgraded to verified delivery. A SHA-256-named backup preserves the exact
+original bytes; repeating reconciliation changed no bytes. This repairs metadata,
+not the underlying 60 goals. [Evidence](../verification/2026-10-02-program-review/README.md).
+
+Ordered systemd environment-file overrides were checked in isolated transient
+processes for agent, dashboard and gardener. All three effectively select Codex,
+`BT_LLM_SOL_ONLY=true`, `gpt-6.1-sol` and the current Codex binary; older inline
+DeepSeek/auto settings are overridden. No configuration change or service start
+was needed. PR83 head `af780cdb` was fetched and is already in the review branch.
+This increment does not deploy that branch or qualify production task outcomes.
+
+### Verified native host release and bounded scheduled task
+
+The 2026-10-02 manual release installed fourteen clean native `b615595b`
+executables after preserving prior binaries/configuration and the resolved state
+directories with all three services stopped. Actual PID executable hashes and
+native Go metadata establish that agent, dashboard and gardener adopted that
+revision; effective process settings enforce ordinary Sol 6.1. All three units
+are active and enabled. Public health and protected 401/200 checks passed.
+
+The actual scheduler then executed one factory-created personal file task using
+Sol, retained its exact tree/version/build and verified output receipt, and
+returned the diagnostic automation to on-demand. This closes the bounded
+wall-clock dispatch check, not general assistant or causal research acceptance.
+Local master now contains the reviewed framework so the coding loop's master
+checkout does not revert it; the old CLI is backed up and its root path aliases
+`bin/bt-agent-cli`. See [retained release evidence](../verification/2026-10-02-runtime-release/README.md).
+
+Automatic rebuild source now uses a captured commit in a private ordinary local
+clone and rejects executables without matching clean native identity before
+replacement (ADR-291). Real native tests cover ordinary, bare and linked source
+repositories. That correction is not a deployed automatic handoff claim. Both
+automatic flags remain zero until bt-agent owns all in-flight admission; never
+restart a scheduled implementation merely because a wait timed out.
 
 ---
 

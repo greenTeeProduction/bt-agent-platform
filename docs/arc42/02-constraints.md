@@ -1,5 +1,7 @@
 # 2. Architecture Constraints
 
+The owner requires `gpt-6.1-sol` for ordinary BT inference via Codex login, with no alternate fallback. Explicit exceptions are NotebookLM generation/research, external embeddings/session indexing and legacy memory extraction; their existing configuration is retained. A further owner instruction on 2026-10-01 requires real Ollama models for benchmark evaluation, with Sol 6.1 fallback when local inference is too slow or unavailable. Mock output is not benchmark evidence. See [Sol policy](../sol-model-policy.md).
+
 Distinguish compatibility requirements and operator policies from design
 choices. The latter belong in [§4](04-solution-strategy.md) and
 [§9](09-decisions.md). Host observations are dated in [§7](07-deployment.md);

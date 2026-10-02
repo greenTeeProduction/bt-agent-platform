@@ -1,0 +1,12 @@
+{
+  "status": "passed",
+  "observed_utc": "2026-10-02T00:20:10.072388+00:00",
+  "reason": "Scheduled Superpowers worktree sync checks out master; advance the local canonical branch to the verified release before the next cycle",
+  "old_master": "db2c116f7cce1ab921eda65cc81c3fbdba53359f",
+  "master": "b615595b9cb55cdadf6664a8c9d306602abf60d6",
+  "fetched_origin_master": "c7c7881a2fd59bf6a65aace123123156fafe926b",
+  "original_master_backup_ref": "refs/bt-backups/20261002T-runtime-release/original-master",
+  "fast_forward": true,
+  "remote_pushed": false,
+  "checkout_clean": true
+}

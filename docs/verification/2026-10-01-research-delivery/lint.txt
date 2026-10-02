@@ -1,0 +1,5 @@
+internal/engine/research_delivery.go:193:23: stringsseq: Ranging over SplitSeq is more efficient (modernize)
+	for _, file := range strings.Split(files, "\x00") {
+	                     ^
+1 issues:
+* modernize: 1

@@ -1,0 +1,46 @@
+--- FAIL: TestCompilePlanToTree_Scaffold (0.00s)
+    compile_test.go:77: PreGate missing initial-state seed; children: [{Description: MaxRetries:0 TimeoutMs:0 Edges:[] Type:Condition Name:ValidateInput Children:[] Metadata:map[]} {Description: MaxRetries:0 TimeoutMs:0 Edges:[] Type:Action Name:SetupDefaultTools Children:[] Metadata:map[]} {Description: MaxRetries:0 TimeoutMs:0 Edges:[] Type:Action Name:SeedGoapState Children:[] Metadata:map[goap_initial_state:{has_result: false, task_type: general}]}]
+--- FAIL: TestCompilePlanToTree_StepGuardsAndEffects (0.00s)
+    compile_test.go:91: step 1 children = 1, want guard + exec + effects
+--- FAIL: TestCompilePlanToTree_ExecutableNodeSelection (0.00s)
+panic: runtime error: index out of range [1] with length 1 [recovered, repanicked]
+
+goroutine 21 [running]:
+testing.tRunner.func1.2({0x1ce200, 0x7f2501a80240})
+	/home/nico/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.5.linux-arm64/src/testing/testing.go:1974 +0x1a0
+testing.tRunner.func1()
+	/home/nico/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.5.linux-arm64/src/testing/testing.go:1977 +0x318
+panic({0x1ce200?, 0x7f2501a80240?})
+	/home/nico/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.5.linux-arm64/src/runtime/panic.go:860 +0x12c
+github.com/nico/go-bt-evolve/internal/goap.TestCompilePlanToTree_ExecutableNodeSelection(0x7f2501a786c8)
+	/mnt/ssd/bt-review-worktrees/runtime-impact-20261001/internal/goap/compile_test.go:117 +0x870
+testing.tRunner(0x7f2501a786c8, 0x1f43b8)
+	/home/nico/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.5.linux-arm64/src/testing/testing.go:2036 +0xc4
+created by testing.(*T).Run in goroutine 1
+	/home/nico/go/pkg/mod/golang.org/toolchain@v0.0.1-go1.26.5.linux-arm64/src/testing/testing.go:2101 +0x3a8
+FAIL	github.com/nico/go-bt-evolve/internal/goap	0.021s
+ok  	github.com/nico/go-bt-evolve/internal/evolution	0.018s [no tests to run]
+--- FAIL: TestCompiledGoapAction_AppliesEffects (0.00s)
+    goap_compiled_nodes_test.go:66: status = -1
+--- FAIL: TestCompiledGoapNodes_NumericEquality (0.00s)
+    goap_compiled_nodes_test.go:88: numeric values should compare equal after parse
+--- FAIL: TestAction_ExecuteGoapStep_WithLLM (0.00s)
+    goap_nodes_test.go:364: expected 1 for LLM-based step execution, got -1
+    goap_nodes_test.go:367: expected outcome 'running', got "failure"
+    goap_nodes_test.go:375: expected step index 1, got 0
+    goap_nodes_test.go:383: world state should reflect step effects (has_analysis=true)
+    goap_nodes_test.go:388: expected executed_steps [analyze_requirements], got []
+--- FAIL: TestAction_ExecuteGoapStep_WithNoPlan (0.00s)
+    goap_nodes_test.go:409: expected 1 even without plan, got -1
+    goap_nodes_test.go:412: expected outcome 'running', got "failure"
+--- FAIL: TestAction_ExecuteGoapStep_NoLLM (0.00s)
+    goap_nodes_test.go:456: failure could be masked by a fallback
+--- FAIL: TestAction_ExecuteGoapStep_AccumulatesAndSynthesizes (0.00s)
+    goap_nodes_test.go:573: step 0 failed: -1, mock step output
+--- FAIL: TestAction_ExecuteGoapStep_PastEnd (0.00s)
+    registry_test.go:1111: expected 1 for past-end, got -1
+    registry_test.go:1114: expected success outcome, got "failure"
+    registry_test.go:1117: result should indicate completion
+FAIL
+FAIL	github.com/nico/go-bt-evolve/internal/engine	0.021s
+FAIL

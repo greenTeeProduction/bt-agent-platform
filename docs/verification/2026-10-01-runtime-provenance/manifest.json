@@ -1,0 +1,28 @@
+{
+  "status": "verified_local_increment_pending_commit_checks",
+  "scope": "Observed native runtime code identity, exact resolved publication, recomputable terminal result contracts and research delivery joins",
+  "base_commit": "81a49b4bf1d3cce7a7934be4fedb814d4ff7fbdb",
+  "pr83_head": "af780cdbf4745432b4b3a2d890a9c9e88443237e",
+  "checks": {
+    "focused": "passed after correcting future fixture time and declared file scope",
+    "race": "five focused packages passed",
+    "affected_short": "util/evolution/engine/agentexec complete short suites passed",
+    "lint": "four changed packages: zero issues",
+    "live_factory": "passed actual Ollama qwen2.5:1.5b, three baseline failures to three candidate passes, adopted result total42, exact publication proof revalidated after rollback",
+    "live_suite": "make test-live-benchmarks passed with real Ollama/Sol calls including personal file tasks and promotion/rollback",
+    "graph": "AST updated: 33209 nodes, 42922 edges"
+  },
+  "protocol_tests": "Real Git/build metadata fixtures and declared reflection records test attribution boundaries; they do not qualify model performance.",
+  "limits": [
+    "Live Go test binary has unknown native VCS revision and correctly cannot earn code-adoption credit.",
+    "Code presence does not establish execution of changed functions or causal research impact.",
+    "Native metadata and local evidence assume trusted build/storage; no cryptographic attestation.",
+    "Changed delivered files lose source attribution conservatively.",
+    "No deployed rollout, historical backfill, broad semantic goal fulfillment or complete assistant qualification claimed."
+  ],
+  "initial_findings_retained": [
+    "Test fixture used a future start time and changed an undeclared file; corrected after failing tests.",
+    "Four lint issues: zero time tag, builtin identifiers and deprecated runtime.GOROOT lookup; corrected."
+  ],
+  "live_evidence": "live-factory.json"
+}

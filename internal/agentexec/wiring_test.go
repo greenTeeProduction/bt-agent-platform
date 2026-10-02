@@ -2,6 +2,7 @@ package agentexec
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	"github.com/nico/go-bt-evolve/internal/agent"
@@ -264,5 +265,31 @@ func TestRunOnce_RefusesExecutionForNonApprovedAutomation(t *testing.T) {
 				t.Fatalf("%s automation: expected outcome %q, got %+v", tc.status, tc.wantOutcome, res)
 			}
 		})
+	}
+}
+
+func TestAutomationAdmissionRejectsUnreadableAndContradictoryLedger(t *testing.T) {
+	root := t.TempDir()
+	store, err := persona.NewStore(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ledger, err := persona.NewAutomationStore(store.Workspace("alice"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, status := range []string{persona.AutomationApproved, persona.AutomationRejected} {
+		if err := ledger.Upsert(persona.AutomationRecord{Signature: status, TreeID: "goal:report", Status: status}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if automationApproved(root, "alice", "goal:report") {
+		t.Fatal("one approval masked a conflicting rejection")
+	}
+	if err := os.WriteFile(store.Workspace("alice").AutomationsPath(), []byte("{"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if automationApproved(root, "alice", "goal:report") {
+		t.Fatal("corrupt approval ledger admitted execution")
 	}
 }

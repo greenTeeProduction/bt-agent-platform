@@ -3,10 +3,10 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"math"
 	"os"
 	"path/filepath"
@@ -143,22 +143,30 @@ func sanitizeArchiveTreeID(id string) string {
 // regression deterministically.
 var benchmarkRunSuiteFn = benchmark.RunSuite
 
-// benchmarkGateEvolvedWinner runs both the base tree and an evolved winner
-// through treeID's real internal/benchmark suite (Sandbox mode with a mock
-// LLM — deterministic, no real LLM calls, -short-safe) and reports whether
-// the winner regressed on SuccessRate. The evolve tools' structural fitness
-// (evolution.StructuralMultiFitness and friends) scores mutations from
-// structural heuristics alone and can rate one as elite while it actually
-// performs worse than the untouched base tree, so callers must skip
-// persisting a regressed winner to a durable cross-run archive (Q2
-// Evolvability: gate durable-archive winners through the benchmark suite,
-// not structural fitness alone).
+// benchmarkGateEvolvedWinner qualifies the winner against the same real-model
+// suite as its baseline. Missing capabilities, model errors, lost task controls
+// and contract regressions reject archive promotion.
 func benchmarkGateEvolvedWinner(treeID string, base, winner *evolution.SerializableNode) (rejected bool, baseRate, winnerRate float64) {
 	suite := benchmark.SuiteForTree(treeID)
-	mock := &llm.MockLLM{}
-	baseMetrics := benchmarkRunSuiteFn(base, suite, mock)
-	winnerMetrics := benchmarkRunSuiteFn(winner, suite, mock)
-	return winnerMetrics.SuccessRate < baseMetrics.SuccessRate, baseMetrics.SuccessRate, winnerMetrics.SuccessRate
+	model, err := benchmark.DefaultLLM()
+	if err != nil {
+		return true, 0, 0
+	}
+	baseMetrics := benchmarkRunSuiteFn(base, suite, model)
+	winnerMetrics := benchmarkRunSuiteFn(winner, suite, model)
+	if baseMetrics.ModelEvidence.Fallbacks > 0 || winnerMetrics.ModelEvidence.Fallbacks > 0 {
+		baseMetrics, winnerMetrics = benchmarkRunSuiteFn(base, suite, model), benchmarkRunSuiteFn(winner, suite, model)
+	}
+	if baseMetrics.Warning != "" || winnerMetrics.Warning != "" {
+		return true, baseMetrics.SuccessRate, winnerMetrics.SuccessRate
+	}
+	contractRegression := winnerMetrics.ContractPassRate < baseMetrics.ContractPassRate
+	for i, result := range baseMetrics.Results {
+		if result.ContractPassed && (i >= len(winnerMetrics.Results) || !winnerMetrics.Results[i].ContractPassed) {
+			contractRegression = true
+		}
+	}
+	return !evolution.PreservesGovernance(base, winner) || contractRegression || winnerMetrics.SuccessRate < baseMetrics.SuccessRate || winnerMetrics.PathMatchRate < baseMetrics.PathMatchRate, baseMetrics.SuccessRate, winnerMetrics.SuccessRate
 }
 
 func checkLLMHealth(health *llm.HealthMonitor, toolName string) *engine.ToolResult {
@@ -172,28 +180,6 @@ func checkLLMHealth(health *llm.HealthMonitor, toolName string) *engine.ToolResu
 		return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 	}
 	return nil
-}
-
-// persistGeneratedTree validates a runtime-generated tree and persists it as
-// tree-<id>.json so it becomes resolvable by ID (agentexec dynamic resolver)
-// and visible to the gardener registry (ADR-133 Phase 0). The outcome is
-// recorded in the tool result: an invalid tree stays KG-registered for
-// discovery but is never persisted, so it can never be executed.
-// recordEvolvedFitness writes a winning QD/island elite's structural fitness
-// back into the knowledge graph via the monotone, clamped "evolved" outcome so
-// fitness-aware discovery can surface archive-improved trees (milestone 4/5). A
-// missing graph or unregistered tree is a no-op — RecordRun ignores unknown
-// tree IDs — so this is safe to call unconditionally after evolution.
-func recordEvolvedFitness(deps *mcpDeps, treeID string, eliteFitness float64) {
-	if deps.kg == nil || treeID == "" {
-		return
-	}
-	deps.kg.RecordRun(knowledge.RunRecord{
-		TreeID:  treeID,
-		Task:    "quality-diversity archive elite",
-		Outcome: "evolved",
-		Quality: eliteFitness,
-	})
 }
 
 // addFailureContext threads a bottleneck's structured last-failure task/outcome
@@ -228,22 +214,6 @@ func persistGeneratedTree(deps *mcpDeps, treeID string, tree *evolution.Serializ
 	result["file"] = path
 }
 
-// persistEvolvedWinner persists the winner tree a production genetic-evolution
-// pass produced under a derived "<baseTreeID>-evolved" id via the existing
-// persistGeneratedTree seam, then registers it in the knowledge graph
-// (inheriting the base tree's capabilities and connecting back via an
-// evolved_from edge) so fitness-aware discovery and the gardener can find the
-// bred winner on the next run instead of only its scalar fitness surviving.
-//
-// The knowledge graph is consulted first — via the non-mutating
-// EvolvedFitnessImproves peek — so a later, weaker genetic-evolution pass
-// never even attempts to overwrite a stronger winner already persisted on
-// disk. The bookkeeping commit (RegisterEvolved) only runs after
-// persistGeneratedTree actually reports persisted=true, so a winner that
-// fails validation or fails to write never leaves the knowledge graph
-// claiming a fitness, node count, or evolved count that disk does not back —
-// the two stay atomic: either both update or neither does.
-
 // lineageSkipsReEvolution reports whether treeID already has a fitter,
 // non-regressing evolved descendant registered via RegisterEvolved's
 // "evolved_from" bookkeeping — closing the loop RegisterEvolved's own doc
@@ -267,24 +237,14 @@ func lineageSkipsReEvolution(kg *knowledge.KnowledgeGraph, treeID string, baseFi
 }
 
 func persistEvolvedWinner(deps *mcpDeps, baseTreeID string, winner *evolution.SerializableNode, fitness float64, result map[string]any) {
-	evolvedID := baseTreeID + "-evolved"
-	result["evolved_tree_id"] = evolvedID
-	if deps.kg != nil && !deps.kg.EvolvedFitnessImproves(evolvedID, fitness) {
-		result["persisted"] = false
-		result["skip_reason"] = "fitness does not improve on stored evolved winner"
+	result["evolved_tree_id"] = baseTreeID
+	result["persisted"], result["qualified"] = false, false
+	base, err := publicationBaseline(deps, baseTreeID, "")
+	if err != nil {
+		result["persist_error"] = err.Error()
 		return
 	}
-	persistGeneratedTree(deps, evolvedID, winner, result)
-	if persisted, _ := result["persisted"].(bool); !persisted {
-		return
-	}
-	if deps.kg != nil {
-		deps.kg.RegisterEvolved(baseTreeID, evolvedID, evolution.CountNodes(winner), fitness)
-		deps.kg.MarkFeedbackDirty()
-		if err := deps.kg.FlushFeedback(false); err != nil {
-			slog.Warn("persistEvolvedWinner: feedback flush failed", "err", err)
-		}
-	}
+	publishEvolutionProposal(deps, baseTreeID, "", base, winner, fitness, result)
 }
 
 // persistGeneratedTreeForUser persists a user-attributed generated tree into
@@ -314,21 +274,23 @@ func persistGeneratedTreeForUser(deps *mcpDeps, user, treeID string, tree *evolu
 }
 
 // seedCompileReflection writes the compile-time plan validation as the tree's
-// first reflection record (ADR-133 Phase 5). Freshly compiled trees would
-// otherwise carry zero evidence and stay frozen behind the gardener's
-// evidence gate forever. The TaskID is derived from the tree ID, so
-// recompiling the same goal overwrites the seed instead of accumulating
-// synthetic evidence.
+// compilation record (ADR-133 Phase 5). This is design evidence; only a
+// subsequent execution can satisfy the gardener's run-evidence gate. The TaskID includes the owner and tree ID, so
+// recompiling replaces only that owner's seed. Compilation evidence must
+// remain distinguishable from an observed execution outcome.
 func seedCompileReflection(deps *mcpDeps, user, treeID, goalName string, planSteps []string) {
 	if deps.refStore == nil {
 		return
 	}
+	user, treeID = strings.TrimSpace(user), strings.TrimSpace(treeID)
+	identity := sha256.Sum256([]byte(user + "\x00" + treeID))
 	rec := &evolution.Record{
-		TaskID:   "seed-" + goalTreeSlug(treeID),
-		Task:     "Compile-time validation for goal: " + goalName,
-		Plan:     strings.Join(planSteps, " → "),
-		TreeName: treeID,
-		User:     user,
+		TaskID:       fmt.Sprintf("seed-%x", identity),
+		EvidenceKind: evolution.EvidenceCompilation,
+		Task:         "Compile-time validation for goal: " + goalName,
+		Plan:         strings.Join(planSteps, " → "),
+		TreeName:     treeID,
+		User:         user,
 		WhatWentWell: []string{
 			"GOAP planner reached the goal state",
 			"compiled tree passed full engine validation",
@@ -404,6 +366,7 @@ type mcpDeps struct {
 // TestToolsBuildPopulationsViaProductionHelper).
 func newProductionPopulation(size int, base *evolution.SerializableNode) *evolution.Population {
 	pop := evolution.NewPopulation(size, base)
+	pop.DeferExperienceCommit = true
 	pop.Specialists = evolution.SeedSpecialistRegistry()
 	return pop
 }
@@ -429,7 +392,7 @@ func evolveHealthProjection(pop *evolution.Population) map[string]any {
 	}
 }
 
-// registerMCPTools registers all 83 MCP tools on the server.
+// registerMCPTools registers all 87 MCP tools on the server.
 // Each tool handler accesses shared state through deps instead of main() locals.
 func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 	// ─── TREE EXECUTION ───────────────────────────────────────────────
@@ -462,9 +425,18 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			deps.bb.KgResults = ""
 			deps.bb.CachedResult = ""
 			injectPersonaContextLocked(deps, params.User)
+			if active, err := agentexec.ResolveRuntimeVersion(params.User, deps.bb.TreeID); err != nil {
+				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: fmt.Sprintf(`{"error": %q}`, err.Error())}}}
+			} else if active != nil {
+				command, err := engine.BuildAndValidate(active, deps.bb)
+				if err != nil {
+					return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: fmt.Sprintf(`{"error": %q}`, err.Error())}}}
+				}
+				*deps.bt = command
+			}
 			result := engine.RunTask(deps.bb, *deps.bt)
 			duration := time.Since(start)
-			recordPersonaInteraction(deps, params.User, params.Task, "", deps.bb.Outcome, duration.Milliseconds())
+			recordPersonaInteraction(deps, params.User, params.Task, deps.bb.EvidenceTreeID(), deps.bb.Outcome, duration.Milliseconds())
 			// Interaction-time autopilot (ADR-133 Phase 4): after a good
 			// user-attributed run, check whether a recurring habit should
 			// become an automation proposal. Best-effort by design.
@@ -480,21 +452,17 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			} else {
 				engine.Info("bt_run_task: completed", "task", params.Task, "outcome", deps.bb.Outcome, "duration_ms", duration.Milliseconds())
 			}
-			response := fmt.Sprintf(`{"result": %q, "outcome": %q, "complexity": %q, "duration_ms": %d, "plan": %q}`,
-				result, deps.bb.Outcome, deps.bb.Complexity, deps.bb.DurationMs, deps.bb.Plan)
-			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: response}}}
+			payload := map[string]any{"result": result, "outcome": deps.bb.Outcome, "complexity": deps.bb.Complexity, "duration_ms": deps.bb.DurationMs, "plan": deps.bb.Plan, "tree_id": deps.bb.EvidenceTreeID(), "tree_version": deps.bb.EvidenceTreeVersion()}
+			if deps.bb.EvidenceError != nil {
+				payload["evidence_error"] = deps.bb.EvidenceError.Error()
+			}
+			response, _ := json.Marshal(payload)
+			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(response)}}}
 		})
 
-	server.RegisterTool("bt_get_tree", "Get the current behavior tree definition",
-		map[string]engine.Property{}, nil,
-		func(args json.RawMessage) *engine.ToolResult {
-			tree, err := deps.treeStore.Load()
-			if err != nil || tree == nil {
-				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: `{"error": "no tree found"}`}}}
-			}
-			data, _ := json.MarshalIndent(tree, "", "  ")
-			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
-		})
+	server.RegisterBlackboardTool("bt_get_tree", "Inspect the active tree definition or its exact owner/version execution evidence",
+		map[string]engine.Property{"tree": {Type: "string", Description: "Tree ID; defaults to the current tree"}, "user": {Type: "string", Description: "Personal tree owner"}}, nil,
+		func(args json.RawMessage) *engine.ToolResult { return currentTreeEvidence(deps, args, false) })
 
 	server.RegisterTool("bt_get_reflections", "Get all reflection records",
 		map[string]engine.Property{}, nil,
@@ -508,31 +476,12 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 
-	server.RegisterTool("bt_evolve", "Run tree evolution (adapt on failures)",
-		map[string]engine.Property{}, nil,
-		func(args json.RawMessage) *engine.ToolResult {
-			tree, err := deps.treeStore.Load()
-			if err != nil || tree == nil {
-				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: `{"error": "no tree to evolve"}`}}}
-			}
-			failures := deps.refStore.CountFailures()
-			if failures < 3 {
-				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: fmt.Sprintf(`{"evolved": false, "reason": "need 3+ failures, have %d"}`, failures)}}}
-			}
-			ops := []evolution.MutationOp{
-				{Operation: "wrap_retry", Target: "AnalyzeTask"},
-				{Operation: "increase_retries", Target: "RetrySelfCorrect"},
-			}
-			before := evolution.CountNodes(tree)
-			applied := evolution.ApplyMutations(tree, ops)
-			after := evolution.CountNodes(tree)
-			if applied > 0 {
-				_ = deps.treeStore.Save(tree)
-			}
-			result := map[string]any{"evolved": applied > 0, "applied": applied, "nodes_before": before, "nodes_after": after}
-			data, _ := json.Marshal(result)
-			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
-		})
+	server.RegisterBlackboardTool("bt_evolve", "Propose bounded recovery from failures of an exact tree version; publish only measured task improvement",
+		map[string]engine.Property{
+			"tree": {Type: "string", Description: "Tree ID; defaults to the current tree"},
+			"user": {Type: "string", Description: "Owner of a personal tree"},
+		}, nil,
+		func(args json.RawMessage) *engine.ToolResult { return evolveCurrentTree(deps, args) })
 
 	server.RegisterTool("bt_reset", "Reset the behavior tree to the default",
 		map[string]engine.Property{}, nil,
@@ -544,21 +493,9 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: fmt.Sprintf(`{"reset": true, "nodes": %d}`, evolution.CountNodes(tree))}}}
 		})
 
-	server.RegisterTool("bt_get_fitness", "Get tree fitness stats",
-		map[string]engine.Property{}, nil,
-		func(args json.RawMessage) *engine.ToolResult {
-			tree, _ := deps.treeStore.Load()
-			records, _ := deps.refStore.LoadAll()
-			failures := deps.refStore.CountFailures()
-			successes := len(records) - failures
-			successRate := 0.0
-			if len(records) > 0 {
-				successRate = float64(successes) / float64(len(records))
-			}
-			stats := map[string]any{"total_tasks": len(records), "successes": successes, "failures": failures, "success_rate": fmt.Sprintf("%.2f", successRate), "node_count": evolution.CountNodes(tree)}
-			data, _ := json.Marshal(stats)
-			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
-		})
+	server.RegisterBlackboardTool("bt_get_fitness", "Inspect the active tree definition or its exact owner/version execution evidence",
+		map[string]engine.Property{"tree": {Type: "string", Description: "Tree ID; defaults to the current tree"}, "user": {Type: "string", Description: "Personal tree owner"}}, nil,
+		func(args json.RawMessage) *engine.ToolResult { return currentTreeEvidence(deps, args, true) })
 
 	server.RegisterTool("bt_create_agent", "Create a behavior tree agent from a skill file",
 		map[string]engine.Property{"skill_path": {Type: "string", Description: "Path to SKILL.md"}},
@@ -584,6 +521,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 		func(args json.RawMessage) *engine.ToolResult {
 			tree := evolution.GoDeveloperTree()
 			_ = deps.treeStore.Save(tree)
+			deps.bb.TreeID = "godev"
 			newBt := engine.BuildTree(tree, deps.bb)
 			*deps.bt = newBt
 			result := map[string]any{"switched": true, "tree": "GoDeveloperTree", "node_count": evolution.CountNodes(tree), "strategies": 5}
@@ -609,6 +547,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: fmt.Sprintf(`{"error": "unknown agent", "available": %q}`, names.String())}}}
 			}
 			_ = deps.treeStore.Save(tree)
+			deps.bb.TreeID = "finance:" + params.Agent
 			*deps.bt = engine.BuildTree(tree, deps.bb)
 			result := map[string]any{"switched": true, "agent": params.Agent, "description": evolution.AgentDescriptions[params.Agent], "node_count": evolution.CountNodes(tree)}
 			data, _ := json.Marshal(result)
@@ -650,6 +589,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: `{"error": "unknown variant, use: deep_research, quick_research"}`}}}
 			}
 			_ = deps.treeStore.Save(tree)
+			deps.bb.TreeID = "research:" + params.Variant
 			*deps.bt = engine.BuildTree(tree, deps.bb)
 			result := map[string]any{"switched": true, "variant": params.Variant, "description": evolution.Descriptions[params.Variant], "node_count": evolution.CountNodes(tree)}
 			data, _ := json.Marshal(result)
@@ -674,6 +614,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: fmt.Sprintf(`{"error": "unknown tree", "available": %q}`, names.String())}}}
 			}
 			_ = deps.treeStore.Save(tree)
+			deps.bb.TreeID = "domain:" + params.Tree
 			*deps.bt = engine.BuildTree(tree, deps.bb)
 			// domains.DescriptionFor spans all three description maps; indexing
 			// domains.Descriptions directly would confirm the switch with an
@@ -800,6 +741,8 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: fmt.Sprintf(`{"error":"unknown tree: %s"}`, params.Tree)}}}
 			}
 			deps.bb.Task = params.Task
+			deps.bb.TreeID = params.Tree
+			injectPersonaContextLocked(deps, "")
 			*deps.bt = engine.BuildTree(tree, deps.bb)
 			output := engine.RunTask(deps.bb, *deps.bt)
 			result := map[string]any{"delegated_to": params.Tree, "outcome": deps.bb.Outcome, "output": output}
@@ -847,32 +790,9 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 
-	server.RegisterTool("bt_kg_auto_create", "Auto-discover or create a behavior tree for a task",
-		map[string]engine.Property{"task": {Type: "string", Description: "Task to discover or create a tree for"}},
-		[]string{"task"},
-		func(args json.RawMessage) *engine.ToolResult {
-			var params struct {
-				Task string `json:"task"`
-			}
-			if err := json.Unmarshal(args, &params); err != nil {
-				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: fmt.Sprintf(`{"error": %q}`, err.Error())}}}
-			}
-			autoTree, treeID, err := knowledge.AutoCreateTreeWith(newTreeFactory(deps), params.Task)
-			if err != nil {
-				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: fmt.Sprintf(`{"error": %q}`, err.Error())}}}
-			}
-			action := "created"
-			if autoTree == nil {
-				action = "discovered"
-			}
-			result := map[string]any{"action": action, "tree_id": treeID}
-			if autoTree != nil {
-				result["node_count"] = evolution.CountNodes(autoTree)
-				persistGeneratedTree(deps, treeID, autoTree, result)
-			}
-			data, _ := json.Marshal(result)
-			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
-		})
+	server.RegisterTool("bt_kg_auto_create", "Create a governed response or owned file-task tree with declared result checks",
+		factoryTaskProperties(), []string{"task", "result_contract"},
+		func(args json.RawMessage) *engine.ToolResult { return createFactoryTask(deps, args) })
 
 	server.RegisterTool("bt_kg_summary", "Get knowledge graph summary: tree counts by category, total edges",
 		map[string]engine.Property{}, nil,
@@ -966,7 +886,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			// is wired; a nil bank degrades to plain Evolve inside
 			// EvolveWithExperience, keeping the result shape uniform.
 			retrievalHits := evolution.ExperienceRetrievalHits(deps.expBank, baseTree)
-			best := pop.EvolveWithExperience(params.Generations, structuralFitnessFn, deps.expBank)
+			best := pop.EvolveWithExperience(params.Generations, governedStructuralFitness(baseTree), deps.expBank)
 			bankEntries := 0
 			if deps.expBank != nil {
 				bankEntries = deps.expBank.Count()
@@ -982,15 +902,8 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				"experience_retrieval_hits": retrievalHits,
 				"health":                    evolveHealthProjection(pop),
 			}
-			// Persist the winner instead of discarding it after computing its
-			// fitness (Q2 Evolvability): it becomes resolvable by id and
-			// discoverable via the knowledge graph, not just a scalar number.
+			// Retain the proposal; only fresh task qualification can publish it.
 			persistEvolvedWinner(deps, params.Tree, best, pop.BestFitness, result)
-			// Also write the fitness back onto the *base* tree (Q2 Evolvability
-			// milestone 2/2), matching bt_evolve_qd/bt_evolve_selection_pressure:
-			// fitness-aware discovery ranks the base tree itself, not just its
-			// "-evolved" descendant.
-			recordEvolvedFitness(deps, params.Tree, pop.BestFitness)
 			data, _ := json.Marshal(result)
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
@@ -1092,12 +1005,9 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				expertLoadErr = err.Error()
 			}
 			mp.ExpertKnowledge = ek
-			mp.EvolveMAPElites(params.Generations, structuralFitnessFn)
+			mp.EvolveMAPElites(params.Generations, governedStructuralFitness(baseTree))
 			grid.InsertFromPopulation(mp.Population, params.Domain)
-			// Write the best illuminated elite's structural fitness back into the
-			// knowledge graph so fitness-aware discovery can surface the
-			// archive-improved tree on the next run (milestone 4/5).
-			recordEvolvedFitness(deps, params.Tree, grid.Stats().BestFitness)
+			// Archive estimates describe search diversity, not adopted runtime impact.
 			result := map[string]any{
 				"tree": params.Tree, "domain": params.Domain, "generations": mp.Generation,
 				"diversity_score": grid.DiversityScore(), "cell_count": grid.CellCount(),
@@ -1196,13 +1106,9 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			if baseTree == nil {
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: `{"error":"unknown tree"}`}}}
 			}
-			// Deterministic, LLM-free NSGA-II over the three fixed structural axes,
+			// Deterministic, LLM-free NSGA-II over the executable governance axes,
 			// reusing the shared StructuralMultiFitness (Quick-tier, no LLM calls).
-			dims := []evolution.FitnessDimension{
-				evolution.DimSuccessRate,
-				evolution.DimNodeEfficiency,
-				evolution.DimStability,
-			}
+			dims := evolution.GovernanceDimensions()
 			nsga := evolution.NewNSGAIIPopulation(population, baseTree, dims)
 			nsga.Specialists = evolution.SeedSpecialistRegistry()
 			nsga.Cap = population * 5
@@ -1223,7 +1129,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				expertLoadErr = err.Error()
 			}
 			nsga.ExpertKnowledge = ek
-			best := nsga.Evolve(params.Generations, evolution.StructuralMultiFitness)
+			best := nsga.Evolve(params.Generations, governedMultiFitness(baseTree))
 			// Per-dimension best scores across the final population.
 			dimNames := make([]string, len(dims))
 			dimBests := make(map[string]float64, len(dims))
@@ -1358,13 +1264,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			// newProductionPopulation (not evolution.NewParetoPopulation) so its
 			// seeded specialist registry backs crisis resurrection on this path
 			// too, mirroring bt_evolve_multiobjective.
-			dims := []evolution.FitnessDimension{
-				evolution.DimSuccessRate,
-				evolution.DimPathCoverage,
-				evolution.DimStability,
-				evolution.DimNodeEfficiency,
-				evolution.DimExecutionSpeed,
-			}
+			dims := evolution.GovernanceDimensions()
 			pp := &evolution.ParetoPopulation{
 				Population: newProductionPopulation(population, baseTree),
 				Front:      evolution.NewParetoFront(dims),
@@ -1386,7 +1286,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				expertLoadErr = err.Error()
 			}
 			pp.ExpertKnowledge = ek
-			best := pp.EvolvePareto(params.Generations, evolution.StructuralMultiFitness)
+			best := pp.EvolvePareto(params.Generations, governedMultiFitness(baseTree))
 			// Warm-start a durable Pareto front archive from the evolved
 			// population so Pareto-optimal individuals accumulate across runs
 			// instead of resetting on every call (Q2 Evolvability). This is a
@@ -1405,7 +1305,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				warmStarted = false
 				archiveLoadErr = err.Error()
 			}
-			archive.AddFromPopulation(pp.Population, evolution.StructuralMultiFitness)
+			archive.AddFromPopulation(pp.Population, governedMultiFitness(baseTree))
 			stats := archive.Stats()
 			result := map[string]any{
 				"tree": params.Tree, "generations": pp.Generation,
@@ -1520,7 +1420,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			// structural fitness so the tool stays -short-safe.
 			pop := newProductionPopulation(population, baseTree)
 			searcher := evolution.NewLocalSearcher(searchStrategy)
-			best := pop.MemeticEvolve(params.Generations, structuralFitnessFn, searcher, 2)
+			best := pop.MemeticEvolve(params.Generations, governedStructuralFitness(baseTree), searcher, 2)
 			result := map[string]any{
 				"tree": params.Tree, "strategy": params.Strategy,
 				"generations": pop.Generation, "best_fitness": pop.BestFitness,
@@ -1644,7 +1544,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			rl := evolution.NewReinforcementLearner()
 			rl.Epsilon = epsilon
 			rl.LearningRate = params.LearningRate
-			best := pop.EvolveQLearning(params.Generations, structuralFitnessFn, qt, category, rl, ek)
+			best := pop.EvolveQLearning(params.Generations, governedStructuralFitness(baseTree), qt, category, rl, ek)
 			learned := qt.LearnedActions()
 			result := map[string]any{
 				"tree": params.Tree, "generations": pop.Generation,
@@ -1788,6 +1688,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			im := evolution.NewIslandModel(params.MigrationInterval, params.MigrationRate)
 			im.Bank = deps.expBank
 			var seeded []string
+			islandBases := []*evolution.SerializableNode{baseTree}
 			if params.Domains != "" {
 				var names []string
 				for raw := range strings.SplitSeq(params.Domains, ",") {
@@ -1803,6 +1704,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 						return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(msg)}}}
 					}
 					seeds[name] = domainTree
+					islandBases = append(islandBases, domainTree)
 				}
 				params.Islands = len(names)
 				seeded = names
@@ -1889,7 +1791,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			im.ExpertKnowledge = ek
 			var bestTrees map[string]*evolution.SerializableNode
 			for range params.Generations {
-				bestTrees = im.EvolveAll(structuralFitnessFn)
+				bestTrees = im.EvolveAll(governedStructuralFitness(islandBases...))
 			}
 			stats := im.Stats()
 			// Report per-island bests only for the islands this run seeded:
@@ -1902,29 +1804,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 					perIslandBest[name] = best
 				}
 			}
-			// Write evolved fitness back into the knowledge graph so
-			// fitness-aware discovery can surface archive-improved trees on
-			// the next run (milestone 4/5). Attribution follows seeding: in
-			// domains mode each island's elites descend from its own domain
-			// tree's genome, so each domain:<name> entry is credited with its
-			// island's best; the base tree seeded nothing and gets no credit.
-			// In default mode the base tree seeded every island and alone
-			// receives the cross-island best.
-			if params.Domains != "" {
-				for _, name := range seeded {
-					if best, present := perIslandBest[name]; present {
-						recordEvolvedFitness(deps, "domain:"+name, best)
-					}
-				}
-			} else {
-				bestElite := 0.0
-				for _, best := range perIslandBest {
-					if best > bestElite {
-						bestElite = best
-					}
-				}
-				recordEvolvedFitness(deps, params.Tree, bestElite)
-			}
+			// Island archive estimates do not change runtime discovery fitness.
 			result := map[string]any{
 				"tree": params.Tree, "islands": params.Islands, "generations": params.Generations,
 				"per_island_best": perIslandBest, "migrations": stats.Migrations,
@@ -1969,7 +1849,12 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			// the durable archive never accumulates a worse tree.
 			gateRejected, baseRate, winnerRate := false, 0.0, 0.0
 			if winnerTree != nil {
-				gateRejected, baseRate, winnerRate = benchmarkGateEvolvedWinner(params.Tree, baseTree, winnerTree)
+				gateTreeID, gateBase := params.Tree, baseTree
+				if params.Domains != "" {
+					gateTreeID = "domain:" + bestDomain
+					gateBase = resolveTree(gateTreeID)
+				}
+				gateRejected, baseRate, winnerRate = benchmarkGateEvolvedWinner(gateTreeID, gateBase, winnerTree)
 				// Record this call's benchmark-gate outcome into the same
 				// shared TrackRecord bt_evolve_qd, bt_evolve_multiobjective,
 				// bt_evolve_pareto, and bt_evolve_qlearning write, regardless
@@ -2058,7 +1943,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			// Run the reordered tree through the shared persistence path so its
 			// outcome (persisted true, or a validation/persist error under bare
 			// deps) is reported alongside the reorder count.
-			persistGeneratedTree(deps, params.Tree, baseTree, result)
+			persistEvolvedWinner(deps, params.Tree, baseTree, evolution.AssessGovernance(baseTree).Score, result)
 			data, _ := json.Marshal(result)
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
@@ -2148,7 +2033,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				// addFailureContext.
 				// Trees with tunable parameters get CMA-ES parameter tuning;
 				// parameterless trees fall back to structural genetic evolution.
-				if tunedTree, tunedParams, bestFitness, tuned := evolution.TuneTreeParameters(baseTree, population, params.Generations, structuralFitnessFn); tuned {
+				if tunedTree, tunedParams, bestFitness, tuned := evolution.TuneTreeParameters(baseTree, population, params.Generations, governedStructuralFitness(baseTree)); tuned {
 					algorithms["cmaes"]++
 					entry := map[string]any{
 						"tree":           b.TreeID,
@@ -2171,7 +2056,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 				// task rather than just its tree type (Q2 Evolvability); an
 				// empty LastFailureTask falls back to RetrieveByTreeType inside
 				// EvolveWithExperienceContext, matching EvolveWithExperience.
-				best := pop.EvolveWithExperienceContext(params.Generations, structuralFitnessFn, deps.expBank, b.LastFailureTask)
+				best := pop.EvolveWithExperienceContext(params.Generations, governedStructuralFitness(baseTree), deps.expBank, b.LastFailureTask)
 				entry := map[string]any{
 					"tree":           b.TreeID,
 					"before_fitness": b.SuccessRate,
@@ -2198,7 +2083,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
 		})
 
-	server.RegisterTool("bt_evolve_selection_pressure", "Evolve every knowledge-graph tree under selection pressure (proven fitness >= 70 but underbred, RunCount < 5) via experience-grounded genetic evolution, writing each elite's fitness back through the evolved path and reporting per-tree before/after fitness",
+	server.RegisterTool("bt_evolve_selection_pressure", "Propose improvements for knowledge-graph trees under selection pressure (fitness >= 70, RunCount < 5); publish only after fresh real-model task qualification",
 		map[string]engine.Property{
 			"population":  {Type: "integer", Description: "Population size per pressured tree (default: 20)"},
 			"generations": {Type: "integer", Description: "Number of generations per pressured tree (default: 10)"},
@@ -2222,11 +2107,8 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 			if deps.kg == nil {
 				return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: `{"error":"knowledge graph unavailable"}`}}}
 			}
-			// Deterministic, LLM-free closure of the learn→discover→evolve loop:
-			// the same proven-but-underbred criteria ComputeAnalytics surfaces as
-			// human-readable SuggestedActions strings drive structural evolution
-			// directly, and each bred elite's fitness is written back through the
-			// evolved path so fitness-driven discovery can surface the winners.
+			// Analytics selects search targets. Its historical scores cannot
+			// authorize candidate publication or runtime discovery credit.
 			pressure := deps.kg.ComputeAnalytics().SelectionPressure
 			bankEntries := 0
 			if deps.expBank != nil {
@@ -2252,8 +2134,7 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 					continue
 				}
 				pop := newProductionPopulation(population, baseTree)
-				best := pop.EvolveWithExperience(params.Generations, structuralFitnessFn, deps.expBank)
-				recordEvolvedFitness(deps, sp.TreeID, pop.BestFitness)
+				best := pop.EvolveWithExperience(params.Generations, governedStructuralFitness(baseTree), deps.expBank)
 				entry := map[string]any{
 					"tree":           sp.TreeID,
 					"before_fitness": sp.Fitness,
@@ -2421,41 +2302,9 @@ func registerMCPTools(server *engine.Server, deps *mcpDeps) {
 
 	// ─── FACTORY ──────────────────────────────────────────────────────
 
-	server.RegisterTool("bt_factory_create", "Breed a new behavior tree from existing parent trees",
-		map[string]engine.Property{
-			"task":     {Type: "string", Description: "Task description for the new tree"},
-			"parent_a": {Type: "string", Description: "First parent tree ID (e.g., finance:pitch_agent)"},
-			"parent_b": {Type: "string", Description: "Second parent tree ID (e.g., research:deep_research)"},
-		},
-		[]string{"task"},
-		func(args json.RawMessage) *engine.ToolResult {
-			var params struct {
-				Task    string `json:"task"`
-				ParentA string `json:"parent_a"`
-				ParentB string `json:"parent_b"`
-			}
-			_ = json.Unmarshal(args, &params)
-			f := newTreeFactory(deps)
-			var tree *evolution.SerializableNode
-			var treeID string
-			if params.ParentA != "" && params.ParentB != "" {
-				tree, treeID = f.CreateFromParents(params.ParentA, params.ParentB, params.Task)
-			} else {
-				category := params.ParentA
-				if category == "" {
-					category = "core"
-				}
-				tree, treeID = f.CreateTree(params.Task, category, nil)
-			}
-			cat := treeID
-			if before, _, ok := strings.Cut(treeID, ":"); ok {
-				cat = before
-			}
-			result := map[string]any{"tree_id": treeID, "node_count": evolution.CountNodes(tree), "parents": []string{params.ParentA, params.ParentB}, "category": cat}
-			persistGeneratedTree(deps, treeID, tree, result)
-			data, _ := json.Marshal(result)
-			return &engine.ToolResult{Content: []engine.ContentItem{{Type: "text", Text: string(data)}}}
-		})
+	server.RegisterTool("bt_factory_create", "Create and persist a governed response or owned file-task tree; parent references record design lineage",
+		factoryTaskProperties(), []string{"task", "result_contract"},
+		func(args json.RawMessage) *engine.ToolResult { return createFactoryTask(deps, args) })
 
 	// ─── WORKFLOW ─────────────────────────────────────────────────────
 
@@ -3076,35 +2925,32 @@ func resolveEvolvePopulation(population *int) (int, *engine.ToolResult) {
 	return *population, nil
 }
 
-// structuralFitnessFn scores a tree's structural quality without invoking the
-// LLM: it balances node count, depth, and node-type diversity against known
-// anti-patterns. Shared by the deterministic bt_evolve_genetic and bt_evolve_qd
-// evolution paths so both stay -short-safe.
+// structuralFitnessFn ranks executable governance, never size or decorative depth.
 func structuralFitnessFn(t *evolution.SerializableNode) float64 {
-	nodeCount := float64(evolution.CountNodes(t))
-	depth := float64(maxTreeDepth(t, 0))
-	diversity := treeDiversityScore(t)
+	return evolution.AssessGovernance(t).Score
+}
 
-	// Base score: moderate node count (penalize both too small and too large)
-	baseScore := 0.0
-	if nodeCount >= 5 && nodeCount <= 80 {
-		baseScore = nodeCount * 2.0
-	} else if nodeCount < 5 {
-		baseScore = nodeCount * 1.0 // penalize too simple
-	} else {
-		baseScore = 80.0 + (nodeCount-80)*0.5 // diminishing returns on huge trees
+func governedStructuralFitness(bases ...*evolution.SerializableNode) func(*evolution.SerializableNode) float64 {
+	return func(candidate *evolution.SerializableNode) float64 {
+		if !engine.ValidateTreeFull(candidate).Valid() {
+			return -1
+		}
+		for _, base := range bases {
+			if evolution.PreservesGovernance(base, candidate) {
+				return structuralFitnessFn(candidate)
+			}
+		}
+		return -1
 	}
+}
 
-	// Depth bonus (deep trees are better for complex tasks, up to a point)
-	depthBonus := math.Min(depth*3.0, 30.0)
-
-	// Diversity bonus (more node types = more capability)
-	diversityBonus := diversity * 15.0
-
-	// Anti-pattern penalty
-	antiPatternPenalty := detectAntiPatternsInTree(t) * -10.0
-
-	return baseScore + depthBonus + diversityBonus + antiPatternPenalty
+func governedMultiFitness(base *evolution.SerializableNode) func(*evolution.SerializableNode) evolution.MultiFitness {
+	return func(candidate *evolution.SerializableNode) evolution.MultiFitness {
+		if !engine.ValidateTreeFull(candidate).Valid() || !evolution.PreservesGovernance(base, candidate) {
+			return evolution.NewMultiFitness()
+		}
+		return evolution.StructuralMultiFitness(candidate)
+	}
 }
 
 // treeDiversityScore counts unique node types in the tree as a diversity metric.

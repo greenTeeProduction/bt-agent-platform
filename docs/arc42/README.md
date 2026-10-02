@@ -1,5 +1,7 @@
 # BT platform architecture
 
+Current owner model policy: [ordinary inference uses Sol 6.1, with approved external exceptions](../sol-model-policy.md).
+
 This is the current architecture specification for the BT Agent Platform.
 The 2026-09-16 alignment review used source baseline `012612e1` and a
 separately identified snapshot of the deployed host. It corrected stale
@@ -57,8 +59,9 @@ safe presentation (ADR-273), blackboard owner admission and atomic run promotion
 (ADR-275), shared sprint capacity and owned batch budgets
 (ADR-276), conservative process-restart recovery holds
 (ADR-277), durable DLQ replay claims and current-disk deltas
-(ADR-280), island acceptance
-and the Codex-only policy (ADR-261). The hardcoded health toolchain
+(ADR-280), measured runtime publication and rollback
+(ADR-281), manual/genetic publication through the same evidence boundary
+(ADR-282), offline collapsed-tree repair with retained evidence (ADR-283), transactional automation reservations and exact activation (ADR-284), executable personal file tasks and version consent (ADR-285), typed checkpoints and observed agent state (ADR-286), research delivery evidence (ADR-287), native runtime provenance (ADR-288), observed compiled/dynamic GOAP effects (ADR-289), reviewed program completion and recoverable delivery (ADR-290), island acceptance and the Codex-only policy (ADR-261). The hardcoded health toolchain
 field was corrected on 2026-09-16 (D7).
 Provider/model readiness and clean-repository preconditions also require
 operational verification; a closed GOAP breaker does not prove a successful

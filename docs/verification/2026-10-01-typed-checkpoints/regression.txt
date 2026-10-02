@@ -1,0 +1,5 @@
+ok  	github.com/nico/go-bt-evolve/internal/goap	0.091s
+ok  	github.com/nico/go-bt-evolve/internal/evolution	9.680s
+ok  	github.com/nico/go-bt-evolve/internal/engine	34.528s
+ok  	github.com/nico/go-bt-evolve/internal/domains	0.684s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-agent	2.876s

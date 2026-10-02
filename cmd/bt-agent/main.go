@@ -33,6 +33,11 @@ import (
 )
 
 func resolveTree(id string) *evolution.SerializableNode {
+	if tree, err := agentexec.ResolveRuntimeVersion("", id); err != nil {
+		return &evolution.SerializableNode{Type: "UnavailableRuntimeVersion", Name: id, Description: err.Error()}
+	} else if tree != nil {
+		return tree
+	}
 	if t := agent.LoadMutatedTreeOverride(id); t != nil {
 		// A persisted runtime mutation shadows the code-defined tree until its
 		// override file is removed — surface that, or code changes to this
@@ -507,7 +512,7 @@ func main() {
 	engine.Info("llm provider initialized", "provider", cfg.LLMProvider)
 
 	// Graceful Degradation: LLM health monitor
-	llmHealth := llm.NewHealthMonitor(cfg.OllamaHost, 30*time.Second)
+	llmHealth := llm.NewProviderHealthMonitor(cfg, 30*time.Second)
 	llmHealth.Start()
 
 	// ── Agent Factory ──────────────────────────────────────────────────────
@@ -558,6 +563,10 @@ func main() {
 		LLM:         llmClient,
 	}
 
+	bb.TreeID = tree.Name
+	if tree.Name == evolution.DefaultTree().Name {
+		bb.TreeID = "default"
+	}
 	bt := engine.BuildTree(tree, bb)
 
 	// ── Agent Platform ─────────────────────────────────────────────────────

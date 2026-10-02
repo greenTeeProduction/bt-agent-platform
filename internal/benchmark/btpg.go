@@ -30,8 +30,10 @@ type BTPGTaskResult struct {
 
 // BTPGResult aggregates BTPG evaluation results.
 type BTPGResult struct {
-	Metrics BTPGMetrics      `json:"metrics"`
-	PerTask []BTPGTaskResult `json:"per_task"`
+	ModelEvidence ModelEvidence    `json:"model_evidence"`
+	Warning       string           `json:"warning,omitempty"`
+	Metrics       BTPGMetrics      `json:"metrics"`
+	PerTask       []BTPGTaskResult `json:"per_task"`
 }
 
 // EvaluateBTPG runs service-robot-style tasks through the tree and computes
@@ -39,6 +41,8 @@ type BTPGResult struct {
 // counts nodes visited, and tracks the execution path. Edge-case tasks
 // (very short or ambiguous) contribute to the robustness score.
 func EvaluateBTPG(tree *evolution.SerializableNode, tasks []string, llm llm.LLM) *BTPGResult {
+	var modelEvidence ModelEvidence
+	var warning string
 	results := make([]BTPGTaskResult, 0, 32)
 	successes := 0
 	edgeSuccesses := 0
@@ -46,14 +50,17 @@ func EvaluateBTPG(tree *evolution.SerializableNode, tasks []string, llm llm.LLM)
 	quality := BTPGQualityScore(tree)
 
 	for _, task := range tasks {
-		bb := &engine.Blackboard{
+		bb := &engine.Blackboard{NodeAdmission: benchmarkAdmission,
 			Task: task,
 			LLM:  llm,
 		}
-		bt := engine.BuildTree(tree, bb)
-		output := engine.RunTask(bb, bt)
+		output, taskEvidence, taskWarning := executeLiveTask(tree, bb)
+		mergeModelEvidence(&modelEvidence, taskEvidence)
+		if taskWarning != "" {
+			warning = taskWarning
+		}
 
-		success := bb.Outcome == "success"
+		success := taskWarning == "" && bb.Outcome == "success"
 		if success {
 			successes++
 		}
@@ -85,7 +92,7 @@ func EvaluateBTPG(tree *evolution.SerializableNode, tasks []string, llm llm.LLM)
 
 	n := len(tasks)
 	if n == 0 {
-		return &BTPGResult{Metrics: quality, PerTask: results}
+		return &BTPGResult{ModelEvidence: modelEvidence, Warning: warning, Metrics: quality, PerTask: results}
 	}
 
 	successRate := float64(successes) / float64(n)
@@ -103,7 +110,7 @@ func EvaluateBTPG(tree *evolution.SerializableNode, tasks []string, llm llm.LLM)
 		quality.RobustnessScore = successRate
 	}
 
-	return &BTPGResult{
+	return &BTPGResult{ModelEvidence: modelEvidence, Warning: warning,
 		Metrics: quality,
 		PerTask: results,
 	}

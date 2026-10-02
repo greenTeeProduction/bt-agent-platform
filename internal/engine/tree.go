@@ -33,7 +33,6 @@ import (
 
 	btcomp "github.com/rvitorper/go-bt/composite"
 	btcore "github.com/rvitorper/go-bt/core"
-	btdec "github.com/rvitorper/go-bt/decorators"
 	btleaf "github.com/rvitorper/go-bt/leaf"
 )
 
@@ -105,19 +104,28 @@ func (bb *Blackboard) ChildTicks() []ChildTick {
 
 // Blackboard is the shared state passed through the behavior tree.
 type Blackboard struct {
-	parallelStates map[*parallelCommand]*parallelState
-	Task           string
-	Complexity     string
-	Plan           string
-	Result         string
-	Outcome        string
-	DurationMs     int64
-	KgResults      string
-	CachedResult   string
-	FailureCount   int
-	Reflections    *evolution.Store
-	TreeStore      *evolution.TreeStore
-	LLM            llm.LLM
+	// Only an executed JSON contract can exempt this exact result from the
+	// prose-length heuristic. It is cleared at each run and failed gateway.
+	contractValidatedResult string
+	// TreeID and User are supplied by the resolver/caller, never inferred from task text.
+	TreeID           string
+	User             string
+	DeferRunEvidence bool
+	EvidenceError    error `json:"-"`
+	runEvidence      *runEvidence
+	parallelStates   map[*parallelCommand]*parallelState
+	Task             string
+	Complexity       string
+	Plan             string
+	Result           string
+	Outcome          string
+	DurationMs       int64
+	KgResults        string
+	CachedResult     string
+	FailureCount     int
+	Reflections      *evolution.Store
+	TreeStore        *evolution.TreeStore
+	LLM              llm.LLM
 
 	// Langchain integration — chain primitives accessible from BT nodes.
 	// Use interface{} to avoid circular imports; chain runners cast to concrete types.
@@ -159,6 +167,9 @@ type Blackboard struct {
 	executionLocalError error
 	executionBlocked    bool
 	executionForced     bool
+	goapEffectScope     string
+	goapObserved        []goapCapabilityObservation
+	goapStepRuntime     *goapRuntimeStep
 
 	// liveRun and buildCapture support runtime tree mutation
 	// (tree_mutation.go / live_run.go). Pointer + map so forkBlackboard's
@@ -174,6 +185,9 @@ type Blackboard struct {
 	// tree evaluation can never spawn subprocesses, hit the network, or burn
 	// external API quotas. Conditions still run (routing stays observable).
 	Sandbox bool
+	// NodeAdmission permits a caller to restrict execution to its available
+	// capabilities. Rejection is a typed terminal stop, never simulated success.
+	NodeAdmission func(kind, name string) error `json:"-"`
 
 	TraceContext context.Context `json:"-"`
 	Logger       *slog.Logger    `json:"-"` // run-scoped logger (run_id/agent/tree bound); use Log()
@@ -231,7 +245,7 @@ func BuildAndValidate(serTree *evolution.SerializableNode, bb *Blackboard) (btco
 	if !info.Valid() {
 		return nil, fmt.Errorf("tree validation failed: %v", info.Errors)
 	}
-	return buildNode(expanded, bb, ""), nil
+	return bindTreeDefinition(buildNode(expanded, bb, ""), serTree, expanded, bb.TreeID)
 }
 
 // buildNode builds the node and wraps it with the per-node observability
@@ -241,6 +255,7 @@ func BuildAndValidate(serTree *evolution.SerializableNode, bb *Blackboard) (btco
 // produced nothing until this wiring.
 func buildNode(node *evolution.SerializableNode, bb *Blackboard, parentName string) btcore.Command[Blackboard] {
 	inner := buildNodeInner(node, bb, parentName)
+	inner = withNodeAdmission(node, inner, bb)
 	if bb != nil && bb.buildCapture != nil {
 		bb.buildCapture[node] = inner
 	}
@@ -326,6 +341,10 @@ func buildNodeInner(node *evolution.SerializableNode, bb *Blackboard, parentName
 		return BuildRunner(node, bb)
 	case "Monitor":
 		return BuildMonitor(node, bb)
+	case "FileTask":
+		return buildFileTask(node, bb)
+	case "GoapStep":
+		return buildGoapStep(node, bb)
 	case "QualityGate":
 		return BuildQualityGate(node, bb)
 	case "Retry":
@@ -337,15 +356,34 @@ func buildNodeInner(node *evolution.SerializableNode, bb *Blackboard, parentName
 		if times <= 0 {
 			times = 1
 		}
-		return btdec.NewRepeat(child, times)
+		return boundedRetry(child, times)
 	case "Action":
-		return btleaf.NewAction(bb.actionForName(node.Name))
+		fn := bb.actionForName(node.Name)
+		if goapNodeHasMetadata(node) {
+			return btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int {
+				if err := applyGoapMetadata(ctx.Blackboard, node); err != nil {
+					return failGoapExecution(ctx.Blackboard, err)
+				}
+				return fn(ctx)
+			})
+		}
+		return btleaf.NewAction(fn)
 	case "ChainAction":
 		// Langchain chain node — reads ChainConfig from node metadata
 		cfg := parseChainConfig(node)
 		return BuildChainAction(cfg, bb)
 	case "Condition":
-		return btleaf.NewCondition(bb.conditionForName(node.Name))
+		fn := bb.conditionForName(node.Name)
+		if goapNodeHasMetadata(node) {
+			return btleaf.NewCondition(func(b *Blackboard) bool {
+				if err := applyGoapMetadata(b, node); err != nil {
+					failGoapExecution(b, err)
+					return false
+				}
+				return fn(b)
+			})
+		}
+		return btleaf.NewCondition(fn)
 	case "UtilitySelector":
 		return BuildUtilitySelector(node, bb)
 	case "DecisionTree":
@@ -362,8 +400,7 @@ func buildNodeInner(node *evolution.SerializableNode, bb *Blackboard, parentName
 			return btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int { return -1 })
 		}
 		child := buildNode(&node.Children[0], bb, node.Name)
-		postconditions := readPostconditions(node)
-		return NewCheckpointVerifier(child, node.MaxRetries, postconditions)
+		return newCheckpointVerifier(child, node)
 	case "HumanApprovalGate":
 		return buildHumanApprovalGate(node, bb, parentName)
 	case "ClaudeErrorHandler":
@@ -474,6 +511,9 @@ func validateOutputQuality(b *Blackboard) bool {
 	if isStructured {
 		minLen = 15 // structured zero-LLM output is intentionally compact
 	}
+	if b.contractValidatedResult != "" && b.contractValidatedResult == result {
+		minLen = 0 // the executed JSON contract already verified this output
+	}
 
 	// 1. Minimum length check
 	if len(result) < minLen {
@@ -565,8 +605,16 @@ func stripFencedBlocks(s string) string {
 	return out.String()
 }
 
-func RunTask(bb *Blackboard, tree btcore.Command[Blackboard]) string {
+func RunTask(bb *Blackboard, tree btcore.Command[Blackboard]) (result string) {
 	start := time.Now()
+	beginRunEvidence(bb, tree, start)
+	defer func() {
+		bb.DurationMs = time.Since(start).Milliseconds()
+		if !bb.DeferRunEvidence {
+			_ = FinalizeRunEvidence(bb)
+		}
+		result = bb.Result
+	}()
 	if bb.executionStop == nil {
 		bb.executionStop = &executionStop{}
 	}

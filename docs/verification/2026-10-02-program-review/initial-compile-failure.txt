@@ -1,0 +1,6 @@
+ok  	github.com/nico/go-bt-evolve/internal/research	0.260s
+# github.com/nico/go-bt-evolve/internal/engine [github.com/nico/go-bt-evolve/internal/engine.test]
+internal/engine/actions_goap_fusion_red_precheck_test.go:5:2: "strings" imported and not used
+FAIL	github.com/nico/go-bt-evolve/internal/engine [build failed]
+ok  	github.com/nico/go-bt-evolve/cmd/bt-agent	0.026s
+FAIL

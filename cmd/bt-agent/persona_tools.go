@@ -195,6 +195,7 @@ func personaEmbedder(deps *mcpDeps) func(string) ([]float64, error) {
 // Callers must be registered via server.RegisterBlackboardTool so the whole
 // call runs under the Server-wide blackboard lock (internal/engine/mcp_server.go).
 func injectPersonaContextLocked(deps *mcpDeps, user string) {
+	deps.bb.User = strings.TrimSpace(user)
 	if deps.bb.ChainState == nil {
 		deps.bb.ChainState = map[string]any{}
 	}
@@ -226,11 +227,16 @@ func recordPersonaInteraction(deps *mcpDeps, user, task, treeID, outcome string,
 		engine.Warn("persona: interaction log unavailable", "user", user, "error", err)
 		return
 	}
+	version := ""
+	if deps.bb != nil {
+		version = deps.bb.EvidenceTreeVersion()
+	}
 	if err := log.Append(persona.Interaction{
-		Task:       task,
-		TreeID:     treeID,
-		Outcome:    outcome,
-		DurationMs: durationMs,
+		Task:        task,
+		TreeID:      treeID,
+		TreeVersion: version,
+		Outcome:     outcome,
+		DurationMs:  durationMs,
 	}); err != nil {
 		engine.Warn("persona: interaction append failed", "user", user, "error", err)
 	}

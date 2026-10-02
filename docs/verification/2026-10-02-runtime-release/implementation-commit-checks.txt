@@ -1,0 +1,120 @@
+🔍 pre-commit: go-bt-evolve checks...
+
+→ gofmt check on staged files...
+  ✓ formatted
+→ go vet...
+  ✓ passed
+→ golangci-lint (staged packages)...
+0 issues.
+  ✓ passed
+→ go mod tidy check...
+  ✓ passed
+→ documentation drift check (docs/ changed)...
+=== Doc Drift Validation ===
+Root: /mnt/ssd/bt-review-worktrees/runtime-impact-20261001
+
+--- API_REFERENCE.md package listing ---
+[32m  All code packages are documented[0m
+[32m  ✓ package listing consistent[0m
+
+--- GETTING_STARTED.md binary listing ---
+[32m  All core binaries mentioned in Getting Started[0m
+
+--- TUTORIAL.md command validation ---
+[32m  All tutorial command references are valid[0m
+
+--- TROUBLESHOOTING.md command validation ---
+[32m  All troubleshooting command references are valid[0m
+
+--- arc42 section validation ---
+...........
+----------------------------------------------------------------------
+Ran 11 tests in 0.101s
+
+OK
+arc42 references, inventories and traceability pass; behavioral claims require evidence review
+[32m  arc42 sections, ADR log, and README paths are consistent[0m
+
+--- VIDEO_WALKTHROUGH.md command syntax check ---
+[32m  All video walkthrough command references are valid[0m
+
+--- Walkthrough evidence artifact ---
+[32m  walkthrough-evidence.md is fresh (14h old)[0m
+
+=== Results ===
+[32m  ✓ Documentation structure and references pass; behavioral claims require evidence review[0m
+
+Exit code: 0
+  ✓ docs in sync
+→ ci-doctor workflow maturity check...
+  ✓ 44/44 CI/CD workflow checks passed
+→ go test -short...
+ok  	github.com/nico/go-bt-evolve/cmd/benchcmp	0.089s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-agent	5.246s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-agent-cli	0.137s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-assistant	0.071s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-ci-doctor	0.021s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-dashboard	3.399s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-docgen	0.065s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-evaluator	0.043s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-langagent	0.051s
+?   	github.com/nico/go-bt-evolve/cmd/bt-notebooklm-auth	[no test files]
+ok  	github.com/nico/go-bt-evolve/cmd/bt-scalability-probe	0.037s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-security-probe	0.057s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-tree-integration	0.062s
+ok  	github.com/nico/go-bt-evolve/internal/a2a	1.668s
+ok  	github.com/nico/go-bt-evolve/internal/agent	11.067s
+ok  	github.com/nico/go-bt-evolve/internal/agentexec	0.132s
+ok  	github.com/nico/go-bt-evolve/internal/api	0.110s
+?   	github.com/nico/go-bt-evolve/internal/audit	[no test files]
+ok  	github.com/nico/go-bt-evolve/internal/benchmark	0.124s
+ok  	github.com/nico/go-bt-evolve/internal/blackboard	0.857s
+ok  	github.com/nico/go-bt-evolve/internal/blocks	0.134s
+ok  	github.com/nico/go-bt-evolve/internal/cicd	0.081s
+ok  	github.com/nico/go-bt-evolve/internal/config	6.261s
+ok  	github.com/nico/go-bt-evolve/internal/dashboard	3.795s
+ok  	github.com/nico/go-bt-evolve/internal/domains	0.672s
+ok  	github.com/nico/go-bt-evolve/internal/doormate	0.045s
+ok  	github.com/nico/go-bt-evolve/internal/engine	38.718s
+ok  	github.com/nico/go-bt-evolve/internal/evaluator	0.229s
+ok  	github.com/nico/go-bt-evolve/internal/evolution	6.431s
+ok  	github.com/nico/go-bt-evolve/internal/factory	0.028s
+ok  	github.com/nico/go-bt-evolve/internal/fusion	0.767s
+ok  	github.com/nico/go-bt-evolve/internal/goap	0.073s
+ok  	github.com/nico/go-bt-evolve/internal/hitl	0.795s
+ok  	github.com/nico/go-bt-evolve/internal/knowledge	24.527s
+ok  	github.com/nico/go-bt-evolve/internal/llm	21.753s
+ok  	github.com/nico/go-bt-evolve/internal/notebooklmauth	20.046s
+ok  	github.com/nico/go-bt-evolve/internal/persona	5.188s
+ok  	github.com/nico/go-bt-evolve/internal/reliability	16.263s
+ok  	github.com/nico/go-bt-evolve/internal/research	0.423s
+ok  	github.com/nico/go-bt-evolve/internal/security	3.177s
+ok  	github.com/nico/go-bt-evolve/internal/startup	0.976s
+?   	github.com/nico/go-bt-evolve/internal/startup/companies	[no test files]
+ok  	github.com/nico/go-bt-evolve/internal/thinktank	0.085s
+ok  	github.com/nico/go-bt-evolve/internal/tracing	0.020s
+ok  	github.com/nico/go-bt-evolve/internal/util	0.614s
+  ✓ passed
+
+✅ pre-commit checks passed
+[codex/runtime-impact-20261001 5cfeb412] fix: require clean native provenance before runtime rebuild replacement
+ 27 files changed, 3846 insertions(+), 2897 deletions(-)
+ create mode 100644 docs/verification/2026-10-02-runtime-release/README.md
+ create mode 100644 docs/verification/2026-10-02-runtime-release/agent-race-passed.txt
+ create mode 100644 docs/verification/2026-10-02-runtime-release/canonical-source.json
+ create mode 100644 docs/verification/2026-10-02-runtime-release/cron-proof.json
+ create mode 100644 docs/verification/2026-10-02-runtime-release/doc-checker-tests.txt
+ create mode 100644 docs/verification/2026-10-02-runtime-release/doc-drift.txt
+ create mode 100644 docs/verification/2026-10-02-runtime-release/enabled-services.json
+ create mode 100644 docs/verification/2026-10-02-runtime-release/graph-update.txt
+ create mode 100644 docs/verification/2026-10-02-runtime-release/initial-lint.txt
+ create mode 100644 docs/verification/2026-10-02-runtime-release/initial-race.txt
+ create mode 100644 docs/verification/2026-10-02-runtime-release/legacy-cli-alias.json
+ create mode 100644 docs/verification/2026-10-02-runtime-release/lint-passed.txt
+ create mode 100644 docs/verification/2026-10-02-runtime-release/manifest.json
+ create mode 100644 docs/verification/2026-10-02-runtime-release/native-focused.txt
+ create mode 100644 docs/verification/2026-10-02-runtime-release/native-red.txt
+ create mode 100644 docs/verification/2026-10-02-runtime-release/pr83-fetch.txt
+ create mode 100644 docs/verification/2026-10-02-runtime-release/release-manifest.json
+ create mode 100644 docs/verification/2026-10-02-runtime-release/service-smoke.json
+ create mode 100644 internal/agent/rebuild_provenance_test.go

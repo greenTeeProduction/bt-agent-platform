@@ -101,7 +101,7 @@ func goapRedPassDeliverableVerdict(goal string) goapDeliverableVerdict {
 // unreadable store yields "", i.e. no named deliverable, i.e. the pre-existing
 // behavior.
 func goapMilestoneGoalText(programID string, idx int) string {
-	ps, err := research.OpenPrograms(goapProgramsPath)
+	ps, err := research.OpenPrograms(currentGoapProgramsPath())
 	if err != nil {
 		return ""
 	}

@@ -24,18 +24,42 @@ const (
 	Failure Outcome = "failure"
 )
 
-// Record captures a completed task execution and its reflection.
+// ResultCheck records an executed gate's verdict and the output it checked.
+type ResultCheck struct {
+	Gate         string          `json:"gate"`
+	Passed       bool            `json:"passed"`
+	OutputDigest string          `json:"output_digest"`
+	Reason       string          `json:"reason,omitempty"`
+	Contract     *ResultContract `json:"contract,omitempty"`
+}
+
+// Record captures evidence with its origin and execution identity.
 type Record struct {
-	TaskID           string   `json:"task_id"`
-	Timestamp        int64    `json:"timestamp"`
-	Task             string   `json:"task"`
-	Plan             string   `json:"plan"`
-	TreeName         string   `json:"tree_name,omitempty"`
-	WhatWentWell     []string `json:"what_went_well"`
-	WhatToImprove    []string `json:"what_to_improve"`
-	AdjustedBehavior string   `json:"adjusted_behavior"`
-	Outcome          Outcome  `json:"outcome"`
-	DurationMs       int64    `json:"duration_ms"`
+	GoapChecks          []GoapCheck          `json:"goap_checks,omitempty"`
+	Build               util.BuildProvenance `json:"build"`
+	StartedAt           time.Time            `json:"started_at,omitzero"`
+	Publication         *RuntimeRelease      `json:"publication,omitempty"`
+	Effects             []EffectReceipt      `json:"effects,omitempty"`
+	ResultChecks        []ResultCheck        `json:"result_checks,omitempty"`
+	ResultChecksDropped int                  `json:"result_checks_dropped,omitempty"`
+	RunID               string               `json:"run_id,omitempty"`
+	TreeVersion         string               `json:"tree_version,omitempty"`
+	ExecutionVersions   []string             `json:"execution_versions,omitempty"`
+	EvidenceKind        string               `json:"evidence_kind,omitempty"`
+	Result              string               `json:"result,omitempty"`
+	QualityScore        float64              `json:"quality_score,omitempty"`
+	Path                string               `json:"path,omitempty"`
+	Error               string               `json:"error,omitempty"`
+	TaskID              string               `json:"task_id"`
+	Timestamp           int64                `json:"timestamp"`
+	Task                string               `json:"task"`
+	Plan                string               `json:"plan"`
+	TreeName            string               `json:"tree_name,omitempty"`
+	WhatWentWell        []string             `json:"what_went_well"`
+	WhatToImprove       []string             `json:"what_to_improve"`
+	AdjustedBehavior    string               `json:"adjusted_behavior"`
+	Outcome             Outcome              `json:"outcome"`
+	DurationMs          int64                `json:"duration_ms"`
 	// User attributes the record to a persona (ADR-133 Phase 5); empty for
 	// anonymous/system runs.
 	User string `json:"user,omitempty"`
@@ -52,23 +76,10 @@ const (
 	FeedbackNegative = "negative"
 )
 
-// FilterByTreeName returns records matching the given tree name.
-// An empty treeName matches records that have no TreeName set (backward compat).
+// FilterByTreeName returns only records attributed to the requested tree.
+// Missing history is not permission to borrow unrelated or untagged runs.
 func FilterByTreeName(records []Record, treeName string) []Record {
-	if treeName == "" {
-		return records
-	}
-	var filtered []Record
-	for _, r := range records {
-		if r.TreeName == treeName {
-			filtered = append(filtered, r)
-		}
-	}
-	// If no records match, return all records (backward compat — before TreeName was populated)
-	if len(filtered) == 0 {
-		return records
-	}
-	return filtered
+	return FilterByTreeNameStrict(records, treeName)
 }
 
 // FilterByTreeNameStrict returns only records whose TreeName matches exactly,
@@ -80,6 +91,23 @@ func FilterByTreeNameStrict(records []Record, treeName string) []Record {
 	var filtered []Record
 	for _, r := range records {
 		if r.TreeName == treeName {
+			filtered = append(filtered, r)
+		}
+	}
+	return filtered
+}
+
+// FilterByTreeOwner selects evidence for one exact tree/owner pair. Empty
+// owner denotes shared execution; it is never a wildcard for personal runs.
+// Unattributed legacy records remain inspectable without being assigned to
+// an arbitrary personal tree.
+func FilterByTreeOwner(records []Record, treeName, user string) []Record {
+	var filtered []Record
+	if treeName == "" {
+		return filtered
+	}
+	for _, r := range records {
+		if r.TreeName == treeName && r.User == user {
 			filtered = append(filtered, r)
 		}
 	}
@@ -148,6 +176,37 @@ func (s *Store) LoadAll() ([]Record, error) {
 	return records, nil
 }
 
+// LoadAllStrict is used by evidence reports: an unreadable or corrupt record
+// makes completeness unknown instead of silently disappearing from the result.
+func (s *Store) LoadAllStrict() ([]Record, error) {
+	entries, err := os.ReadDir(s.dir)
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var records []Record
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".json" || !strings.HasPrefix(entry.Name(), reflectionFilePrefix) {
+			continue
+		}
+		data, err := util.ReadPersistenceFile(filepath.Join(s.dir, entry.Name()))
+		if err != nil {
+			return nil, err
+		}
+		var record Record
+		if err := json.Unmarshal(data, &record); err != nil {
+			return nil, fmt.Errorf("corrupt execution record %s: %w", entry.Name(), err)
+		}
+		if record.TaskID == "" || entry.Name() != reflectionFilePrefix+record.TaskID+".json" {
+			return nil, fmt.Errorf("execution record identity mismatch: %s", entry.Name())
+		}
+		records = append(records, record)
+	}
+	return records, nil
+}
+
 // CountFailures returns the number of failure records.
 func (s *Store) CountFailures() int {
 	records, err := s.LoadAll()
@@ -155,7 +214,7 @@ func (s *Store) CountFailures() int {
 		return 0
 	}
 	n := 0
-	for _, r := range records {
+	for _, r := range ExecutionRecords(records) {
 		if r.Outcome == Failure {
 			n++
 		}
@@ -169,6 +228,7 @@ func (s *Store) RecentFailures(n int) []Record {
 	if err != nil {
 		return nil
 	}
+	records = ExecutionRecords(records)
 	var failures []Record
 	for i := len(records) - 1; i >= 0 && len(failures) < n; i-- {
 		if records[i].Outcome == Failure {

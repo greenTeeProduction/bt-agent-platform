@@ -1,0 +1,20 @@
+ok  	github.com/nico/go-bt-evolve/internal/research	0.007s [no tests to run]
+--- FAIL: TestRecordImplementedGoals_ClearsGoalBudget (0.00s)
+    actions_goap_fusion_goal_budget_test.go:384: landing must clear the goal budget; attempts = 2, want 0
+--- FAIL: TestRepeatedRedPassClosesResearchGoalWhenNoMilestoneCharged (0.01s)
+    actions_goap_fusion_redpass_test.go:227: second consecutive red-pass must record the goal goap:implemented
+--- FAIL: TestRecentImplementedGoalsReadsStore (0.00s)
+    goap_research_goals_test.go:161: must list only implemented goals, got []
+--- FAIL: TestRecordImplementedGoalsStripsTransientEnrichment (0.00s)
+    graphify_components_test.go:587: the stripped objective must be the recorded identity
+time=2026-10-01T20:33:49.419+02:00 level=WARN msg="goap fusion: implementation degraded — Claude path failed, no code landed; fell back to deterministic analysis" outcome="" reason="## GOAP Superpowers Runtime Failed\n\nopenat some-plan.md: no such file or directory"
+--- FAIL: TestResumeSkipsAlreadyImplementedPlan (0.00s)
+    superpowers_findings_fix_test.go:42: resume of a fully implemented plan must no-op succeed, got -1: ## GOAP Superpowers Runtime Failed
+        
+        openat some-plan.md: no such file or directory
+--- FAIL: TestSuperpowersPlanAlreadyImplementedRequiresAllTasks (0.00s)
+    superpowers_findings_fix_test.go:65: plan whose every task objective is recorded must count as implemented
+FAIL
+FAIL	github.com/nico/go-bt-evolve/internal/engine	0.034s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-agent	0.017s [no tests to run]
+FAIL

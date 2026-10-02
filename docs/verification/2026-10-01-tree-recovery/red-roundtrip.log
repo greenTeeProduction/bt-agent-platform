@@ -1,0 +1,120 @@
+2026/10/01 16:53:36 WARN gardener/v2: pre-mutation snapshot failed tree=experience_recording error="open /tmp/TestOrdinaryAdoptionFailurePreservesCommittedEvidencesnapshot1969628749/005/blocked/snapshots: not a directory"
+2026/10/01 16:53:36 ERROR gardener/v2: saving evolved tree failed, evolution result is not durably persisted tree=experience_recording error="create dir for /tmp/TestOrdinaryAdoptionFailurePreservesCommittedEvidencetree-write1513986628/005/blocked/tree.json: open /tmp/TestOrdinaryAdoptionFailurePreservesCommittedEvidencetree-write1513986628/005/blocked: not a directory"
+2026/10/01 16:53:36 WARN gardener/v2: validation gate rejected, skipping deployment error="validation gate REJECTED experience_recording/experience_recording: no SLO evidence; failing closed"
+2026/10/01 16:53:36 WARN gardener/v2: deep-search adoption failed tree=experience_recording error="create dir for /tmp/TestDeepSearchWriteFailurePreservesCommittedEvidence3731342076/006/blocked/tree.json: open /tmp/TestDeepSearchWriteFailurePreservesCommittedEvidence3731342076/006/blocked: not a directory"
+2026/10/01 16:53:36 ERROR gardener/v2: saving metrics failed, snapshot is not durably persisted tree=default error="create dir for /tmp/TestRunCycleV2_MetricsSaveFailurePropagates1766110146/001/blocked-parent/gardener-metrics.json: open /tmp/TestRunCycleV2_MetricsSaveFailurePropagates1766110146/001/blocked-parent: not a directory"
+2026/10/01 16:53:36 ERROR gardener/v2: final metrics save failed, snapshot is not durably persisted error="create dir for /tmp/TestRunCycleV2_MetricsSaveFailurePropagates1766110146/001/blocked-parent/gardener-metrics.json: open /tmp/TestRunCycleV2_MetricsSaveFailurePropagates1766110146/001/blocked-parent: not a directory"
+[gardener] SLO default/default success=90.0% recovery=100.0% avg_latency=0ms calls=10
+2026/10/01 16:53:36 ERROR gardener/v2: exporting SLO metrics failed, dashboard snapshot is stale path=/tmp/TestRunCycleV2_SLOMetricsExportFailurePropagates1056494743/001/slo-metrics.json error="commit /tmp/TestRunCycleV2_SLOMetricsExportFailurePropagates1056494743/001/slo-metrics.json: renameat .persist-SFEMHMNGJA42MS4DBGGCTZPDUY.tmp slo-metrics.json: file exists"
+2026/10/01 16:53:36 INFO gardener/v2: crisis intervention — boosting mutation budget tree=crisis_tree reason=stagnation stagnation_epochs=6 budget=1
+2026/10/01 16:53:36 INFO gardener/v2: crisis intervention — boosting mutation budget tree=calibrated_crisis_tree reason=stagnation stagnation_epochs=6 budget=8
+2026/10/01 16:53:36 WARN gardener/v2: deep-search adoption failed tree=deep_search_gate_reject error="validation gate REJECTED deep_search_gate_reject/deep_search_gate_reject: no SLO evidence; failing closed"
+2026/10/01 16:53:36 WARN gardener/v2: deep-search adoption failed tree=deep_search_meta_reject error="deep-search candidate meta-validation rejected"
+2026/10/01 16:53:36 WARN gardener/v2: quality gate DISABLED — automatic rollback triggered (fail-closed), evolution paused until restart tree=rollback_target consecutive_fails=1
+2026/10/01 16:53:36 INFO gardener/v2: crisis intervention — boosting mutation budget tree=diversity_tree reason=diversity_collapse stagnation_epochs=0 budget=2
+2026/10/01 16:53:36 INFO gardener/v2: local search refined tree parameters tree=refine_tree delta=1.5 fitness=63.916666666666664
+2026/10/01 16:53:36 INFO gardener/v2: local search refined tree parameters tree=local_search_gate_control delta=1.5 fitness=39.854166666666664
+2026/10/01 16:53:36 INFO gardener/v2: local search refined tree parameters tree=local_search_gate_reject delta=1.5 fitness=39.854166666666664
+2026/10/01 16:53:36 WARN gardener/v2: validation gate rejected, skipping deployment error="validation gate REJECTED local_search_gate_reject/local_search_gate_reject: no SLO evidence; failing closed"
+2026/10/01 16:53:36 INFO gardener/v2: crisis intervention — boosting mutation budget tree=elite_reseed_tree reason=diversity_collapse stagnation_epochs=0 budget=1
+2026/10/01 16:53:36 INFO gardener/v2: diversity collapse — reseeding from MAP-Elites elite tree=elite_reseed_tree base_fitness=59.916666666666664 seed_fitness=63.916666666666664 archived_fitness=63.916666666666664 seed_nodes=4
+2026/10/01 16:53:36 INFO gardener/v2: crisis intervention — boosting mutation budget tree=weak_archive_tree reason=diversity_collapse stagnation_epochs=0 budget=1
+2026/10/01 16:53:36 INFO gardener/v2: crisis intervention — boosting mutation budget tree=live_archive_reseed_tree reason=diversity_collapse stagnation_epochs=0 budget=1
+2026/10/01 16:53:36 INFO gardener/v2: diversity collapse — reseeding from MAP-Elites elite tree=live_archive_reseed_tree base_fitness=59.916666666666664 seed_fitness=63.916666666666664 archived_fitness=63.916666666666664 seed_nodes=4
+2026/10/01 16:53:36 INFO gardener/v2: island winner committed tree=island_tree base_fitness=59.916666666666664 winner_fitness=63.916666666666664
+2026/10/01 16:53:36 INFO gardener/v2: island seeded for domain tree=island_a size=8
+2026/10/01 16:53:36 INFO gardener/v2: island seeded for domain tree=island_b size=8
+2026/10/01 16:53:36 INFO gardener/v2: island seeded for domain tree=island_interval_tree size=8
+2026/10/01 16:53:36 WARN gardener/v2: quality gate DISABLED — skipping island adoption (fail-closed) tree=island_gate_disabled consecutive_fails=1
+2026/10/01 16:53:36 WARN gardener/v2: validation gate rejected island winner, not migrating tree=island_validation_gate error="validation gate REJECTED island_validation_gate/island_validation_gate: no SLO evidence; failing closed"
+2026/10/01 16:53:36 INFO gardener/v2: MCTS search joined the structural-mutation competition tree=experience_recording heuristic_candidates=1 mcts_candidates=3 merged_candidates=4
+2026/10/01 16:53:36 WARN gardener/v2: validation gate rejected, skipping deployment error="validation gate REJECTED fail_closed_acceptance/fail_closed_acceptance: no SLO evidence; failing closed"
+[gardener] SLO domain_goap_fusion/domain_goap_fusion success=80.0% recovery=50.0% avg_latency=50ms calls=10
+[gardener] SLO agent-x/slo_export_tree success=100.0% recovery=0.0% avg_latency=0ms calls=4
+2026/10/01 16:53:36 WARN gardener/v2: quality gate DISABLED — automatic rollback triggered (fail-closed), evolution paused until restart tree=gate_disabled_v2 consecutive_fails=0
+2026/10/01 16:53:36 WARN gardener/v2: automatic rollback failed, tree remains frozen in regressed state tree=gate_disabled_v2 error="rollback tree \"gate_disabled_v2\": no snapshot found for tree \"gate_disabled_v2\" in /tmp/TestEvolveTreeV2_GateIsDisabled_Respected702544508/001"
+2026/10/01 16:53:36 WARN gardener/v2: quality gate DISABLED — automatic rollback triggered (fail-closed), evolution paused until restart tree=wiring_v2_tree consecutive_fails=1
+2026/10/01 16:53:36 WARN gardener/v2: automatic rollback failed, tree remains frozen in regressed state tree=wiring_v2_tree error="rollback tree \"wiring_v2_tree\": no snapshot found for tree \"wiring_v2_tree\" in /tmp/TestEvolveTreeV2_PerTreeDisabledFailsClosed2015335804/001"
+2026/10/01 16:53:36 WARN gardener/v2: validation gate rejected, skipping deployment error="validation gate REJECTED gate_rejection_rollback/gate_rejection_rollback: no SLO evidence; failing closed"
+2026/10/01 16:53:36 WARN gardener/v2: quality gate DISABLED — automatic rollback triggered (fail-closed), evolution paused until restart tree=quality_gate_per_candidate consecutive_fails=0
+2026/10/01 16:53:36 WARN gardener/v2: automatic rollback failed, tree remains frozen in regressed state tree=quality_gate_per_candidate error="rollback tree \"quality_gate_per_candidate\": no snapshot found for tree \"quality_gate_per_candidate\" in /tmp/TestEvolveTreeV2_QualityGateRejection_TreeUnchanged1421493158/001"
+2026/10/01 16:53:36 WARN gardener/v2: meta-validation rejected island winner tree=island_meta
+2026/10/01 16:53:36 INFO gardener/v2: island winner committed tree=island_snapshot base_fitness=59.916666666666664 winner_fitness=63.916666666666664
+2026/10/01 16:53:36 ERROR gardener/v2: predecessor snapshot failed, island adoption rejected tree=island_failure_snapshot error="open /tmp/TestIslandAdoptionFailurePreservesLiveTreesnapshot3485678045/002/blocked/snapshots: not a directory"
+2026/10/01 16:53:36 ERROR gardener/v2: island persistence failed, live tree preserved tree=island_failure_tree-write error="create dir for /tmp/TestIslandAdoptionFailurePreservesLiveTreetree-write1412717327/002/blocked/tree.json: open /tmp/TestIslandAdoptionFailurePreservesLiveTreetree-write1412717327/002/blocked: not a directory"
+time=2026-10-01T16:53:36.799+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=default
+time=2026-10-01T16:53:36.800+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=domain_agent_monitor
+time=2026-10-01T16:53:36.801+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=domain_alert_router
+time=2026-10-01T16:53:36.801+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=domain_arc42:docsync
+time=2026-10-01T16:53:36.801+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=domain_arc42:section1
+time=2026-10-01T16:53:36.801+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=domain_arc42:section10
+time=2026-10-01T16:53:36.801+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=domain_arc42:section11
+time=2026-10-01T16:53:36.801+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=domain_arc42:section12
+time=2026-10-01T16:53:36.801+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=domain_arc42:section2
+time=2026-10-01T16:53:36.801+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=domain_arc42:section3
+time=2026-10-01T16:53:36.801+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=domain_arc42:section4
+time=2026-10-01T16:53:36.802+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=domain_arc42:section5
+time=2026-10-01T16:53:36.802+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=domain_arc42:section6
+time=2026-10-01T16:53:36.802+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=domain_arc42:section7
+time=2026-10-01T16:53:36.802+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=domain_arc42:section8
+time=2026-10-01T16:53:36.802+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=domain_arc42:section9
+time=2026-10-01T16:53:36.802+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=domain_arc42_seeder
+time=2026-10-01T16:53:36.802+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=domain_auction_demo
+time=2026-10-01T16:53:36.802+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=domain_bt_fusion
+time=2026-10-01T16:53:36.802+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=domain_bt_manager
+time=2026-10-01T16:53:36.803+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=domain_code_review
+time=2026-10-01T16:53:36.803+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=domain_crash_investigator
+time=2026-10-01T16:53:36.803+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=domain_data_pipeline
+time=2026-10-01T16:53:36.803+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=domain_devops_ci
+time=2026-10-01T16:53:36.803+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=domain_game_ai
+time=2026-10-01T16:53:36.803+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=domain_goap_devops
+time=2026-10-01T16:53:36.803+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=domain_goap_fusion
+time=2026-10-01T16:53:36.803+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=domain_goap_fusion_loop
+time=2026-10-01T16:53:36.804+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=domain_goap_planning
+time=2026-10-01T16:53:36.804+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=domain_goap_research
+time=2026-10-01T16:53:36.804+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=domain_hermes_update
+time=2026-10-01T16:53:36.804+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=domain_meeting_notes
+time=2026-10-01T16:53:36.804+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=domain_notebooklm
+time=2026-10-01T16:53:36.804+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=domain_notebooklm_consumer
+time=2026-10-01T16:53:36.804+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=domain_notebooklm_plan_implement
+time=2026-10-01T16:53:36.804+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=domain_refactoring
+time=2026-10-01T16:53:36.804+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=domain_security_audit
+time=2026-10-01T16:53:36.804+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=domain_self_review
+time=2026-10-01T16:53:36.805+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=domain_superpowers_workflow
+time=2026-10-01T16:53:36.805+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=domain_trading_signal
+time=2026-10-01T16:53:36.805+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=finance_earnings_reviewer
+time=2026-10-01T16:53:36.805+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=finance_gl_reconciler
+time=2026-10-01T16:53:36.805+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=finance_kyc_screener
+time=2026-10-01T16:53:36.805+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=finance_market_researcher
+time=2026-10-01T16:53:36.806+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=finance_meeting_prep
+time=2026-10-01T16:53:36.806+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=finance_model_builder
+time=2026-10-01T16:53:36.806+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=finance_month_end_closer
+time=2026-10-01T16:53:36.806+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=finance_pitch_agent
+time=2026-10-01T16:53:36.807+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=finance_statement_auditor
+time=2026-10-01T16:53:36.807+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=finance_valuation_reviewer
+time=2026-10-01T16:53:36.807+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=godev
+time=2026-10-01T16:53:36.807+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=research_deep_research
+time=2026-10-01T16:53:36.807+02:00 level=WARN msg="persisted builtin has lost task logic; offline recovery required" tree=research_quick_research
+--- FAIL: TestRecoverCollapsedBuiltinsPreservesEvidenceAndReloads (0.19s)
+    recovery_test.go:91: wrong authored definition for domain_goap_devops
+2026/10/01 16:53:37 WARN validation-gate: no usable file evidence agent=review-final-gate tree=review-final-gate error="read SLO evidence: open /tmp/TestReviewFinalGateRejectsReorderedCandidate01765877743/001/absent-evidence.json: no such file or directory"
+2026/10/01 16:53:37 WARN gardener/v2: validation gate rejected, skipping deployment error="validation gate REJECTED review-final-gate/review-final-gate: no SLO evidence; failing closed"
+2026/10/01 16:53:37 WARN validation-gate: no usable file evidence agent=review-final-gate tree=review-final-gate error="read SLO evidence: open /tmp/TestReviewFinalGateRejectsReorderedCandidate23190347574/001/absent-evidence.json: no such file or directory"
+2026/10/01 16:53:37 WARN gardener/v2: validation gate rejected, skipping deployment error="validation gate REJECTED review-final-gate/review-final-gate: no SLO evidence; failing closed"
+2026/10/01 16:53:37 WARN personal experience unavailable user=nico error="create experience dir: mkdir /tmp/TestBankFor_TransientOpenErrorDoesNotPermanentlyCacheSharedBank3753865682/002/nico/experience: not a directory"
+2026/10/01 16:53:37 WARN personal experience unavailable: owner storage not configured user=nico
+2026/10/01 16:53:37 INFO validation-gate: passed agent=agent-x tree=evidence_pass_tree success_rate=0.9 recovery_rate=0.5 calls=20
+2026/10/01 16:53:37 INFO validation-gate: passed agent=any-agent tree=evidence_shared_tree success_rate=0.9 recovery_rate=1 calls=10
+2026/10/01 16:53:37 WARN validation-gate: no usable file evidence agent=agent-x tree=evidence_absent_tree error="read SLO evidence: open /tmp/TestValidationGate_NoMemoryNoFile_FailsClosed205180128/001/missing.json: no such file or directory"
+2026/10/01 16:53:37 WARN validation-gate: no usable file evidence agent=agent-x tree=evidence_wrong_tree error="no snapshots for tree \"evidence_wrong_tree\" in /tmp/TestValidationGate_EvidenceForOtherTreeOnly_FailsClosed727309803/001/slo-metrics.json"
+2026/10/01 16:53:37 INFO validation-gate: passed agent=domain_goap_fusion tree=domain_goap_fusion success_rate=0.9 recovery_rate=0.5 calls=20
+2026/10/01 16:53:37 WARN validation-gate: no usable file evidence agent=never_executed_tree tree=never_executed_tree error="no snapshots for tree \"never_executed_tree\" in /tmp/TestValidationGate_AllowUnverified_PassesWithoutEvidence859710027/001/slo-metrics.json"
+2026/10/01 16:53:37 INFO validation-gate: no SLO evidence, passing unverified (AllowUnverified) agent=never_executed_tree tree=never_executed_tree
+2026/10/01 16:53:37 INFO validation-gate: passed agent=good_agent tree=test_tree success_rate=1 recovery_rate=0 calls=10
+2026/10/01 16:53:37 INFO validation-gate: passed agent=pareto_tradeoff_agent tree=pareto_tradeoff_tree success_rate=0.75 recovery_rate=1 calls=100
+FAIL
+FAIL	github.com/nico/go-bt-evolve/internal/gardener	0.607s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-gardener	0.063s
+ok  	github.com/nico/go-bt-evolve/internal/evolution	4.782s
+ok  	github.com/nico/go-bt-evolve/internal/benchmark	0.087s
+FAIL

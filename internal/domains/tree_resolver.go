@@ -20,6 +20,21 @@ import (
 // execution-layer concern. Nil means no dynamic resolution (ADR-133 Phase 0).
 var DynamicResolveFn func(id string) *evolution.SerializableNode
 
+// ActiveVersionResolveFn is the authoritative promoted-version lookup. An error
+// produces an invalid definition so callers cannot silently run a fallback.
+var ActiveVersionResolveFn func(user, id string) (*evolution.SerializableNode, error)
+
+func activeVersion(user, id string) (*evolution.SerializableNode, bool) {
+	if ActiveVersionResolveFn == nil {
+		return nil, false
+	}
+	tree, err := ActiveVersionResolveFn(user, id)
+	if err != nil {
+		return &evolution.SerializableNode{Type: "UnavailableRuntimeVersion", Name: id, Description: err.Error()}, true
+	}
+	return tree, tree != nil
+}
+
 // DynamicResolveForUserFn is the user-scoped counterpart to DynamicResolveFn
 // (ADR-133 personalization hardening, Q1 Correctness): resolves a
 // runtime-generated tree ID against ONE requesting user's own workspace, so a
@@ -84,6 +99,9 @@ var DTStatsPathFn func(treeID string) string
 // telemetry reorders Selector children before the tree reaches the engine.
 // Used by bt-agent, A2A, and template validation tests.
 func ResolveTreeID(id string) *evolution.SerializableNode {
+	if tree, found := activeVersion("", id); found {
+		return tree
+	}
 	tree := resolveTreeID(id)
 	if tree != nil {
 		applyLearnedSelectorOrdering(id, tree)
@@ -98,6 +116,9 @@ func ResolveTreeID(id string) *evolution.SerializableNode {
 func LookupTreeID(id string) *evolution.SerializableNode {
 	if id == "" || id == "." || id == ".." || strings.ContainsAny(id, "/\\\x00") {
 		return nil
+	}
+	if tree, found := activeVersion("", id); found {
+		return tree
 	}
 	noDynamic := func(string) *evolution.SerializableNode { return nil }
 	var tree *evolution.SerializableNode
@@ -136,6 +157,9 @@ func LookupTreeID(id string) *evolution.SerializableNode {
 func ResolveTreeIDForUser(user, id string) *evolution.SerializableNode {
 	if user == "" {
 		return ResolveTreeID(id)
+	}
+	if tree, found := activeVersion(user, id); found {
+		return tree
 	}
 	tree := resolveTreeIDWithResolver(id, func(id string) *evolution.SerializableNode {
 		return dynamicResolveForUser(user, id)
@@ -214,6 +238,11 @@ func resolveTreeID(id string) *evolution.SerializableNode {
 func resolveTreeIDWithResolver(id string, resolve func(id string) *evolution.SerializableNode, allowFallback bool) *evolution.SerializableNode {
 	if id == "" {
 		return nil
+	}
+	// Factory IDs name specific persisted tasks. Missing, unreadable or
+	// inaccessible task definitions must never execute a generic fallback.
+	if strings.HasPrefix(id, "factory:") {
+		return resolve(id)
 	}
 	if id == "hermes_evolve" {
 		return HermesSelfEvolutionTree()

@@ -2,7 +2,6 @@ package goap
 
 import (
 	"fmt"
-	"maps"
 	"sync"
 	"time"
 )
@@ -193,7 +192,7 @@ func (a *Agent) executePlan(plan *Plan, startTime time.Time) *AgentRun {
 				return run
 			}
 
-			newState, err := fn(currentState)
+			newState, err := fn(currentState.Clone())
 			if err != nil {
 				if a.Callbacks.OnStepComplete != nil {
 					a.Callbacks.OnStepComplete(i, action, err)
@@ -222,17 +221,29 @@ func (a *Agent) executePlan(plan *Plan, startTime time.Time) *AgentRun {
 				return run
 			}
 
-			currentState = newState
+			// The executor's observed state is authoritative, including removed
+			// facts. Planned effects are predictions and must never be copied
+			// into the live agent state or exposed to success callbacks.
+			currentState = newState.Clone()
+			a.mu.Lock()
+			a.WorldState = currentState.Clone()
+			a.mu.Unlock()
+			if !currentState.Satisfies(action.Effects) {
+				err := fmt.Errorf("action %q did not establish its declared effects", action.Name)
+				run.Status, run.Error, a.State = AgentFailed, err.Error(), AgentFailed
+				run.EndState = currentState.Clone()
+				run.Duration = time.Since(startTime)
+				if a.Callbacks.OnStepComplete != nil {
+					a.Callbacks.OnStepComplete(i, action, err)
+				}
+				// Repeating a completed action cannot undo an unverified effect.
+				// Leave reconciliation/replanning to the caller with EndState.
+				return run
+			}
 			run.StepsTaken = append(run.StepsTaken, action.Name)
-
 			if a.Callbacks.OnStepComplete != nil {
 				a.Callbacks.OnStepComplete(i, action, nil)
 			}
-
-			// Update agent's world state
-			a.mu.Lock()
-			maps.Copy(a.WorldState, action.Effects)
-			a.mu.Unlock()
 		}
 
 		// All steps done — check if goal satisfied

@@ -31,7 +31,7 @@ for name in ['notebooklm_tools', 'notebooklm_tools.core', 'notebooklm_tools.util
              'notebooklm_tools.core.auth', 'notebooklm_tools.core.client',
              'notebooklm_tools.utils.cdp', 'notebooklm_tools.cli.main']:
     module(name)
-importlib.metadata.version = lambda name: '0.10.1'
+importlib.metadata.version = lambda name: '0.14.0'
 
 class BaseClient:
     pass

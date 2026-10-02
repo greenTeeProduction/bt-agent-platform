@@ -83,22 +83,24 @@ type RunOptions struct {
 
 // RunResult is the outcome of RunOnce.
 type RunResult struct {
-	AgentName      string             `json:"agent_name"`
-	TreeID         string             `json:"tree_id"`
-	Task           string             `json:"task"`
-	Outcome        string             `json:"outcome"`
-	Output         string             `json:"output"`
-	Quality        float64            `json:"quality"`
-	QualityPassed  bool               `json:"quality_passed"`
-	QualityReasons []string           `json:"quality_reasons,omitempty"`
-	OutputPassed   bool               `json:"output_passed"`
-	OutputReasons  []string           `json:"output_reasons,omitempty"`
-	RunID          string             `json:"run_id,omitempty"`
-	SessionID      string             `json:"session_id,omitempty"`
-	NodePaths      []string           `json:"node_paths,omitempty"` // BT nodes visited during execution (from bb.VisitedPaths)
-	ChildTicks     []engine.ChildTick `json:"-"`                    // terminal child ticks (from bb.ChildTicks()), feeds knowledge.StepsFromChildTicks
-	TraceID        string             `json:"trace_id,omitempty"`
-	SpanID         string             `json:"span_id,omitempty"`
+	Effects        []evolution.EffectReceipt `json:"effects,omitempty"`
+	AgentName      string                    `json:"agent_name"`
+	TreeID         string                    `json:"tree_id"`
+	TreeVersion    string                    `json:"tree_version,omitempty"`
+	Task           string                    `json:"task"`
+	Outcome        string                    `json:"outcome"`
+	Output         string                    `json:"output"`
+	Quality        float64                   `json:"quality"`
+	QualityPassed  bool                      `json:"quality_passed"`
+	QualityReasons []string                  `json:"quality_reasons,omitempty"`
+	OutputPassed   bool                      `json:"output_passed"`
+	OutputReasons  []string                  `json:"output_reasons,omitempty"`
+	RunID          string                    `json:"run_id,omitempty"`
+	SessionID      string                    `json:"session_id,omitempty"`
+	NodePaths      []string                  `json:"node_paths,omitempty"` // BT nodes visited during execution (from bb.VisitedPaths)
+	ChildTicks     []engine.ChildTick        `json:"-"`                    // terminal child ticks (from bb.ChildTicks()), feeds knowledge.StepsFromChildTicks
+	TraceID        string                    `json:"trace_id,omitempty"`
+	SpanID         string                    `json:"span_id,omitempty"`
 	Duration       time.Duration
 	StartedAt      time.Time
 	EndedAt        time.Time
@@ -185,7 +187,7 @@ func (d *RunDeps) RunOnce(ctx context.Context, agentName, task string, opts RunO
 		}
 	}
 	tree := resolve(treeID)
-	if tree == nil {
+	if tree == nil && def == nil {
 		tree = resolve(agentName)
 		if tree != nil {
 			result.TreeID = agentName
@@ -210,9 +212,25 @@ func (d *RunDeps) RunOnce(ctx context.Context, agentName, task string, opts RunO
 	}
 
 	bb := &engine.Blackboard{
-		Reflections: d.RefStore,
-		TreeStore:   d.TreeStore,
+		Reflections:      d.RefStore,
+		TreeID:           result.TreeID,
+		DeferRunEvidence: true,
+		TreeStore:        d.TreeStore,
 	}
+
+	if def != nil {
+		bb.User = def.Metadata["user"]
+	}
+	defer func() {
+		if result != nil && result.Outcome != "" {
+			bb.Outcome = result.Outcome
+			bb.Result = result.Output
+			bb.QualityScore = result.Quality
+		}
+		if evidenceErr := engine.FinalizeRunEvidence(bb, err); evidenceErr != nil {
+			err = errors.Join(err, &reliability.ExecutionPersistenceError{Err: evidenceErr})
+		}
+	}()
 
 	// Engine nodes flatten LLM errors into blackboard strings, severing the
 	// error chain. The recorder preserves the typed error (e.g. RateLimitError
@@ -259,6 +277,9 @@ func (d *RunDeps) RunOnce(ctx context.Context, agentName, task string, opts RunO
 	} else if opts.InjectMemory {
 		fullTask = d.injectMemoryContext(agentName, fullTask, opts.PreviousRunLimit)
 	}
+	if tree.Metadata["factory_kind"] == "file_task" {
+		fullTask = task
+	}
 	bb.Task = fullTask
 	runCtx := ctx
 	if runCtx == nil {
@@ -287,6 +308,8 @@ func (d *RunDeps) RunOnce(ctx context.Context, agentName, task string, opts RunO
 	}
 	runSpan.End()
 
+	result.TreeVersion = bb.EvidenceTreeVersion()
+	result.Effects = bb.EvidenceEffects()
 	result.Output = bb.Result
 	result.Outcome = bb.Outcome
 	result.NodePaths = bb.VisitedPaths

@@ -108,6 +108,10 @@ var AllMutationOps = []string{
 	"prune_node",
 	"increase_iterations",
 	"add_tool",
+	"wrap_quality_gate",
+	"guard_task",
+	"add_contract_recovery",
+	"improve_prompt",
 }
 
 // ─── MCTSMutator ────────────────────────────────────────────────────────────
@@ -337,6 +341,38 @@ func (m *MCTSMutator) concreteMutationOp(op string, tree *SerializableNode) Muta
 	}
 	unique := fmt.Sprintf("MCTS_%s_%d", op, m.randomIntn(1_000_000))
 	switch op {
+	case "add_contract_recovery":
+		if targets := ContractRecoveryTargets(tree); len(targets) > 0 {
+			target = targets[m.randomIntn(len(targets))]
+		}
+		return MutationOp{Operation: op, Target: target}
+	case "wrap_quality_gate", "guard_task":
+		bit := uint8(2)
+		if op == "guard_task" {
+			bit = 1
+		}
+		assessment := AssessGovernance(tree)
+		var targets []string
+		var collect func(*SerializableNode)
+		collect = func(n *SerializableNode) {
+			if IsTaskWork(n) {
+				for _, flags := range assessment.controls[n.Type+":"+n.Name] {
+					if flags.flags&bit == 0 {
+						targets = append(targets, n.Name)
+						break
+					}
+				}
+				return
+			}
+			for i := range n.Children {
+				collect(&n.Children[i])
+			}
+		}
+		collect(tree)
+		if len(targets) == 0 {
+			return MutationOp{Operation: op}
+		}
+		return MutationOp{Operation: op, Target: targets[m.randomIntn(len(targets))]}
 	case "reorder_children":
 		direction := "left"
 		if m.randomIntn(2) != 0 {

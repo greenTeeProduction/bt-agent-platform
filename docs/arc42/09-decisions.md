@@ -1,5 +1,7 @@
 # 9. Architecture Decisions
 
+Owner decision, clarified 2026-10-01: [Sol 6.1 for ordinary inference](../sol-model-policy.md) extends ADR-261. The initial same-day blocking of NotebookLM generation/research, embeddings/indexing and legacy memory extraction is superseded by explicit owner exceptions. Historical decisions below remain the record of their time.
+
 This append-only log preserves the rationale and limitations recorded when
 changes landed. **A historical Accepted status is not a claim that every
 consequence remains true today.** Current structure and behavior are in
@@ -304,6 +306,17 @@ Navigation and provenance:
 | ADR-278 | [Atomic Dashboard Restart Admission and Detached Ownership](#adr-278) | Accepted implementation | 2026-10-01 |
 | ADR-279 | [Target-Owned Sibling Restart and Uncertain Handoff Seals](#adr-279) | Accepted implementation | 2026-10-01 |
 | ADR-280 | [Durable DLQ Replay Claims and Current-Disk Transactions](#adr-280) | Accepted — fixture-tested; production/rollout partial | 2026-10-01 |
+| ADR-281 | [Measured Runtime Tree Publication and Exact Rollback](#adr-281) | Accepted — gardener implemented; broader rollout partial | 2026-10-01 |
+| ADR-282 | [Manual and Genetic Publication Requires Measured Task Improvement](#adr-282) | Accepted — covered MCP entrypoints; fleet rollout partial | 2026-10-01 |
+| ADR-283 | [Evidence-Preserving Offline Recovery of Collapsed Trees](#adr-283) | Accepted — observed data repair; service rollout open | 2026-10-01 |
+| ADR-284 | [Transactional Automation Reservations and Exact Activation](#adr-284) | Accepted — approval boundary; task effects remain open | 2026-10-01 |
+| ADR-285 | [Executable Personal File Tasks and Version-Bound Consent](#adr-285) | Accepted — real file fixture; broader capabilities/rollout open | 2026-10-01 |
+| ADR-286 | [Typed Checkpoints and Observed GOAP Agent State](#adr-286) | Accepted — verification boundary; generic effect observers open | 2026-10-01 |
+| ADR-287 | [Research Sources and Verified Code Delivery Are Separate Evidence](#adr-287) | Accepted — adoption and measured impact links open | 2026-10-01 |
+| ADR-288 | [Runtime Build, Publication and Recomputable Result Evidence](#adr-288) | Accepted — causal research impact open | 2026-10-01 |
+| ADR-289 | [Observed Effects for Compiled and Dynamic GOAP](#adr-289) | Accepted — built-in adapters and rollout open | 2026-10-02 |
+| ADR-290 | [Program Review Holds and Verified Code Delivery](#adr-290) | Accepted — semantic impact and rollout open | 2026-10-02 |
+| ADR-291 | [Native Identity Before Automatic Binary Replacement](#adr-291) | Accepted | 2026-10-02 |
 
 <a id="adr-001"></a>
 
@@ -6483,6 +6496,491 @@ cover hold rejection, storage failure and retained purge counts.
 [Engine escalation failure](../../internal/engine/ops_actions_test.go) stops
 without falsely reporting durable insertion. Durable snapshot/gate evidence is
 recorded in [the durable DLQ report](../verification/2026-10-01-dlq-recovery/README.md).
+
+
+<a id="adr-281"></a>
+## ADR-281: Measured Runtime Tree Publication and Exact Rollback
+
+**Date:** 2026-10-01
+**Status:** Accepted for gardener publication; broader rollout remains partial.
+
+**Context:** A structural score or a predecessor's execution history does not
+establish that a proposed tree performs its task better. Mutable legacy files
+also fail to identify which definition a runtime actually adopted.
+
+**Decision:** Production gardener saves must qualify both exact definitions
+against the same independently declared task contracts using the real benchmark
+provider. Require at least three paired trials, strict pass-count improvement,
+no regression and all candidate trials passing. Preserve declared governance,
+owner and fixed factory task. Retain rejected trial outputs. A provider switch
+invalidates the mixed comparison and restarts it on the settled provider.
+
+Store immutable definitions/proofs and atomically update an owner/tree-scoped
+active pointer under a bounded lock, checking the measured predecessor against
+the currently active version. The first publication retains the inspected
+legacy predecessor. Runtime resolution loads the managed definition directly,
+without further heuristic reordering, and refuses integrity failure. Rollback
+selects a retained ancestor without replaying task effects. Report pass counts,
+version hashes and the qualification reference rather than proxy fitness as
+measured improvement. Detailed bounded recovery earns structural credit only
+when it remains within a result-checking gateway; task improvement still needs
+actual outputs.
+
+**Consequences:** The response factory has an end-to-end controlled real-model
+cycle. Domain suites lacking independent task contracts cannot publish merely
+from routing/length checks. Search ranking, manual/genetic unmanaged paths,
+legacy-writer first-adoption races, representative corpora and deployed rollout
+remain follow-up work. The private version store is a trusted internal evidence
+boundary, not external model attestation or a power-loss durability guarantee.
+
+**Evidence:** [Live factory/gardener/runtime/rollback regression](../../cmd/bt-agent/runtime_promotion_test.go),
+[transaction and integrity regressions](../../internal/evolution/runtime_release_test.go),
+[scoped runtime authority](../../internal/agentexec/runtime_version_test.go),
+and [qualification implementation](../../internal/benchmark/runtime_qualification.go).
+
+---
+
+<a id="adr-282"></a>
+## ADR-282: Manual and Genetic Publication Requires Measured Task Improvement
+
+**Date:** 2026-10-01
+**Status:** Accepted for the covered MCP entrypoints; fleet rollout remains open.
+
+**Context:** Manual failure counts pooled unrelated history. Genetic, selector
+and archive tools could publish runnable winners or discovery fitness from
+structural estimates. This bypassed ADR-281's measured gardener boundary.
+
+**Decision:** Share the real-model qualification and immutable publication helper
+with manual/genetic-family tools. Retain proposals outside every runtime tree
+discovery directory. Report proposal persistence separately from qualified
+publication under the existing tree ID; an unqualified `-evolved` file is no
+longer created. Require three failed executions of the exact owner/tree/source
+and executed version before manual recovery. Inspection and fitness use the
+active definition and exact execution evidence. Only committed shared
+publication credits discovery; personal manual results stay private. QD/island
+archive estimates no longer credit runtime discovery. Production GA learning
+retains prior hints but defers new heuristic-gain experience. Batch gains are
+not assigned to individual operations without attribution evidence.
+
+Seed missing bounded contract recovery among initial genetic candidates so it
+is reachable without random luck. Preserve actual task contracts and the
+three-trial acceptance threshold. The initial Qwen 0.5B manual attempt failed
+one trial and was rejected. The stronger Qwen 2.5 1.5B passed 18/18 checks in a
+six-task repeated probe and both real entrypoint cycles, with acceptable local
+latency; make it the benchmark-only default. Sol 6.1 timeout fallback remains.
+
+**Alternatives:** Keeping old writes behind a higher structural-score threshold
+would still not demonstrate task improvement. Automatically retrying failed
+qualification until green would hide model unreliability. Publishing only a new
+`-evolved` ID would not ensure runtime adoption of the intended tree.
+
+**Consequences:** Missing task corpora now prevent publication. Existing clients
+must distinguish `proposal_saved` from `qualified`/`persisted`. Rejected outputs
+remain reviewable. Shared genetic entrypoints do not gain personal authority.
+Legacy first-adoption races, resolve-time ordering, lineage-skip/archive scoring,
+managed reset behavior, effectful personal tasks and deployed rollout remain
+open. One controlled arithmetic task is not general assistant impact.
+
+**Evidence:** [Real entrypoint and failure-scope tests](../../cmd/bt-agent/runtime_publication_test.go),
+[exact execution filter](../../internal/evolution/tree_identity_test.go),
+[shared publication helper](../../internal/benchmark/runtime_publication.go), and
+[retained observations](../verification/2026-10-01-manual-publication/manifest.json).
+
+---
+
+<a id="adr-283"></a>
+## ADR-283: Evidence-Preserving Offline Recovery of Collapsed Trees
+
+**Date:** 2026-10-01
+**Status:** Accepted; observed host data repair, service rollout still open.
+
+**Context:** Fifty-two persisted named trees had lost every task branch and
+retained only outcome recovery. Wrong root names also made name-based recovery
+unsafe. One affected ID, `domain:arc42:assemble`, was intentionally retired.
+
+**Decision:** Match exact registered filenames to fresh compiled definitions.
+Recognize the observed lost-task signature rather than a node-count threshold.
+Disable collapsed builtin overrides in the gardener until repaired; preserve
+qualified managed authority. An explicit offline command validates replacements,
+seals the in-process plan, checks original bytes, makes private exact backups and
+writes a prepared manifest before per-file changes. Restore authored trees;
+quarantine the retired assembly skeleton. Record each completed operation and
+report partial failure without replay or speculative rollback. Preserve unrelated
+and unknown trees. Require all legacy writers stopped because they do not share
+the bounded recovery lock.
+
+Recovery validation exposed seven implemented engine node types absent from the
+schema allowlist; align the allowlist while retaining benchmark capability
+admission. GOAP typed metadata also changed serialized key order after reload;
+normalize metadata through the tree schema with exact JSON numbers for stable
+versions. Existing persisted map representations retain their identity.
+
+**Alternatives:** Replacing every small tree would destroy valid compact tasks.
+Using damaged root names would perpetuate cross-tree substitutions. Treating
+restoration as qualified evolution would invent task-success evidence. Restoring
+a removed assembly workflow would revive intentionally retired behavior.
+
+**Consequences:** The observed 52-file collapse is repaired with 51 restores and
+one quarantine, verified against exact backups and a fresh registry. This is
+neither measured general task improvement nor deployed service adoption. The
+batch is not globally atomic or power-loss durable; prepared manifests and
+per-item states aid reconciliation. Noncooperating writers, representative task
+coverage, historical learning and remaining personal-effect gaps remain open.
+
+**Evidence:** [Recovery tests](../../internal/gardener/recovery_test.go),
+[CLI tests](../../cmd/bt-gardener/recovery_test.go),
+[metadata identity regression](../../internal/evolution/tree_identity_test.go),
+and [actual host repair/readback](../verification/2026-10-01-tree-recovery/manifest.json).
+
+---
+
+<a id="adr-284"></a>
+## ADR-284: Transactional Automation Reservations and Exact Activation
+
+**Date:** 2026-10-01
+**Status:** Accepted implementation; task execution and service rollout remain open.
+
+**Context:** Autopilot published trees before durable approval tracking, ignored
+ledger failures, and accepted any existing agent with the proposed name. Separate
+ledger instances could lose updates. Scheduled task descriptions added automation
+administration prose, and personal descriptions entered shared discovery.
+
+**Decision:** Reserve the exact task, agent, schedule and request before tree
+publication. Enforce dedup/cap checks in a bounded, rooted ledger transaction;
+include pending and flagged reservations in capacity. Retain the raw owner.
+Resolve approvals against that reservation and reject conflicts. Accept an existing
+agent only when its complete current-disk configuration matches; serialize creation
+with a bounded per-definition sidecar lock. Preserve the original task description.
+Commit approval after preparing the definition and surface failures, preserving the
+prior admission state. Deny unreadable ledgers and conflicting statuses. Keep personal
+tasks out of the shared KG. Both MCP and dashboard use shared finalization.
+
+**Alternatives:** Accepting a name collision treats unrelated configuration as
+consent. Approving before definition persistence acknowledges incomplete activation.
+Publishing before reservation leaves an untracked runnable tree after a write failure.
+Silently retrying a completed task is not a remedy for an approval storage error.
+
+**Consequences:** This is an approval-boundary repair, not an external-task benchmark.
+Agent YAML and ledger are separate atomic files, without a global transaction or
+power-loss guarantee. Failed preparation can leave a pending reservation for repair.
+Incomplete legacy records cannot be newly activated but can be rejected. Unowned
+legacy ledgers, absent-ledger provenance, immutable tree-version consent, stale
+feedback-review IDs and noncooperating definition writers remain open. The current
+compiled automation still describes administrative creation steps; actual task
+capabilities and independent effect verification must follow before assistant impact
+is claimed. Ordinary Sol policy and real-model benchmark configuration are unchanged.
+
+**Evidence:** [Ledger concurrency/failure tests](../../internal/persona/automation_transaction_test.go),
+[approval identity/retry tests](../../internal/persona/automation_finalize_test.go),
+[current-disk creation tests](../../internal/agent/registry_identity_test.go), and
+[admission tests](../../internal/agentexec/wiring_test.go).
+
+---
+
+<a id="adr-285"></a>
+## ADR-285: Executable Personal File Tasks and Version-Bound Consent
+
+**Date:** 2026-10-01
+**Status:** Accepted; observed isolated real-model file workflow, not deployed.
+
+**Context:** The autopilot compiled operators for creating/scheduling an automation
+instead of the recurring task. Generated text could mark administrative effects as
+complete. Ordinary response trees had no verified filesystem capability, and approval
+was not bound to definition bytes. A missing registered tree could select a fallback.
+
+**Decision:** Reuse exact owned response/file task definitions from version-attributed
+interaction history, or explicitly request scheduling with `bt_automation_schedule`.
+Resolve templates through active runtime authority so a measured improvement is
+carried into the proposed task rather than reverting to the legacy definition.
+Do not infer executable capabilities from keyword similarity. Preserve task/contract
+and bind the proposal/ledger to the copied version. Block changed or untracked marked
+automations, and stop registered-agent fallback when its tree is unavailable.
+
+The factory supports an explicit `FileTask` node: owner-relative input snapshot,
+bounded governed generation, declared JSON verification, input freshness check,
+atomic output replacement and independent readback. The engine obtains the storage
+root through a lower-layer hook, never task/model text. Persist effect receipts with
+exact run identity; verification uncertainty stops replay. Governance cannot silently
+remove or redirect the file contract. Generic benchmarks reject filesystem effects;
+a dedicated temporary fixture uses actual files and a real Ollama/Sol model. Personal
+scheduler feedback stays out of the shared graph.
+
+**Alternatives:** A ReAct final answer alone is not evidence that a file was written.
+Automatically setting GOAP state cannot verify an external effect. Copying another
+keyword-matched task or running a fallback after missing consent changes the user's
+authorized task. A mocked model would not qualify generated output quality.
+
+**Consequences:** One declared file workflow is usable and independently tested,
+including a real failed result contract preserving an existing report. The trial
+uses scheduler manual dispatch, not observed wall-clock cron. Arbitrary integrations,
+dynamic semantic oracles, general GOAP effect verification, managed file-task evolution,
+stale feedback approvals and deployment remain open. Legacy unversioned autopilot trees
+are held for explicit reconciliation. Filesystem receipts prove observed completion,
+not permanent integrity, global transactions or power-loss durability. Sol 6.1 remains
+the ordinary provider; fast real Ollama remains the authorized benchmark exception.
+
+**Evidence:** [Real create/approve/dispatch/readback trial](../../cmd/bt-agent/file_automation_test.go),
+[filesystem lifecycle failures](../../internal/engine/file_task_test.go),
+[effect-contract preservation](../../internal/evolution/file_task_test.go),
+and [autopilot task/version tests](../../cmd/bt-agent/autopilot_test.go).
+
+---
+
+
+
+<a id="adr-286"></a>
+
+## ADR-286: Typed Checkpoints and Observed GOAP Agent State
+
+**Context:** The GOAP checkpoint wrapper converted `task_status=completed` to
+`false`, while its engine decorator silently discarded non-boolean metadata and
+read `world_state` instead of GOAP's `goap_world_state`. A `Running` child lost its
+attempt snapshot and retry count on the next tick. The standalone GOAP agent
+published predicted effects into live state even when its executor returned a
+different observed state. Dynamic GOAP also synthesized completion without an LLM.
+
+**Decision:** Use a shared typed checkpoint contract with an explicit state source,
+one child, nonempty scalar facts and exact JSON numeric comparisons. Preserve
+postcondition numbers during tree decoding. Malformed/empty contracts fail before
+execution and cannot earn governance credit; mutations cannot redirect the state
+source or replace declared facts. Keep snapshots and retry budgets across ticks,
+cache terminal disposition within a run, and preserve typed execution stops.
+A failed gate after a recorded committed effect is uncertain and cannot restore or
+replay the external work. The standalone GOAP agent publishes the executor's actual
+returned state before callbacks, including removed facts, and rejects missing
+promised effects without automatically repeating the completed action. Dynamic
+GOAP with no executor stops without advancing the step or synthesizing effects.
+
+**Status:** Accepted (2026-10-01); generic effect observers and rollout remain open.
+
+**Validation:** [Contract persistence tests](../../internal/evolution/checkpoint_contract_test.go),
+[checkpoint runtime tests](../../internal/engine/checkpoint_contract_test.go),
+[actual file-effect lifecycle tests](../../internal/engine/file_task_test.go),
+[observed agent-state tests](../../internal/goap/observed_state_test.go), and
+[dynamic GOAP missing-executor regression](../../internal/engine/goap_nodes_test.go).
+These verify control semantics and actual file replay disposition, not model
+capability. They do not use mock inference to qualify an improvement.
+
+**Limits:** Generic compiled `ApplyGoapEffects` and dynamic model-output effect
+assertions still need independently wired effect observers. A checkpoint checks
+its selected facts; it cannot establish that their producer observed reality.
+Only effects with retained committed receipts receive this replay protection.
+Snapshots are process-local and do not establish cross-process resume or external
+rollback. Existing persisted GOAP wrappers need explicit contract/version review
+before adoption; changes to authoring helpers do not migrate saved definitions.
+Broader task qualification, research attribution and deployed rollout remain open.
+
+<a id="adr-287"></a>
+
+## ADR-287: Research Sources and Verified Code Delivery Are Separate Evidence
+
+**Status:** Accepted (2026-10-01); runtime adoption and measured impact links remain open.
+
+**Context:** The old research index treated any known objective as implemented.
+Two already-passing RED attempts could write the same `goap:implemented` label as
+a real landing. Records retained no commit, owner, source timing or verification
+identity, and stale knowledge/budget saves could erase sibling writes.
+
+**Decision:** Keep a separate owner-scoped delivery ledger. Record research answer
+digests and observation times before planning. Preserve file scope in goal identity.
+Record delivery only for committed apply runs with actual Git ancestry, exact run
+commit subject, changed declared task files and recorded passing verification.
+Persist full commit/tree identity and verification command/output digests. Bind
+only sources observed before the run started; later observations cannot gain
+retroactive delivery credit. Repeated research-goal RED passes require review and
+stop automatic retries without becoming delivered work. Ignore historical source
+labels for delivery decisions. Journal pending attribution before code apply;
+repair metadata before subsequent planning without repeating the completed work.
+Use bounded shared JSON transactions and reject stale legacy knowledge/budget
+snapshots. Superpowers journals also reject stale recovery writers under a bounded
+lock. Expose owner-scoped evidence through `bt_research_status`.
+
+**Validation:** [Real Git/Go delivery integration](../../internal/engine/research_delivery_test.go)
+checks source-to-commit links, idempotence, rejection of dry/no-op/unlanded/unrelated
+changes, scope/owner isolation, late-source exclusion and restart receipt repair.
+[Transaction tests](../../internal/research/trace_test.go) cover concurrent writers,
+corruption, owner mismatch, stale saves and lock deadlines. [MCP regression](../../cmd/bt-agent/impact_tools_test.go)
+checks owner selection and explicit unknown adoption/impact. These tests qualify
+attribution/control behavior, not LLM task performance.
+
+**Limits:** A delivery receipt does not prove that the task's semantic objective
+was fulfilled, that the commit is deployed, or that it improves runtime outcomes.
+Recorded verification is trusted run evidence, not an attestation of an isolated
+build. Legacy program milestone completion on RED prechecks remains separate debt.
+Automatically scoped/rewritten goals can lack exact source links rather than being
+matched speculatively. Historical backfill, program lineage, active build/tree
+adoption, measured task outcomes and deployed rollout remain open.
+
+
+<a id="adr-288"></a>
+
+## ADR-288: Runtime Build, Publication and Recomputable Result Evidence
+
+**Status:** Accepted (2026-10-01); causal research impact and deployed rollout remain open.
+
+**Context:** A code-delivery receipt identifies landed source, but the executing
+binary could be older, dirty or unrelated. A current release pointer can move
+after resolution. Boolean gate results cannot independently establish correctness
+of the final retained output.
+
+**Decision:** Terminal execution records retain native Go VCS metadata from the
+running binary, execution start time and the validated publication selected at
+resolution. A private, nonserialized node snapshot prevents JSON proposals from
+claiming runtime admission; changed resolved definitions are rejected. Historical
+qualification is revalidated from immutable definitions and content-addressed
+paired evidence even after rollback. Result checks retain detached contracts.
+A successful final result requires a matching output digest and an executed value
+oracle that can be recomputed, with no dropped checks or uncertain committed effect.
+
+`bt_research_status` joins the current owner's exact executions to delivery receipts
+only when the clean native build contains the delivered commit and its changed
+files remain identical. Missing native metadata, display-only revision stamps,
+local dependency replacements, feedback, mixed versions and runs predating delivery
+are excluded. Corrupt reflection files fail the report instead of silently
+vanishing. Failed runs may establish code presence but earn no verified-result
+credit. Publication qualification remains separate from final task correctness.
+
+**Validation:** [Real Git attribution protocol tests](../../internal/engine/research_runtime_test.go),
+[real executable metadata tests](../../internal/util/build_provenance_test.go),
+[final-oracle tests](../../internal/evolution/execution_proof_test.go), and
+[publication snapshot tests](../../internal/evolution/runtime_release_test.go)
+check evidence boundaries without claiming model performance. The
+[live factory evolution test](../../cmd/bt-agent/runtime_promotion_test.go) uses
+actual model calls, independently checks the adopted result, retains the executed
+publication and revalidates its evidence after rollback.
+
+**Limits:** Native VCS metadata is provenance under trusted local build/storage,
+not a cryptographic build attestation. Code inclusion does not prove that changed
+functions ran or that research caused an improvement. Changed delivered files
+lose attribution even when later changes preserve semantics. Test executables
+without native VCS metadata remain unqualified for code adoption. Publication
+trials qualify their stated tree corpus, not arbitrary research changes. Broad
+semantic goal fulfillment, paired code-change experiments, historical backfill,
+program lineage and production deployment remain open.
+
+<a id="adr-289"></a>
+
+## ADR-289: Observed Effects for Compiled and Dynamic GOAP
+
+**Context:** Both generic runtime planning paths copied predicted effects after
+producing text. Dynamic tree metadata did not reliably reach its handlers, setup
+could replace observed state, and re-ticking could reset planning. Step completion
+therefore did not establish external work or satisfaction of the complete goal.
+
+**Decision:** Compile each action to a `GoapStep` containing one executable child,
+typed preconditions/effects and an explicit observation source/binding. Compiled
+and dynamic plans execute the same gate. Model JSON may establish only
+`result.*` facts against an exact value oracle. External completion requires a
+scoped FileTask write/readback receipt or a trusted native adapter's observation.
+Missing, stale, wrong or failed observations cannot advance world state. Preserve
+step state across Running, cache terminal disposition and stop as uncertain when
+verification fails after a committed effect. Unconditional legacy effect writers
+fail explicitly and require regeneration.
+
+Apply whitelisted GOAP configuration when its node executes. Preserve observations,
+full executor definitions, exact fact numbers, budgets and typed edges. A dynamic
+memory sequence keeps its cursor across ticks. Replanning clears stale executable
+state and retains the original capabilities/goal; it does not introduce unselected
+capabilities. Both paths require satisfaction of the complete goal. Terminal
+records retain recomputable GoapChecks and scoped effect receipts. FileTask checks
+the exact normalized bytes written and read back before reporting success.
+
+**Alternatives:** Copying effects after nonempty prose preserves false completion.
+Using public blackboard flags as receipts merely relocates that assertion. Accepting
+partial-plan progress as success hides an unmet goal. These alternatives are rejected.
+
+**Status:** Accepted (2026-10-02); implemented observation boundary, bounded live
+fixtures, built-in capability migration and production adoption remain open.
+
+**Evidence:** [Live dependent-file and exact-result tests](../../internal/benchmark/live_goap_test.go),
+[execution regressions](../../internal/engine/goap_observation_test.go),
+[oracle persistence/governance](../../internal/evolution/goap_step_test.go), and
+[retained run evidence](../verification/2026-10-02-goap-observations/README.md).
+
+**Limits:** Observations trust local native capability adapters and storage. A
+verified model value is not external delivery. Built-in research/DevOps declarations
+lack these adapters; legacy persisted wrappers need reviewed regeneration and
+version adoption. Full GOAP configuration mutation preservation, broader semantic
+oracles, alternate-capability replanning, durable external retry recovery and
+production rollout remain open. The tests prove the stated file/value tasks;
+they do not establish general personal-assistant competence or causal research impact.
+
+<a id="adr-290"></a>
+
+## ADR-290: Program Review Holds and Verified Code Delivery
+
+**Context:** Program milestones could complete after repeated preimplementation
+RED passes or completion labels without real Git attribution. The host retained
+60 such RED-pass completions. Later dependent work could advance on that unsupported
+premise, and program metadata failure lacked durable delivery reconciliation.
+
+**Decision:** Repeated passes create `needs_review`, not completion. Hold dependent
+selection/batching. Preserve historical original bytes before correcting known
+RED labels and retain their prior disposition. Expose framework-scoped MCP review
+and reconciliation tools; revision requires an exact current goal and changed
+requirements, preserves history and reopens pending work without credit.
+
+Capture program/index/exact goal in the run before implementation. Validate actual
+Git landing, verification and completed task/file scope before recording a detached
+delivery receipt. Keep program persistence within the pending-delivery journal so
+failed bookkeeping is repaired without rerunning implementation. Validate backlog
+shape/identities, bound lock waits and resolve the configured platform home after
+startup. Failed admission persistence prevents planning.
+
+**Alternatives:** Repeated passing tests and merely present files cannot establish
+new delivery. Guessing milestone identity from shared filenames after execution
+can misattribute unrelated work. Deleting historical claims loses audit evidence.
+Those shortcuts are rejected.
+
+**Status:** Accepted (2026-10-02); implemented and locally verified, host metadata
+corrected; semantic research impact and service rollout remain open.
+
+**Evidence:** [Program delivery/recovery tests](../../internal/engine/program_delivery_test.go),
+[backup/revision tests](../../internal/research/program_review_test.go),
+[MCP tests](../../cmd/bt-agent/impact_tools_test.go) and
+[compiled MCP host correction plus race/live regressions](../verification/2026-10-02-program-review/README.md).
+
+**Limits:** An anchored task/file intersection attributes a code delivery; it does
+not prove that the whole natural-language goal is satisfied. Stored receipts trust
+local storage. The remaining historical done labels have no verified delivery
+credit. Review revision checks changed text, not the semantic quality of its test.
+Immutable research-source lineage through rewrites, paired code-change experiments,
+broader task corpora and production deployment remain separate work.
+
+<a id="adr-291"></a>
+
+## ADR-291: Native Identity Before Automatic Binary Replacement
+
+**Context:** The host Go toolchain omits native VCS metadata in linked worktrees.
+The existing automatic rebuild path could therefore produce functioning binaries
+that could not qualify code adoption. Inherited Git variables could redirect the
+compiler's identity lookup. The CLI rebuild target also differed from `bin/`.
+
+**Decision:** Capture the source HEAD, create a private ordinary shared clone,
+check out that exact commit with hooks disabled, and scrub inherited Git variables
+for every Git/compiler call. Build with native VCS stamping and preserve display
+ldflags only for compatibility. Before replacement, inspect the actual executable
+and require the expected module, exact revision, commit time, clean state and no
+local replacements. On failure retain the previous executable. Build the CLI into
+`bin/`; a deployed root alias can preserve historical callers.
+
+**Alternatives:** Display revision strings are assertions, not native evidence.
+Building in the writable source checkout could include another worker's edits.
+An ordinary private checkout preserves both committed input and native identity.
+
+**Status:** Accepted (2026-10-02); real compiler/Git tests pass. Automatic restart
+remains disabled until separate process-wide admission and handoff acceptance.
+
+**Evidence:** [Native rebuild regressions](../../internal/agent/rebuild_provenance_test.go)
+cover ordinary, bare and linked source repositories, inherited Git overrides,
+source preservation, executable behavior and rejection before replacement.
+[Release and retained RED/green evidence](../verification/2026-10-02-runtime-release/README.md)
+separates the deployed b615 baseline from this new source correction.
+
+**Limits:** Native metadata assumes trusted local tools/storage; it is not a
+cryptographic attestation or proof of causal research benefit. A shared clone
+uses the source object database during its build lifetime. Native build
+identity does not prove safe restart, whole-fleet adoption or useful task impact.
 
 ---
 

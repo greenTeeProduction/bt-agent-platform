@@ -1606,6 +1606,8 @@ func parseChainConfig(node *evolution.SerializableNode) ChainConfig {
 		}
 		if mt, ok := node.Metadata["max_tokens"].(float64); ok {
 			cfg.MaxTokens = int(mt)
+		} else if mt, ok := node.Metadata["max_tokens"].(int); ok {
+			cfg.MaxTokens = mt
 		}
 		if st, ok := node.Metadata["stream"].(bool); ok {
 			cfg.Stream = st

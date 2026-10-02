@@ -1,0 +1,42 @@
+{
+  "source_parent": "c1cf8e69ebaaac23d29a5058a14ee401dafbea2d",
+  "created_utc": "2026-10-01T13:28:26.754746+00:00",
+  "source_sha256": {
+    "cmd/bt-agent/main.go": "517c0a955343db6a154c8e766e220b7ffe9d73d1eec43f6cda8fc8a0c20bb063",
+    "cmd/bt-agent/runtime_promotion_test.go": "7e27f935befa33f40cf3fc16db44a1c7a875fd4e9ec1c624a4c45fcfa34c9976",
+    "cmd/bt-agent/tools.go": "e2dd456731524b5ae69083d8dbe4e1762d06bfb2d6020db9d2b5db0f9f1068f2",
+    "cmd/bt-gardener/main_test.go": "70113077a11325b8697ec10e843591b2ddea0532560e85dc72e5d530ce37f9fe",
+    "internal/agentexec/runtime_version_test.go": "ac486055c922f51911229f6e851b9044fae794a6ecfb205599950b5351b37bbf",
+    "internal/agentexec/wiring.go": "9b48203e8ec84eb6b50ba965d4bf19e4e4bcd8794ec4d67375653ce549c232c3",
+    "internal/benchmark/benchmark.go": "2a350085da43cbee1f9ac35efb543ce288afb35ebdf39c1be1b195d11668c885",
+    "internal/benchmark/runtime_qualification.go": "dd52efb45e0d8c236c7c23b7626f2d043f0be93a1baaafd3a7508d6c55900695",
+    "internal/domains/tree_resolver.go": "fcff0663da71d2b20b5f22e680e09cb682646334d75a17dafe233b5c565ad8bc",
+    "internal/engine/run_evidence.go": "91565812afb1113231daa38d83d91d16fa3db237ed8857d5ba0bcf3de39849aa",
+    "internal/evaluator/stockfish.go": "203a29ca335f9ce144cf47df5477fa8bfa420c379dc1309820c880ecb9a673ad",
+    "internal/evolution/contract_recovery.go": "0a1b8569bbafd8f733153153df58fcdf592acb31f37dfa249d4d0cd8318da992",
+    "internal/evolution/governance.go": "17fae1d00f186266a707c4a52f81b8590d7cff9dfa3461c211c8090dc46d55b4",
+    "internal/evolution/mcts_mutate.go": "2eb67fb9147efe82fa2780d05f427e6ee337a89b95084c0b9236a2f773b957fa",
+    "internal/evolution/mcts_mutate_test.go": "337b40059269b3213d6c657dccdfbdb05c7d2467b8a7a89cda1427dc2aa66974",
+    "internal/evolution/mutate.go": "ba0cd4179ab777e3ee783b335e513461ceadfc77bb6b20bbbfd8ca55042a1675",
+    "internal/evolution/runtime_release.go": "cbb92f5df1a27a9a93f64b2d8f72125fcf6bf3131cc19db5bb52a808abc936b4",
+    "internal/evolution/runtime_release_test.go": "8c76fb201b2c39b91f0e5e35c361ea63eb91847884e78834de821cf16088536a",
+    "internal/gardener/evolve_v2.go": "28e3fe1bdd190388db8906efb56aacd57b004dd784da957d5b047d0a7f1c4744",
+    "internal/gardener/gardener.go": "74fec696371866210d5e629ae582efa8871fdaaeff27fdb0b55ba696610de20a",
+    "internal/gardener/runtime_promotion.go": "4258878be0431a73bc673e8c791df7f54987a83c7e3b4d4ab9c18824bec70b22",
+    "internal/gardener/user_trees.go": "e4b0ba0abe4d0c568f20b19a447382fb8d69373fd19021670ed70d346a13e31e",
+    "scripts/test-live-benchmarks.sh": "cbcc7616244c29403b49230a0f6db6f78c6520d3cdaca4ee91ac2ccd07caca61"
+  },
+  "scope": "Controlled response factory task; real qwen2.5:0.5b, three repeated paired trials, actual runtime adoption, registry reload and exact rollback. No general assistant/fleet claim.",
+  "qualification": "accepted.json",
+  "failed_attempt": "rejected.json",
+  "race_validation": "Six changed packages passed in the broad race run. That run also caught missing fmt and a test rename during compilation; final affected-package rerun passes agentexec, bt-agent and bt-gardener.",
+  "remaining": [
+    "legacy/manual/genetic publication paths",
+    "first-adoption concurrency with legacy file writers",
+    "search ranking still uses history/proxy estimates",
+    "domain/external-tool task corpora",
+    "collapsed persisted tree recovery",
+    "personal GOAP actual effects",
+    "deployed adoption and research-to-delivery ledger"
+  ]
+}

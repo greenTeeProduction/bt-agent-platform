@@ -46,7 +46,7 @@ func runFailClosedArm(t *testing.T, vgCfg ValidationGateConfig) (CycleMetrics, b
 		ValidationGate: vgCfg,
 		MaxMutations:   1,
 	}
-	g := NewGardener(cfg)
+	g := newOrchestrationTestGardener(t, cfg)
 
 	v2cfg := EvolveV2Config{UseRealLLM: false}
 	metrics := g.evolveTreeV2(registry.List()[0], v2cfg)

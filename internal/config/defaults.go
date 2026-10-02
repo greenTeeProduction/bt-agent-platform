@@ -18,7 +18,7 @@ const (
 	defaultDashboardPort = 9800
 
 	// ── LLM Provider ──
-	defaultLLMProvider     = "ollama"
+	defaultLLMProvider     = "codex"
 	defaultOllamaHost      = "http://localhost:11434"
 	defaultOllamaModel     = "qwen3.6:35b-a3b"
 	defaultDeepSeekHost    = "https://api.deepseek.com/v1"

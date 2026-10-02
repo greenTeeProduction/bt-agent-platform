@@ -29,6 +29,8 @@ type BFCLV3Entry struct {
 
 // BFCLV3Metrics aggregates BFCL V3 multi-turn evaluation results.
 type BFCLV3Metrics struct {
+	ModelEvidence        ModelEvidence  `json:"model_evidence"`
+	Warning              string         `json:"warning,omitempty"`
 	TotalEntries         int            `json:"total_entries"`
 	CorrectTurns         int            `json:"correct_turns"`
 	TotalTurns           int            `json:"total_turns"`
@@ -82,6 +84,8 @@ func LoadBFCLV3Entries(path string) ([]BFCLV3Entry, error) {
 // output or detected path matches the expected tool for that turn.
 // A multi-step entry is fully correct only if ALL turns match.
 func EvaluateBFCLV3(tree *evolution.SerializableNode, entries []BFCLV3Entry, llmClient llm.LLM) *BFCLV3Metrics {
+	var modelEvidence ModelEvidence
+	var warning string
 	results := make([]BFCLV3Result, 0, 32)
 	totalTurns := 0
 	correctTurns := 0
@@ -89,7 +93,7 @@ func EvaluateBFCLV3(tree *evolution.SerializableNode, entries []BFCLV3Entry, llm
 
 	for _, entry := range entries {
 		// Stateful blackboard reused across turns
-		bb := &engine.Blackboard{
+		bb := &engine.Blackboard{NodeAdmission: benchmarkAdmission,
 			LLM: llmClient,
 		}
 
@@ -98,8 +102,11 @@ func EvaluateBFCLV3(tree *evolution.SerializableNode, entries []BFCLV3Entry, llm
 
 		for i, turn := range entry.Turns {
 			bb.Task = turn.Content
-			bt := engine.BuildTree(tree, bb)
-			output := engine.RunTask(bb, bt)
+			output, taskEvidence, taskWarning := executeLiveTask(tree, bb)
+			mergeModelEvidence(&modelEvidence, taskEvidence)
+			if taskWarning != "" {
+				warning = taskWarning
+			}
 
 			// Determine if this turn matches the expected tool
 			expected := ""
@@ -108,7 +115,7 @@ func EvaluateBFCLV3(tree *evolution.SerializableNode, entries []BFCLV3Entry, llm
 			}
 
 			path := detectPath(output, bb)
-			isCorrect := isToolMatch(output, path, expected)
+			isCorrect := taskWarning == "" && isToolMatch(output, path, expected)
 
 			totalTurns++
 			if isCorrect {
@@ -143,7 +150,7 @@ func EvaluateBFCLV3(tree *evolution.SerializableNode, entries []BFCLV3Entry, llm
 		multiStepRate = float64(fullyCorrect) / float64(n)
 	}
 
-	return &BFCLV3Metrics{
+	return &BFCLV3Metrics{ModelEvidence: modelEvidence, Warning: warning,
 		TotalEntries:         n,
 		CorrectTurns:         correctTurns,
 		TotalTurns:           totalTurns,

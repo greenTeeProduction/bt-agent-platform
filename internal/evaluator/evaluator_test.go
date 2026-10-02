@@ -321,7 +321,7 @@ func TestOrderMutations_PrioritizesPromptThenToolThenIterations(t *testing.T) {
 	if len(candidates) < 3 {
 		t.Fatalf("expected at least three content candidates, got %d", len(candidates))
 	}
-	want := []string{"improve_prompt", "add_tool", "increase_iterations"}
+	want := []string{"wrap_quality_gate", "guard_task", "improve_prompt", "add_tool", "increase_iterations"}
 	for i, op := range want {
 		if candidates[i].Op.Operation != op {
 			t.Fatalf("candidate[%d] op=%s, want %s; all=%v", i, candidates[i].Op.Operation, op, candidates)

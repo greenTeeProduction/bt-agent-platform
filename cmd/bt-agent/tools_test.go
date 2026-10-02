@@ -766,19 +766,8 @@ func TestBTEvolveIslandWiresExperienceBankIntoMigration(t *testing.T) {
 	}
 }
 
-// TestBTEvolveIslandDomainsModeWritesFitnessBackPerDomain pins milestone 4/5
-// of the production-safe island archive program: correct evolved-fitness
-// attribution in domains mode. When each island is seeded from a registered
-// domain tree, the evolved quality was earned by those domain trees — so each
-// seeded domain island's own best elite fitness must be written back to its
-// domain:<name> knowledge-graph entry through the evolved path
-// (StructuralFitness + EvolvedCount, never the runtime-success EMA), and the
-// base tree must NOT be credited with the single cross-island best. Crediting
-// params.Tree for fitness that domain-seeded islands earned steers
-// fitness-aware discovery toward a tree whose genome the elites never came
-// from. Default (anonymous-islands) mode keeps the existing contract: the base
-// tree seeded every island, so it alone receives the cross-island best.
-func TestBTEvolveIslandDomainsModeWritesFitnessBackPerDomain(t *testing.T) {
+// Search estimates remain proposals until independently qualified.
+func TestBTEvolveIslandEstimatesCannotCreditRuntime(t *testing.T) {
 	// Isolate the durable island archive so the run neither warm-starts from
 	// nor persists test state into the real platform home.
 	t.Setenv("BT_AGENT_HOME", t.TempDir())
@@ -831,21 +820,12 @@ func TestBTEvolveIslandDomainsModeWritesFitnessBackPerDomain(t *testing.T) {
 		if !isNum || best <= 0 {
 			t.Fatalf("per_island_best[%q] must be a positive number for this attribution pin to be meaningful; got %v", d.island, perIsland[d.island])
 		}
-		// The evolved write-back clamps into [0,100]; the entries start with a
-		// zero StructuralFitness, so monotonicity cannot mask the credit.
-		want := best
-		if want > 100 {
-			want = 100
-		}
 		tree := kg.Trees[d.kgID]
 		if tree == nil {
-			t.Fatalf("%s vanished from the knowledge graph after evolution", d.kgID)
+			t.Fatalf("%s vanished", d.kgID)
 		}
-		if tree.EvolvedCount != 1 {
-			t.Errorf("domains mode must write each seeded domain island's best back to its own KG entry exactly once; %s.EvolvedCount = %d, want 1", d.kgID, tree.EvolvedCount)
-		}
-		if diff := tree.StructuralFitness - want; diff < -1e-9 || diff > 1e-9 {
-			t.Errorf("%s.StructuralFitness = %v, want its own island's best %v — each domain must be credited with its own elite fitness, not the cross-island best (and not nothing)", d.kgID, tree.StructuralFitness, want)
+		if tree.EvolvedCount != 0 || tree.StructuralFitness != 0 {
+			t.Fatal("island estimate credited unpublished runtime structure")
 		}
 		// The evolved path must leave genuine-execution telemetry alone.
 		if tree.Fitness != d.fitness {
@@ -892,8 +872,8 @@ func TestBTEvolveIslandDomainsModeWritesFitnessBackPerDomain(t *testing.T) {
 	if defaultBase == nil {
 		t.Fatal("godev vanished from the knowledge graph after the default-mode run")
 	}
-	if defaultBase.EvolvedCount != 1 || defaultBase.StructuralFitness <= 0 {
-		t.Errorf("default (anonymous-islands) mode must keep crediting the base tree with the cross-island best; godev EvolvedCount = %d (want 1), StructuralFitness = %v (want > 0)", defaultBase.EvolvedCount, defaultBase.StructuralFitness)
+	if defaultBase.EvolvedCount != 0 || defaultBase.StructuralFitness != 0 {
+		t.Fatal("unpublished default island changed discovery")
 	}
 }
 
@@ -1538,7 +1518,7 @@ func TestBTEvolveMultiObjectiveRegisteredAndReturnsParetoMetrics(t *testing.T) {
 	if !ok || len(dims) == 0 {
 		t.Fatalf("bt_evolve_multiobjective result must echo a non-empty 'dimensions' list; got %v", out["dimensions"])
 	}
-	wantDims := map[string]bool{"success_rate": false, "node_efficiency": false, "stability": false}
+	wantDims := map[string]bool{"input_guarding": false, "result_verification": false, "agent_guidance": false, "execution_bounds": false, "recovery_controls": false}
 	for _, d := range dims {
 		if s, isStr := d.(string); isStr {
 			if _, tracked := wantDims[s]; tracked {
@@ -2451,11 +2431,8 @@ func TestBTEvolveSelectionPressureRegisteredAndBreedsProvenUnderbredTrees(t *tes
 	if cr == nil {
 		t.Fatal("domain:code_review vanished from the knowledge graph after evolution")
 	}
-	if cr.StructuralFitness <= 0 {
-		t.Errorf("bt_evolve_selection_pressure must write each elite's fitness back through the evolved path; expected domain:code_review.StructuralFitness > 0, got %.2f", cr.StructuralFitness)
-	}
-	if cr.EvolvedCount != 1 {
-		t.Errorf("bt_evolve_selection_pressure evolved write-back must bump EvolvedCount to 1 for domain:code_review; got %d", cr.EvolvedCount)
+	if cr.StructuralFitness != 0 || cr.EvolvedCount != 0 {
+		t.Fatal("unpublished selection-pressure estimate credited runtime")
 	}
 	if cr.Fitness != 90 {
 		t.Errorf("bt_evolve_selection_pressure must not overwrite the runtime-success EMA (Fitness); expected 90, got %.2f", cr.Fitness)
@@ -2517,17 +2494,8 @@ func TestBTEvolveSelectionPressureRegisteredAndBreedsProvenUnderbredTrees(t *tes
 	}
 }
 
-// TestBTEvolveGeneticPersistsEvolvedWinnerTree pins the fix for the
-// evolved-winner-discarded gap (Q2 Evolvability, Q1 Correctness):
-// bt_evolve_genetic computes best := pop.EvolveWithExperience(...) only to
-// read CountNodes(best) for the report, then drops the winner tree entirely —
-// nothing about its actual structure survives the call. The tool must instead
-// persist the winner through the existing persistGeneratedTree seam under a
-// derived "<tree>-evolved" id (mirroring bt_evolve_selectors' "persisted"/
-// "file" result keys), report that id, and register it in the knowledge graph
-// so fitness-aware discovery and the gardener can find the bred winner on the
-// next run instead of only its scalar fitness.
-func TestBTEvolveGeneticPersistsEvolvedWinnerTree(t *testing.T) {
+// Search estimates remain proposals until independently qualified.
+func TestBTEvolveGeneticRetainsUnqualifiedProposal(t *testing.T) {
 	dir := t.TempDir()
 	treeStore, err := evolution.NewTreeStore(dir)
 	if err != nil {
@@ -2551,55 +2519,11 @@ func TestBTEvolveGeneticPersistsEvolvedWinnerTree(t *testing.T) {
 		t.Fatalf("bt_evolve_genetic result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
 	}
 
-	const wantID = "godev-evolved"
-	evolvedID, _ := out["evolved_tree_id"].(string)
-	if evolvedID != wantID {
-		t.Fatalf("bt_evolve_genetic must report the persisted evolved winner's id as 'evolved_tree_id' = %q instead of discarding the winner after computing fitness; got %v (keys %v)", wantID, out["evolved_tree_id"], out)
-	}
-	if persisted, _ := out["persisted"].(bool); !persisted {
-		t.Errorf("bt_evolve_genetic must report persisted=true for the evolved winner when it validates and a tree store is configured; got %v", out["persisted"])
-	}
-	if file, _ := out["file"].(string); file == "" {
-		t.Errorf("bt_evolve_genetic must report the on-disk 'file' path the evolved winner was persisted to; got %v", out["file"])
-	}
-
-	loaded, err := treeStore.LoadNamed(wantID)
-	if err != nil {
-		t.Fatalf("LoadNamed(%q): %v", wantID, err)
-	}
-	if loaded == nil {
-		t.Fatalf("bt_evolve_genetic must persist the evolved winner tree under %q so it survives restarts and is resolvable by id; treeStore has nothing there", wantID)
-	}
-
-	meta := kg.Trees[wantID]
-	if meta == nil {
-		t.Fatalf("bt_evolve_genetic must register the evolved winner tree %q in the knowledge graph so discovery can surface it", wantID)
-	}
-	if meta.StructuralFitness <= 0 {
-		t.Errorf("bt_evolve_genetic evolved winner %q must be registered with a positive StructuralFitness; got %v", wantID, meta.StructuralFitness)
-	}
-
-	related := kg.DiscoverRelated("godev")
-	found := false
-	for _, id := range related {
-		if id == wantID {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("bt_evolve_genetic must connect the evolved winner %q back to its base tree 'godev' via a KG relationship; DiscoverRelated(godev)=%v", wantID, related)
-	}
+	assertUnqualifiedProposal(t, treeStore, kg, "godev", out)
 }
 
-// TestBTEvolveGeneticRecordsBaseTreeFitness pins the base-tree write-back gap
-// (Q2 Evolvability milestone 2/2): bt_evolve_genetic persists the winner
-// under "<tree>-evolved" via persistEvolvedWinner, but never calls
-// recordEvolvedFitness(deps, params.Tree, pop.BestFitness) the way
-// bt_evolve_qd/bt_evolve_selection_pressure/the gardener's domain loop do —
-// so the *base* tree's StructuralFitness (used by fitness-aware discovery to
-// rank the base tree itself, not just its "-evolved" descendant) never
-// updates after a genetic-evolution pass.
-func TestBTEvolveGeneticRecordsBaseTreeFitness(t *testing.T) {
+// Search estimates remain proposals until independently qualified.
+func TestBTEvolveGeneticDoesNotCreditUnqualifiedFitness(t *testing.T) {
 	dir := t.TempDir()
 	treeStore, err := evolution.NewTreeStore(dir)
 	if err != nil {
@@ -2623,19 +2547,13 @@ func TestBTEvolveGeneticRecordsBaseTreeFitness(t *testing.T) {
 	if baseMeta == nil {
 		t.Fatalf("base tree 'godev' vanished from the knowledge graph after bt_evolve_genetic")
 	}
-	if baseMeta.StructuralFitness <= 0 {
-		t.Errorf("bt_evolve_genetic must write pop.BestFitness back onto the *base* tree's StructuralFitness (via recordEvolvedFitness), not just the persisted '-evolved' tree; got StructuralFitness=%v", baseMeta.StructuralFitness)
+	if baseMeta.StructuralFitness != 0 || baseMeta.EvolvedCount != 0 {
+		t.Fatal("unpublished genetic search changed runtime discovery fitness")
 	}
 }
 
-// TestBTEvolveBottlenecksPersistsEvolvedWinnerTree pins the same fix as
-// TestBTEvolveGeneticPersistsEvolvedWinnerTree for the genetic-fallback path
-// inside bt_evolve_bottlenecks: today pop.EvolveWithExperience(...)'s return
-// value is discarded outright (line is a bare statement), leaving only
-// pop.BestFitness in the report. domain:alert_router has no tunable
-// parameters, so it deterministically routes to the genetic path (mirroring
-// TestBTEvolveBottlenecksRegisteredAndReturnsBeforeAfterReport's fixture).
-func TestBTEvolveBottlenecksPersistsEvolvedWinnerTree(t *testing.T) {
+// Search estimates remain proposals until independently qualified.
+func TestBTEvolveBottlenecksRetainsUnqualifiedProposal(t *testing.T) {
 	dir := t.TempDir()
 	treeStore, err := evolution.NewTreeStore(dir)
 	if err != nil {
@@ -2670,36 +2588,11 @@ func TestBTEvolveBottlenecksPersistsEvolvedWinnerTree(t *testing.T) {
 		t.Fatalf("fixture bottleneck must route to the genetic path; got algorithm=%v", entry["algorithm"])
 	}
 
-	const wantID = "domain:alert_router-evolved"
-	evolvedID, _ := entry["evolved_tree_id"].(string)
-	if evolvedID != wantID {
-		t.Fatalf("bt_evolve_bottlenecks genetic-path report entry must carry 'evolved_tree_id' = %q instead of discarding the bred winner after computing fitness; got %v (entry %v)", wantID, entry["evolved_tree_id"], entry)
-	}
-	if persisted, _ := entry["persisted"].(bool); !persisted {
-		t.Errorf("bt_evolve_bottlenecks report entry must report persisted=true for the evolved winner; got %v", entry["persisted"])
-	}
-
-	loaded, err := treeStore.LoadNamed(wantID)
-	if err != nil {
-		t.Fatalf("LoadNamed(%q): %v", wantID, err)
-	}
-	if loaded == nil {
-		t.Fatalf("bt_evolve_bottlenecks must persist the genetic-path evolved winner tree under %q instead of discarding it after computing fitness", wantID)
-	}
-
-	if meta := kg.Trees[wantID]; meta == nil {
-		t.Fatalf("bt_evolve_bottlenecks must register the evolved winner tree %q in the knowledge graph", wantID)
-	}
+	assertUnqualifiedProposal(t, treeStore, kg, "domain:alert_router", entry)
 }
 
-// TestBTEvolveBottlenecksCMAESPersistsEvolvedWinnerTree pins the same fix as
-// TestBTEvolveBottlenecksPersistsEvolvedWinnerTree for the CMA-ES branch:
-// today evolution.TuneTreeParameters's tuned *SerializableNode return value is
-// discarded (bound to "_"), leaving only bestFitness in the report. This test
-// uses the same domain:code_review fixture as
-// TestBTEvolveBottlenecksRegisteredAndReturnsBeforeAfterReport, whose Retry
-// MaxRetries knob deterministically routes it to the CMA-ES path.
-func TestBTEvolveBottlenecksCMAESPersistsEvolvedWinnerTree(t *testing.T) {
+// Search estimates remain proposals until independently qualified.
+func TestBTEvolveBottlenecksCMAESRetainsUnqualifiedProposal(t *testing.T) {
 	dir := t.TempDir()
 	treeStore, err := evolution.NewTreeStore(dir)
 	if err != nil {
@@ -2734,26 +2627,7 @@ func TestBTEvolveBottlenecksCMAESPersistsEvolvedWinnerTree(t *testing.T) {
 		t.Fatalf("fixture bottleneck must route to the cmaes path; got algorithm=%v", entry["algorithm"])
 	}
 
-	const wantID = "domain:code_review-evolved"
-	evolvedID, _ := entry["evolved_tree_id"].(string)
-	if evolvedID != wantID {
-		t.Fatalf("bt_evolve_bottlenecks cmaes-path report entry must carry 'evolved_tree_id' = %q instead of discarding the tuned winner after computing fitness; got %v (entry %v)", wantID, entry["evolved_tree_id"], entry)
-	}
-	if persisted, _ := entry["persisted"].(bool); !persisted {
-		t.Errorf("bt_evolve_bottlenecks report entry must report persisted=true for the tuned winner; got %v", entry["persisted"])
-	}
-
-	loaded, err := treeStore.LoadNamed(wantID)
-	if err != nil {
-		t.Fatalf("LoadNamed(%q): %v", wantID, err)
-	}
-	if loaded == nil {
-		t.Fatalf("bt_evolve_bottlenecks must persist the cmaes-path tuned winner tree under %q instead of discarding it after computing fitness", wantID)
-	}
-
-	if meta := kg.Trees[wantID]; meta == nil {
-		t.Fatalf("bt_evolve_bottlenecks must register the tuned winner tree %q in the knowledge graph", wantID)
-	}
+	assertUnqualifiedProposal(t, treeStore, kg, "domain:code_review", entry)
 }
 
 // TestBTEvolveBottlenecksSkipsTreeWithFitterNonRegressingEvolvedDescendant
@@ -2909,13 +2783,8 @@ func TestBTEvolveSelectionPressureSkipsTreeWithFitterNonRegressingEvolvedDescend
 	}
 }
 
-// TestBTEvolveSelectionPressurePersistsEvolvedWinnerTree pins the same fix as
-// TestBTEvolveGeneticPersistsEvolvedWinnerTree for bt_evolve_selection_pressure:
-// today only pop.BestFitness survives via recordEvolvedFitness — the bred
-// elite tree that earned that fitness is discarded. Uses the same fixture as
-// TestBTEvolveSelectionPressureRegisteredAndBreedsProvenUnderbredTrees
-// (domain:code_review, proven+underbred).
-func TestBTEvolveSelectionPressurePersistsEvolvedWinnerTree(t *testing.T) {
+// Search estimates remain proposals until independently qualified.
+func TestBTEvolveSelectionPressureRetainsUnqualifiedProposal(t *testing.T) {
 	dir := t.TempDir()
 	treeStore, err := evolution.NewTreeStore(dir)
 	if err != nil {
@@ -2947,37 +2816,9 @@ func TestBTEvolveSelectionPressurePersistsEvolvedWinnerTree(t *testing.T) {
 	}
 	entry, _ := report[0].(map[string]any)
 
-	const wantID = "domain:code_review-evolved"
-	evolvedID, _ := entry["evolved_tree_id"].(string)
-	if evolvedID != wantID {
-		t.Fatalf("bt_evolve_selection_pressure report entry must carry 'evolved_tree_id' = %q instead of discarding the bred elite after computing fitness; got %v (entry %v)", wantID, entry["evolved_tree_id"], entry)
-	}
-	if persisted, _ := entry["persisted"].(bool); !persisted {
-		t.Errorf("bt_evolve_selection_pressure report entry must report persisted=true for the evolved winner; got %v", entry["persisted"])
-	}
-
-	loaded, err := treeStore.LoadNamed(wantID)
-	if err != nil {
-		t.Fatalf("LoadNamed(%q): %v", wantID, err)
-	}
-	if loaded == nil {
-		t.Fatalf("bt_evolve_selection_pressure must persist the bred elite tree under %q instead of discarding it after computing fitness", wantID)
-	}
-
-	if meta := kg.Trees[wantID]; meta == nil {
-		t.Fatalf("bt_evolve_selection_pressure must register the evolved winner tree %q in the knowledge graph", wantID)
-	}
+	assertUnqualifiedProposal(t, treeStore, kg, "domain:code_review", entry)
 }
 
-// TestPersistEvolvedWinner_SkipsOverwriteWhenFitnessDoesNotImprove pins the
-// gate this goal adds: persistEvolvedWinner (and the RegisterEvolved
-// bookkeeping it drives) must only overwrite the persisted "<base>-evolved"
-// tree file and its knowledge-graph metadata when the new winner's fitness
-// actually beats what's already stored for that id. Today the file write via
-// persistGeneratedTree is unconditional, so a later, weaker genetic-evolution
-// pass silently clobbers a stronger winner already on disk — and
-// RegisterEvolved's NodeCount write-back follows the clobbered structure even
-// though its StructuralFitness field is already (correctly) monotone.
 func TestPersistEvolvedWinner_SkipsOverwriteWhenFitnessDoesNotImprove(t *testing.T) {
 	dir := t.TempDir()
 	treeStore, err := evolution.NewTreeStore(dir)
@@ -2994,11 +2835,10 @@ func TestPersistEvolvedWinner_SkipsOverwriteWhenFitnessDoesNotImprove(t *testing
 	}
 	const wantID = "godev-evolved"
 
-	first := map[string]any{}
-	persistEvolvedWinner(deps, "godev", strong, 90, first)
-	if persisted, _ := first["persisted"].(bool); !persisted {
-		t.Fatalf("first persistEvolvedWinner call must persist the initial winner; result=%v", first)
+	if _, err := treeStore.SaveNamed(wantID, strong); err != nil {
+		t.Fatal(err)
 	}
+	kg.RegisterEvolved("godev", wantID, evolution.CountNodes(strong), 90)
 
 	second := map[string]any{}
 	persistEvolvedWinner(deps, "godev", weak, 50, second)
@@ -3027,114 +2867,48 @@ func TestPersistEvolvedWinner_SkipsOverwriteWhenFitnessDoesNotImprove(t *testing
 	}
 }
 
-// TestPersistEvolvedWinner_AtomicWithFailedDiskWrite pins that persistEvolvedWinner's
-// knowledge-graph bookkeeping (RegisterEvolved) and its disk write
-// (persistGeneratedTree) succeed or fail together. Today RegisterEvolved
-// commits the higher fitness, bumped EvolvedCount, and the new NodeCount to
-// the knowledge graph unconditionally before persistGeneratedTree even
-// attempts engine.ValidateTreeFull — so when the winner tree fails
-// validation and the disk write never happens, the knowledge graph is left
-// claiming a better winner exists at evolvedID than what is actually
-// persisted on disk. A later, genuinely weaker winner would then be silently
-// rejected by RegisterEvolved's fitness gate because it can never beat the
-// phantom fitness recorded for a tree that was never written.
 func TestPersistEvolvedWinner_AtomicWithFailedDiskWrite(t *testing.T) {
-	dir := t.TempDir()
-	treeStore, err := evolution.NewTreeStore(dir)
+	treeStore, err := evolution.NewTreeStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
 	kg := knowledge.NewKnowledgeGraph()
+	kg.Register(&knowledge.TreeMeta{ID: "godev", Name: "Go"})
 	deps := &mcpDeps{treeStore: treeStore, kg: kg}
-
-	strong := &evolution.SerializableNode{Type: "Action", Name: "AddCitations"}
-	const wantID = "godev-evolved"
-
-	first := map[string]any{}
-	persistEvolvedWinner(deps, "godev", strong, 90, first)
-	if persisted, _ := first["persisted"].(bool); !persisted {
-		t.Fatalf("first persistEvolvedWinner call must persist the initial winner; result=%v", first)
+	if err = os.WriteFile(filepath.Join(treeStore.Dir(), "evolution-proposals"), []byte("write fault"), 0600); err != nil {
+		t.Fatal(err)
 	}
-
-	invalid := &evolution.SerializableNode{Type: "TotallyBogusNodeType", Name: "invalid-winner"}
-	second := map[string]any{}
-	persistEvolvedWinner(deps, "godev", invalid, 95, second)
-
-	if persisted, _ := second["persisted"].(bool); persisted {
-		t.Fatalf("persistEvolvedWinner must not report persisted=true when the winner tree fails validation; result=%v", second)
+	candidate := evolution.GoDeveloperTree()
+	candidate.Description = "proposal"
+	result := map[string]any{}
+	persistEvolvedWinner(deps, "godev", candidate, 999, result)
+	if result["persisted"] != false || result["persist_error"] == nil || kg.Trees["godev"].EvolvedCount != 0 {
+		t.Fatalf("failed write advertised adoption: %v", result)
 	}
-
-	loaded, err := treeStore.LoadNamed(wantID)
-	if err != nil {
-		t.Fatalf("LoadNamed(%q): %v", wantID, err)
-	}
-	if loaded == nil || loaded.Name != "AddCitations" {
-		t.Fatalf("a winner that fails validation must not disturb the tree already persisted at %q; got %+v", wantID, loaded)
-	}
-
-	meta := kg.Trees[wantID]
-	if meta == nil {
-		t.Fatalf("expected evolved tree %q to still be registered in the knowledge graph", wantID)
-	}
-	if meta.StructuralFitness != 90 {
-		t.Errorf("knowledge-graph bookkeeping must not record fitness 95 for a winner that was never written to disk; StructuralFitness got %v, want 90 (matching what is actually persisted)", meta.StructuralFitness)
-	}
-	if meta.NodeCount != evolution.CountNodes(strong) {
-		t.Errorf("knowledge-graph bookkeeping must not record the failed winner's node count when its disk write never happened; NodeCount got %d, want %d (matching what is actually persisted)", meta.NodeCount, evolution.CountNodes(strong))
-	}
-	if meta.EvolvedCount != 1 {
-		t.Errorf("EvolvedCount must not increment for a winner that failed to persist; got %d, want 1", meta.EvolvedCount)
+	result = map[string]any{}
+	persistEvolvedWinner(deps, "godev", &evolution.SerializableNode{Type: "Bogus", Name: "invalid"}, 1000, result)
+	if result["persisted"] != false || result["validation_errors"] == nil {
+		t.Fatalf("invalid candidate admitted: %v", result)
 	}
 }
 
-// TestPersistEvolvedWinner_FlushesFeedbackToDisk pins milestone 4/4 of the Q2
-// Evolvability program: an evolution winner registered via persistEvolvedWinner
-// (the seam every bt_evolve_* MCP tool routes through) must reach the feedback
-// snapshot on disk immediately, not just the tree file. Today only the
-// scheduler's run-outcome path (persistRunFeedback in internal/agent/scheduler.go)
-// calls MarkFeedbackDirty + FlushFeedback, so a winner registered purely via an
-// MCP evolve tool call — with no scheduled run in between — has its
-// StructuralFitness/NodeCount/evolved_from bookkeeping live only in the
-// in-memory graph. A daemon restart before the next scheduled run silently
-// drops it, even though RegisterEvolved already committed it in memory and the
-// tree file itself survived on disk.
-//
-// The test arms ConfigureFeedbackPersistence with a zero minInterval (so the
-// very first flush always lands, mirroring lastFlush's zero value), calls
-// persistEvolvedWinner once, and asserts the feedback file exists and decodes
-// back the evolved tree's StructuralFitness — proving MarkFeedbackDirty +
-// FlushFeedback(false) actually ran off the back of RegisterEvolved succeeding.
-func TestPersistEvolvedWinner_FlushesFeedbackToDisk(t *testing.T) {
-	dir := t.TempDir()
-	treeStore, err := evolution.NewTreeStore(dir)
+func TestPersistEvolvedWinnerDoesNotFlushUnqualifiedFeedback(t *testing.T) {
+	treeStore, err := evolution.NewTreeStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
 	kg := knowledge.NewKnowledgeGraph()
+	kg.Register(&knowledge.TreeMeta{ID: "godev", Name: "Go"})
 	feedbackPath := filepath.Join(t.TempDir(), "feedback.json")
 	kg.ConfigureFeedbackPersistence(feedbackPath, 0)
 	deps := &mcpDeps{treeStore: treeStore, kg: kg}
-
-	winner := &evolution.SerializableNode{Type: "Action", Name: "AddCitations"}
-	const wantID = "godev-evolved"
-
+	candidate := evolution.GoDeveloperTree()
+	candidate.Description = "unqualified estimate"
 	result := map[string]any{}
-	persistEvolvedWinner(deps, "godev", winner, 90, result)
-	if persisted, _ := result["persisted"].(bool); !persisted {
-		t.Fatalf("persistEvolvedWinner must persist the winner; result=%v", result)
-	}
-
-	if _, err := os.Stat(feedbackPath); err != nil {
-		t.Fatalf("feedback snapshot missing after persistEvolvedWinner — MarkFeedbackDirty/FlushFeedback not wired: %v", err)
-	}
-
-	verify := knowledge.NewKnowledgeGraph()
-	verify.Register(&knowledge.TreeMeta{ID: wantID, Name: "Verify", Category: "test"})
-	if err := verify.LoadFeedback(feedbackPath); err != nil {
-		t.Fatalf("LoadFeedback(%q): %v", feedbackPath, err)
-	}
-	if got := verify.Trees[wantID].StructuralFitness; got != 90 {
-		t.Errorf("persisted StructuralFitness for %q = %v, want 90 — RegisterEvolved's bookkeeping did not reach disk", wantID, got)
+	persistEvolvedWinner(deps, "godev", candidate, 999, result)
+	assertUnqualifiedProposal(t, treeStore, kg, "godev", result)
+	if _, err := os.Stat(feedbackPath); !os.IsNotExist(err) {
+		t.Fatalf("unqualified feedback reached disk: %v", err)
 	}
 }
 
@@ -3447,14 +3221,8 @@ func TestBTEvolveMemeticRegisteredAndValidatesStrategy(t *testing.T) {
 	}
 }
 
-// TestBTEvolveMemeticPersistsEvolvedWinnerTree pins the same fix as
-// TestBTEvolveGeneticPersistsEvolvedWinnerTree for bt_evolve_memetic: today
-// best := pop.MemeticEvolve(...) is only consulted for CountNodes(best) and
-// pop.BestFitness in the report — the refined winner tree itself is discarded
-// after being bred. The tool must instead persist it through the existing
-// persistEvolvedWinner seam under a derived "<tree>-evolved" id and register
-// it in the knowledge graph, exactly like every other production evolve tool.
-func TestBTEvolveMemeticPersistsEvolvedWinnerTree(t *testing.T) {
+// Search estimates remain proposals until independently qualified.
+func TestBTEvolveMemeticRetainsUnqualifiedProposal(t *testing.T) {
 	dir := t.TempDir()
 	treeStore, err := evolution.NewTreeStore(dir)
 	if err != nil {
@@ -3478,44 +3246,7 @@ func TestBTEvolveMemeticPersistsEvolvedWinnerTree(t *testing.T) {
 		t.Fatalf("bt_evolve_memetic result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
 	}
 
-	const wantID = "godev-evolved"
-	evolvedID, _ := out["evolved_tree_id"].(string)
-	if evolvedID != wantID {
-		t.Fatalf("bt_evolve_memetic must report the persisted evolved winner's id as 'evolved_tree_id' = %q instead of discarding the winner after computing fitness; got %v (keys %v)", wantID, out["evolved_tree_id"], out)
-	}
-	if persisted, _ := out["persisted"].(bool); !persisted {
-		t.Errorf("bt_evolve_memetic must report persisted=true for the evolved winner when it validates and a tree store is configured; got %v", out["persisted"])
-	}
-	if file, _ := out["file"].(string); file == "" {
-		t.Errorf("bt_evolve_memetic must report the on-disk 'file' path the evolved winner was persisted to; got %v", out["file"])
-	}
-
-	loaded, err := treeStore.LoadNamed(wantID)
-	if err != nil {
-		t.Fatalf("LoadNamed(%q): %v", wantID, err)
-	}
-	if loaded == nil {
-		t.Fatalf("bt_evolve_memetic must persist the evolved winner tree under %q so it survives restarts and is resolvable by id; treeStore has nothing there", wantID)
-	}
-
-	meta := kg.Trees[wantID]
-	if meta == nil {
-		t.Fatalf("bt_evolve_memetic must register the evolved winner tree %q in the knowledge graph so discovery can surface it", wantID)
-	}
-	if meta.StructuralFitness <= 0 {
-		t.Errorf("bt_evolve_memetic evolved winner %q must be registered with a positive StructuralFitness; got %v", wantID, meta.StructuralFitness)
-	}
-
-	related := kg.DiscoverRelated("godev")
-	found := false
-	for _, id := range related {
-		if id == wantID {
-			found = true
-		}
-	}
-	if !found {
-		t.Errorf("bt_evolve_memetic must connect the evolved winner %q back to its base tree 'godev' via a KG relationship; DiscoverRelated(godev)=%v", wantID, related)
-	}
+	assertUnqualifiedProposal(t, treeStore, kg, "godev", out)
 }
 
 // TestEvolveToolsRejectDegeneratePopulationAtMCPBoundary pins the MCP-boundary
@@ -3615,7 +3346,7 @@ func TestEvolveToolsRejectDegeneratePopulationAtMCPBoundary(t *testing.T) {
 // actions alongside the evolved winner. epsilon=0 makes the run deterministic
 // once a state has Q-values (pure greedy selection, no exploration), so the
 // learned_actions map must be non-empty and every learned action must be one of
-// the five known mutation categories. An unknown tree id must yield the shared
+// the supported mutation categories. An unknown tree id must yield the shared
 // {"error":"unknown tree"} shape.
 func TestBTEvolveQLearningRegisteredAndLearnsGreedily(t *testing.T) {
 	server := engine.NewServer("test")
@@ -3665,9 +3396,9 @@ func TestBTEvolveQLearningRegisteredAndLearnsGreedily(t *testing.T) {
 	if len(learned) == 0 {
 		t.Fatal("bt_evolve_qlearning 'learned_actions' must be non-empty after learning generations (QTable.Update was never applied)")
 	}
-	validActions := map[string]bool{
-		"add_before": true, "add_after": true, "add_fallback": true,
-		"replace_node": true, "remove_node": true,
+	validActions := map[string]bool{"remove_node": true} // retained archive alias
+	for _, op := range evolution.AllMutationOps {
+		validActions[op] = true
 	}
 	for state, action := range learned {
 		// QTable.GetState encodes states as "<category>:<size-bucket>:<depth>".
@@ -3676,7 +3407,7 @@ func TestBTEvolveQLearningRegisteredAndLearnsGreedily(t *testing.T) {
 		}
 		actionStr, isStr := action.(string)
 		if !isStr || !validActions[actionStr] {
-			t.Errorf("bt_evolve_qlearning learned action for state %q must be one of the five mutation categories; got %v", state, action)
+			t.Errorf("bt_evolve_qlearning learned action for state %q must be one of the supported mutation categories; got %v", state, action)
 		}
 	}
 
@@ -4529,17 +4260,7 @@ func TestBTEvolveSelectorsHonorsEnvOrderingStrategy(t *testing.T) {
 	if err := json.Unmarshal([]byte(res.Content[0].Text), &out); err != nil {
 		t.Fatalf("bt_evolve_selectors result is not valid JSON: %v (text=%q)", err, res.Content[0].Text)
 	}
-	if persisted, _ := out["persisted"].(bool); !persisted {
-		t.Fatalf("bt_evolve_selectors must persist the reordered tree when a tree store is configured; got %v", out)
-	}
-
-	loaded, err := treeStore.LoadNamed("domain:selector_probe")
-	if err != nil {
-		t.Fatalf("LoadNamed(domain:selector_probe): %v", err)
-	}
-	if loaded == nil {
-		t.Fatal("bt_evolve_selectors reported persisted=true but the tree store has nothing under domain:selector_probe")
-	}
+	loaded := assertUnqualifiedProposal(t, treeStore, nil, "domain:selector_probe", out)
 
 	var router *evolution.SerializableNode
 	var walk func(n *evolution.SerializableNode)

@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -61,10 +62,24 @@ func seedRecurringTask(t *testing.T, deps *mcpDeps, user, task string) {
 	if err != nil {
 		t.Fatalf("interaction log: %v", err)
 	}
+	// Compile an explicit owned contract as the prior task template. These
+	// lifecycle fixtures seed interactions; they are not model benchmarks.
+	tree, id, err := newTreeFactory(deps).BuildTask(knowledge.TaskRequest{Task: task, User: user, ResultContract: json.RawMessage(`{"required_keys":["summary"]}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := evolution.SaveNamedTree(deps.personaStore.Workspace(user).TreesDir(), id, tree); err != nil {
+		t.Fatal(err)
+	}
+	version, err := evolution.TreeVersion(tree)
+	if err != nil {
+		t.Fatal(err)
+	}
 	now := time.Now().Unix()
 	for i := range 3 {
 		if err := log.Append(persona.Interaction{
-			Task:      task,
+			Task:   task,
+			TreeID: id, TreeVersion: version,
 			Outcome:   "success",
 			Timestamp: now - int64(3-i)*3600,
 		}); err != nil {
@@ -75,7 +90,7 @@ func seedRecurringTask(t *testing.T, deps *mcpDeps, user, task string) {
 
 // TestConsiderAutomation_ProposesViaHITLOnce pins the observe→propose loop
 // (ADR-133 Phase 4): a task repeated 3× yields exactly one HITL automation
-// proposal backed by a compiled, persisted, KG-registered tree — and the
+// proposal backed by a compiled, persisted personal tree — and the
 // dedup ledger prevents the same habit from being proposed twice.
 func TestConsiderAutomation_ProposesViaHITLOnce(t *testing.T) {
 	deps := newAutopilotDeps(t)
@@ -103,8 +118,8 @@ func TestConsiderAutomation_ProposesViaHITLOnce(t *testing.T) {
 	} else if _, err := os.Stat(file); err != nil {
 		t.Errorf("persisted tree file missing: %v", err)
 	}
-	if _, registered := deps.kg.Trees[treeID]; !registered {
-		t.Errorf("compiled tree %q must be KG-registered", treeID)
+	if _, registered := deps.kg.Trees[treeID]; registered {
+		t.Errorf("personal tree %q must not expose the task in the shared KG", treeID)
 	}
 
 	// The HITL request carries the activation context for the approve hook.
@@ -273,5 +288,45 @@ func TestBTAutomationProposeRegistered(t *testing.T) {
 	}
 	if _, hasLedger := out["automations"]; !hasLedger {
 		t.Errorf("result must include the automation ledger, got keys %v", out)
+	}
+}
+
+func TestAutopilotRequiresActualTaskTemplateAndVersionConsent(t *testing.T) {
+	deps := newAutopilotDeps(t)
+	log, err := persona.NewLog(deps.personaStore.Workspace("alice"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 3 {
+		if err := log.Append(persona.Interaction{Task: "summarize the weekly sales report", Outcome: "success", Timestamp: time.Now().Unix()}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if out := considerAutomation(deps, "alice"); out["proposed"] != false || out["requires_task_contract"] != true {
+		t.Fatalf("invented an executable administrative plan: %v", out)
+	}
+	seedRecurringTask(t, deps, "alice", "summarize the weekly sales report")
+	out := considerAutomation(deps, "alice")
+	if out["proposed"] != true {
+		t.Fatal(out)
+	}
+	tree, err := evolution.LoadNamedTree(deps.personaStore.Workspace("alice").TreesDir(), out["tree_id"].(string))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, _ := json.Marshal(tree)
+	if strings.Contains(string(data), "ApplyGoapEffects:") || !strings.Contains(string(data), "summarize the weekly sales report") {
+		t.Fatal("automation does not preserve the actual task")
+	}
+	tree.Description += " changed"
+	if _, err := evolution.SaveNamedTree(deps.personaStore.Workspace("alice").TreesDir(), tree.Name, tree); err != nil {
+		t.Fatal(err)
+	}
+	req, err := hitl.DefaultStore.Approve(out["hitl_id"].(string), "tester", "approve")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res := finalizeAutomationApproval(deps, req, true); res["activated"] != false || res["activation_error"] == nil {
+		t.Fatalf("changed proposal activated: %v", res)
 	}
 }

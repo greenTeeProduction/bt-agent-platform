@@ -13,21 +13,23 @@ import (
 
 	"github.com/nico/go-bt-evolve/internal/benchmark"
 	"github.com/nico/go-bt-evolve/internal/gardener"
-	"github.com/nico/go-bt-evolve/internal/llm"
 )
 
 const defaultMinSuccessRate = 0.80
 
 type treeResult struct {
-	Name        string             `json:"name"`
-	Suite       string             `json:"suite"`
-	Tasks       int                `json:"tasks"`
-	SuccessRate float64            `json:"success_rate"`
-	Successes   int                `json:"successes"`
-	Failures    int                `json:"failures"`
-	DurationMs  int64              `json:"duration_ms"`
-	Passed      bool               `json:"passed"`
-	Results     []benchmark.Result `json:"results,omitempty"`
+	Warning          string                  `json:"warning,omitempty"`
+	ModelEvidence    benchmark.ModelEvidence `json:"model_evidence"`
+	ContractPassRate float64                 `json:"contract_pass_rate"`
+	Name             string                  `json:"name"`
+	Suite            string                  `json:"suite"`
+	Tasks            int                     `json:"tasks"`
+	SuccessRate      float64                 `json:"success_rate"`
+	Successes        int                     `json:"successes"`
+	Failures         int                     `json:"failures"`
+	DurationMs       int64                   `json:"duration_ms"`
+	Passed           bool                    `json:"passed"`
+	Results          []benchmark.Result      `json:"results,omitempty"`
 }
 
 type validationReport struct {
@@ -141,9 +143,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 
-	llmClient, err := llm.NewClient(llm.DefaultConfig())
+	llmClient, err := benchmark.DefaultLLM()
 	if err != nil {
-		fmt.Fprintf(stderr, "real Ollama LLM unavailable: %v\n", err)
+		fmt.Fprintf(stderr, "benchmark LLM unavailable: %v\n", err)
 		return 1
 	}
 
@@ -153,7 +155,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		StorageDir:     *storageDir,
 		TotalTrees:     len(entries),
 		MinSuccessRate: *minSuccess,
-		LLMProvider:    "ollama",
+		LLMProvider:    "benchmark:live",
 		Passed:         true,
 	}
 
@@ -169,14 +171,17 @@ func run(args []string, stdout, stderr io.Writer) int {
 		start := time.Now()
 		metrics := benchmark.RunSuite(entry.Tree, suite, llmClient)
 		tr := treeResult{
-			Name:        entry.Name,
-			Suite:       suite.Name,
-			Tasks:       metrics.TotalTasks,
-			SuccessRate: metrics.SuccessRate,
-			Successes:   metrics.Successes,
-			Failures:    metrics.Failures,
-			DurationMs:  time.Since(start).Milliseconds(),
-			Passed:      metrics.SuccessRate >= *minSuccess,
+			Warning:          metrics.Warning,
+			ModelEvidence:    metrics.ModelEvidence,
+			ContractPassRate: metrics.ContractPassRate,
+			Name:             entry.Name,
+			Suite:            suite.Name,
+			Tasks:            metrics.TotalTasks,
+			SuccessRate:      metrics.SuccessRate,
+			Successes:        metrics.Successes,
+			Failures:         metrics.Failures,
+			DurationMs:       time.Since(start).Milliseconds(),
+			Passed:           metrics.TotalTasks > 0 && metrics.Warning == "" && metrics.ModelEvidence.Calls > 0 && metrics.ModelEvidence.Errors == 0 && metrics.SuccessRate >= *minSuccess && metrics.ContractPassRate >= *minSuccess,
 		}
 		if *includeResults {
 			tr.Results = metrics.Results
@@ -197,6 +202,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stdout, "%s %s suite=%s success=%.1f%% tasks=%d duration=%s\n", status, tr.Name, tr.Suite, tr.SuccessRate*100, tr.Tasks, time.Since(start).Round(time.Second))
 		}
 	}
+	if report.ValidatedTrees == 0 {
+		report.Passed = false
+	}
 	report.FinishedAt = time.Now()
 	report.DurationMs = report.FinishedAt.Sub(started).Milliseconds()
 
@@ -211,7 +219,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		if report.Passed {
 			status = "PASS"
 		}
-		fmt.Fprintf(stdout, "BT tree real-Ollama integration: %s (%d/%d trees passed, min %.0f%%)\n", status, report.PassedTrees, report.ValidatedTrees, *minSuccess*100)
+		fmt.Fprintf(stdout, "BT tree live-model integration: %s (%d/%d trees passed, min %.0f%%)\n", status, report.PassedTrees, report.ValidatedTrees, *minSuccess*100)
 	}
 	if code := encodeJSON(stdout, stderr, report); code != 0 {
 		return code
@@ -273,7 +281,7 @@ func verifyEvidenceReport(path string, expectedTrees int, maxAge time.Duration, 
 		verification.ExpectedTrees = expectedTrees
 	}
 	check(report.Passed, "report did not pass")
-	check(report.LLMProvider == "ollama", "report was not produced by real Ollama")
+	check(report.LLMProvider == "benchmark:live", "report lacks live benchmark provenance")
 	check(report.TotalTrees > 0, "report has no registered trees")
 	check(report.ValidatedTrees >= expectedTrees, fmt.Sprintf("validated %d trees, expected at least %d", report.ValidatedTrees, expectedTrees))
 	check(report.PassedTrees == report.ValidatedTrees, fmt.Sprintf("passed %d of %d validated trees", report.PassedTrees, report.ValidatedTrees))
@@ -287,6 +295,11 @@ func verifyEvidenceReport(path string, expectedTrees int, maxAge time.Duration, 
 		check(result.Passed, fmt.Sprintf("tree %s failed evidence gate", result.Name))
 		check(result.SuccessRate >= report.MinSuccessRate, fmt.Sprintf("tree %s success %.2f below min %.2f", result.Name, result.SuccessRate, report.MinSuccessRate))
 		check(result.Tasks > 0, fmt.Sprintf("tree %s has no benchmark tasks", result.Name))
+		check(result.Warning == "", fmt.Sprintf("tree %s is unqualified: %s", result.Name, result.Warning))
+		evidence := result.ModelEvidence
+		check(evidence.Calls > 0 && evidence.Errors == 0 && evidence.LastError == "", fmt.Sprintf("tree %s lacks successful inference evidence", result.Name))
+		check((evidence.Backend == "ollama" && evidence.Model != "") || (evidence.Backend == "sol" && evidence.Model == "gpt-6.1-sol"), fmt.Sprintf("tree %s has an unsupported benchmark provider", result.Name))
+		check(result.ContractPassRate >= report.MinSuccessRate, fmt.Sprintf("tree %s task contracts below threshold", result.Name))
 	}
 	return verification, nil
 }

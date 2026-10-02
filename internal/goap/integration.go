@@ -124,10 +124,14 @@ const (
 
 // SerializableNode mirrors engine.SerializableNode to avoid import cycles.
 type SerializableNode struct {
-	Type     BTNodeType         `json:"type"`
-	Name     string             `json:"name"`
-	Children []SerializableNode `json:"children,omitempty"`
-	Metadata map[string]any     `json:"metadata,omitempty"`
+	Description string             `json:"description,omitempty"`
+	MaxRetries  int                `json:"max_retries,omitzero"`
+	TimeoutMs   int64              `json:"timeout_ms,omitzero"`
+	Edges       []json.RawMessage  `json:"edges,omitempty"`
+	Type        BTNodeType         `json:"type"`
+	Name        string             `json:"name"`
+	Children    []SerializableNode `json:"children,omitempty"`
+	Metadata    map[string]any     `json:"metadata,omitempty"`
 }
 
 // GOAPTreeDefinition is a complete behavior tree that integrates GOAP planning.
@@ -158,74 +162,17 @@ func DefaultGOAPConfig() GOAPTreeConfig {
 	}
 }
 
-// BuildSerializableTree creates a BT structure that wraps GOAP planning.
-// The tree structure:
-//
-//	Sequence: GOAP_Root
-//	  Condition: HasGoapGoal           ← triggers only if goals are set
-//	  Action:    PlanGoapActions       ← runs the planner
-//	  Selector:  GoapStrategyRouter
-//	    Sequence: GoapExecutePath      ← executes the plan step by step
-//	      Action: ExecuteNextGoapStep
-//	      Condition: HasMoreGoapSteps
-//	    Action: GoapFallback           ← fallback if execution fails
-//	  Action:    ReflectGoapOutcome    ← post-execution reflection
+// BuildSerializableTree creates a memory sequence that installs the declared
+// capabilities and goal, plans once, executes observed steps across ticks, and
+// finalizes only when the complete goal holds. Failure remains a failure.
 func BuildSerializableTree(def GOAPTreeDefinition) SerializableNode {
-	return SerializableNode{
-		Type: "Sequence",
-		Name: "GOAP_Root",
-		Children: []SerializableNode{
-			{
-				Type: "Condition",
-				Name: "HasGoapGoal",
-				Metadata: map[string]any{
-					"goap_goals":       def.Goals,
-					"goap_actions":     def.Actions,
-					"goap_config":      def.Config,
-					"goap_llm_prompts": def.LLMPrompts,
-				},
-			},
-			{
-				Type: "Action",
-				Name: "PlanGoapActions",
-				Metadata: map[string]any{
-					"goap_actions": def.Actions,
-					"goap_config":  def.Config,
-				},
-			},
-			{
-				Type: "Selector",
-				Name: "GoapStrategyRouter",
-				Children: []SerializableNode{
-					{
-						Type: "Sequence",
-						Name: "GoapExecutePath",
-						Children: []SerializableNode{
-							{
-								Type: "Action",
-								Name: "ExecuteGoapStep",
-								Metadata: map[string]any{
-									"goap_llm_prompts": def.LLMPrompts,
-								},
-							},
-							{
-								Type: "Condition",
-								Name: "HasMoreGoapSteps",
-							},
-						},
-					},
-					{
-						Type: "Action",
-						Name: "GoapFallback",
-					},
-				},
-			},
-			{
-				Type: "Action",
-				Name: "ReflectGoapOutcome",
-			},
-		},
-	}
+	return SerializableNode{Type: "MemSequence", Name: "GOAP_Root", Children: []SerializableNode{
+		{Type: "Action", Name: "SetupGoapTools", Metadata: map[string]any{"goap_goals": def.Goals, "goap_actions": def.Actions, "goap_config": def.Config, "goap_llm_prompts": def.LLMPrompts}},
+		{Type: "Condition", Name: "HasGoapGoal"},
+		{Type: "Action", Name: "PlanGoapActions"},
+		{Type: "Action", Name: "ExecuteGoapStep"},
+		{Type: "Action", Name: "ReflectGoapOutcome"},
+	}}
 }
 
 // --- JSON Conversion Helpers ---
@@ -237,8 +184,13 @@ func (def GOAPTreeDefinition) ToJSON() ([]byte, error) {
 
 // FromJSON deserializes a tree definition from JSON.
 func FromJSON(data []byte) (*GOAPTreeDefinition, error) {
+	if !json.Valid(data) {
+		return nil, fmt.Errorf("invalid GOAP definition JSON")
+	}
 	var def GOAPTreeDefinition
-	if err := json.Unmarshal(data, &def); err != nil {
+	decoder := json.NewDecoder(strings.NewReader(string(data)))
+	decoder.UseNumber()
+	if err := decoder.Decode(&def); err != nil {
 		return nil, err
 	}
 	if def.Config.MaxPlannerDepth == 0 {

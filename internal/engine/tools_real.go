@@ -429,30 +429,30 @@ const defaultNotebook = "463ca402-e972-470b-889c-b735e37c6746"
 var nlmRun = func(timeout time.Duration, args ...string) string {
 	return nlmRunContext(context.Background(), timeout, args...)
 }
+var nlmCommand = notebooklmauth.Command
+
 var nlmRunContext = func(parent context.Context, timeout time.Duration, args ...string) string {
-	const maxRetries = 3
+	parent, stop := context.WithTimeout(parent, timeout)
+	defer stop()
+	if err := parent.Err(); err != nil {
+		return "Error: nlm canceled: " + err.Error()
+	}
+	maxRetries := 1
+	if nlmRetrySafe(args) {
+		maxRetries = 3
+	}
 	const baseDelay = 2 * time.Second
 	const maxDelay = 30 * time.Second
 
-	// Circuit breaker check — wait through cooldown instead of failing immediately.
-	// This prevents cascading failures in scheduled pipelines: if one agent
-	// trips the breaker, the next scheduled agent (e.g., goap-fusion-runner
-	// right after goap-fusion-loop-runner) would fail immediately without
-	// waiting for the cooldown to expire.
+	// An open breaker must not sleep through the caller's deadline.
 	nlmCircuitMu.Lock()
 	if nlmCircuitOpen {
-		if elapsed := time.Since(nlmOpenedAt); elapsed < nlmCooldown {
-			remaining := nlmCooldown - elapsed
+		remaining := nlmCooldown - time.Since(nlmOpenedAt)
+		if remaining > 0 {
 			nlmCircuitMu.Unlock()
-			time.Sleep(remaining + 1*time.Second) // wait past cooldown + buffer
-			// After waiting, reset the circuit and proceed
-			nlmCircuitMu.Lock()
-			nlmCircuitOpen = false
-			nlmFailCount = 0
-		} else {
-			nlmCircuitOpen = false
-			nlmFailCount = 0
+			return fmt.Sprintf("Error: NotebookLM circuit open; retry after %s", remaining.Round(time.Second))
 		}
+		nlmCircuitOpen, nlmFailCount = false, 0
 	}
 	nlmCircuitMu.Unlock()
 
@@ -491,13 +491,13 @@ var nlmRunContext = func(parent context.Context, timeout time.Duration, args ...
 			delay := min(baseDelay*time.Duration(1<<(attempt-1)), maxDelay)
 			select {
 			case <-parent.Done():
-				return fmt.Sprintf("nlm cancelled: %v", parent.Err())
+				return fmt.Sprintf("Error: nlm cancelled: %v", parent.Err())
 			case <-time.After(delay):
 			}
 		}
 
 		ctx, cancel := context.WithTimeout(parent, timeout)
-		cmd := notebooklmauth.Command(ctx, args...)
+		cmd := nlmCommand(ctx, args...)
 		cmd.Env = append(os.Environ(), "PATH="+os.Getenv("PATH")+":/home/nico/.local/bin")
 		bindToolCommandCancellation(cmd)
 		var stdout, stderr bytes.Buffer
@@ -505,8 +505,13 @@ var nlmRunContext = func(parent context.Context, timeout time.Duration, args ...
 		cmd.Stderr = &stderr
 		err := cmd.Run()
 		cancel()
-
+		if parent.Err() != nil {
+			return "Error: nlm request interrupted; check operation status before resubmitting: " + parent.Err().Error()
+		}
 		out := strings.TrimSpace(stdout.String())
+		if err == nil && nlmResponseFailed(out) {
+			err = fmt.Errorf("notebooklm returned an error response")
+		}
 		if err != nil {
 			errOut := strings.TrimSpace(stderr.String())
 			if errOut != "" {
@@ -519,9 +524,9 @@ var nlmRunContext = func(parent context.Context, timeout time.Duration, args ...
 				out = fmt.Sprintf("nlm error: %v", err)
 			}
 
-			if strings.Contains(errOut, "Authentication failed") ||
-				strings.Contains(errOut, "Usage:") ||
-				strings.Contains(errOut, "Error:") {
+			if strings.Contains(out, "Authentication failed") ||
+				strings.Contains(out, "Usage:") ||
+				strings.Contains(out, "Error:") {
 				nlmCircuitMu.Lock()
 				nlmFailCount++
 				if nlmFailCount >= nlmCircuitThresh {
@@ -535,10 +540,10 @@ var nlmRunContext = func(parent context.Context, timeout time.Duration, args ...
 				if len(out) > 8192 {
 					out = out[:8192] + "\n... [truncated]"
 				}
-				return out
+				return "Error: NotebookLM command failed: " + out
 			}
 
-			lastOut = out
+			lastOut = "Error: NotebookLM command failed (check status before resubmitting): " + out
 			continue
 		}
 
@@ -551,9 +556,7 @@ var nlmRunContext = func(parent context.Context, timeout time.Duration, args ...
 		nlmCircuitMu.Unlock()
 
 		nlmMetrics.RecordLatency(op, time.Since(start))
-		if len(out) > 8192 {
-			out = out[:8192] + "\n... [truncated]"
-		}
+		// Preserve complete JSON/citations; truncation here corrupts successful responses.
 		nlmPostflight(args, out)
 		return out
 	}

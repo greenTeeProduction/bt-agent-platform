@@ -1,0 +1,89 @@
+{
+  "independent_contract_passed": true,
+  "model": {
+    "backend": "ollama",
+    "model": "qwen2.5:1.5b",
+    "calls": 1,
+    "fallbacks": 0,
+    "errors": 0
+  },
+  "record": {
+    "build": {
+      "module": "github.com/nico/go-bt-evolve",
+      "dirty": true,
+      "known": false
+    },
+    "started_at": "2026-10-02T00:30:44.943726972+02:00",
+    "result_checks": [
+      {
+        "gate": "VerifyResult",
+        "passed": true,
+        "output_digest": "sha256:a364054c9f780fd3c72b723bde8bef8329ca983a9505e61d4d5725be5099f694",
+        "contract": {
+          "json_fields": {
+            "total": 42,
+            "verified": true
+          }
+        }
+      }
+    ],
+    "run_id": "run-d7feee06be72a8d0f583320511ad0ce0",
+    "tree_version": "sha256:e6572c7a3c0dc74d4f42055f9935e4b639ec373ed7e8c5a9afccbe7801e4cc36",
+    "execution_versions": [
+      "sha256:e6572c7a3c0dc74d4f42055f9935e4b639ec373ed7e8c5a9afccbe7801e4cc36"
+    ],
+    "evidence_kind": "execution",
+    "result": "```json\n{\n  \"total\": 42,\n  \"verified\": true\n}\n```",
+    "quality_score": 0.6,
+    "task_id": "run-d7feee06be72a8d0f583320511ad0ce0",
+    "timestamp": 1790893846588,
+    "task": "Compute 17 + 25. Return JSON with total equal to the result and verified true only if total is 42.",
+    "plan": "",
+    "tree_name": "factory:sum",
+    "what_went_well": null,
+    "what_to_improve": null,
+    "adjusted_behavior": "",
+    "outcome": "success",
+    "duration_ms": 1644,
+    "user": "benchmark-owner"
+  },
+  "tree": {
+    "type": "Sequence",
+    "name": "verified_sum",
+    "children": [
+      {
+        "type": "Condition",
+        "name": "ValidateInput"
+      },
+      {
+        "type": "QualityGate",
+        "name": "VerifyResult",
+        "children": [
+          {
+            "type": "ChainAction",
+            "name": "llm_call:{{.Task}}",
+            "metadata": {
+              "max_tokens": 96,
+              "system_msg": "Return compact JSON only."
+            }
+          },
+          {
+            "type": "ChainAction",
+            "name": "llm_call:Return exactly a JSON object with the field total containing the sum of 17 and 25, and the field verified containing boolean true. Use these exact field names.",
+            "metadata": {
+              "max_tokens": 96
+            }
+          }
+        ],
+        "metadata": {
+          "result_contract": {
+            "json_fields": {
+              "total": 42,
+              "verified": true
+            }
+          }
+        }
+      }
+    ]
+  }
+}

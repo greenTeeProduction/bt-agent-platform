@@ -1,5 +1,7 @@
 # 5. Building Block View
 
+`internal/llm/CodexClient` supplies ordinary inference; `LangChainModel` adapts it to textual ReAct. The coding runner owns coding permissions. `internal/notebooklmauth` owns validated session renewal and the pinned MCP bridge; external embeddings and legacy scripts retain their provider configuration. See [model policy](../sol-model-policy.md).
+
 This view describes current responsibilities and interfaces. Source links
 identify the owner of a concept; the [ADR log](09-decisions.md) preserves its
 history. Package counts and registry sizes are deliberately not copied here.
@@ -43,7 +45,7 @@ obligation.
 | Package | Responsibility | Principal interface / consumers |
 |---|---|---|
 | `internal/a2a` | Peer discovery, task transport, bidding/award and card trust | `Server`, `BTAgentClient.SendTask`, `AuctionDelegateWithContext`; agent/dashboard wiring |
-| `internal/agent` | Agent registry, scheduler, history, memory, events, breaker persistence and deploy drift | `RunDeps.RunOnce`, `Scheduler` (durable admission/recovery holds), `AgentCircuitBreakerStore`; entrypoints |
+| `internal/agent` | Agent registry, scheduler, history, memory, events, breaker persistence and deploy drift | `RunDeps.RunOnce`, `Registry.EnsureDefinition` (exact creation retry), `Scheduler` (durable admission/recovery holds), `AgentCircuitBreakerStore`; entrypoints |
 | `internal/agentexec` | Assemble run dependencies and scoped generated-tree resolution | `NewRunDeps`, `ResolveGeneratedTreeForUser`, `AutomationBlocked` |
 | `internal/api` | Dashboard route/schema descriptions and validation support | `DashboardRoutes`; OpenAPI and HTTP middleware |
 | `internal/audit` | Append-only task audit records | JSONL audit writer; agent execution |
@@ -66,7 +68,7 @@ obligation.
 | `internal/knowledge` | Tree capabilities, discovery, feedback, breeding and impact graph | `KnowledgeGraph`, `Factory`; runners and gardener |
 | `internal/llm` | Configurable model adapters, fallback and health | LLM interface; chains, fusion and evaluation |
 | `internal/notebooklmauth` | NotebookLM authentication diagnosis/recovery and browser integration | Auth helper used by `bt-notebooklm-auth` and research actions |
-| `internal/persona` | User profiles, interactions, habits and tracked automations | `Store`, automation finalization, feedback escalation |
+| `internal/persona` | User profiles, interactions, habits and tracked automations | `Store`, transactional `AutomationStore.Reserve`, exact approval finalization, feedback escalation (ADR-284) |
 | `internal/reliability` | Panic/retry primitives, locks, DLQ, queues, routing and shared execution dispositions | Shared reliability APIs; optional adapters are not necessarily deployed |
 | `internal/research` | Deduplicated knowledge, goals/programs and quota-related state | `KnowledgeStore`, `ProgramStore`, `UpdatePrograms` |
 | `internal/security` | HTTP/session/auth primitives, rate limits, CSRF, input/path checks and probes | Shared middleware and `SessionStore`; entrypoints choose wiring |
@@ -154,6 +156,16 @@ flowchart LR
 The familiar PreGate → StrategyRouter → OutcomeSelector scaffold is a common
 tree pattern, not a mandatory shape of every valid tree.
 
+`evolution.CheckpointContract` defines the typed state contract used by the engine
+checkpoint decorator. The GOAP wrapper explicitly selects `goap_world_state`;
+legacy boolean callers select `world_state`. The standalone `goap.Agent` exposes
+observed executor state and rejects unobserved effects before success callbacks.
+Compiled and dynamic plans now share `evolution.GoapStepSpec` and the engine's
+[observation gate](../../internal/engine/goap_step.go). The gate accepts a fresh
+value-checked model result in the `result.*` namespace, a scoped verified FileTask
+receipt, or a trusted capability adapter's actual observation. Predicted effects
+are expectations. They cannot directly update runtime state (ADR-289).
+
 ## 5.3 Evolution Engine
 
 The gardener orchestrates evidence collection and adoption; `evaluator`
@@ -179,7 +191,15 @@ in [`cmd/bt-gardener/config.go`](../../cmd/bt-gardener/config.go) and
 [`evolve_v2.go`](../../internal/gardener/evolve_v2.go) determines live use.
 
 Per-tree evidence and archive state must not be conflated with global
-runtime success. The ordinary mutation competition, deep search, local
+runtime success. Gardener reflection selection requires the tree and owner
+to match; missing evidence never borrows the global record pool. Shared
+catalog names recognize their historical underscore/runtime colon aliases.
+The engine owns terminal run evidence; the agent runner supplies canonical tree
+identity/owner and defers publication until outer quality gates finish. Source
+and executed definition versions are retained. Compilation and feedback are
+separate evidence kinds, and personal experience-store errors never select the
+shared bank. Exact-version promotion is still incomplete (see §8).
+The ordinary mutation competition, deep search, local
 refinement and island adoption retain path-specific evidence. Island adoption
 now includes quick benchmark/meta-validation and a configured predecessor
 snapshot, persisting before updating live state.
@@ -259,6 +279,7 @@ flowchart LR
 | [`goap/goalfactory.go`](../../internal/goap/goalfactory.go), [`compile.go`](../../internal/goap/compile.go) | Intent/pattern → goal; plan → serializable tree |
 | [`agentexec/wiring.go`](../../internal/agentexec/wiring.go) | Resolve user-scoped generated trees and refuse blocked tracked automations |
 | [`knowledge/factory.go`](../../internal/knowledge/factory.go) | Breed from real parent structures when available; distinct from skill compilation |
+| [`knowledge/task_factory.go`](../../internal/knowledge/task_factory.go) | Build task-specific response workflows with enforced intermediate/final result contracts; MCP publication validates and persists before shared indexing |
 | [`gardener/user_trees.go`](../../internal/gardener/user_trees.go) | Discover personal trees and associate user-specific evidence/experience |
 | [`cmd/bt-agent/feedback_tools.go`](../../cmd/bt-agent/feedback_tools.go) | Explicit feedback, satisfaction evidence and flagged-automation escalation |
 
@@ -332,6 +353,57 @@ publication and durable replay claims (ADR-280). Scheduler, MCP, dashboard and
 engine escalation use error-returning acknowledgement APIs. The trusted Go
 reconciliation seam needs an exact claim plus independently established owner
 quiescence; there is no authenticated operator recovery endpoint.
+
+### Shared measured-publication boundary
+
+[`benchmark.PublishRuntimeCandidate`](../../internal/benchmark/runtime_publication.go)
+owns real-provider comparison, rejection retention and immutable publication for
+both the gardener and MCP tools. [`runtime_publication.go`](../../cmd/bt-agent/runtime_publication.go)
+resolves exact owner authority, retains search proposals outside discovery and
+returns qualified status separately from proposal persistence. It also serves
+version-specific manual failure evidence and tree/fitness inspection. Structural
+search archives remain distinct from runtime publication (ADR-282).
+
+---
+
+### Offline persisted-tree recovery
+
+[`gardener/recovery.go`](../../internal/gardener/recovery.go) reuses the registry's
+fresh authored catalog to match exact legacy filenames. It recognizes the
+observed recovery-only skeleton, validates authored replacements, retains exact
+original bytes and records restoration or retirement separately. The CLI lives
+in [`cmd/bt-gardener/recovery.go`](../../cmd/bt-gardener/recovery.go). Registry
+loading marks these collapsed builtin overrides inactive and recovery-required;
+a valid managed release remains authoritative. `TreeVersion` normalizes typed
+metadata through JSON with exact numbers so GOAP struct/map representations
+retain identity across persistence.
+
+[`evolution/file_task.go`](../../internal/evolution/file_task.go) defines explicit
+file contracts and effect receipts. [`engine/file_task.go`](../../internal/engine/file_task.go)
+executes rooted snapshot/generate/validate/write/readback work. The artifact root
+hook is wired by `agentexec`; engine does not import persona or agent. The task
+factory emits this node for owned file workflows, while `autopilot` clones exact
+factory task definitions and offers explicit `bt_automation_schedule` proposals.
+The scheduler preserves personal feedback isolation and the runner exposes receipts.
+
+### Research delivery evidence
+
+[`research/trace.go`](../../internal/research/trace.go) owns source/delivery/review
+records and bounded owner-scoped transactions. [`engine/research_delivery.go`](../../internal/engine/research_delivery.go)
+inspects actual Git delivery, binds pre-run sources and repairs pending receipts
+without running code again. The MCP `bt_research_status` surface in
+[`impact_tools.go`](../../cmd/bt-agent/impact_tools.go) reports these states separately
+from unlinked adoption and impact. The legacy dedup index is not delivery evidence.
+
+### Program review and delivery
+
+[`program_review.go`](../../internal/research/program_review.go) validates the
+backlog, preserves a content-addressed original backup and retains review history.
+[`program_delivery.go`](../../internal/engine/program_delivery.go) captures exact
+milestone goals before implementation, checks actual Git delivery and reconciles
+program metadata through the existing pending-delivery journal. Program paths
+resolve from configured platform home at use time, after startup configuration.
+MCP review/reconciliation handlers share this boundary (ADR-290).
 
 ---
 

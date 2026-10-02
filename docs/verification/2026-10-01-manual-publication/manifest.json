@@ -1,0 +1,42 @@
+{
+  "created_utc": "2026-10-01T14:42:19.757653+00:00",
+  "source_parent": "c3220d1ca31b9a61a499aa055c374764b3e6ba09",
+  "status": "implemented; live, race and lint passed; commit hook pending",
+  "scope": "Covered MCP manual and genetic-family publication shares gardener task qualification. These controlled response tasks do not qualify general personal assistance or deployment.",
+  "observations": {
+    "rejected_qwen05": "Manual candidate failed one of three paired candidate trials; no active publication. Genetic case separately passed. Original log retained.",
+    "small_models": "qwen2.5:0.5b 7/18; qwen3:0.6b (think=false) 9/18; qwen2.5:1.5b 18/18 existing result contracts. Bare JSON compliance is separate.",
+    "final_manual_and_genetic": "Both 0/3 baseline to 3/3 candidate passes; independently verified real runtime adoption; exact-version fitness and shared feedback reload verified.",
+    "gardener": "Reverified real promotion, adoption, registry reload and rollback with Qwen 1.5B.",
+    "sol_fallback": "Real unavailable/deadline cases passed with gpt-6.1-sol.",
+    "deployment": "No services restarted or binaries installed by this change."
+  },
+  "verification_commands": [
+    "bash scripts/test-live-benchmarks.sh",
+    "go test ./cmd/bt-agent -count=1 -timeout=180s -v -run ^(TestLiveManualAndGeneticPublication|TestLiveFactoryEvolutionPromotesAndRollsBackMeasuredVersion)$",
+    "go test -race -short -count=1 -timeout=180s ./cmd/bt-agent ./internal/evolution ./internal/gardener ./internal/benchmark",
+    "golangci-lint run ./cmd/bt-agent/... ./internal/evolution/... ./internal/gardener/... ./internal/benchmark/...",
+    "graphify update ."
+  ],
+  "remaining": [
+    "Legacy first-adoption writer races and unqualified resolve-time ordering",
+    "Representative task/capability fixtures and measured search ranking",
+    "Legacy lineage/archive estimates and managed reset semantics",
+    "Collapsed persisted tree recovery",
+    "Effectful personal automation and independent postconditions",
+    "Research-to-commit-to-version-to-outcome ledger",
+    "Fleet rollout and deployed evidence"
+  ],
+  "artifacts": {
+    "final-live.log": "ae73eb0f8f4dc50f399409da8c519a05ecdc034dd6c9c43f051db1bc8df11efb",
+    "gardener.json": "5f2761e34862222c6eed349bedf512af98e80e639e807d085291bb58aa8c695f",
+    "genetic.json": "02ed53a543e454cb434d2c5133304b8502c95d35e2fc165666848788855ddd75",
+    "graph-update.log": "843393cfd0fd46350446dc12761cb1b54fc7ddc856f7d94731e5db5383f9d1d7",
+    "lint.log": "e92606b0bf483111dff0a120c315ea165821348f31365020e2468a0059095c47",
+    "live-suite.log": "c9426f00d4a4732179ccc59db053ebca7000cdf3d93f8a665d3c16d94a2af674",
+    "manual.json": "c355f5615a56e54b4ef7d654c2483279e8fc51e8fc4e9bf1fc1480385fc01373",
+    "race.log": "f6457fc90e7d1a613d78356b4612c13545540f04e0ae12aa68bc14b395353fc7",
+    "rejected-qwen05.log": "32b6f67265f55bfe61314c73a4a80244c77b194ff2907a8a61f85749fbe56315",
+    "small-model-comparison.json": "ad47b462f13191688c0a49cd94e35cb3516ef58467150d8afe4627312257fc59"
+  }
+}

@@ -1,0 +1,12 @@
+=== RUN   TestGardenerRunCycleTool_RejectsUnqualifiedSelectorOrdering
+2026/10/01 15:26:13 WARN validation-gate: no usable file evidence agent=selector_tree tree=selector_tree error="read SLO evidence: open /tmp/slo-evidence.json: no such file or directory"
+2026/10/01 15:26:13 INFO validation-gate: no SLO evidence, passing unverified (AllowUnverified) agent=selector_tree tree=selector_tree
+2026/10/01 15:26:19 ERROR gardener/v2: saving evolved tree failed, evolution result is not durably persisted tree=selector_tree error="candidate has not demonstrated task improvement: task 1 needs an independent result-value contract and isolated task fixture"
+--- PASS: TestGardenerRunCycleTool_RejectsUnqualifiedSelectorOrdering (5.82s)
+=== RUN   TestGardenerRunCycleTool_RejectsUnqualifiedSelectorOrdering_PerTreeTelemetryFile
+2026/10/01 15:26:19 WARN validation-gate: no usable file evidence agent=selector_tree tree=selector_tree error="read SLO evidence: open /tmp/slo-evidence.json: no such file or directory"
+2026/10/01 15:26:19 INFO validation-gate: no SLO evidence, passing unverified (AllowUnverified) agent=selector_tree tree=selector_tree
+2026/10/01 15:26:24 ERROR gardener/v2: saving evolved tree failed, evolution result is not durably persisted tree=selector_tree error="candidate has not demonstrated task improvement: task 1 needs an independent result-value contract and isolated task fixture"
+--- PASS: TestGardenerRunCycleTool_RejectsUnqualifiedSelectorOrdering_PerTreeTelemetryFile (5.51s)
+PASS
+ok  	github.com/nico/go-bt-evolve/cmd/bt-gardener	11.414s

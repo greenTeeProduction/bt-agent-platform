@@ -1,5 +1,10 @@
 # BT Agent Platform
 
+All built-in LLM roles use **Sol 6.1 through Codex login** under the
+[model policy](docs/sol-model-policy.md). Alternate-model fallback is disabled;
+NotebookLM generation/research, external embeddings and legacy memory extraction
+retain their configured providers as owner-approved exceptions.
+
 **Behavior-tree-driven AI agent framework** with scheduled agents, MCP and
 HTTP interfaces, generated personal workflows, and evidence-gated evolution.
 

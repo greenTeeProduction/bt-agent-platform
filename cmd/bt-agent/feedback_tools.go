@@ -51,6 +51,7 @@ func recordUserFeedback(deps *mcpDeps, user, treeID, signal, comment string) map
 	// Unique TaskID: the store's default (millisecond timestamp) can collide
 	// when feedback arrives in quick succession, silently overwriting records.
 	rec := &evolution.Record{
+		EvidenceKind: evolution.EvidenceFeedback,
 		TaskID:       fmt.Sprintf("feedback-%s-%d", goalTreeSlug(treeID), time.Now().UnixNano()),
 		Task:         "User feedback on tree " + treeID,
 		TreeName:     treeID,
@@ -77,7 +78,7 @@ func recordUserFeedback(deps *mcpDeps, user, treeID, signal, comment string) map
 	// Report the tree's cumulative feedback standing.
 	positives, negatives := 0, 0
 	if all, err := deps.refStore.LoadAll(); err == nil {
-		for _, r := range evolution.FilterByTreeNameStrict(all, treeID) {
+		for _, r := range evolution.FilterByTreeOwner(all, treeID, user) {
 			switch r.UserFeedback {
 			case evolution.FeedbackPositive:
 				positives++

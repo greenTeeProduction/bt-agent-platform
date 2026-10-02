@@ -1,0 +1,265 @@
+{
+  "adoption": [
+    {
+      "result_checks": [
+        {
+          "gate": "VerifyTaskStep1",
+          "passed": false,
+          "output_digest": "sha256:b79580e6005bbb0c38e9308c1bb5ad3836c3ef9737129f05468e90eda20d22c0",
+          "reason": "missing required JSON field \"total\""
+        },
+        {
+          "gate": "VerifyTaskStep1",
+          "passed": true,
+          "output_digest": "sha256:e44ac9ea9faae2041a70df94a4717aa223c8a334ee19601b835f0d33c58cd0db"
+        }
+      ],
+      "run_id": "run_1790861166039554511",
+      "tree_version": "sha256:7e7171845f9f24237c8d6fdab167306880a7284c14fd7aedfbf3e2ec190160d2",
+      "execution_versions": [
+        "sha256:7e7171845f9f24237c8d6fdab167306880a7284c14fd7aedfbf3e2ec190160d2"
+      ],
+      "evidence_kind": "execution",
+      "result": "```json\n{\n  \"total\": 42\n}\n```",
+      "quality_score": 0.6,
+      "task_id": "run-e2724548b0ac0ec27873de681f7b9651",
+      "timestamp": 1790861167108,
+      "task": "Execute the saved calculation.",
+      "plan": "",
+      "tree_name": "factory:core_df6d1b6568fbeb4f6611f4c0171ac67f",
+      "what_went_well": null,
+      "what_to_improve": null,
+      "adjusted_behavior": "",
+      "outcome": "success",
+      "duration_ms": 1069,
+      "user": "evolution-benchmark"
+    }
+  ],
+  "after": {
+    "agent_name": "evolving_sum",
+    "tree_id": "factory:core_df6d1b6568fbeb4f6611f4c0171ac67f",
+    "tree_version": "sha256:7e7171845f9f24237c8d6fdab167306880a7284c14fd7aedfbf3e2ec190160d2",
+    "task": "Execute the saved calculation.",
+    "outcome": "success",
+    "output": "```json\n{\n  \"total\": 42\n}\n```",
+    "quality": 0.6,
+    "quality_passed": true,
+    "output_passed": true,
+    "Duration": 1070199804,
+    "StartedAt": "2026-10-01T15:26:06.03843444+02:00",
+    "EndedAt": "2026-10-01T15:26:07.108634212+02:00"
+  },
+  "after_rollback": {
+    "agent_name": "evolving_sum",
+    "tree_id": "factory:core_df6d1b6568fbeb4f6611f4c0171ac67f",
+    "tree_version": "sha256:de35d14352695ed8962db2633fa8866f4275c8db0a56bf5a44da9caf98ac22b3",
+    "task": "Execute the saved calculation.",
+    "outcome": "failure",
+    "output": "```json\n{\n  \"wrong_total\": 37\n}\n```",
+    "quality": 0.6,
+    "quality_passed": true,
+    "output_passed": true,
+    "Duration": 474361146,
+    "StartedAt": "2026-10-01T15:26:07.131173685+02:00",
+    "EndedAt": "2026-10-01T15:26:07.605534767+02:00"
+  },
+  "baseline": {
+    "type": "Sequence",
+    "name": "factory:core_df6d1b6568fbeb4f6611f4c0171ac67f",
+    "description": "Compute seventeen plus twenty-five. Return compact JSON with only the field total containing the calculated sum. Do not add prose or padding.",
+    "children": [
+      {
+        "type": "Condition",
+        "name": "ValidateInput"
+      },
+      {
+        "type": "QualityGate",
+        "name": "VerifyTaskStep1",
+        "children": [
+          {
+            "type": "ChainAction",
+            "name": "llm_call:Compute seventeen plus twenty-five. Return only a JSON object with the field wrong_total containing the calculated sum. Use exactly that field name.",
+            "metadata": {
+              "max_tokens": 128,
+              "system_msg": "Follow the task and output contract. Do not claim external actions or observations that you have not performed. Return JSON only."
+            }
+          }
+        ],
+        "metadata": {
+          "result_contract": {
+            "json_fields": {
+              "total": 42
+            }
+          }
+        }
+      }
+    ],
+    "timeout_ms": 120000,
+    "metadata": {
+      "category": "core",
+      "factory_kind": "response",
+      "parents": null,
+      "task": "Compute seventeen plus twenty-five. Return compact JSON with only the field total containing the calculated sum. Do not add prose or padding.",
+      "user": "evolution-benchmark"
+    }
+  },
+  "before": {
+    "agent_name": "evolving_sum",
+    "tree_id": "factory:core_df6d1b6568fbeb4f6611f4c0171ac67f",
+    "tree_version": "sha256:de35d14352695ed8962db2633fa8866f4275c8db0a56bf5a44da9caf98ac22b3",
+    "task": "Execute the saved calculation.",
+    "outcome": "failure",
+    "output": "```json\n{\n  \"wrong_total\": 37\n}\n```",
+    "quality": 0.6,
+    "quality_passed": true,
+    "output_passed": true,
+    "Duration": 510427576,
+    "StartedAt": "2026-10-01T15:25:57.936320492+02:00",
+    "EndedAt": "2026-10-01T15:25:58.446748164+02:00"
+  },
+  "candidate": {
+    "type": "Sequence",
+    "name": "factory:core_df6d1b6568fbeb4f6611f4c0171ac67f",
+    "description": "Compute seventeen plus twenty-five. Return compact JSON with only the field total containing the calculated sum. Do not add prose or padding.",
+    "children": [
+      {
+        "type": "Condition",
+        "name": "ValidateInput"
+      },
+      {
+        "type": "QualityGate",
+        "name": "VerifyTaskStep1",
+        "children": [
+          {
+            "type": "ChainAction",
+            "name": "llm_call:Compute seventeen plus twenty-five. Return only a JSON object with the field wrong_total containing the calculated sum. Use exactly that field name.",
+            "metadata": {
+              "max_tokens": 128,
+              "system_msg": "Follow the task and output contract. Do not claim external actions or observations that you have not performed. Return JSON only."
+            }
+          },
+          {
+            "type": "ChainAction",
+            "name": "llm_call:Solve this task independently and check your calculation: Compute seventeen plus twenty-five. Return compact JSON with only the field total containing the calculated sum. Do not add prose or padding.\nReturn only a JSON object with these required field names: [\"total\"]. Compute every value from the task. A previous attempt failed validation.\nValidation failure: {{.ChainState.result_contract_error}}\nReturn complete JSON.",
+            "metadata": {
+              "max_tokens": 512,
+              "system_msg": "Independently recompute and verify the requested task result. Return JSON only."
+            }
+          }
+        ],
+        "metadata": {
+          "result_contract": {
+            "json_fields": {
+              "total": 42
+            }
+          }
+        }
+      }
+    ],
+    "timeout_ms": 120000,
+    "metadata": {
+      "category": "core",
+      "factory_kind": "response",
+      "parents": null,
+      "task": "Compute seventeen plus twenty-five. Return compact JSON with only the field total containing the calculated sum. Do not add prose or padding.",
+      "user": "evolution-benchmark"
+    }
+  },
+  "controlled_fault": "worker returns wrong_total; no mocked model outputs",
+  "cycle": {
+    "baseline_version": "sha256:de35d14352695ed8962db2633fa8866f4275c8db0a56bf5a44da9caf98ac22b3",
+    "candidate_version": "sha256:7e7171845f9f24237c8d6fdab167306880a7284c14fd7aedfbf3e2ec190160d2",
+    "qualification": "7b05bed49b6eceacc84c30672400ba605ea3766b73f544cf300b6466ebd6d14e",
+    "tree_name": "factory:core_df6d1b6568fbeb4f6611f4c0171ac67f",
+    "cycle": 0,
+    "timestamp": 1790861165,
+    "base_fitness": 0,
+    "new_fitness": 100,
+    "delta": 100,
+    "mutations_applied": 1,
+    "nodes_before": 4,
+    "nodes_after": 5,
+    "improved": true,
+    "duration_ms": 7390,
+    "mutation_budget": 1
+  },
+  "independent_contract_passed": true,
+  "qualification": {
+    "tree_id": "factory:core_df6d1b6568fbeb4f6611f4c0171ac67f",
+    "user": "evolution-benchmark",
+    "baseline_version": "sha256:de35d14352695ed8962db2633fa8866f4275c8db0a56bf5a44da9caf98ac22b3",
+    "candidate_version": "sha256:7e7171845f9f24237c8d6fdab167306880a7284c14fd7aedfbf3e2ec190160d2",
+    "backend": "ollama",
+    "model": "qwen2.5:0.5b",
+    "baseline_calls": 3,
+    "candidate_calls": 6,
+    "measured_at": "2026-10-01T13:26:01.571009511Z",
+    "trials": [
+      {
+        "task": "Compute seventeen plus twenty-five. Return compact JSON with only the field total containing the calculated sum. Do not add prose or padding.",
+        "contract": {
+          "json_fields": {
+            "total": 42
+          }
+        },
+        "before_output": "```json\n{\n  \"wrong_total\": 37\n}\n```",
+        "after_output": "```json\n{\n  \"total\": 42\n}\n```",
+        "before_outcome": "failure",
+        "after_outcome": "success",
+        "before_duration_ms": 472,
+        "after_duration_ms": 956
+      },
+      {
+        "task": "Compute seventeen plus twenty-five. Return compact JSON with only the field total containing the calculated sum. Do not add prose or padding.",
+        "contract": {
+          "json_fields": {
+            "total": 42
+          }
+        },
+        "before_output": "```json\n{\n  \"wrong_total\": 37\n}\n```",
+        "after_output": "```json\n{\n  \"total\": 42\n}\n```",
+        "before_outcome": "failure",
+        "after_outcome": "success",
+        "before_duration_ms": 486,
+        "after_duration_ms": 943
+      },
+      {
+        "task": "Compute seventeen plus twenty-five. Return compact JSON with only the field total containing the calculated sum. Do not add prose or padding.",
+        "contract": {
+          "json_fields": {
+            "total": 42
+          }
+        },
+        "before_output": "```json\n{\n  \"wrong_total\": 37\n}\n```",
+        "after_output": "```json\n{\n  \"total\": 42\n}\n```",
+        "before_outcome": "failure",
+        "after_outcome": "success",
+        "before_duration_ms": 519,
+        "after_duration_ms": 1022
+      }
+    ]
+  },
+  "release": {
+    "tree_id": "factory:core_df6d1b6568fbeb4f6611f4c0171ac67f",
+    "user": "evolution-benchmark",
+    "version": "sha256:7e7171845f9f24237c8d6fdab167306880a7284c14fd7aedfbf3e2ec190160d2",
+    "ancestors": [
+      "sha256:de35d14352695ed8962db2633fa8866f4275c8db0a56bf5a44da9caf98ac22b3"
+    ],
+    "qualification": "7b05bed49b6eceacc84c30672400ba605ea3766b73f544cf300b6466ebd6d14e",
+    "generation": 1,
+    "action": "promote",
+    "updated_at": "2026-10-01T13:26:05.975636215Z"
+  },
+  "rollback": {
+    "tree_id": "factory:core_df6d1b6568fbeb4f6611f4c0171ac67f",
+    "user": "evolution-benchmark",
+    "version": "sha256:de35d14352695ed8962db2633fa8866f4275c8db0a56bf5a44da9caf98ac22b3",
+    "generation": 2,
+    "action": "rollback",
+    "reason": "gardener quality gate requested rollback",
+    "updated_at": "2026-10-01T13:26:07.123713189Z"
+  },
+  "tree_id": "factory:core_df6d1b6568fbeb4f6611f4c0171ac67f",
+  "user": "evolution-benchmark"
+}

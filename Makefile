@@ -20,6 +20,10 @@ build-quality:
 graphify-update:
 	@$(CHECK) graphify-update
 
+.PHONY: test-live-benchmarks
+test-live-benchmarks:
+	./scripts/test-live-benchmarks.sh
+
 test:
 	$(GO) test -short -count=1 -race ./...
 
@@ -72,7 +76,7 @@ vulncheck:
 clean:
 	rm -rf $(BIN_DIR)/*
 
-# Run benchmark suite (fast, no LLM needed)
+# Run benchmark suite with real inference (Ollama with Sol fallback)
 bench:
 	$(GO) test -bench=. -benchtime=1x -count=1 ./internal/benchmark/... 2>&1
 

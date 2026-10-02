@@ -13,9 +13,12 @@
 package goap
 
 import (
+	"encoding/json"
 	"fmt"
 	"maps"
+	"math/big"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -73,7 +76,7 @@ func (ws WorldState) Clone() WorldState {
 func (ws WorldState) Satisfies(goal WorldState) bool {
 	for k, want := range goal {
 		have, ok := ws[k]
-		if !ok || have != want {
+		if !ok || !ValuesEqual(have, want) {
 			return false
 		}
 	}
@@ -99,7 +102,7 @@ func (ws WorldState) Equals(other WorldState) bool {
 		return false
 	}
 	for k, v := range ws {
-		if other[k] != v {
+		if value, ok := other[k]; !ok || !ValuesEqual(value, v) {
 			return false
 		}
 	}
@@ -134,4 +137,41 @@ func NewGoal(name string, priority float64, conditions WorldState) *Goal {
 // NewAction creates a new action with the given name, cost, preconditions, and effects.
 func NewAction(name string, cost float64, pre, effects WorldState) Action {
 	return Action{Name: name, Cost: cost, Preconditions: pre, Effects: effects}
+}
+
+// ValuesEqual compares only typed scalar facts and keeps JSON numeric
+// roundtrips exact. Invalid structured facts fail instead of panicking.
+func ValuesEqual(a, b any) bool {
+	switch value := a.(type) {
+	case bool:
+		other, ok := b.(bool)
+		return ok && value == other
+	case string:
+		other, ok := b.(string)
+		return ok && value == other
+	case nil:
+		return b == nil
+	}
+	number := func(value any) (*big.Rat, bool) {
+		switch value.(type) {
+		case json.Number, float32, float64, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
+		default:
+			return nil, false
+		}
+		data, err := json.Marshal(value)
+		if err != nil || len(data) > 2048 {
+			return nil, false
+		}
+		text := string(data)
+		if index := strings.IndexAny(text, "eE"); index >= 0 {
+			exponent, err := strconv.ParseInt(text[index+1:], 10, 32)
+			if err != nil || exponent < -4096 || exponent > 4096 {
+				return nil, false
+			}
+		}
+		return new(big.Rat).SetString(text)
+	}
+	left, leftOK := number(a)
+	right, rightOK := number(b)
+	return leftOK && rightOK && left.Cmp(right) == 0
 }

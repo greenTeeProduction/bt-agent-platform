@@ -1,0 +1,23 @@
+{
+  "observed_utc": "2026-10-02T00:25:02.057288+00:00",
+  "services": [
+    {
+      "unit": "bt-agent",
+      "ActiveState": "active",
+      "UnitFileState": "enabled",
+      "MainPID": "2778489"
+    },
+    {
+      "unit": "bt-dashboard",
+      "ActiveState": "active",
+      "UnitFileState": "enabled",
+      "MainPID": "2778481"
+    },
+    {
+      "unit": "bt-gardener",
+      "ActiveState": "active",
+      "UnitFileState": "enabled",
+      "MainPID": "2778495"
+    }
+  ]
+}

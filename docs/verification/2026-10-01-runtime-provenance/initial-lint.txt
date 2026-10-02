@@ -1,0 +1,16 @@
+internal/evolution/reflection_store.go:39:43: omitzero: Omitempty has no effect on nested struct fields (modernize)
+	StartedAt           time.Time            `json:"started_at,omitempty"`
+	                                         ^
+internal/evolution/execution_proof_test.go:32:4: redefines-builtin-id: redefinition of the built-in function copy (revive)
+			copy := r
+			^
+internal/evolution/runtime_release.go:262:2: redefines-builtin-id: redefinition of the built-in function copy (revive)
+	copy := *release
+	^
+internal/util/build_provenance_test.go:68:21: SA1019: runtime.GOROOT has been deprecated since Go 1.24: The root used during the Go build will not be meaningful if the binary is copied to another machine. Use the system path to locate the “go” binary, and use “go env GOROOT” to find its GOROOT. (staticcheck)
+		run(filepath.Join(runtime.GOROOT(), "bin", "go"), "build", "-buildvcs=true", "-o", bin, ".")
+		                  ^
+4 issues:
+* modernize: 1
+* revive: 2
+* staticcheck: 1

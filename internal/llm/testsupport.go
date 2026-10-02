@@ -54,7 +54,8 @@ func OllamaReachable(cfg Config) bool {
 }
 
 // Configured reports whether a real LLM backend is available for integration tests.
-// Honors BT_SKIP_LLM_TESTS. For ollama, probes the server; for deepseek/acp, checks credentials/command.
+// Honors BT_SKIP_LLM_TESTS. Codex checks login without inference; retained
+// legacy fixtures probe their configured transport when policy is opted out.
 func Configured() bool {
 	return configuredOnce()
 }
@@ -65,6 +66,12 @@ func configured() bool {
 	}
 	cfg := DefaultConfig()
 	c, err := config.Load()
+	if err != nil {
+		return false
+	}
+	if config.SolOnly() || c.LLMProvider == "codex" {
+		return NewProviderHealthMonitor(c, 0).Probe()
+	}
 	provider := "ollama"
 	if err == nil && c != nil && strings.TrimSpace(c.LLMProvider) != "" {
 		provider = strings.TrimSpace(c.LLMProvider)
@@ -85,7 +92,7 @@ func SkipIfUnavailable(t *testing.T) {
 	if Configured() {
 		return
 	}
-	t.Skip("skipping: no LLM configured or reachable (unset BT_SKIP_LLM_TESTS, configure Ollama/ACP/DeepSeek, or start Ollama)")
+	t.Skip("skipping: no LLM configured or reachable (check BT_SKIP_LLM_TESTS and Codex login status)")
 }
 
 // SkipUnlessIntegration skips an LLM integration test unless it is explicitly
@@ -104,11 +111,11 @@ func SkipUnlessIntegration(t *testing.T) {
 	SkipIfUnavailable(t)
 }
 
-// NewClientOrSkip returns a real Ollama client or skips the test.
+// NewClientOrSkip returns the configured provider or skips the test.
 func NewClientOrSkip(t *testing.T) LLM {
 	t.Helper()
 	SkipUnlessIntegration(t)
-	client, err := NewClient(DefaultConfig())
+	client, err := NewConfigured()
 	if err != nil {
 		t.Skipf("skipping: LLM client: %v", err)
 	}

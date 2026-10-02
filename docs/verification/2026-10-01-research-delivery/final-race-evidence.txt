@@ -1,0 +1,110 @@
+=== RUN   TestTraceTransactionsPreserveConcurrentSources
+--- PASS: TestTraceTransactionsPreserveConcurrentSources (0.09s)
+=== RUN   TestTraceLockRespectsDeadlineAndPreservesCorruption
+--- PASS: TestTraceLockRespectsDeadlineAndPreservesCorruption (0.03s)
+=== RUN   TestResearchStoresRejectStaleWriter
+--- PASS: TestResearchStoresRejectStaleWriter (0.01s)
+PASS
+ok  	github.com/nico/go-bt-evolve/internal/research	1.181s
+=== RUN   TestRecordImplementedGoals_ClearsGoalBudget
+--- PASS: TestRecordImplementedGoals_ClearsGoalBudget (0.56s)
+=== RUN   TestRepeatedRedPassRequiresReviewWithoutDelivery
+--- PASS: TestRepeatedRedPassRequiresReviewWithoutDelivery (0.01s)
+=== RUN   TestResearchNotebookLM_MissingTaskIDFailsBeforeStatusPoll
+--- PASS: TestResearchNotebookLM_MissingTaskIDFailsBeforeStatusPoll (0.00s)
+=== RUN   TestResearchNotebookLM_ImportRequestsCitedOnlyWhenStatusMentionsCited
+--- PASS: TestResearchNotebookLM_ImportRequestsCitedOnlyWhenStatusMentionsCited (0.01s)
+=== RUN   TestResearchNotebookLM_ImportOmitsCitedOnlyWithoutCitedStatus
+--- PASS: TestResearchNotebookLM_ImportOmitsCitedOnlyWithoutCitedStatus (0.00s)
+=== RUN   TestResearchNotebookLM_VaultSaveErrorDoesNotFailTheRun
+--- PASS: TestResearchNotebookLM_VaultSaveErrorDoesNotFailTheRun (0.00s)
+=== RUN   TestResearchActions_TaskTemplatedOverwrite
+=== RUN   TestResearchActions_TaskTemplatedOverwrite/AskClarifyingQuestions
+=== RUN   TestResearchActions_TaskTemplatedOverwrite/ExecuteSingleSearch
+=== RUN   TestResearchActions_TaskTemplatedOverwrite/SpawnResearchThreads
+=== RUN   TestResearchActions_TaskTemplatedOverwrite/SpawnDeepThreads
+=== RUN   TestResearchActions_TaskTemplatedOverwrite/StructureReport
+--- PASS: TestResearchActions_TaskTemplatedOverwrite (0.00s)
+    --- PASS: TestResearchActions_TaskTemplatedOverwrite/AskClarifyingQuestions (0.00s)
+    --- PASS: TestResearchActions_TaskTemplatedOverwrite/ExecuteSingleSearch (0.00s)
+    --- PASS: TestResearchActions_TaskTemplatedOverwrite/SpawnResearchThreads (0.00s)
+    --- PASS: TestResearchActions_TaskTemplatedOverwrite/SpawnDeepThreads (0.00s)
+    --- PASS: TestResearchActions_TaskTemplatedOverwrite/StructureReport (0.00s)
+=== RUN   TestResearchActions_FixedAppends
+=== RUN   TestResearchActions_FixedAppends/SearchBroadFirst
+=== RUN   TestResearchActions_FixedAppends/FilterAndRankSources
+=== RUN   TestResearchActions_FixedAppends/ExtractKeyFindings
+=== RUN   TestResearchActions_FixedAppends/CrossReferenceFacts
+=== RUN   TestResearchActions_FixedAppends/TargetedDeepDive
+=== RUN   TestResearchActions_FixedAppends/PivotOnDeadEnds
+=== RUN   TestResearchActions_FixedAppends/CoverageComplete
+=== RUN   TestResearchActions_FixedAppends/IterateSearch
+=== RUN   TestResearchActions_FixedAppends/GenerateVisualizations
+=== RUN   TestResearchActions_FixedAppends/AddCitations
+=== RUN   TestResearchActions_FixedAppends/FlagRemainingGaps
+=== RUN   TestResearchActions_FixedAppends/AddReasoningChain
+--- PASS: TestResearchActions_FixedAppends (0.00s)
+    --- PASS: TestResearchActions_FixedAppends/SearchBroadFirst (0.00s)
+    --- PASS: TestResearchActions_FixedAppends/FilterAndRankSources (0.00s)
+    --- PASS: TestResearchActions_FixedAppends/ExtractKeyFindings (0.00s)
+    --- PASS: TestResearchActions_FixedAppends/CrossReferenceFacts (0.00s)
+    --- PASS: TestResearchActions_FixedAppends/TargetedDeepDive (0.00s)
+    --- PASS: TestResearchActions_FixedAppends/PivotOnDeadEnds (0.00s)
+    --- PASS: TestResearchActions_FixedAppends/CoverageComplete (0.00s)
+    --- PASS: TestResearchActions_FixedAppends/IterateSearch (0.00s)
+    --- PASS: TestResearchActions_FixedAppends/GenerateVisualizations (0.00s)
+    --- PASS: TestResearchActions_FixedAppends/AddCitations (0.00s)
+    --- PASS: TestResearchActions_FixedAppends/FlagRemainingGaps (0.00s)
+    --- PASS: TestResearchActions_FixedAppends/AddReasoningChain (0.00s)
+=== RUN   TestRecoverGoapFusionPendingPatches_SkipsSupersededViaKnowledgeStore
+--- PASS: TestRecoverGoapFusionPendingPatches_SkipsSupersededViaKnowledgeStore (0.57s)
+=== RUN   TestRecentImplementedGoalsReadsStore
+--- PASS: TestRecentImplementedGoalsReadsStore (0.56s)
+=== RUN   TestRecordImplementedGoalsStripsTransientEnrichment
+--- PASS: TestRecordImplementedGoalsStripsTransientEnrichment (0.57s)
+=== RUN   TestTraceContextHandler_InjectsTraceIDs
+--- PASS: TestTraceContextHandler_InjectsTraceIDs (0.00s)
+=== RUN   TestResearchNotebookLM_NoveltyGateSkipsRecentDuplicate
+--- PASS: TestResearchNotebookLM_NoveltyGateSkipsRecentDuplicate (0.00s)
+=== RUN   TestResearchNotebookLM_SuccessfulRunMarksQueryDone
+--- PASS: TestResearchNotebookLM_SuccessfulRunMarksQueryDone (0.01s)
+=== RUN   TestResearchDeliveryLinksSourceToRealCommitWithoutClaimingImpact
+--- PASS: TestResearchDeliveryLinksSourceToRealCommitWithoutClaimingImpact (0.59s)
+=== RUN   TestResearchDeliveryDoesNotRetroactivelyCreditLaterResearch
+--- PASS: TestResearchDeliveryDoesNotRetroactivelyCreditLaterResearch (0.59s)
+=== RUN   TestResearchDeliveryRejectsUnlandedCommit
+--- PASS: TestResearchDeliveryRejectsUnlandedCommit (0.56s)
+=== RUN   TestResearchDeliveryRejectsUnsupportedCompletion
+=== RUN   TestResearchDeliveryRejectsUnsupportedCompletion/failed-check
+=== RUN   TestResearchDeliveryRejectsUnsupportedCompletion/pending-patch
+=== RUN   TestResearchDeliveryRejectsUnsupportedCompletion/other-run
+=== RUN   TestResearchDeliveryRejectsUnsupportedCompletion/no-checks
+=== RUN   TestResearchDeliveryRejectsUnsupportedCompletion/unrelated-files
+=== RUN   TestResearchDeliveryRejectsUnsupportedCompletion/unfinished-task
+=== RUN   TestResearchDeliveryRejectsUnsupportedCompletion/dry-run
+=== RUN   TestResearchDeliveryRejectsUnsupportedCompletion/no-op
+=== RUN   TestResearchDeliveryRejectsUnsupportedCompletion/invented-commit
+--- PASS: TestResearchDeliveryRejectsUnsupportedCompletion (0.59s)
+    --- PASS: TestResearchDeliveryRejectsUnsupportedCompletion/failed-check (0.00s)
+    --- PASS: TestResearchDeliveryRejectsUnsupportedCompletion/pending-patch (0.00s)
+    --- PASS: TestResearchDeliveryRejectsUnsupportedCompletion/other-run (0.01s)
+    --- PASS: TestResearchDeliveryRejectsUnsupportedCompletion/no-checks (0.00s)
+    --- PASS: TestResearchDeliveryRejectsUnsupportedCompletion/unrelated-files (0.02s)
+    --- PASS: TestResearchDeliveryRejectsUnsupportedCompletion/unfinished-task (0.02s)
+    --- PASS: TestResearchDeliveryRejectsUnsupportedCompletion/dry-run (0.00s)
+    --- PASS: TestResearchDeliveryRejectsUnsupportedCompletion/no-op (0.00s)
+    --- PASS: TestResearchDeliveryRejectsUnsupportedCompletion/invented-commit (0.00s)
+=== RUN   TestResearchDeliveryPersistenceFailureDoesNotReplayCode
+time=2026-10-01T21:09:21.621+02:00 level=WARN msg="landed code lacks complete research attribution" run=delivery-5a2baecbc2f62913 err="read /tmp/TestResearchDeliveryPersistenceFailureDoesNotReplayCode1839987333/001/knowledge.json.trace-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.json: is a directory"
+time=2026-10-01T21:09:21.648+02:00 level=WARN msg="landed code lacks complete research attribution" run=delivery-5a2baecbc2f62913 err="read /tmp/TestResearchDeliveryPersistenceFailureDoesNotReplayCode1839987333/001/knowledge.json.trace-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.json: is a directory"
+--- PASS: TestResearchDeliveryPersistenceFailureDoesNotReplayCode (0.62s)
+=== RUN   TestSuperpowersRunJournalRejectsStaleRecoveryWriter
+--- PASS: TestSuperpowersRunJournalRejectsStaleRecoveryWriter (0.01s)
+=== RUN   TestSuperpowersPlanAlreadyImplementedRequiresAllTasks
+--- PASS: TestSuperpowersPlanAlreadyImplementedRequiresAllTasks (0.58s)
+PASS
+ok  	github.com/nico/go-bt-evolve/internal/engine	6.956s
+=== RUN   TestBTResearchStatusUsesCurrentOwnerAndDoesNotClaimImpact
+--- PASS: TestBTResearchStatusUsesCurrentOwnerAndDoesNotClaimImpact (0.00s)
+PASS
+ok  	github.com/nico/go-bt-evolve/cmd/bt-agent	1.066s

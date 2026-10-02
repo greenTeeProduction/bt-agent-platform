@@ -1,0 +1,8 @@
+{
+  "legacy": "/mnt/ssd/go-bt-evolve/bt-agent-cli",
+  "target": "/mnt/ssd/go-bt-evolve/bin/bt-agent-cli",
+  "previous_sha256": "1d65597678c1a39915e7fe0af25bbddede9aa5ec6b6f80eacaa1f4e556be826d",
+  "backup": "/home/nico/.local/state/go-bt-evolve/runtime-release-20261002T001136Z/previous-binaries/root-bt-agent-cli",
+  "installed_sha256": "233741e8c7fd85223c4a7a2cda6bf8f4783ee86ab8c362502db2464886e5c087",
+  "reason": "legacy root CLI was still at db2c116f; keep it on the current canonical bin/CLI across later rebuilds"
+}

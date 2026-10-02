@@ -11,7 +11,7 @@ import (
 // completes a comparison-style research query with acceptable success rate.
 func TestDeepResearch(t *testing.T) {
 	tree := evolution.DeepResearchTree()
-	mock := benchmark.DefaultMock()
+	model := benchmark.RealLLM(t)
 	suite := benchmark.Suite{
 		Name: "deep_research_test",
 		Tasks: []benchmark.TaskCase{
@@ -23,9 +23,10 @@ func TestDeepResearch(t *testing.T) {
 		},
 	}
 
-	metrics := benchmark.RunSuite(tree, suite, mock)
+	metrics := benchmark.RunSuite(tree, suite, model)
+	requireQualifiedBenchmark(t, metrics)
 
-	if metrics.SuccessRate < 0.0 {
+	if metrics.SuccessRate < 1.0 {
 		t.Errorf("deep research success rate too low: %.2f", metrics.SuccessRate)
 	}
 	if metrics.TotalTasks != 1 {
@@ -45,7 +46,7 @@ func TestDeepResearch(t *testing.T) {
 // simple fact-finding query (capital of France).
 func TestQuickResearch(t *testing.T) {
 	tree := evolution.QuickResearchTree()
-	mock := benchmark.DefaultMock()
+	model := benchmark.RealLLM(t)
 	suite := benchmark.Suite{
 		Name: "quick_research_test",
 		Tasks: []benchmark.TaskCase{
@@ -57,7 +58,8 @@ func TestQuickResearch(t *testing.T) {
 		},
 	}
 
-	metrics := benchmark.RunSuite(tree, suite, mock)
+	metrics := benchmark.RunSuite(tree, suite, model)
+	requireQualifiedBenchmark(t, metrics)
 
 	if metrics.TotalTasks == 0 {
 		t.Fatal("expected at least 1 task, got 0")
@@ -81,7 +83,7 @@ func TestQuickResearch(t *testing.T) {
 // 1-task suite to verify basic routing and execution work end-to-end.
 func TestAllResearchTrees(t *testing.T) {
 	trees := evolution.ResearchTrees()
-	mock := benchmark.DefaultMock()
+	model := benchmark.RealLLM(t)
 
 	if len(trees) == 0 {
 		t.Fatal("evolution.ResearchTrees() returned no trees")
@@ -100,7 +102,8 @@ func TestAllResearchTrees(t *testing.T) {
 				},
 			}
 
-			metrics := benchmark.RunSuite(tree, suite, mock)
+			metrics := benchmark.RunSuite(tree, suite, model)
+			requireQualifiedBenchmark(t, metrics)
 
 			if metrics.TotalTasks == 0 {
 				t.Errorf("tree %q: expected TotalTasks > 0", name)

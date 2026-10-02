@@ -11,6 +11,7 @@ import (
 )
 
 func TestRegisterScriptNodes_Success(t *testing.T) {
+	t.Setenv("BT_LLM_SOL_ONLY", "true")
 	if runtime.GOOS == "windows" {
 		t.Skip("shell-script PATH shim is POSIX-only")
 	}

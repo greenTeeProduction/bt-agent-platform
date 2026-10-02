@@ -23,7 +23,6 @@ import (
 
 	"github.com/tmc/langchaingo/agents"
 	"github.com/tmc/langchaingo/chains"
-	"github.com/tmc/langchaingo/llms/ollama"
 	"github.com/tmc/langchaingo/prompts"
 	"github.com/tmc/langchaingo/tools"
 )
@@ -179,6 +178,13 @@ func versionRequested() bool {
 }
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "recover-persisted-trees" {
+		if err := runTreeRecovery(context.Background(), os.Args[2:], os.Stdout, os.Stderr); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 	// Version fast path: print the stamped build identity and exit before any
 	// engine/store initialization, so the drift smoke test has no side effects.
 	if versionRequested() {
@@ -257,18 +263,14 @@ func main() {
 	// wireDTOrdering enables the domain-tree (DT) entropy/Gini-based
 	// reordering pass — mirrors wireSelectorOrdering above.
 	cfg, v2Cfg = wireDTOrdering(cfg, v2Cfg, metricsDir)
-	// v2Cfg.UseRealLLM = false // default — mock for speed, enough for structural validation
+	// Benchmark validation always uses real Ollama inference, with Sol fallback.
 
 	g = gardener.NewGardener(cfg)
 
-	// Ollama LLM for langchain agent — uses platform config
-	llmCfg := llm.DefaultConfig()
-	ollamaLLM, err := ollama.New(
-		ollama.WithModel(llmCfg.Model),
-		ollama.WithServerURL(llmCfg.ServerURL),
-	)
+	// The LangChain loop uses the same pinned provider as ordinary BT nodes.
+	model, err := llm.NewProvider(platformConfig)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "fatal: ollama: %v\n", err)
+		fmt.Fprintf(os.Stderr, "fatal: llm: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -302,7 +304,7 @@ Question: {{.input}}`,
 		[]string{"input", "agent_scratchpad"},
 	)
 
-	analysisAgent := agents.NewOneShotAgent(ollamaLLM, agentTools, agents.WithPrompt(prompt))
+	analysisAgent := agents.NewOneShotAgent(llm.LangChainModel{Inner: model}, agentTools, agents.WithPrompt(prompt))
 	executor := agents.NewExecutor(analysisAgent, agents.WithMaxIterations(5))
 
 	// Watchers and restart control observe only initialized owners.

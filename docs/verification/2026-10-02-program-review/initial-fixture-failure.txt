@@ -1,0 +1,128 @@
+ok  	github.com/nico/go-bt-evolve/internal/research	0.222s
+time=2026-10-02T01:43:15.690+02:00 level=INFO msg="goap fusion: red-pass rejected, named deliverable missing at HEAD" milestone=d779e16d838e52f9:0
+time=2026-10-02T01:43:15.698+02:00 level=INFO msg="goap fusion: red-pass rejected, named deliverable missing at HEAD" milestone=d779e16d838e52f9:0
+time=2026-10-02T01:43:15.699+02:00 level=INFO msg="goap fusion: red-pass rejected, named deliverable missing at HEAD" milestone=d779e16d838e52f9:0
+time=2026-10-02T01:43:15.699+02:00 level=INFO msg="goap fusion: red-pass rejected, named deliverable missing at HEAD" milestone=d779e16d838e52f9:0
+time=2026-10-02T01:43:15.701+02:00 level=INFO msg="goap fusion: red-pass recorded, milestone attempt refunded" milestone=d779e16d838e52f9:0 streak=1
+time=2026-10-02T01:43:15.702+02:00 level=INFO msg="goap fusion: milestone needs review after repeated red-pass" milestone=d779e16d838e52f9:0 streak=2
+time=2026-10-02T01:43:15.704+02:00 level=INFO msg="goap fusion: red-pass recorded, completion withheld — deliverable probe unavailable" milestone=d779e16d838e52f9:0 streak=1
+time=2026-10-02T01:43:15.705+02:00 level=INFO msg="goap fusion: milestone needs review after repeated red-pass" milestone=d779e16d838e52f9:0 streak=2
+time=2026-10-02T01:43:15.706+02:00 level=INFO msg="goap fusion: red-pass recorded, completion withheld — deliverable probe unavailable" milestone=d779e16d838e52f9:0 streak=3
+time=2026-10-02T01:43:15.708+02:00 level=INFO msg="goap fusion: red-pass rejected, named deliverable missing at HEAD" milestone=d779e16d838e52f9:0
+time=2026-10-02T01:43:15.710+02:00 level=INFO msg="goap fusion: red-pass rejected, named deliverable missing at HEAD" milestone=d779e16d838e52f9:0
+time=2026-10-02T01:43:15.712+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=d779e16d838e52f9:0
+time=2026-10-02T01:43:15.712+02:00 level=INFO msg="goap fusion: red-pass recorded, completion withheld — deliverable probe unavailable" milestone=d779e16d838e52f9:0 streak=1
+time=2026-10-02T01:43:15.714+02:00 level=INFO msg="goap fusion: red-pass recorded, milestone attempt refunded" milestone=d779e16d838e52f9:0 streak=1
+time=2026-10-02T01:43:15.715+02:00 level=INFO msg="goap fusion: milestone needs review after repeated red-pass" milestone=d779e16d838e52f9:0 streak=2
+time=2026-10-02T01:43:15.717+02:00 level=INFO msg="goap fusion: red pre-check hypothesis discarded — named deliverable missing at HEAD" milestone=d779e16d838e52f9:0 red_cmd="go test ./internal/engine -short"
+time=2026-10-02T01:43:15.718+02:00 level=INFO msg="goap fusion: milestone needs review after red pre-check" milestone=ac9d79614027c9cd:0 streak=2
+time=2026-10-02T01:43:15.720+02:00 level=INFO msg="goap fusion: red pre-check still fails — milestone needs real work" milestone=ac9d79614027c9cd:0 red_cmd="go test ./internal/foo -run TestBar"
+time=2026-10-02T01:43:15.722+02:00 level=INFO msg="goap fusion: red pre-check produced no verdict — evidence left untouched" milestone=ac9d79614027c9cd:0 red_cmd="go test ./internal/foo -run TestBar" err="goap red pre-check unavailable"
+time=2026-10-02T01:43:15.724+02:00 level=INFO msg="goap fusion: milestone needs review after red pre-check" milestone=ac9d79614027c9cd:0 streak=2
+time=2026-10-02T01:43:15.725+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=2f0333b936080390:0
+time=2026-10-02T01:43:15.726+02:00 level=INFO msg="goap fusion: red-pass recorded, milestone attempt refunded" milestone=2f0333b936080390:0 streak=1
+time=2026-10-02T01:43:15.726+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=2f0333b936080390:0
+time=2026-10-02T01:43:15.727+02:00 level=INFO msg="goap fusion: milestone needs review after repeated red-pass" milestone=2f0333b936080390:0 streak=2
+time=2026-10-02T01:43:15.728+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=2f0333b936080390:0
+time=2026-10-02T01:43:15.729+02:00 level=INFO msg="goap fusion: red-pass recorded, milestone attempt refunded" milestone=2f0333b936080390:0 streak=1
+time=2026-10-02T01:43:15.730+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=2f0333b936080390:0
+time=2026-10-02T01:43:15.731+02:00 level=INFO msg="goap fusion: red-pass recorded, milestone attempt refunded" milestone=2f0333b936080390:0 streak=1
+time=2026-10-02T01:43:15.735+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=2f0333b936080390:0
+time=2026-10-02T01:43:15.735+02:00 level=INFO msg="goap fusion: red-pass recorded, milestone attempt refunded" milestone=2f0333b936080390:0 streak=1
+time=2026-10-02T01:43:15.739+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=472abaeb455e911b:0
+time=2026-10-02T01:43:15.740+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=472abaeb455e911b:0
+time=2026-10-02T01:43:15.741+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=472abaeb455e911b:0
+time=2026-10-02T01:43:15.743+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=472abaeb455e911b:0
+time=2026-10-02T01:43:15.744+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=472abaeb455e911b:0
+time=2026-10-02T01:43:15.750+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=861a583d0f641be7:0
+time=2026-10-02T01:43:15.762+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=38c47f87eee70ced:0
+time=2026-10-02T01:43:15.770+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=aa35af50f6fbabc6:0
+time=2026-10-02T01:43:15.781+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=f2d23a5b7e7e8166:0
+time=2026-10-02T01:43:15.790+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=395446fa0b837c83:0
+time=2026-10-02T01:43:15.801+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=fe0211779a5b9d61:0
+time=2026-10-02T01:43:15.811+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=7fa4c1af742fdac9:0
+time=2026-10-02T01:43:15.821+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=c7c4907f5ded6124:0
+time=2026-10-02T01:43:15.831+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=32fd4a80103aee6e:0
+time=2026-10-02T01:43:15.840+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=59e52ffa00908b9e:0
+time=2026-10-02T01:43:15.841+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=e12c8f4e6c077e9b:0
+time=2026-10-02T01:43:15.851+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=70ac4b90fe6853f5:0
+time=2026-10-02T01:43:15.861+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=710ede2a2cf08523:0
+time=2026-10-02T01:43:15.870+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=01cf6a9ce85140d3:0
+time=2026-10-02T01:43:15.881+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=458668245f534e81:0
+time=2026-10-02T01:43:15.891+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=a8822f74b83e6459:0
+time=2026-10-02T01:43:15.900+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=8529f79fa4d9dc15:0
+time=2026-10-02T01:43:15.911+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=9e4c67828188cfa5:0
+time=2026-10-02T01:43:15.921+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=1e3974de6930a8ce:0
+time=2026-10-02T01:43:15.930+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=6892eb28ff660b40:0
+time=2026-10-02T01:43:15.932+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=590db9d50efe5d04:0
+time=2026-10-02T01:43:15.941+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=32df1413ab6304b8:0
+time=2026-10-02T01:43:15.951+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=ba9c4c43d15122f8:0
+time=2026-10-02T01:43:15.960+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=4b97555d1d6de94b:0
+time=2026-10-02T01:43:15.971+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=4504c8d7de464dd7:0
+time=2026-10-02T01:43:15.981+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=e9dd4098e735d1b1:0
+time=2026-10-02T01:43:15.991+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=4e1d92953e9a2b80:0
+time=2026-10-02T01:43:16.000+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=0575679200025d82:0
+time=2026-10-02T01:43:16.011+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=f998ca1db162fe62:0
+time=2026-10-02T01:43:16.021+02:00 level=INFO msg="goap fusion: refunded milestone attempt after infrastructure failure" milestone=11ec922e6e76c7de:0
+time=2026-10-02T01:43:16.764+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=4ed40cd634b75301 title="Fix nil deref" source=self-fix:self-review:4ed40cd634b75301 program=555ff1c7270e953b
+time=2026-10-02T01:43:16.764+02:00 level=INFO msg="self-review: seed result" sig=foo-bar-nil-deref canonical_sig=4ed40cd634b75301 seeded=true reason="seeded program 555ff1c7270e953b"
+time=2026-10-02T01:43:16.764+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=bf22dc778e4153d9 title="Fix leaked handle" source=self-fix:self-review:bf22dc778e4153d9 program=ce69a009b81abe73
+time=2026-10-02T01:43:16.765+02:00 level=INFO msg="self-review: seed result" sig=foo-baz-leak canonical_sig=bf22dc778e4153d9 seeded=true reason="seeded program ce69a009b81abe73"
+time=2026-10-02T01:43:16.819+02:00 level=INFO msg="goap fusion: red pre-check hypothesis discarded — named deliverable missing at HEAD" milestone=a33c7080aa5d3a4b:0 red_cmd="go test ./internal/engine -short -count=1"
+time=2026-10-02T01:43:16.827+02:00 level=INFO msg="goap fusion: red pre-check produced no verdict — evidence left untouched" milestone=a33c7080aa5d3a4b:0 red_cmd="go test ./internal/engine -short -count=1" err="command killed by 8m0s shell timeout: context deadline exceeded"
+time=2026-10-02T01:43:16.828+02:00 level=INFO msg="goap fusion: red pre-check produced no verdict — evidence left untouched" milestone=a33c7080aa5d3a4b:0 red_cmd="go test ./internal/engine -short -count=1" err="fork/exec /bin/bash: cannot allocate memory"
+time=2026-10-02T01:43:16.830+02:00 level=INFO msg="goap fusion: red pre-check still fails — milestone needs real work" milestone=a33c7080aa5d3a4b:0 red_cmd="go test ./internal/engine -short -count=1"
+time=2026-10-02T01:43:16.831+02:00 level=INFO msg="goap fusion: milestone needs review after red pre-check" milestone=a33c7080aa5d3a4b:0 streak=2
+time=2026-10-02T01:43:16.833+02:00 level=INFO msg="goap fusion: milestone needs review after red pre-check" milestone=a33c7080aa5d3a4b:0 streak=2
+time=2026-10-02T01:43:16.834+02:00 level=INFO msg="goap fusion: milestone needs review after red pre-check" milestone=a33c7080aa5d3a4b:0 streak=2
+time=2026-10-02T01:43:19.646+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=cross-sig-0 title="Cross fix 0" source=self-fix:test:cross-sig-0 program=3aa72b85877f243e
+time=2026-10-02T01:43:19.658+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=cross-sig-1 title="Cross fix 1" source=self-fix:test:cross-sig-1 program=e4e3e8b9facaecd7
+time=2026-10-02T01:43:19.659+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=cross-sig-3 title="Cross fix 3" source=self-fix:test:cross-sig-3 program=8609c360f252649b
+time=2026-10-02T01:43:19.660+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=cross-sig-6 title="Cross fix 6" source=self-fix:test:cross-sig-6 program=937581cb86433148
+time=2026-10-02T01:43:19.662+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=cross-sig-7 title="Cross fix 7" source=self-fix:test:cross-sig-7 program=929d962b3467e7de
+time=2026-10-02T01:43:19.663+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=cross-sig-2 title="Cross fix 2" source=self-fix:test:cross-sig-2 program=d641449a3c9a25c5
+time=2026-10-02T01:43:19.664+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=cross-sig-4 title="Cross fix 4" source=self-fix:test:cross-sig-4 program=6fdfed9b19da2cbe
+time=2026-10-02T01:43:19.666+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=cross-sig-8 title="Cross fix 8" source=self-fix:test:cross-sig-8 program=43117875be5e7353
+time=2026-10-02T01:43:19.689+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=cross-sig-14 title="Cross fix 14" source=self-fix:test:cross-sig-14 program=42010a8bee7a93c9
+time=2026-10-02T01:43:19.690+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=cross-sig-11 title="Cross fix 11" source=self-fix:test:cross-sig-11 program=f05a2e4eacc9f0af
+time=2026-10-02T01:43:19.692+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=cross-sig-12 title="Cross fix 12" source=self-fix:test:cross-sig-12 program=a69aba67f85c4a28
+time=2026-10-02T01:43:19.693+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=cross-sig-13 title="Cross fix 13" source=self-fix:test:cross-sig-13 program=949290e889f6d49c
+time=2026-10-02T01:43:19.695+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=cross-sig-10 title="Cross fix 10" source=self-fix:test:cross-sig-10 program=003ef11396664938
+time=2026-10-02T01:43:19.697+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=cross-sig-9 title="Cross fix 9" source=self-fix:test:cross-sig-9 program=a6679a4a8c77e5d7
+time=2026-10-02T01:43:19.699+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=cross-sig-18 title="Cross fix 18" source=self-fix:test:cross-sig-18 program=dfd413780ce9dc6a
+time=2026-10-02T01:43:19.701+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=cross-sig-17 title="Cross fix 17" source=self-fix:test:cross-sig-17 program=b5602b6a444e92aa
+time=2026-10-02T01:43:19.702+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=cross-sig-16 title="Cross fix 16" source=self-fix:test:cross-sig-16 program=267bb31e79d76ce5
+time=2026-10-02T01:43:19.704+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=cross-sig-19 title="Cross fix 19" source=self-fix:test:cross-sig-19 program=1801781fbef71c5b
+time=2026-10-02T01:43:19.706+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=cross-sig-5 title="Cross fix 5" source=self-fix:test:cross-sig-5 program=5d3b4703e4a0a6e1
+time=2026-10-02T01:43:19.708+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=cross-sig-15 title="Cross fix 15" source=self-fix:test:cross-sig-15 program=d104fa7bc7e3f1ea
+time=2026-10-02T01:43:20.264+02:00 level=WARN msg="landed code lacks complete research attribution" run=delivery-70190db3b12d1b66 err="update /tmp/TestProgramDeliveryJournalRepairsMetadataWithoutReimplementation3771389994/001/knowledge.json.trace-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.json: invalid research goal \"fd8e59a9821d361a\""
+time=2026-10-02T01:43:20.290+02:00 level=WARN msg="landed code lacks complete research attribution" run=delivery-70190db3b12d1b66 err="update /tmp/TestProgramDeliveryJournalRepairsMetadataWithoutReimplementation3771389994/001/knowledge.json.trace-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.json: invalid research goal \"fd8e59a9821d361a\""
+--- FAIL: TestProgramDeliveryJournalRepairsMetadataWithoutReimplementation (0.58s)
+    program_delivery_test.go:41: run delivery-70190db3b12d1b66: update /tmp/TestProgramDeliveryJournalRepairsMetadataWithoutReimplementation3771389994/001/knowledge.json.trace-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.json: invalid research goal "fd8e59a9821d361a"
+time=2026-10-02T01:43:23.645+02:00 level=WARN msg="landed code lacks complete research attribution" run=delivery-5a2baecbc2f62913 err="read /tmp/TestResearchDeliveryPersistenceFailureDoesNotReplayCode3134483130/001/knowledge.json.trace-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.json: is a directory"
+time=2026-10-02T01:43:23.664+02:00 level=WARN msg="landed code lacks complete research attribution" run=delivery-5a2baecbc2f62913 err="read /tmp/TestResearchDeliveryPersistenceFailureDoesNotReplayCode3134483130/001/knowledge.json.trace-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.json: is a directory"
+time=2026-10-02T01:43:23.695+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=sig1 title="Fix X" source=self-fix:test:sig1 program=45045a5297cb9415
+time=2026-10-02T01:43:23.697+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=sig1 title="Fix X" source=self-fix:test:sig1 program=45045a5297cb9415
+time=2026-10-02T01:43:23.698+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=sig1 title="Fix X" source=self-fix:test:sig1 program=45045a5297cb9415
+time=2026-10-02T01:43:23.699+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=sig1 title="Fix X take two" source=self-fix:test:sig1 program=19215f8b67394a3b
+time=2026-10-02T01:43:23.702+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=sig-new title="Fix Z" source=self-fix:test:sig-new program=9b6e81c814e2b2e8
+time=2026-10-02T01:43:23.706+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=sigA title="Fix X" source=self-fix:test:sigA program=45045a5297cb9415
+time=2026-10-02T01:43:23.707+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=sig-same title="Fix Same" source=self-fix:test:sig-same program=37937f69b1fb27d5
+time=2026-10-02T01:43:23.710+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=sig1 title="Fix One" source=self-fix:mis-tagged-source-1 program=6bd36ff1f99f2a45
+time=2026-10-02T01:43:23.711+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=sig2 title="Fix Two" source=self-fix:mis-tagged-source-2 program=28c1d2cc8f4fa963
+time=2026-10-02T01:43:23.713+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=sig11 title="Fix sig11" source=self-fix:test:sig11 program=994fcf3e94dfbea1
+time=2026-10-02T01:43:23.714+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=sig1 title="Fix sig1" source=self-fix:test:sig1 program=79ea9b9f00933f67
+time=2026-10-02T01:43:23.715+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=sig3 title="Fix sig3" source=self-fix:test:sig3 program=7e3e6e255c6812d0
+time=2026-10-02T01:43:23.716+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=sig0 title="Fix sig0" source=self-fix:test:sig0 program=9ea99a1ffb127192
+time=2026-10-02T01:43:23.717+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=sig2 title="Fix sig2" source=self-fix:test:sig2 program=4d0c5ad1eb1008dd
+time=2026-10-02T01:43:23.718+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=sig6 title="Fix sig6" source=self-fix:test:sig6 program=f1c3c47c72cedb52
+time=2026-10-02T01:43:23.719+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=sig4 title="Fix sig4" source=self-fix:test:sig4 program=c37285e65cb5242f
+time=2026-10-02T01:43:23.720+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=sig8 title="Fix sig8" source=self-fix:test:sig8 program=b41b3da39464eff7
+time=2026-10-02T01:43:23.721+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=sig7 title="Fix sig7" source=self-fix:test:sig7 program=5d05c7c5ac8989da
+time=2026-10-02T01:43:23.722+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=sig9 title="Fix sig9" source=self-fix:test:sig9 program=989650e270bde65a
+time=2026-10-02T01:43:23.724+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=sig5 title="Fix sig5" source=self-fix:test:sig5 program=abdabdd93780cb90
+time=2026-10-02T01:43:23.725+02:00 level=INFO msg="self-fix: seeded code-fix program" sig=sig10 title="Fix sig10" source=self-fix:test:sig10 program=cc3d4820d92236ad
+FAIL
+FAIL	github.com/nico/go-bt-evolve/internal/engine	8.086s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-agent	0.031s
+FAIL

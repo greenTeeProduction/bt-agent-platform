@@ -4,278 +4,107 @@ import (
 	"context"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/nico/go-bt-evolve/internal/domains"
 	"github.com/nico/go-bt-evolve/internal/engine"
 	"github.com/nico/go-bt-evolve/internal/evolution"
 )
 
-func TestGoDevSuite_Routing(t *testing.T) {
-	tree := evolution.GoDeveloperTree()
-	mock := DefaultMock()
-	metrics := RunSuite(tree, GoDevSuite(), mock)
+// The fixture exercises real inference and real routing without needing an
+// external repository or service. Domain trees lacking such capabilities must
+// report a qualification gap; they cannot inherit this fixture's results.
+func liveRoutingFixture() (*evolution.SerializableNode, Suite) {
+	work := evolution.SerializableNode{Type: "ChainAction", Name: "llm_call", Metadata: map[string]any{
+		"prompt": "Describe this task in one concise sentence using only the supplied information. Do not claim execution. Task: {{.Task}}", "max_tokens": float64(64),
+	}}
+	tree := &evolution.SerializableNode{Type: "Sequence", Name: "LiveRouting", Children: []evolution.SerializableNode{
+		{Type: "Condition", Name: "ValidateInput"},
+		{Type: "Selector", Name: "StrategyRouter", Children: []evolution.SerializableNode{
+			{Type: "Sequence", Name: "BuildPath", Children: []evolution.SerializableNode{{Type: "Condition", Name: "NeedsCompilation"}, work}},
+			{Type: "Sequence", Name: "GoKnowledgePath", Children: []evolution.SerializableNode{{Type: "Condition", Name: "IsGoQuestion"}, work}},
+			{Type: "Sequence", Name: "ExecutionPath", Children: []evolution.SerializableNode{work}},
+		}},
+	}}
+	return tree, Suite{Name: "live_routing_fixture", Tasks: []TaskCase{
+		{Task: "explain how to build and compile a Go project", ExpectedPath: "BuildPath", ShouldSucceed: true, MinResultLen: 20},
+		{Task: "what is a Go goroutine?", ExpectedPath: "GoKnowledgePath", ShouldSucceed: true, MinResultLen: 20},
+		{Task: "", ShouldReject: true},
+	}}
+}
 
-	if metrics.SuccessRate < 0.5 {
-		t.Errorf("godev baseline success rate too low: %.2f", metrics.SuccessRate)
+func TestDomainSuitesReportMissingCapabilityFixtures(t *testing.T) {
+	model, err := DefaultLLM()
+	if err != nil {
+		t.Fatal(err)
 	}
-	// Suite may have 6-8 tasks depending on tree restructuring
-	if metrics.TotalTasks < 6 {
-		t.Errorf("expected at least 6 tasks, got %d", metrics.TotalTasks)
-	}
-	if metrics.Failures == 0 {
-		t.Error("expected at least 1 failure (empty task)")
-	}
-
-	// Verify empty task failed
-	for _, r := range metrics.Results {
-		if r.Task == "" && r.Success {
-			t.Error("empty task should fail")
+	for _, test := range []struct {
+		tree  *evolution.SerializableNode
+		suite Suite
+	}{
+		{evolution.GoDeveloperTree(), GoDevSuite()}, {domains.CodeReviewTree(), CodeReviewSuite()},
+	} {
+		metrics := RunSuite(test.tree, test.suite, model)
+		if metrics.Warning == "" {
+			t.Fatalf("missing capabilities were not reported: %+v", metrics)
+		}
+		if QuickValidateCandidate(test.tree, test.tree, test.suite, model) {
+			t.Fatal("unqualified domain tree accepted for promotion")
 		}
 	}
 }
 
-func TestCodeReviewSuite_Routing(t *testing.T) {
-	tree := domains.CodeReviewTree()
-	mock := DefaultMock()
-	metrics := RunSuite(tree, CodeReviewSuite(), mock)
-
-	if metrics.SuccessRate < 0.7 {
-		t.Errorf("code_review baseline too low: %.2f", metrics.SuccessRate)
-	}
-
-	// Verify routing: bug task should go through BugDetection
-	for _, r := range metrics.Results {
-		if r.Task == "find bugs in this code" && r.Path != "BugDetection" {
-			t.Errorf("bug task routed to %s, expected BugDetection", r.Path)
-		}
-	}
-}
-
-// TestRunSuite_PathMatchRate_ReflectsExpectedPath pins the not-yet-existing
-// path-match wiring: RunSuite must compare the detected path (Result.Path)
-// against each TaskCase's declared ExpectedPath/PossiblePaths and surface
-// both a per-result PathMatched bool and a suite-level PathMatchRate,
-// mirroring the existing PathCoverage field.
 func TestRunSuite_PathMatchRate_ReflectsExpectedPath(t *testing.T) {
-	tree := evolution.GoDeveloperTree()
-	mock := DefaultMock()
-	metrics := RunSuite(tree, GoDevSuite(), mock)
-
-	if metrics.PathMatchRate <= 0 {
-		t.Errorf("PathMatchRate = %.2f, want > 0", metrics.PathMatchRate)
+	model := RealLLM(t)
+	tree, suite := liveRoutingFixture()
+	metrics := RunSuite(tree, suite, model)
+	if metrics.Warning != "" || metrics.ContractPassRate != 1 || metrics.PathMatchRate != 1 || metrics.ModelEvidence.Calls < 2 {
+		t.Fatalf("live routing qualification failed: %+v", metrics)
 	}
-
-	var found bool
-	for _, r := range metrics.Results {
-		if r.Task == "build and compile the Go project" {
-			found = true
-			if r.Path != "BuildPath" {
-				t.Errorf("Path = %q, want %q", r.Path, "BuildPath")
-			}
-			if !r.PathMatched {
-				t.Errorf("PathMatched = false for task with matching ExpectedPath %q and actual Path %q", "BuildPath", r.Path)
-			}
-		}
-	}
-	if !found {
-		t.Fatal(`expected a result for task "build and compile the Go project"`)
-	}
-
-	// Direct unit check on pathMatches: a PossiblePaths hit should match, an
-	// unrelated path should not.
-	tc := TaskCase{Task: "x", ExpectedPath: "A", PossiblePaths: []string{"A", "B"}}
-	if !pathMatches(tc, "B") {
-		t.Error("pathMatches(tc, \"B\") = false, want true (B is in PossiblePaths)")
-	}
-	if pathMatches(tc, "C") {
-		t.Error("pathMatches(tc, \"C\") = true, want false (C is not ExpectedPath or in PossiblePaths)")
-	}
-}
-
-func TestABTest_IncreaseRetries_ImprovesSuccessRate(t *testing.T) {
-	tree := evolution.GoDeveloperTree()
-	suite := GoDevSuite()
-	mock := DefaultMock()
-
-	ops := []evolution.MutationOp{
-		{Operation: "increase_retries", Target: "RetrySelfCorrect"},
-	}
-
-	ab := RunABTest(tree, suite, mock, ops)
-
-	if !ab.Improved {
-		t.Log("increase_retries did not improve — may be fine if tree already perfect on this suite")
-	}
-	// At minimum, it should not regress
-	if ab.Delta.SuccessRate < -0.2 {
-		t.Errorf("increase_retries caused significant regression: Δ=%.2f", ab.Delta.SuccessRate)
+	tc := TaskCase{ExpectedPath: "A", PossiblePaths: []string{"A", "B"}}
+	if !pathMatches(tc, "B") || pathMatches(tc, "C") {
+		t.Fatal("possible-path matching is incorrect")
 	}
 }
 
 func TestABTest_WrapRetry_DoesNotRegress(t *testing.T) {
-	tree := evolution.GoDeveloperTree()
-	suite := GoDevSuite()
-	mock := DefaultMock()
-
-	ops := []evolution.MutationOp{
-		{Operation: "wrap_retry", Target: "AnalyzeTask"},
-	}
-
-	ab := RunABTest(tree, suite, mock, ops)
-
-	if ab.Delta.SuccessRate < -0.2 {
-		t.Errorf("wrap_retry caused regression: Δ=%.2f", ab.Delta.SuccessRate)
+	model := RealLLM(t)
+	tree, suite := liveRoutingFixture()
+	ab := RunABTest(tree, suite, model, []evolution.MutationOp{{Operation: "wrap_retry", Target: "llm_call"}})
+	if !ab.Qualified || ab.Delta.ContractPassRate < 0 || ab.Delta.PathMatchRate < 0 {
+		t.Fatalf("bounded retry regressed the real fixture: %+v", ab)
 	}
 }
 
 func TestABTest_AddBefore_Validates(t *testing.T) {
-	tree := evolution.GoDeveloperTree()
-	suite := GoDevSuite()
-	mock := DefaultMock()
-
-	ops := []evolution.MutationOp{{
-		Operation: "add_before",
-		Target:    "PreGate",
-		Node: &evolution.SerializableNode{
-			Type: "Condition", Name: "CheckConfidence", Description: "Confidence gate",
-		},
-	}}
-
-	ab := RunABTest(tree, suite, mock, ops)
-
-	if ab.Delta.SuccessRate < -0.2 {
-		t.Errorf("add_before caused regression: Δ=%.2f", ab.Delta.SuccessRate)
-	}
-	// Should not break anything
-	if !ab.Improved && ab.Delta.SuccessRate == 0 {
-		t.Log("add_before had no effect — may be neutral mutation")
+	model := RealLLM(t)
+	tree, suite := liveRoutingFixture()
+	ab := RunABTest(tree, suite, model, []evolution.MutationOp{{Operation: "add_before", Target: "StrategyRouter", Node: &evolution.SerializableNode{Type: "Condition", Name: "TaskIsNotEmpty"}}})
+	if !ab.Qualified || ab.Improved || ab.Delta.ContractPassRate != 0 {
+		t.Fatalf("a duplicate guard should preserve results without earning impact: %+v", ab)
 	}
 }
 
-func TestABTest_AddFallback_HelpsEdgeCases(t *testing.T) {
-	tree := domains.CodeReviewTree()
-	suite := CodeReviewSuite()
-	mock := DefaultMock()
-
-	ops := []evolution.MutationOp{{
-		Operation: "add_fallback",
-		Target:    "OutcomeSelector",
-		Node: &evolution.SerializableNode{
-			Type: "Action", Name: "DefaultFallback", Description: "Catch-all",
-		},
-	}}
-
-	ab := RunABTest(tree, suite, mock, ops)
-
-	if ab.Delta.SuccessRate < -0.2 {
-		t.Errorf("add_fallback caused regression: Δ=%.2f", ab.Delta.SuccessRate)
-	}
-}
-
-func TestScoreMutation_GoodMutation_ScoresPositive(t *testing.T) {
-	tree := evolution.GoDeveloperTree()
-	suite := GoDevSuite()
-	mock := DefaultMock()
-
-	ops := []evolution.MutationOp{
-		{Operation: "increase_retries", Target: "RetrySelfCorrect"},
-	}
-
-	score := ScoreMutation(tree, suite, mock, ops)
-	if score < -2 {
-		t.Errorf("increase_retries scored too low: %.2f", score)
-	}
-}
-
-func TestScoreMutation_BadMutation_ScoresNegative(t *testing.T) {
-	tree := evolution.GoDeveloperTree()
-	suite := GoDevSuite()
-	mock := DefaultMock()
-
-	// Prune ExecutePlan — removes the fallback execution path
-	ops := []evolution.MutationOp{
-		{Operation: "prune_node", Target: "ExecutePlan"},
-	}
-
-	score := ScoreMutation(tree, suite, mock, ops)
-	if score > 0 {
-		t.Errorf("pruning ExecutePlan should score negative or zero, got %.2f", score)
-	}
-}
-
-// TestScoreMutation_PruneRoutingCondition_BreaksPathMatchWithoutSuccessRegression
-// pins the routing-regression that plain SuccessRate/PathCoverage scoring
-// blindly rewards today: pruning NeedsCompilation (BuildPath's gating
-// Condition) removes the guard, so StrategyRouter's Selector semantics
-// swallow every task that should have reached GoKnowledgePath/TestPath/
-// ExecutionPath into BuildPath's CompileGoCode/FixBuildErrors instead — whose
-// mocked actions still report success, so SuccessRate barely moves even
-// though routing genuinely broke. ScoreMutation must catch this via
-// PathMatchRate, not SuccessRate alone.
 func TestScoreMutation_PruneRoutingCondition_BreaksPathMatchWithoutSuccessRegression(t *testing.T) {
-	tree := evolution.GoDeveloperTree()
-	suite := GoDevSuite()
-	mock := DefaultMock()
-
-	ops := []evolution.MutationOp{
-		{Operation: "prune_node", Target: "NeedsCompilation"},
+	model := RealLLM(t)
+	tree, suite := liveRoutingFixture()
+	ops := []evolution.MutationOp{{Operation: "prune_node", Target: "NeedsCompilation"}}
+	ab := RunABTest(tree, suite, model, ops)
+	if !ab.Qualified || ab.Improved || ab.Delta.PathMatchRate >= 0 || ab.Delta.ContractPassRate != 0 {
+		t.Fatalf("lost routing was not detected in real execution: %+v", ab)
 	}
-
-	ab := RunABTest(tree, suite, mock, ops)
-	if ab.Delta.SuccessRate < -0.01 {
-		t.Fatalf("expected success rate roughly unchanged (mock actions still report success), got delta=%.3f", ab.Delta.SuccessRate)
-	}
-	if ab.Delta.PathMatchRate >= 0 {
-		t.Errorf("PathMatchRate delta = %.3f, want < 0 (routing broke: tasks got swallowed into BuildPath)", ab.Delta.PathMatchRate)
-	}
-
-	score := ScoreMutation(tree, suite, mock, ops)
-	if score > 0 {
-		t.Errorf("ScoreMutation = %.2f, want <= 0 (routing regression must never score as an improvement)", score)
+	if score := ScoreMutation(tree, suite, model, ops); score >= 0 {
+		t.Fatalf("routing regression score = %v", score)
 	}
 }
 
-// TestScoreMutation_PathMatchWeight_BothImprovementsOutrankSuccessOnly is a
-// regression guard for the PathMatchRate weight term in ScoreMutation: pruning
-// IsGoRelated (the PreGate condition that currently rejects Go-development
-// tasks with no Go-flavored keywords) improves both SuccessRate and
-// PathMatchRate on GoDevSuite. Scoring the identical mutation against a copy
-// of the suite with every ExpectedPath/PossiblePaths cleared holds
-// SuccessRate's improvement constant (bb.Outcome doesn't depend on a suite's
-// path expectations) while pinning PathMatchRate at a constant 1.0 — so any
-// score difference between the two runs is attributable only to the added
-// PathMatchRate term, and the "both improved" run must score strictly higher.
-func TestScoreMutation_PathMatchWeight_BothImprovementsOutrankSuccessOnly(t *testing.T) {
-	tree := evolution.GoDeveloperTree()
-	suite := GoDevSuite()
-	mock := DefaultMock()
-
-	ops := []evolution.MutationOp{
-		{Operation: "prune_node", Target: "IsGoRelated"},
+func TestScoreMutation_RequiresQualifiedEvidence(t *testing.T) {
+	tree, suite := liveRoutingFixture()
+	if score := ScoreMutation(tree, suite, nil, nil); score >= 0 {
+		t.Fatalf("missing inference cannot qualify: %v", score)
 	}
-
-	// Sanity: this mutation must genuinely move both signals on the real
-	// suite, otherwise the comparison below would be vacuous.
-	abBoth := RunABTest(tree, suite, mock, ops)
-	if abBoth.Delta.SuccessRate <= 0 {
-		t.Fatalf("expected prune_node(IsGoRelated) to improve success rate, got delta=%.3f", abBoth.Delta.SuccessRate)
-	}
-	if abBoth.Delta.PathMatchRate <= 0 {
-		t.Fatalf("expected prune_node(IsGoRelated) to improve path match rate, got delta=%.3f", abBoth.Delta.PathMatchRate)
-	}
-
-	successOnlySuite := Suite{Name: suite.Name + "_noexpectedpath"}
-	for _, tc := range suite.Tasks {
-		tc.ExpectedPath = ""
-		tc.PossiblePaths = nil
-		successOnlySuite.Tasks = append(successOnlySuite.Tasks, tc)
-	}
-
-	scoreBoth := ScoreMutation(tree, suite, mock, ops)
-	scoreSuccessOnly := ScoreMutation(tree, successOnlySuite, mock, ops)
-
-	if scoreBoth <= scoreSuccessOnly {
-		t.Errorf("mutation improving both success rate and path match (score=%.2f) should outscore the identical mutation scored where path match can't move (score=%.2f)", scoreBoth, scoreSuccessOnly)
+	if ab := RunABTest(tree, suite, nil, nil); ab.Qualified || ab.Improved {
+		t.Fatal("missing inference qualified")
 	}
 }
 
@@ -362,24 +191,6 @@ func TestFisherExact_NotSignificant(t *testing.T) {
 	p := fishersExact(10, 10, 11, 9) // 50% → 55% success
 	if p < 0.05 {
 		t.Logf("small effect may be significant by chance, p=%.4f", p)
-	}
-}
-
-func TestMockLLM_ReturnsPredictable(t *testing.T) {
-	mock := DefaultMock()
-	if mock.AnalyzeComplexity("any") != "medium" {
-		t.Error("mock complexity mismatch")
-	}
-	plan := mock.GeneratePlan("task", "low")
-	if len(plan) < 5 {
-		t.Error("mock plan too short")
-	}
-	ww, ti := mock.Reflect("t", "success", "p")
-	if ww != "task completed successfully" {
-		t.Error("mock reflect mismatch")
-	}
-	if ti != "optimize performance" {
-		t.Error("mock reflect mismatch")
 	}
 }
 
@@ -479,9 +290,9 @@ func TestAnnotateMetrics(t *testing.T) {
 	}
 }
 
-func TestMockLLM_GenerateCtx(t *testing.T) {
-	mock := DefaultMock()
-	result, err := mock.GenerateCtx(context.TODO(), "test prompt")
+func TestLiveLLM_GenerateCtx(t *testing.T) {
+	model := RealLLM(t)
+	result, err := model.GenerateCtx(context.TODO(), "test prompt")
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -490,9 +301,9 @@ func TestMockLLM_GenerateCtx(t *testing.T) {
 	}
 }
 
-func TestMockLLM_GenerateWithTimeout(t *testing.T) {
-	mock := DefaultMock()
-	result, err := mock.GenerateWithTimeout("test prompt", 1000)
+func TestLiveLLM_GenerateWithTimeout(t *testing.T) {
+	model := RealLLM(t)
+	result, err := model.GenerateWithTimeout("Explain in one sentence why output verification matters.", 20*time.Second)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -549,56 +360,38 @@ func TestDetectPath_KeywordFallback(t *testing.T) {
 	}
 }
 
-func TestQuickValidate_SmallSuite(_ *testing.T) {
-	tree := evolution.GoDeveloperTree()
-	mock := DefaultMock()
-	// Small suite (<=3 tasks) should call ScoreMutation directly
-	suite := Suite{Name: "tiny", Tasks: []TaskCase{
-		{Task: "build the Go module", ExpectedPath: "BuildPath", MinResultLen: 30, ShouldSucceed: true},
-	}}
-	ops := []evolution.MutationOp{{Operation: "increase_retries", Target: "RetrySelfCorrect"}}
-	score := QuickValidate(tree, suite, mock, ops)
-	// Should not panic, score can be any value
-	_ = score
+func TestQuickValidate_SmallSuite(t *testing.T) {
+	model := RealLLM(t)
+	tree, suite := liveRoutingFixture()
+	suite.Tasks = suite.Tasks[:1]
+	if score := QuickValidate(tree, suite, model, nil); score != 0 {
+		t.Fatalf("unchanged live tree: score=%v", score)
+	}
 }
 
-func TestQuickValidate_LargeSuite(_ *testing.T) {
-	tree := evolution.GoDeveloperTree()
-	mock := DefaultMock()
-	suite := GoDevSuite() // has >3 tasks
-	ops := []evolution.MutationOp{{Operation: "increase_retries", Target: "RetrySelfCorrect"}}
-	score := QuickValidate(tree, suite, mock, ops)
-	// Should use only first+last tasks and not panic
-	_ = score
+func TestQuickValidate_LargeSuite(t *testing.T) {
+	model := RealLLM(t)
+	tree, suite := liveRoutingFixture()
+	suite.Tasks = append(suite.Tasks[:2], suite.Tasks...)
+	if score := QuickValidate(tree, suite, model, nil); score != 0 {
+		t.Fatalf("unchanged live tree: score=%v", score)
+	}
 }
 
 func TestScoreMutation_NeutralIsZero(t *testing.T) {
-	tree := evolution.GoDeveloperTree()
-	suite := GoDevSuite()
-	mock := DefaultMock()
-	// Empty ops should be neutral
-	ops := []evolution.MutationOp{}
-	score := ScoreMutation(tree, suite, mock, ops)
-	if score != 0.0 {
-		t.Errorf("no-op mutation should be neutral (0.0), got %.2f", score)
+	model := RealLLM(t)
+	tree, suite := liveRoutingFixture()
+	if score := ScoreMutation(tree, suite, model, nil); score != 0 {
+		t.Fatalf("unchanged live tree: score=%v", score)
 	}
 }
 
 func TestScoreMutation_RegressionIsNegative(t *testing.T) {
-	tree := evolution.GoDeveloperTree()
-	suite := GoDevSuite()
-	mock := DefaultMock()
-	// Prune a critical path node — with mock LLM, output is identical so score is 0 (neutral)
-	// Real LLM would show actual regression here
-	ops := []evolution.MutationOp{
-		{Operation: "prune_node", Target: "StrategyRouter"},
-	}
-	score := ScoreMutation(tree, suite, mock, ops)
-	if score < 0 {
-		t.Logf("pruning StrategyRouter scored negative as expected: %.2f", score)
-	}
-	if score > 0 {
-		t.Errorf("pruning StrategyRouter should not improve score, got %.2f", score)
+	model := RealLLM(t)
+	tree, suite := liveRoutingFixture()
+	ops := []evolution.MutationOp{{Operation: "prune_node", Target: "StrategyRouter"}}
+	if score := ScoreMutation(tree, suite, model, ops); score >= 0 {
+		t.Fatalf("deleted task work: score=%v", score)
 	}
 }
 
@@ -748,7 +541,7 @@ func TestLoadSWEVerifiedAndEvaluate(t *testing.T) {
 	}
 
 	tree := &evolution.SerializableNode{Type: "Action", Name: "MarkSuccessful"}
-	metrics := EvaluateSWEVerified(tree, entries, DefaultMock())
+	metrics := EvaluateSWEVerified(tree, entries, RealLLM(t))
 	if metrics.TotalEntries != 1 || len(metrics.Results) != 1 {
 		t.Fatalf("unexpected metrics shape: %+v", metrics)
 	}

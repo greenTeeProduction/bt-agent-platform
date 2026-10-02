@@ -1826,7 +1826,7 @@ func TestDiff_LLMProviderSwitch(t *testing.T) {
 		// LLMProvider changed + OllamaHost emptied + DeepSeekKey set
 		t.Fatalf("expected 3 diffs, got %d: %v", len(diffs), diffs)
 	}
-	if diffs[0] != "LLMProvider: ollama → deepseek" {
+	if diffs[0] != "LLMProvider: codex → deepseek" {
 		t.Errorf("expected LLMProvider diff, got %q", diffs[0])
 	}
 	// OllamaHost changed (emptied for deepseek)

@@ -50,7 +50,7 @@ func TestNeedsFreshProgramCondition(t *testing.T) {
 	if cond(&Blackboard{}) {
 		t.Fatal("active program must suppress seeding")
 	}
-	ps.MarkDone(ps.Programs[0].ID, 0, "run-x")
+	seedLegacyProgramDone(ps, ps.Programs[0].ID, 0, "run-x")
 	_ = ps.Save()
 	if !cond(&Blackboard{}) {
 		t.Fatal("completed programs must re-enable seeding")

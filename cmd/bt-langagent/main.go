@@ -18,7 +18,6 @@ import (
 
 	btcore "github.com/rvitorper/go-bt/core"
 	"github.com/tmc/langchaingo/llms"
-	"github.com/tmc/langchaingo/llms/ollama"
 )
 
 // langAgentServer holds the stores and evolved agent backing the la_* tool
@@ -207,21 +206,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	llmCfg := llm.DefaultConfig()
-	llmClient, err := llm.NewClient(llmCfg)
+	llmClient, err := llm.NewProvider(platformConfig)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "fatal: llm: %v\n", err)
 		os.Exit(1)
 	}
 
-	langLLM, err := ollama.New(
-		ollama.WithModel(llmCfg.Model),
-		ollama.WithServerURL(llmCfg.ServerURL),
-	)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "fatal: langchain llm: %v\n", err)
-		os.Exit(1)
-	}
+	langLLM := llm.LangChainModel{Inner: llmClient}
 
 	refDir, refErr := platformConfig.SharedReflectionsDir()
 	if refErr != nil {

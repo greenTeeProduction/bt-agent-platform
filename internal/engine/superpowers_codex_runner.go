@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/nico/go-bt-evolve/internal/config"
 )
 
 // CodexRunner executes a one-shot OpenAI Codex CLI delegation. It mirrors
@@ -19,7 +21,7 @@ type CodexRunner interface {
 }
 
 // execCodexRunner invokes the codex CLI via `codex exec`. Verified against
-// codex-cli 0.153.4 (see `codex exec --help`): exec is the non-interactive
+// codex-cli 0.159.3 (see `codex exec --help`): exec is the non-interactive
 // subcommand, `--sandbox` selects the sandbox policy (read-only |
 // workspace-write | danger-full-access), `--ephemeral` skips persisting the
 // session to disk, and `--color never` disables ANSI codes so logs stay clean.
@@ -54,6 +56,10 @@ func (r execCodexRunner) buildCodexArgs(prompt string, outputFile string) []stri
 	if model := resolvedSuperpowersCodexModel(); model != "" {
 		args = append(args, "-m", model)
 	}
+	if config.SolOnly() {
+		// A separately configured reviewer or subagent must not select another model.
+		args = append(args, "--disable", "multi_agent", "-c", "review_model=\""+config.SolModel+"\"")
+	}
 	return append(args,
 		"--sandbox", sandbox,
 		"--ephemeral",
@@ -73,7 +79,7 @@ func (r execCodexRunner) RunCodex(ctx context.Context, repoDir string, prompt st
 	repoDir, prompt = isolatedDir, isolatedPrompt
 	bin := r.Bin
 	if bin == "" {
-		bin = getenvDefault("BT_SUPERPOWERS_CODEX_BIN", "/mnt/ssd/npm-global/bin/codex")
+		bin = getenvDefault("BT_SUPERPOWERS_CODEX_BIN", "/home/nico/.local/bin/codex")
 	}
 
 	// Bin and its environment override are trusted operator configuration,
@@ -112,7 +118,7 @@ func (r execCodexRunner) RunCodex(ctx context.Context, repoDir string, prompt st
 	cmd.Dir = repoDir
 	// Codex shells out to git/go; make the npm-global codex install and the
 	// absolute Go toolchain reachable regardless of the ambient PATH.
-	cmd.Env = append(os.Environ(), "PATH=/mnt/ssd/npm-global/bin:/usr/local/go/bin:"+os.Getenv("HOME")+"/go/bin:"+os.Getenv("PATH"))
+	cmd.Env = append(os.Environ(), "PATH="+filepath.Dir(bin)+":/usr/local/go/bin:"+os.Getenv("HOME")+"/go/bin:"+os.Getenv("PATH"))
 	// The codex CLI is a Node wrapper that spawns its own child group; a bare
 	// CommandContext kill would reap only the wrapper and leave model/agent
 	// children orphaned past a timeout. Kill the whole process group and bound
@@ -155,13 +161,16 @@ func (r execCodexRunner) RunCodex(ctx context.Context, repoDir string, prompt st
 // Set BT_SUPERPOWERS_CODEX_MODEL to an explicit model ID to override this
 // default, or "auto" (or "default"/"none") to drop the flag and inherit the
 // account default instead. Unavailable models fail without substitution.
-const defaultSuperpowersCodexModel = "gpt-5.3-codex-spark"
+const defaultSuperpowersCodexModel = config.SolModel
 
 // resolvedSuperpowersCodexModel returns the model for codex runs.
 // BT_SUPERPOWERS_CODEX_MODEL semantics mirror the Claude model env:
 // unset/empty → defaultSuperpowersCodexModel; "auto"/"default"/"none" → ""
 // (no -m flag, account default); anything else → used verbatim.
 func resolvedSuperpowersCodexModel() string {
+	if config.SolOnly() {
+		return config.SolModel
+	}
 	model := strings.TrimSpace(os.Getenv("BT_SUPERPOWERS_CODEX_MODEL"))
 	if strings.EqualFold(model, "auto") || strings.EqualFold(model, "default") || strings.EqualFold(model, "none") {
 		return ""

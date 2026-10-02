@@ -1,0 +1,10 @@
+=== RUN   TestLivePersonalFileAutomation
+2026/10/01 19:07:35 WARN scheduler: no persisted job state found — starting with fresh jobs path=/tmp/TestLivePersonalFileAutomation3667516663/001/jobs/scheduler-jobs.json
+    file_automation_test.go:159: real personal task: ollama/qwen2.5:1.5b, 3 calls; independent output={"count":3,"total":25}
+--- PASS: TestLivePersonalFileAutomation (5.20s)
+=== RUN   TestLiveManualAndGeneticPublication
+=== RUN   TestLiveManualAndGeneticPublication/bt_evolve
+--- PASS: TestLiveManualAndGeneticPublication (16.47s)
+    --- PASS: TestLiveManualAndGeneticPublication/bt_evolve (16.47s)
+PASS
+ok  	github.com/nico/go-bt-evolve/cmd/bt-agent	21.686s

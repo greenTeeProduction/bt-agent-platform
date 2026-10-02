@@ -46,15 +46,19 @@ type ToolBenchEntry struct {
 
 // ToolBenchMetrics holds aggregate ToolBench evaluation results.
 type ToolBenchMetrics struct {
-	TotalTasks           int     `json:"total_tasks"`
-	APISelectionAccuracy float64 `json:"api_selection_accuracy"` // fraction of tasks with correct API selection
-	StepCompletionRate   float64 `json:"step_completion_rate"`   // fraction of steps that completed
-	SuccessRate          float64 `json:"success_rate"`           // fraction of tasks that fully succeeded
+	ModelEvidence        ModelEvidence `json:"model_evidence"`
+	Warning              string        `json:"warning,omitempty"`
+	TotalTasks           int           `json:"total_tasks"`
+	APISelectionAccuracy float64       `json:"api_selection_accuracy"` // fraction of tasks with correct API selection
+	StepCompletionRate   float64       `json:"step_completion_rate"`   // fraction of steps that completed
+	SuccessRate          float64       `json:"success_rate"`           // fraction of tasks that fully succeeded
 }
 
 // EvaluateToolBench tests whether the tree correctly selects which APIs/tools
 // to invoke for a set of ToolBench entries.
 func EvaluateToolBench(tree *evolution.SerializableNode, entries []ToolBenchEntry, llm llm.LLM) *ToolBenchMetrics {
+	var modelEvidence ModelEvidence
+	var warning string
 	var totalTasks int
 	correctAPISelection := 0
 	totalSteps := 0
@@ -70,12 +74,15 @@ func EvaluateToolBench(tree *evolution.SerializableNode, entries []ToolBenchEntr
 			entry.TaskDescription,
 			formatAvailableAPIs(entry.AvailableAPIs))
 
-		bb := &engine.Blackboard{
+		bb := &engine.Blackboard{NodeAdmission: benchmarkAdmission,
 			Task: task,
 			LLM:  llm,
 		}
-		bt := engine.BuildTree(tree, bb)
-		output := engine.RunTask(bb, bt)
+		output, taskEvidence, taskWarning := executeLiveTask(tree, bb)
+		mergeModelEvidence(&modelEvidence, taskEvidence)
+		if taskWarning != "" {
+			warning = taskWarning
+		}
 
 		path := detectPath(output, bb)
 
@@ -88,26 +95,26 @@ func EvaluateToolBench(tree *evolution.SerializableNode, entries []ToolBenchEntr
 				break
 			}
 		}
-		if apiMatch {
+		if apiMatch && taskWarning == "" {
 			correctAPISelection++
 		}
 
 		// Step completion: count steps that produced output
 		for _, step := range entry.Steps {
 			totalSteps++
-			if strings.Contains(strings.ToLower(output), strings.ToLower(step.API)) {
+			if taskWarning == "" && strings.Contains(strings.ToLower(output), strings.ToLower(step.API)) {
 				completedSteps++
 			}
 		}
 
-		if bb.Outcome == "success" {
+		if taskWarning == "" && bb.Outcome == "success" {
 			totalSuccesses++
 		}
 	}
 
 	n := totalTasks
 	if n == 0 {
-		return &ToolBenchMetrics{}
+		return &ToolBenchMetrics{ModelEvidence: modelEvidence, Warning: warning}
 	}
 
 	apiAcc := 0.0
@@ -120,7 +127,7 @@ func EvaluateToolBench(tree *evolution.SerializableNode, entries []ToolBenchEntr
 	}
 	successRate := float64(totalSuccesses) / float64(n)
 
-	return &ToolBenchMetrics{
+	return &ToolBenchMetrics{ModelEvidence: modelEvidence, Warning: warning,
 		TotalTasks:           n,
 		APISelectionAccuracy: apiAcc,
 		StepCompletionRate:   stepRate,

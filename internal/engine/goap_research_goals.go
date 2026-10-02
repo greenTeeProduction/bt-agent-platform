@@ -314,13 +314,21 @@ func extractGoapProgram(answer string) *goapProgramSpec {
 	return spec
 }
 
-// goapProgramsPath is the multi-cycle program backlog (test seam).
-var goapProgramsPath = research.DefaultProgramsPath()
+// goapProgramsPath is a test override. Production resolves its owner after
+// startup configuration, rather than capturing the user's home at import time.
+var goapProgramsPath string
+
+func currentGoapProgramsPath() string {
+	if goapProgramsPath != "" {
+		return goapProgramsPath
+	}
+	return research.DefaultProgramsPath()
+}
 
 // persistGoapProgram registers a research-proposed multi-cycle program;
 // Add dedupes by title so re-proposals across cycles are harmless.
 func persistGoapProgram(bb *Blackboard, spec *goapProgramSpec, source string) {
-	err := research.UpdatePrograms(goapProgramsPath, func(ps *research.ProgramStore) error {
+	err := research.UpdatePrograms(currentGoapProgramsPath(), func(ps *research.ProgramStore) error {
 		ps.Add(spec.Title, source, spec.Milestones)
 		return nil
 	})
@@ -332,21 +340,23 @@ func persistGoapProgram(bb *Blackboard, spec *goapProgramSpec, source string) {
 }
 
 // recentImplementedGoals lists the newest implemented-goal titles from the
-// shared research knowledge store, so research prompts can say "already
-// done — do not re-propose". Best-effort: an unreadable store yields nil.
+// verified delivery ledger. Legacy knowledge labels carry no delivery credit. Best-effort: an unreadable store yields nil.
 func recentImplementedGoals(n int) []string {
-	store, err := research.Open(btFusionKnowledgePath)
+	if n <= 0 {
+		return nil
+	}
+	store, err := research.OpenTraces(researchTracePath(""), "")
 	if err != nil {
 		return nil
 	}
-	var entries []*research.Entry
-	for _, e := range store.Entries {
-		if strings.HasPrefix(e.Source, "goap:implemented") {
+	var entries []*research.GoalTrace
+	for _, e := range store.Goals {
+		if len(e.Deliveries) > 0 {
 			entries = append(entries, e)
 		}
 	}
-	slices.SortFunc(entries, func(a, b *research.Entry) int {
-		return b.LastSeen.Compare(a.LastSeen)
+	slices.SortFunc(entries, func(a, b *research.GoalTrace) int {
+		return b.Deliveries[len(b.Deliveries)-1].RecordedAt.Compare(a.Deliveries[len(a.Deliveries)-1].RecordedAt)
 	})
 	var titles []string
 	for _, e := range entries {
@@ -358,52 +368,19 @@ func recentImplementedGoals(n int) []string {
 	return titles
 }
 
-// recordImplementedGoals persists this run's completed task objectives so
-// future research cycles do not re-propose landed work.
-func recordImplementedGoals(run *SuperpowersRun) {
-	store, err := research.Open(btFusionKnowledgePath)
-	if err != nil {
-		return
-	}
-	budget, _ := research.OpenGoalAttempts(goapGoalAttemptsPath)
-	budgetChanged := false
-	for _, task := range run.Tasks {
-		if task.Status != "done" && task.Status != "completed" {
-			continue
-		}
-		// The task text is parsed back from the composed plan, which carries
-		// the TRANSIENT scoping/reuse annotations (failure notes; graphify
-		// REUSE-EXISTING hits whose loc=L<n> coordinates shift on every graph
-		// rebuild). Persist the STRIPPED objective: the store keys on content
-		// (research.Key), so recording enriched text would give the same
-		// landed goal a different key per rebuild — breaking SeenCount dedup
-		// and flooding the newest-N "already done" prompt window.
-		title := stripGoapGoalTransientNotes(task.Title)
-		if len(title) > 120 {
-			title = title[:120]
-		}
-		store.Record("goap:implemented", title, stripGoapGoalTransientNotes(task.Objective))
-		// The goal landed: clear its failure budget so a later re-proposal
-		// starts fresh instead of inheriting stale abandon state.
-		if budget != nil && budget.Clear(goapResearchGoalKey(task.Objective)) {
-			budgetChanged = true
-		}
-	}
-	_ = store.Save()
-	if budget != nil && budgetChanged {
-		_ = budget.Save()
-	}
-}
-
 // superpowersPlanAlreadyImplemented reports whether every task objective in
-// the plan is already recorded as goap:implemented in the knowledge store —
+// the plan has verified delivery evidence in the owner-scoped trace store —
 // the signature of a stale carryover plan that must not be resumed.
-func superpowersPlanAlreadyImplemented(activePlan string) bool {
+func superpowersPlanAlreadyImplemented(activePlan string, owners ...string) bool {
+	user := ""
+	if len(owners) > 0 {
+		user = owners[0]
+	}
 	tasks, err := ParseSuperpowersPlan(activePlan)
 	if err != nil || len(tasks) == 0 {
 		return false
 	}
-	store, err := research.Open(btFusionKnowledgePath)
+	store, err := research.OpenTraces(researchTracePath(user), user)
 	if err != nil {
 		return false
 	}
@@ -411,91 +388,11 @@ func superpowersPlanAlreadyImplemented(activePlan string) bool {
 		// Match recordImplementedGoals: objectives are recorded stripped of
 		// their transient annotations, so the lookup must strip identically or
 		// a re-enriched carryover plan never matches its own recorded landing.
-		if !store.Known(stripGoapGoalTransientNotes(task.Objective)) {
+		if !store.Delivered(researchGoalTraceID(task.Objective)) {
 			return false
 		}
 	}
 	return true
-}
-
-// completeGoapProgramMilestone marks the active program milestone done — but
-// only when the applied run demonstrably executed it. PrioritizeGoapGoals
-// stamps "programID:index" into ChainState when it queues a milestone;
-// completing on any successful apply would let a cycle that drifted onto
-// unrelated goals silently check off milestone work it never did.
-func completeGoapProgramMilestone(bb *Blackboard, run *SuperpowersRun) {
-	type milestoneRef struct {
-		programID string
-		idx       int
-		// anchorRequired marks fallback candidates: without a stamp tying the
-		// milestone to this run, completion needs positive file-anchor evidence
-		// (an anchor-less milestone would otherwise be checked off by ANY apply).
-		anchorRequired bool
-	}
-	var completed []string
-	err := research.UpdatePrograms(goapProgramsPath, func(ps *research.ProgramStore) error {
-		var refs []milestoneRef
-		refBlob, _ := bb.ChainState["goap_fusion_program_milestone"].(string)
-		if strings.TrimSpace(refBlob) != "" {
-			// A batched cycle stamps several comma-joined refs; each milestone is
-			// verified against the run's file anchors independently before being
-			// checked off.
-			for ref := range strings.SplitSeq(refBlob, ",") {
-				parts := strings.SplitN(strings.TrimSpace(ref), ":", 2)
-				if len(parts) != 2 {
-					continue
-				}
-				idx, err := strconv.Atoi(parts[1])
-				if err != nil {
-					continue
-				}
-				refs = append(refs, milestoneRef{programID: parts[0], idx: idx})
-			}
-		} else {
-			// No stamp: a preflight-RESUMED plan applies milestone work in a cycle
-			// whose fresh ChainState never saw PrioritizeGoapGoals — the stamp died
-			// with the planning cycle. Fall back to anchor evidence over pending
-			// milestones so shipped work is checked off instead of re-queued (the
-			// 12:00 cycle on 2026-07-10 landed milestones 1-3 as 28bc7d0, left all
-			// pending, and re-implemented them into a deleted worktree).
-			for _, p := range ps.Programs {
-				for i, m := range p.Milestones {
-					if m.Status == "pending" {
-						refs = append(refs, milestoneRef{programID: p.ID, idx: i, anchorRequired: true})
-					}
-				}
-			}
-		}
-		for _, ref := range refs {
-			var milestone *research.Milestone
-			for _, p := range ps.Programs {
-				if p.ID == ref.programID && ref.idx >= 0 && ref.idx < len(p.Milestones) {
-					milestone = &p.Milestones[ref.idx]
-					break
-				}
-			}
-			if milestone == nil {
-				continue
-			}
-			if ref.anchorRequired && len(extractGoFilePaths(milestone.Goal)) == 0 {
-				continue
-			}
-			if !runExecutedMilestone(run, milestone.Goal) {
-				continue
-			}
-			if ps.MarkDone(ref.programID, ref.idx, run.ID) {
-				completed = append(completed, fmt.Sprintf("%s:%d", ref.programID, ref.idx))
-				ps.ReleaseClaim(ref.programID, bb.RunID)
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		return
-	}
-	if len(completed) > 0 {
-		setGoapState(bb, "program_milestone_done", strings.Join(completed, ","))
-	}
 }
 
 // programContinueNote returns the marker line the scheduler watches for:
@@ -503,7 +400,7 @@ func completeGoapProgramMilestone(bb *Blackboard, run *SuperpowersRun) {
 // apply, the next cycle should start immediately instead of idling until
 // the next cron slot.
 func programContinueNote() string {
-	ps, err := research.OpenPrograms(goapProgramsPath)
+	ps, err := research.OpenPrograms(currentGoapProgramsPath())
 	if err != nil {
 		return ""
 	}

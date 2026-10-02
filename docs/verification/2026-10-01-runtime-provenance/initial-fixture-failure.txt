@@ -1,0 +1,18 @@
+ok  	github.com/nico/go-bt-evolve/internal/util	0.717s
+ok  	github.com/nico/go-bt-evolve/internal/evolution	0.112s
+--- FAIL: TestResearchRuntimeJoinsOnlyQualifiedCodeAndResults (0.62s)
+    --- FAIL: TestResearchRuntimeJoinsOnlyQualifiedCodeAndResults/wrong-result (0.00s)
+        research_runtime_test.go:72: incorrect attribution: map[adopted_execution_count:0 delivered_goals:1 goals:map[4080b928b022fb7a:0x7dcbc176eb00] goals_needing_review:0 measured_impact:causal_research_impact_not_established observed_goals:1 qualified_tree_execution_count:0 runtime_adoption:not_linked runtime_evidence:inspected runtime_observations:map[] source_linked_deliveries:1 user:runtime-owner verified_result_count:0]
+    --- FAIL: TestResearchRuntimeJoinsOnlyQualifiedCodeAndResults/failed-run (0.00s)
+        research_runtime_test.go:72: incorrect attribution: map[adopted_execution_count:0 delivered_goals:1 goals:map[4080b928b022fb7a:0x7dcbc176eb80] goals_needing_review:0 measured_impact:causal_research_impact_not_established observed_goals:1 qualified_tree_execution_count:0 runtime_adoption:not_linked runtime_evidence:inspected runtime_observations:map[] source_linked_deliveries:1 user:runtime-owner verified_result_count:0]
+    --- FAIL: TestResearchRuntimeJoinsOnlyQualifiedCodeAndResults/exact (0.00s)
+        research_runtime_test.go:72: incorrect attribution: map[adopted_execution_count:0 delivered_goals:1 goals:map[4080b928b022fb7a:0x7dcbc176ec00] goals_needing_review:0 measured_impact:causal_research_impact_not_established observed_goals:1 qualified_tree_execution_count:0 runtime_adoption:not_linked runtime_evidence:inspected runtime_observations:map[] source_linked_deliveries:1 user:runtime-owner verified_result_count:0]
+    --- FAIL: TestResearchRuntimeJoinsOnlyQualifiedCodeAndResults/flag-only (0.00s)
+        research_runtime_test.go:72: incorrect attribution: map[adopted_execution_count:0 delivered_goals:1 goals:map[4080b928b022fb7a:0x7dcbc176ee80] goals_needing_review:0 measured_impact:causal_research_impact_not_established observed_goals:1 qualified_tree_execution_count:0 runtime_adoption:not_linked runtime_evidence:inspected runtime_observations:map[] source_linked_deliveries:1 user:runtime-owner verified_result_count:0]
+    research_runtime_test.go:119: changed code inherited delivery credit: true <nil>
+time=2026-10-01T22:33:52.215+02:00 level=ERROR msg="terminal run evidence not saved" tree=EvidenceOnce run_id=run-69c3f5068256fed33fc53898e42bb0a9 error="create dir for /tmp/TestRunEvidenceFailureDoesNotReplayCompletedWork3856968437/001/reflection-run-69c3f5068256fed33fc53898e42bb0a9.json: open /tmp/TestRunEvidenceFailureDoesNotReplayCompletedWork3856968437/001: not a directory"
+FAIL
+FAIL	github.com/nico/go-bt-evolve/internal/engine	0.646s
+ok  	github.com/nico/go-bt-evolve/internal/agentexec	0.032s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-agent	0.020s
+FAIL

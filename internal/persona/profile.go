@@ -10,6 +10,7 @@
 package persona
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -220,6 +221,11 @@ func (w Workspace) GoalsDir() string         { return filepath.Join(w.Root, "goa
 func (w Workspace) MemoryDir() string        { return filepath.Join(w.Root, "memory") }
 func (w Workspace) ReflectionsDir() string   { return filepath.Join(w.Root, "reflections") }
 func (w Workspace) ExperienceDir() string    { return filepath.Join(w.Root, "experience") }
+
+// ArtifactsDir isolates raw owners even when legacy sanitized user paths collide.
+func (w Workspace) ArtifactsDir() string {
+	return filepath.Join(w.Root, "artifacts", fmt.Sprintf("%x", sha256.Sum256([]byte(w.User))))
+}
 
 // SanitizeUserID maps a user identifier to a cross-platform-safe directory
 // name fragment (same policy as evolution.TreeFileName's ID sanitization).

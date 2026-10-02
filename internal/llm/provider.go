@@ -9,9 +9,16 @@ import (
 )
 
 // NewProvider creates the appropriate LLM client based on configuration.
-// Supports "ollama", "deepseek", "openrouter", and "acp" providers. Reads API keys,
+// Sol-only policy uses Codex login. Legacy adapters require an explicit opt-out.
+// Reads API keys,
 // model settings, and ACP process settings from config or environment.
 func NewProvider(cfg *config.Config) (LLM, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("LLM configuration is nil")
+	}
+	if config.SolOnly() {
+		return NewCodexClient(config.Duration(cfg.LLMTimeout)), nil
+	}
 	primary, primaryName, err := buildProvider(cfg.LLMProvider, primaryModel(cfg), cfg)
 	if err != nil {
 		return nil, err
@@ -35,6 +42,11 @@ func NewProvider(cfg *config.Config) (LLM, error) {
 
 func buildProvider(provider, model string, cfg *config.Config) (LLM, string, error) {
 	switch provider {
+	case "codex":
+		if model != "" && model != config.SolModel {
+			return nil, "", fmt.Errorf("codex inference requires %s", config.SolModel)
+		}
+		return NewCodexClient(config.Duration(cfg.LLMTimeout)), "codex:" + config.SolModel, nil
 	case "deepseek":
 		dsCfg := DefaultDeepSeekConfig()
 		if cfg.DeepSeekHost != "" {
@@ -88,7 +100,7 @@ func buildProvider(provider, model string, cfg *config.Config) (LLM, string, err
 		}
 		return client, fmt.Sprintf("ollama:%s", ollamaModel), nil
 	default:
-		return nil, "", fmt.Errorf("unknown LLM provider: %s (valid: ollama, deepseek, openrouter, acp)", provider)
+		return nil, "", fmt.Errorf("unknown LLM provider: %s (valid: codex, ollama, deepseek, openrouter, acp)", provider)
 	}
 }
 
@@ -163,7 +175,7 @@ func parseFallbackModels(raw string, defaultProvider string) []fallbackSpec {
 
 func isKnownProvider(provider string) bool {
 	switch provider {
-	case "ollama", "deepseek", "openrouter", "acp":
+	case "codex", "ollama", "deepseek", "openrouter", "acp":
 		return true
 	default:
 		return false

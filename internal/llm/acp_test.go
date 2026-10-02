@@ -56,6 +56,7 @@ func TestNewProviderCreatesACPClient(t *testing.T) {
 		LLMTimeout:  5,
 	}
 
+	t.Setenv("BT_LLM_SOL_ONLY", "false")
 	provider, err := NewProvider(cfg)
 	if err != nil {
 		t.Fatalf("NewProvider(acp): %v", err)

@@ -448,11 +448,7 @@ func TestCompleteGoapProgramMilestone_ReleasesClaim(t *testing.T) {
 			"goap_fusion_program_milestone": id + ":0",
 		},
 	}
-	run := &SuperpowersRun{
-		ID:           "run-complete-probe",
-		ApplyStatus:  "committed",
-		ChangedFiles: []string{"internal/engine/actions_a2a.go"},
-	}
+	run := verifiedProgramRunForTest(t, bb, []SuperpowersTask{{Objective: "Wire bid evaluation in internal/engine/actions_a2a.go", Files: []string{"internal/engine/actions_a2a.go"}}})
 	completeGoapProgramMilestone(bb, run)
 
 	ps, err := research.OpenPrograms(goapProgramsPath)

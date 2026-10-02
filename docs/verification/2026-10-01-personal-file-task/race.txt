@@ -1,0 +1,9 @@
+ok  	github.com/nico/go-bt-evolve/internal/engine	141.705s
+ok  	github.com/nico/go-bt-evolve/internal/evolution	98.102s
+ok  	github.com/nico/go-bt-evolve/internal/knowledge	28.707s
+ok  	github.com/nico/go-bt-evolve/internal/persona	(cached)
+ok  	github.com/nico/go-bt-evolve/internal/agentexec	2.940s
+ok  	github.com/nico/go-bt-evolve/internal/agent	30.428s
+ok  	github.com/nico/go-bt-evolve/internal/benchmark	3.535s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-agent	42.784s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-dashboard	21.844s

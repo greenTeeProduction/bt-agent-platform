@@ -1,0 +1,12 @@
+ok  	github.com/nico/go-bt-evolve/internal/research	0.136s
+--- FAIL: TestRecoverGoapFusionPendingPatches_SkipsSupersededViaKnowledgeStore (0.58s)
+    actions_superpowers_prod_test.go:1489: update /tmp/TestRecoverGoapFusionPendingPatches_SkipsSupersededViaKnowledgeS4092584412/004/knowledge.json.trace-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.json: landed commit contains no completed task's declared files
+time=2026-10-01T20:52:33.269+02:00 level=WARN msg="landed code lacks complete research attribution" run=delivery-5a2baecbc2f62913 err="read /tmp/TestResearchDeliveryPersistenceFailureDoesNotReplayCode3368733675/001/knowledge.json.trace-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.json: is a directory"
+--- FAIL: TestResumeSkipsAlreadyImplementedPlan (0.54s)
+    superpowers_findings_fix_test.go:28: update /tmp/TestResumeSkipsAlreadyImplementedPlan1823278587/001/knowledge.json.trace-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.json: landed commit contains no completed task's declared files
+--- FAIL: TestSuperpowersPlanAlreadyImplementedRequiresAllTasks (0.55s)
+    superpowers_findings_fix_test.go:62: update /tmp/TestSuperpowersPlanAlreadyImplementedRequiresAllTasks2020883271/001/knowledge.json.trace-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855.json: landed commit contains no completed task's declared files
+FAIL
+FAIL	github.com/nico/go-bt-evolve/internal/engine	5.074s
+ok  	github.com/nico/go-bt-evolve/cmd/bt-agent	0.026s [no tests to run]
+FAIL

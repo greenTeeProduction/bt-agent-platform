@@ -21,6 +21,17 @@ import (
 	"github.com/nico/go-bt-evolve/internal/util"
 )
 
+// candidateAcceptor separates orchestration decision tests from live model
+// qualification. Each production gardener defaults to the live validator.
+type candidateAcceptor func(*evolution.SerializableNode, *evolution.SerializableNode, benchmark.Suite, llm.LLM) bool
+
+func (g *Gardener) acceptsCandidate(base, candidate *evolution.SerializableNode, suite benchmark.Suite, model llm.LLM) bool {
+	if g.candidateAcceptance != nil {
+		return g.candidateAcceptance(base, candidate, suite, model)
+	}
+	return benchmark.QuickValidateCandidate(base, candidate, suite, model)
+}
+
 // EvolveV2Config controls the v2 evolution pipeline: a structural quick-check
 // cascade, block-protected candidate filtering, and per-candidate pre-scored
 // mutation application.
@@ -36,7 +47,7 @@ type EvolveV2Config struct {
 	BlocksEnabled bool
 	BlockConfig   evolution.BlockConfig
 
-	// Use real LLM or mock
+	// Deprecated compatibility field: benchmark validation always uses a real model.
 	UseRealLLM bool
 
 	// SelectorOrdering, when true, applies learned Selector child ordering from
@@ -107,7 +118,7 @@ func DefaultEvolveV2Config() EvolveV2Config {
 		CascadeCfg:               evaluator.DefaultCascadeConfig(),
 		BlocksEnabled:            true,
 		BlockConfig:              evolution.DefaultBlockConfig(),
-		UseRealLLM:               false, // use mock by default for speed
+		UseRealLLM:               true, // benchmark evaluation always uses a real model
 		SelectorOrderingStrategy: evolution.OrderBySuccessRate,
 		MCTSStructuralSearch:     true,
 		MCTSIterations:           defaultMCTSCandidateIterations,
@@ -224,10 +235,16 @@ func lastFailureTask(records []evolution.Record) string {
 // evolveTreeV2 runs the v2 evolution pipeline on a single tree:
 // cascade quick-check → ordered candidates → block filter → per-candidate
 // benchmark + pre-score + quality gate → apply → validation-gated persist.
-func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetrics {
+func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) (metrics CycleMetrics) {
 	if entry.Tree == nil {
 		return CycleMetrics{TreeName: entry.Name, Improved: false}
 	}
+	metricEntry := entry
+	metricEntry.Tree = cloneTreeForGardener(entry.Tree)
+	g.cfg.Registry.mu.Lock()
+	delete(g.cfg.Registry.qualifications, entry.FilePath)
+	g.cfg.Registry.mu.Unlock()
+	defer g.applyMeasuredMetrics(metricEntry, &metrics)
 	// Work on a detached candidate. Readers retain the committed predecessor
 	// until persistence succeeds, including when optional passes alter the tree.
 	tree := cloneTreeForGardener(entry.Tree)
@@ -251,9 +268,8 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 	// personal trees in ADR-133 Phase 5): a tree with no reflection records
 	// has no run-derived fitness gradient, so mutation is a blind coin flip
 	// that only burns benchmark compute. Personal trees use strict filtering
-	// (recordsForEntry), so a freshly compiled tree relies on its seed
-	// reflection to pass this gate.
-	if len(records) == 0 && !g.cfg.EvolveWithoutReflections {
+	// (recordsForEntry). A compile seed or feedback is not execution evidence.
+	if len(evolution.ExecutionRecords(records)) == 0 && !g.cfg.EvolveWithoutReflections {
 		return CycleMetrics{
 			TreeName: entry.Name, Improved: false,
 			BaseFitness: baseFitness.Composite, NewFitness: baseFitness.Composite,
@@ -375,11 +391,10 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 
 	// ── Apply mutations with benchmark validation ──
 	suite := benchmark.SuiteForTree(entry.Name)
-	var selectedLLM llm.LLM
-	if cfg.UseRealLLM {
-		selectedLLM = benchmark.DefaultLLM()
-	} else {
-		selectedLLM = benchmark.DefaultMock()
+	selectedLLM, err := benchmark.DefaultLLM()
+	if err != nil {
+		slog.Warn("gardener/v2: benchmark configuration failed", "tree", entry.Name, "error", err)
+		return CycleMetrics{TreeName: entry.Name, Improved: false}
 	}
 
 	// Fail closed AND self-heal (Q2 Evolvability milestone 2): a disabled gate
@@ -459,12 +474,12 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 			rejected++
 			continue
 		}
-		if !benchmark.QuickValidateCandidate(tree, candidateTree, suite, selectedLLM) {
+		if !g.acceptsCandidate(tree, candidateTree, suite, selectedLLM) {
 			rejected++
 			continue
 		}
 		candidateFitness := evaluator.EvaluateTree(candidateTree, records)
-		if candidateFitness.Composite < currentFitness.Composite-0.0001 {
+		if candidateFitness.Composite <= currentFitness.Composite+0.0001 {
 			rejected++
 			continue
 		}
@@ -560,7 +575,7 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 		// ── Validation gate — prevent persisting evolved trees that fail
 		// quality thresholds. A rejection skips this tree only.
 		gateErr := ValidationGate(entry.Name, entry.Name, g.cfg.ValidationGate)
-		if gateErr == nil && !benchmark.QuickValidateCandidate(originalTree, tree, suite, selectedLLM) {
+		if gateErr == nil && !g.acceptsCandidate(originalTree, tree, suite, selectedLLM) {
 			gateErr = errors.New("candidate definition or benchmark rejected")
 		}
 		if gateErr == nil && g.cfg.MetaValidator != nil && g.cfg.MetaValidator.ValidateMutation(originalTree, tree, baseFitness.Composite, newFitness.Composite).Decision == evolution.MetaReject {
@@ -591,7 +606,10 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 	if applied > 0 || reordered > 0 || localSearchDelta > 0 || eliteReseed {
 		if err := g.cfg.Registry.SaveTree(TreeEntry{Name: entry.Name, Tree: tree, FilePath: entry.FilePath}); err != nil {
 			slog.Error("gardener/v2: saving evolved tree failed, evolution result is not durably persisted", "tree", entry.Name, "error", err)
-			saveFailed = true
+			saveFailed = !errors.Is(err, ErrCandidateUnqualified)
+			if !saveFailed {
+				rejected++
+			}
 			*tree = *originalTree
 			newFitness = baseFitness
 			improved = false
@@ -602,7 +620,11 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 		} else {
 			*entry.Tree = *cloneTreeForGardener(tree)
 			for _, experience := range pendingExperience {
-				if err := bank.AddFromProposal(experience.tree, experience.proposal, experience.before, experience.after, nil, lastFailureTask(records)); err != nil {
+				before, after, attributable := g.experienceScores(entry, experience.tree, len(pendingExperience), experience.before, experience.after)
+				if !attributable {
+					continue
+				}
+				if err := bank.AddFromProposal(experience.tree, experience.proposal, before, after, nil, lastFailureTask(records)); err != nil {
 					slog.Warn("gardener/v2: recording committed mutation experience failed", "tree", entry.Name, "error", err)
 				}
 			}
@@ -652,7 +674,7 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 			candidateFitness := evaluator.EvaluateTree(candidate, records)
 			if candidateApplied > 0 && candidateFitness.Composite > newFitness.Composite+0.0001 {
 				commitErr := func() error {
-					if !benchmark.QuickValidateCandidate(tree, candidate, suite, selectedLLM) {
+					if !g.acceptsCandidate(tree, candidate, suite, selectedLLM) {
 						return errors.New("deep-search candidate definition or benchmark rejected")
 					}
 					if g.cfg.Gate != nil && g.cfg.Gate.ValidateFor(entry.Name, newFitness.Composite, candidateFitness.Composite) != evolution.GateAccepted {
@@ -671,7 +693,7 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 						}
 					}
 					if err := g.cfg.Registry.SaveTree(TreeEntry{Name: entry.Name, Tree: candidate, FilePath: entry.FilePath}); err != nil {
-						saveFailed = true
+						saveFailed = !errors.Is(err, ErrCandidateUnqualified)
 						return err
 					}
 					return nil
@@ -688,7 +710,11 @@ func (g *Gardener) evolveTreeV2(entry TreeEntry, cfg EvolveV2Config) CycleMetric
 					improved = newFitness.Composite > baseFitness.Composite
 					if bank != nil {
 						for _, experience := range deepExperience {
-							if err := bank.AddFromProposal(experience.tree, experience.proposal, experience.before, experience.after, nil, lastFailureTask(records)); err != nil {
+							before, after, attributable := g.experienceScores(entry, experience.tree, len(deepExperience), experience.before, experience.after)
+							if !attributable {
+								continue
+							}
+							if err := bank.AddFromProposal(experience.tree, experience.proposal, before, after, nil, lastFailureTask(records)); err != nil {
 								slog.Warn("gardener/v2: recording committed deep-search experience failed", "tree", entry.Name, "error", err)
 							}
 						}
@@ -1270,7 +1296,7 @@ func (g *Gardener) adoptIslandWinner(entry TreeEntry, records []evolution.Record
 	// Evidence gate, mirroring evolveTreeV2: with no reflection records the
 	// scores below are computed over an empty corpus, so "the winner beats the
 	// live tree" is noise rather than a measured improvement.
-	if len(records) == 0 && !g.cfg.EvolveWithoutReflections {
+	if len(evolution.ExecutionRecords(records)) == 0 && !g.cfg.EvolveWithoutReflections {
 		return false
 	}
 
@@ -1299,11 +1325,13 @@ func (g *Gardener) adoptIslandWinner(entry TreeEntry, records []evolution.Record
 
 	// Validate a detached whole-tree candidate before any live mutation.
 	candidate := cloneTreeForGardener(winner)
-	var model llm.LLM = benchmark.DefaultMock()
-	if cfg.UseRealLLM {
-		model = benchmark.DefaultLLM()
+	model, err := benchmark.DefaultLLM()
+	if err != nil {
+		slog.Warn("gardener/v2: benchmark configuration failed", "tree", entry.Name, "error", err)
+		return false
 	}
-	if !benchmark.QuickValidateCandidate(entry.Tree, candidate, benchmark.SuiteForTree(entry.Name), model) {
+
+	if !g.acceptsCandidate(entry.Tree, candidate, benchmark.SuiteForTree(entry.Name), model) {
 		slog.Warn("gardener/v2: benchmark rejected island winner", "tree", entry.Name)
 		return false
 	}

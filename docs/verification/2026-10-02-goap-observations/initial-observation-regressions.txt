@@ -1,0 +1,7 @@
+ok  	github.com/nico/go-bt-evolve/internal/goap	0.011s
+ok  	github.com/nico/go-bt-evolve/internal/evolution	0.014s [no tests to run]
+--- FAIL: TestGoapObservationRetainsScopeAcrossRunningWithoutReplay (0.00s)
+    goap_observation_test.go:63: lost observation: &{contractValidatedResult: TreeID: User: DeferRunEvidence:false EvidenceError:<nil> runEvidence:0x314e22d35a40 parallelStates:map[] Task:save and inspect a file Complexity: Plan: Result:written Outcome:failure DurationMs:1 KgResults: CachedResult: FailureCount:0 Reflections:0x314e22ec7d80 TreeStore:<nil> LLM:<nil> ChainMemory:<nil> ChainTools:[] ChainState:map[goap_world_state:{saved: true}] Results:[] QualityScore:0 OutcomeRefinement: QualityAuthoritative:false CurrentPath: VisitedPaths:[] EventBus:<nil> TreeTimeoutMs:0 TokensUsed:0 TickBudget:0 TreeTicks:0 childTicks:0x314e22ea4cc0 executionStop:0x314e22ee4cf0 executionLocalError:<nil> executionBlocked:false executionForced:false goapEffectScope: goapObserved:[{scope:IJYESOQL5QFUPCNNOZJUW4OTDC origin:actual file readback facts:map[saved:[116 114 117 101]]}] goapStepRuntime:<nil> liveRun:<nil> buildCapture:map[] Sandbox:false NodeAdmission:<nil> TraceContext:<nil> Logger:<nil> BB:<nil> RunID:} calls=2
+FAIL
+FAIL	github.com/nico/go-bt-evolve/internal/engine	0.027s
+FAIL

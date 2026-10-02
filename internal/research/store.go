@@ -6,6 +6,7 @@
 package research
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -16,6 +17,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/nico/go-bt-evolve/internal/reliability"
 	"github.com/nico/go-bt-evolve/internal/util"
 )
 
@@ -35,24 +37,21 @@ type Entry struct {
 
 // Store is the on-disk knowledge index.
 type Store struct {
-	path    string
-	Entries map[string]*Entry `json:"entries"`
+	snapshot string
+	path     string
+	Entries  map[string]*Entry `json:"entries"`
 }
 
 // DefaultPath is the ADR-003 location of the shared research knowledge index.
 func DefaultPath() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		home = "/home/nico"
-	}
-	return filepath.Join(home, ".go-bt-evolve", "research", "knowledge.json")
+	return filepath.Join(util.RuntimePlatformHome(), "research", "knowledge.json")
 }
 
 // Open loads the store at path; a missing file yields an empty store, a
 // corrupt file errors so a broken index is never silently clobbered.
 func Open(path string) (*Store, error) {
 	s := &Store{path: path, Entries: map[string]*Entry{}}
-	b, err := os.ReadFile(path)
+	b, err := util.ReadPersistenceFile(path)
 	if os.IsNotExist(err) {
 		return s, nil
 	}
@@ -65,6 +64,7 @@ func Open(path string) (*Store, error) {
 	if s.Entries == nil {
 		s.Entries = map[string]*Entry{}
 	}
+	s.snapshot = string(b)
 	return s, nil
 }
 
@@ -107,8 +107,23 @@ func (s *Store) Record(source, title, content string) bool {
 func (s *Store) Len() int { return len(s.Entries) }
 
 // Save writes the index atomically (tmp+rename) per ADR-003.
+// A stale reader must reload rather than erase a sibling writer's evidence.
 func (s *Store) Save() error {
-	return util.SaveJSONAtomic(s.path, s)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	var saved []byte
+	err := reliability.UpdateSharedJSONWithContext(ctx, s.path, func(data []byte) (any, error) {
+		if string(data) != s.snapshot {
+			return nil, fmt.Errorf("research store changed concurrently; reload before updating")
+		}
+		var err error
+		saved, err = json.MarshalIndent(s, "", "  ")
+		return s, err
+	})
+	if err == nil {
+		s.snapshot = string(saved)
+	}
+	return err
 }
 
 func normalize(content string) string {

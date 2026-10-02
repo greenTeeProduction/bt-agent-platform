@@ -60,20 +60,7 @@ func hasQualityGateForChild(edges []evolution.TypedEdge, idx int) bool {
 }
 
 func wrapChildQualityGate(primary, recovery btcore.Command[Blackboard]) btcore.Command[Blackboard] {
-	return btleaf.NewAction(func(ctx *btcore.BTContext[Blackboard]) int {
-		code := primary.Run(ctx)
-		if code == 0 {
-			return 0
-		}
-		if validateOutputQuality(ctx.Blackboard) {
-			return code
-		}
-		ctx.Blackboard.Outcome = "quality_gate_failed"
-		if recovery != nil {
-			return recovery.Run(ctx)
-		}
-		return -1
-	})
+	return qualityGateCommand(primary, recovery)
 }
 
 // buildSequenceWithEdges returns a Sequence command respecting typed edges on the node.

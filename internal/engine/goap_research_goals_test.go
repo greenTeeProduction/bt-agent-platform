@@ -156,6 +156,10 @@ func TestRecentImplementedGoalsReadsStore(t *testing.T) {
 	if err := store.Save(); err != nil {
 		t.Fatal(err)
 	}
+	if got := recentImplementedGoals(5); len(got) != 0 {
+		t.Fatalf("legacy label counted as delivery: %v", got)
+	}
+	seedResearchDelivery(t, []SuperpowersTask{{Title: "add -short to test commands", Objective: "add -short to test commands"}})
 	got := recentImplementedGoals(5)
 	if len(got) != 1 || !strings.Contains(got[0], "-short") {
 		t.Fatalf("must list only implemented goals, got %v", got)
@@ -236,10 +240,11 @@ func TestCompleteGoapProgramMilestoneMarksDone(t *testing.T) {
 	bb := &Blackboard{ChainState: map[string]any{
 		"goap_fusion_program_milestone": p.ID + ":0",
 	}}
-	completeGoapProgramMilestone(bb, &SuperpowersRun{ID: "run-777"})
+	run := verifiedProgramRunForTest(t, bb, []SuperpowersTask{{Objective: "m1", Files: []string{"fixture.go"}}})
+	completeGoapProgramMilestone(bb, run)
 
 	re, _ := research.OpenPrograms(path)
-	if re.Programs[0].Milestones[0].Status != "done" || re.Programs[0].Milestones[0].CompletedRun != "run-777" {
+	if re.Programs[0].Milestones[0].Status != "done" || re.Programs[0].Milestones[0].CompletedRun != run.ID {
 		t.Fatalf("milestone must be marked done by the applied run: %+v", re.Programs[0].Milestones[0])
 	}
 	if re.Programs[0].Milestones[1].Status != "pending" {
@@ -290,10 +295,10 @@ func TestCompleteGoapProgramMilestoneSkipsRunThatMissedAnchors(t *testing.T) {
 // evidence against pending milestones instead of silently no-opping: on
 // 2026-07-10 the 12:00 cycle landed milestones 1-3 (28bc7d0) and left all of
 // them pending, so the same cycle re-queued and re-implemented shipped work.
-func TestCompleteGoapProgramMilestoneResumedRunFallsBackToAnchorEvidence(t *testing.T) {
+func TestCompleteGoapProgramMilestoneResumedRunUsesJournaledMilestoneIdentity(t *testing.T) {
 	path := withGoapPrograms(t)
 	ps, _ := research.OpenPrograms(path)
-	ps.Add("DLQ cross-process replay", "auto-seed", []string{
+	program := ps.Add("DLQ cross-process replay", "auto-seed", []string{
 		"Make DLQ persistence atomic in internal/reliability/reliability.go",
 		"Wire replay scan in cmd/bt-agent/main.go",
 		"Untouched milestone in internal/other/elsewhere.go",
@@ -302,17 +307,23 @@ func TestCompleteGoapProgramMilestoneResumedRunFallsBackToAnchorEvidence(t *test
 		t.Fatal(err)
 	}
 
-	bb := &Blackboard{ChainState: map[string]any{}} // resumed cycle: no stamp
-	run := &SuperpowersRun{
-		ID:           "run-resume",
-		ApplyStatus:  "committed",
-		ChangedFiles: []string{"internal/reliability/reliability.go", "cmd/bt-agent/main.go"},
+	planning := &Blackboard{ChainState: map[string]any{"goap_fusion_program_milestone": program.ID + ":0," + program.ID + ":1," + program.ID + ":2"}}
+	run := verifiedProgramRunForTest(t, planning, []SuperpowersTask{{Objective: program.Milestones[0].Goal, Files: []string{"internal/reliability/reliability.go"}}, {Objective: program.Milestones[1].Goal, Files: []string{"cmd/bt-agent/main.go"}}})
+	if err := writeSuperpowersRunJSON(run); err != nil {
+		t.Fatal(err)
 	}
+	reloaded, err := readSuperpowersRunJSON(filepath.Join(run.ArtifactDir, "run.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	run = reloaded
+	bb := &Blackboard{ChainState: map[string]any{}}
+
 	completeGoapProgramMilestone(bb, run)
 
 	re, _ := research.OpenPrograms(path)
 	ms := re.Programs[0].Milestones
-	if ms[0].Status != "done" || ms[0].CompletedRun != "run-resume" {
+	if ms[0].Status != "done" || ms[0].CompletedRun != run.ID {
 		t.Fatalf("anchored milestone 0 must complete on resume-path evidence: %+v", ms[0])
 	}
 	if ms[1].Status != "done" {
@@ -326,10 +337,8 @@ func TestCompleteGoapProgramMilestoneResumedRunFallsBackToAnchorEvidence(t *test
 	}
 }
 
-// The evidence fallback must be strictly positive: a pending milestone naming
-// NO Go-file anchors gets a free pass under the stamped path (trust the
-// queued apply) but must NOT be checked off by an unstamped resume apply —
-// there is no stamp tying it to the run.
+// Unmarked legacy runs cannot complete anchorless milestones. New runs must
+// retain their captured milestone references and actual Git delivery evidence.
 func TestCompleteGoapProgramMilestoneResumeFallbackSkipsAnchorlessMilestones(t *testing.T) {
 	path := withGoapPrograms(t)
 	ps, _ := research.OpenPrograms(path)
@@ -376,10 +385,8 @@ func TestCurrentSuperpowersRunRefusesFinishedRun(t *testing.T) {
 	}
 }
 
-// The milestone completes when the run demonstrably executed it — either its
-// changed files intersect the anchors, or a milestone-tagged task in the run
-// reached done on an anchor file.
-func TestCompleteGoapProgramMilestoneCompletesWhenRunExecutedAnchors(t *testing.T) {
+// Changed-file or done-task labels alone do not establish actual Git delivery.
+func TestCompleteGoapProgramMilestoneRejectsUnverifiedRunLabels(t *testing.T) {
 	anchor := "internal/engine/actions_a2a.go"
 	cases := []struct {
 		name string
@@ -414,8 +421,8 @@ func TestCompleteGoapProgramMilestoneCompletesWhenRunExecutedAnchors(t *testing.
 			completeGoapProgramMilestone(bb, tc.run)
 
 			re, _ := research.OpenPrograms(path)
-			if re.Programs[0].Milestones[0].Status != "done" || re.Programs[0].Milestones[0].CompletedRun != tc.run.ID {
-				t.Fatalf("milestone must complete when the run executed it: %+v", re.Programs[0].Milestones[0])
+			if re.Programs[0].Milestones[0].Status != "pending" || re.Programs[0].Milestones[0].CompletedRun != "" {
+				t.Fatalf("labels must not complete a milestone without inspected delivery: %+v", re.Programs[0].Milestones[0])
 			}
 		})
 	}
@@ -525,7 +532,7 @@ func TestCompleteGoapProgramMilestoneBatchCompletion(t *testing.T) {
 	}}
 	// The run only executed milestones A and B (anchor files changed);
 	// C's anchor is untouched and must stay pending.
-	run := &SuperpowersRun{ID: "run-batch", ChangedFiles: []string{"internal/a2a/a.go", "internal/a2a/b.go"}}
+	run := verifiedProgramRunForTest(t, bb, []SuperpowersTask{{Objective: p.Milestones[0].Goal, Files: []string{"internal/a2a/a.go"}}, {Objective: p.Milestones[1].Goal, Files: []string{"internal/a2a/b.go"}}})
 	completeGoapProgramMilestone(bb, run)
 
 	re, _ := research.OpenPrograms(path)
@@ -545,7 +552,7 @@ func TestProgramContinueNote(t *testing.T) {
 	if note := programContinueNote(); !strings.Contains(note, "PROGRAM-CONTINUE") {
 		t.Fatalf("pending milestones must emit the continue marker, got %q", note)
 	}
-	ps.MarkDone(ps.Programs[0].ID, 0, "run-x")
+	seedLegacyProgramDone(ps, ps.Programs[0].ID, 0, "run-x")
 	_ = ps.Save()
 	if note := programContinueNote(); note != "" {
 		t.Fatalf("completed programs must not emit the marker: %q", note)
@@ -560,7 +567,7 @@ func TestActiveProgramMilestoneNeverRoutesToAnalysisOnUnchangedGoals(t *testing.
 		"Milestone two in internal/engine/two.go",
 	})
 	// milestone 1 done → milestone 2 is the active pending one.
-	ps.MarkDone(ps.Programs[0].ID, 0, "run-prior")
+	seedLegacyProgramDone(ps, ps.Programs[0].ID, 0, "run-prior")
 	if err := ps.Save(); err != nil {
 		t.Fatal(err)
 	}
@@ -646,14 +653,20 @@ func TestCompleteGoapProgramMilestone_ConcurrentCallersAllSurvive(t *testing.T) 
 		t.Fatal(err)
 	}
 
+	tasks := make([]SuperpowersTask, 0, len(anchors))
+	for _, anchor := range anchors {
+		tasks = append(tasks, SuperpowersTask{Objective: "Wire work in " + anchor, Files: []string{anchor}})
+	}
+	baseRun := researchDeliveryFixture(t, tasks)
 	var wg sync.WaitGroup
 	for i := range workers {
 		wg.Go(func() {
 			bb := &Blackboard{ChainState: map[string]any{
 				"goap_fusion_program_milestone": ids[i] + ":0",
 			}}
-			run := &SuperpowersRun{ID: fmt.Sprintf("run-%d", i), ChangedFiles: []string{anchors[i]}}
-			completeGoapProgramMilestone(bb, run)
+			run := *baseRun
+			run.ProgramMilestones = []research.MilestoneRef{{ProgramID: ids[i], Index: 0, Goal: "Wire work in " + anchors[i]}}
+			completeGoapProgramMilestone(bb, &run)
 		})
 	}
 	wg.Wait()

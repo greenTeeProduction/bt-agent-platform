@@ -13,15 +13,16 @@ import (
 	"time"
 )
 
-func TestResolvedSuperpowersCodexModelDefaultsToSpark(t *testing.T) {
+func TestResolvedSuperpowersCodexModelDefaultsToSol(t *testing.T) {
 	t.Setenv("BT_SUPERPOWERS_CODEX_MODEL", "")
 
-	if got := resolvedSuperpowersCodexModel(); got != "gpt-5.3-codex-spark" {
-		t.Fatalf("resolvedSuperpowersCodexModel() = %q, want gpt-5.3-codex-spark", got)
+	if got := resolvedSuperpowersCodexModel(); got != "gpt-6.1-sol" {
+		t.Fatalf("resolvedSuperpowersCodexModel() = %q, want gpt-6.1-sol", got)
 	}
 }
 
 func TestResolvedSuperpowersCodexModelAllowsExplicitAuto(t *testing.T) {
+	t.Setenv("BT_LLM_SOL_ONLY", "false")
 	for _, value := range []string{"auto", "default", "none", " AUTO ", "Default", "NONE"} {
 		t.Run(value, func(t *testing.T) {
 			t.Setenv("BT_SUPERPOWERS_CODEX_MODEL", value)
@@ -33,6 +34,7 @@ func TestResolvedSuperpowersCodexModelAllowsExplicitAuto(t *testing.T) {
 }
 
 func TestResolvedSuperpowersCodexModelExplicitOverride(t *testing.T) {
+	t.Setenv("BT_LLM_SOL_ONLY", "false")
 	t.Setenv("BT_SUPERPOWERS_CODEX_MODEL", " custom-model-id ")
 	if got := resolvedSuperpowersCodexModel(); got != "custom-model-id" {
 		t.Fatalf("resolvedSuperpowersCodexModel() = %q, want custom-model-id", got)
@@ -57,8 +59,8 @@ func TestExecCodexRunnerBuildsReadOnlyArgs(t *testing.T) {
 			t.Fatalf("codex args = %q, missing %q", args, want)
 		}
 	}
-	if !strings.Contains(joined, "-m\ngpt-5.3-codex-spark") {
-		t.Fatalf("codex args = %q, want default -m gpt-5.3-codex-spark", args)
+	if !strings.Contains(joined, "-m\ngpt-6.1-sol") {
+		t.Fatalf("codex args = %q, want default -m gpt-6.1-sol", args)
 	}
 	if args[len(args)-1] != "hello" {
 		t.Fatalf("codex args = %q, want prompt last", args)
@@ -71,8 +73,8 @@ func TestExecCodexRunnerBuildsWriteArgs(t *testing.T) {
 
 	args := captureRunnerCodexArgs(t, execCodexRunner{})
 	joined := strings.Join(args, "\n")
-	if !strings.Contains(joined, "-m\ngpt-5.3-codex-spark") {
-		t.Fatalf("codex args = %q, want default -m gpt-5.3-codex-spark", args)
+	if !strings.Contains(joined, "-m\ngpt-6.1-sol") {
+		t.Fatalf("codex args = %q, want default -m gpt-6.1-sol", args)
 	}
 	if !strings.Contains(joined, "--sandbox\nworkspace-write") {
 		t.Fatalf("codex args = %q, want default --sandbox workspace-write", args)
@@ -80,6 +82,7 @@ func TestExecCodexRunnerBuildsWriteArgs(t *testing.T) {
 }
 
 func TestExecCodexRunnerOmitsModelWhenAuto(t *testing.T) {
+	t.Setenv("BT_LLM_SOL_ONLY", "false")
 	t.Setenv("BT_SUPERPOWERS_CODEX_MODEL", "auto")
 	t.Setenv("BT_SUPERPOWERS_CODEX_SANDBOX", "")
 

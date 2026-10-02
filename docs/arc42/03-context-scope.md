@@ -1,5 +1,7 @@
 # 3. Context and Scope
 
+Current model boundary: ordinary inference and coding use Codex login with `gpt-6.1-sol`. NotebookLM generation/research, external embeddings and legacy memory extraction use their existing integrations. Codex can access NotebookLM through the installed MCP server and shared profile. See [policy](../sol-model-policy.md).
+
 ## 3.1 Business Context
 
 The system boundary includes the repository's Go binaries, embedded dashboard,
@@ -110,6 +112,27 @@ HTTP disconnect; expiration is cooperative (ADR-276). Retained task-result repai
 commits metadata without executing the operation
 again. These authenticated shared-operator routes do not establish tenant
 identity ([ADR-275](09-decisions.md#adr-275)).
+
+Covered MCP evolution tools report `proposal_saved` separately from `qualified`
+and `persisted`: saved search proposals are not runnable. Successful qualification
+activates a version of the original tree ID; `bt_get_tree` and `bt_get_fitness`
+accept optional `tree`/`user` selection and report that authority (ADR-282).
+Persona IDs still scope state rather than authenticate the caller.
+
+---
+
+The offline operator command `bt-gardener recover-persisted-trees --dir <root>`
+returns a recovery plan before daemon/model initialization. Adding `--apply
+--offline` asserts that all directory writers are stopped and requests backup,
+restoration and a durable result manifest. It is not a live evolution endpoint
+and does not claim task qualification (ADR-283).
+
+The framework-scoped MCP tools `bt_program_reconcile` and `bt_program_review`
+repair unsupported historical completion labels and explicitly revise held work
+(ADR-290). `bt_research_status` reports program states and verified code deliveries
+separately. These tools require the blank framework operator scope; a personal
+user cannot mutate the shared backlog. The stdio/host access boundary still
+applies; the blank namespace is not independent authentication.
 
 ---
 

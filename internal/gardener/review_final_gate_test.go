@@ -30,7 +30,7 @@ func TestReviewFinalGateRejectsReorderedCandidate(t *testing.T) {
 			reg := &Registry{dir: root, entries: []TreeEntry{{Name: "review-final-gate", Tree: tree, FilePath: path, Active: true}}}
 			gate := DefaultValidationGateConfig()
 			gate.EvidencePath = filepath.Join(root, "absent-evidence.json")
-			g := NewGardener(Config{Registry: reg, MetricsTracker: metrics, RefStore: refs, MaxMutations: mutations, EvolveWithoutReflections: true, SelectorStatsPath: stats, ValidationGate: gate})
+			g := newOrchestrationTestGardener(t, Config{Registry: reg, MetricsTracker: metrics, RefStore: refs, MaxMutations: mutations, EvolveWithoutReflections: true, SelectorStatsPath: stats, ValidationGate: gate})
 			g.evolveTreeV2(reg.List()[0], EvolveV2Config{CascadeCfg: evaluator.CascadeConfig{QuickThreshold: 0}, SelectorOrdering: true})
 			if !reflect.DeepEqual(tree, original) {
 				t.Error("rejected candidate changed live tree")

@@ -50,7 +50,7 @@ func TestEvolveTreeV2_ValidationGateRejection_RestoresTree(t *testing.T) {
 		ValidationGate: DefaultValidationGateConfig(), // enabled, fail-closed
 		MaxMutations:   1,
 	}
-	g := NewGardener(cfg)
+	g := newOrchestrationTestGardener(t, cfg)
 
 	v2cfg := EvolveV2Config{
 		BlocksEnabled: false,
@@ -137,7 +137,7 @@ func TestEvolveTreeV2_QualityGateRejection_TreeUnchanged(t *testing.T) {
 		ValidationGate: ValidationGateConfig{Enabled: false}, // disable so we don't compound with ValidationGate
 		MaxMutations:   3,
 	}
-	g := NewGardener(cfg)
+	g := newOrchestrationTestGardener(t, cfg)
 
 	v2cfg := EvolveV2Config{
 		BlocksEnabled: false,
